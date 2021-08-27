@@ -20,7 +20,7 @@ MICFLAGS      = -mmic
 # Compiler:
 CXX           = icc
 CC            = icc
-CXXFLAGS      = -fPIC -wd1476 $(MICFLAGS) $(EXTRA_CXXFLAGS) -O2 -m64 -no-vec -no-fma -Wall -DWARNINGMSG $(USERCONF_CXXFLAGS)
+CXXFLAGS      = -fPIC -wd1476 $(MICFLAGS) $(EXTRA_CXXFLAGS) -O2 -g -m64 -no-vec -no-fma -Wall -DWARNINGMSG $(USERCONF_CXXFLAGS)
 CFLAGS        = -fPIC $(MICFLAGS) $(EXTRA_CFLAGS) -restrict $(USERCONF_CFLAGS)
 CINTCXXFLAGS  = -fPIC $(MICFLAGS) $(EXTRA_CXXFLAGS) \
                 -DG__REGEXP -DG__UNIX -DG__SHAREDLIB \

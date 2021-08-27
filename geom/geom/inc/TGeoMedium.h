@@ -31,7 +31,7 @@ public:
 
 protected:
    Int_t                    fId;         // unique Id
-   Double_t                 fParams[20]; // parameters
+   Double_t                 fParams[44]; // parameters
    TGeoMaterial            *fMaterial;   // pointer to material
  
 // methods
@@ -50,6 +50,9 @@ public:
    Int_t                    GetId()   const     {return fId;}
    Double_t                 GetParam(Int_t i) const {return fParams[i];}
    void                     SetParam(Int_t i, Double_t val)   {fParams[i] = val;}
+   static Int_t             ParamId(const Char_t *name);
+   static const Char_t     *ParamName(Int_t id);
+   void                     SetParam(const Char_t *name, Double_t val) {Int_t id = ParamId(name); if (id >= 0 && id < 44) SetParam(id, val);}
    char                    *GetPointerName() const;
    TGeoMaterial            *GetMaterial() const {return fMaterial;}
    virtual void             SavePrimitive(std::ostream &out, Option_t *option = "");

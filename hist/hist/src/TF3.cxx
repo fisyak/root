@@ -488,9 +488,9 @@ Double_t TF3::GetSave(const Double_t *xx)
    if (dz <= 0) return 0;
 
    //we make a trilinear interpolation using the 8 points surrounding x,y,z
-   Int_t ibin    = Int_t((x-xmin)/dx);
-   Int_t jbin    = Int_t((y-ymin)/dy);
-   Int_t kbin    = Int_t((z-zmin)/dz);
+   Int_t ibin    = Int_t((x-xmin)/dx); if (ibin >= npx) ibin = npx - 1;
+   Int_t jbin    = Int_t((y-ymin)/dy); if (jbin >= npy) jbin = npy - 1;
+   Int_t kbin    = Int_t((z-zmin)/dz); if (kbin >= npz) kbin = npz - 1;
    Double_t xlow = xmin + ibin*dx;
    Double_t ylow = ymin + jbin*dy;
    Double_t zlow = zmin + kbin*dz;

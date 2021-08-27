@@ -459,7 +459,18 @@ freebsd* | openbsd* | linux*)
          auxcflags="-std=c++11 -Wno-deprecated-declarations $auxcflags"
       fi
       if test "x$f" = "xcxx14" ; then
+	if test "x$arch" = "xlinuxx8664icc" || test "x$arch" = "xlinuxicc" ; then
+         auxcflags="-std=c++1y"
+        else
          auxcflags="-std=c++1y -Wno-deprecated-declarations $auxcflags"
+        fi
+      fi
+      if test "x$f" = "xcxx17" ; then
+	if test "x$arch" = "xlinuxx8664icc" || test "x$arch" = "xlinuxicc" ; then
+         auxcflags="-std=c++1y"
+        else
+         auxcflags="-std=c++17 -Wno-deprecated-declarations $auxcflags"
+        fi
       fi
       if test "x$f" = "xlibcxx" ; then
          auxcflags="-stdlib=libc++ $auxcflags"
@@ -489,6 +500,9 @@ macosx*)
       fi
       if test "x$f" = "xcxx14" ; then
          auxcflags="-std=c++1y $auxcflags"
+      fi
+      if test "x$f" = "xcxx17" ; then
+         auxcflags="-std=c++17 $auxcflags"
       fi
       if test "x$f" = "xlibcxx" ; then
          auxcflags="-stdlib=libc++ $auxcflags"

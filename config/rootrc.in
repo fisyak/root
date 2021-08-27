@@ -10,18 +10,21 @@
 # Paths are different for Unix and Windows. The example shows the defaults
 # for all ROOT applications for either Unix or Windows.
 Unix.*.Root.DynamicPath:    .:@libdir@:
++Unix.*.Root.DynamicPath:    .:$(LD_LIBRARY_PATH):
 WinNT.*.Root.DynamicPath:   .;@bindir@;
 
 # Path used to find macros.
 # Paths are different for Unix and Windows. The example shows the defaults
 # for all ROOT applications for either Unix or Windows.
 Unix.*.Root.MacroPath:      .:@macrodir@:
++Unix.*.Root.MacroPath:      .:$HOME/macros:@macrodir@:./StRoot/macros:./StRoot/macros/graphics:./StRoot/macros/analysis:./StRoot/macros/test:./StRoot/macros/examples:./StRoot/macros/html:./StRoot/macros/qa:./StRoot/macros/embedding:$(STAR)/StRoot/macros:$(STAR)/StRoot/macros/graphics:$(STAR)/StRoot/macros/analysis:$(STAR)/StRoot/macros/test:$(STAR)/StRoot/macros/examples:$(STAR)/StRoot/macros/html:$(STAR)/StRoot/macros/qa:$(STAR)/StRoot/macros/embedding:$(ROOTSYS)/macros:$(ROOTSYS)/tutorials
 WinNT.*.Root.MacroPath:     .;@macrodir@;
 
 # Path used to find plugin macros.
 # Paths are different for Unix and Windows. The example shows the defaults
 # for all ROOT applications for either Unix or Windows.
 Unix.*.Root.PluginPath:      :@plugindir@:
++Unix.*.Root.PluginPath:     :$STAR/plugins:
 WinNT.*.Root.PluginPath:     ;@plugindir@;
 
 # Path where to look for TrueType fonts.
@@ -99,7 +102,7 @@ Cocoa.EnableAntiAliasing: yes
 Win32.UseSysPointers:    no
 
 # Default editor.
-Unix.*.Editor:           vi
+Unix.*.Editor:           xemacs
 WinNT.*.Editor:          notepad
 
 # Default 3d Viewer.

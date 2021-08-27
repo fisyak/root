@@ -169,7 +169,7 @@ static TReAllocInit gReallocInit;
 //------------------------------------------------------------------------------
 
 #ifdef __GNUC__
-#   if !defined(R__THROWNEWDELETE) && __GNUC__ >= 3
+#   if !defined(R__THROWNEWDELETE) && __GNUC__ >= 3 && __GNUC__ < 11
 #      define R__THROWNEWDELETE
 #   endif
 #endif

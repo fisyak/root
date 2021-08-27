@@ -80,6 +80,15 @@ LDFLAGS      += -m64
 ICC_GE_9      = $(ICC_MAJOR)
 ICC_GE_101    = $(ICC_MAJOR)$(ICC_MINOR)
 endif
+ifeq ($(findstring $(ICC_MAJOR),17 16),)
+CXXFLAGS     += -m64
+CFLAGS       += -m64
+CINTCXXFLAGS += -m64
+CINTCFLAGS   += -m64
+LDFLAGS      += -m64
+ICC_GE_9      = $(ICC_MAJOR)
+ICC_GE_101    = $(ICC_MAJOR)$(ICC_MINOR)
+endif
 
 # System libraries:
 SYSLIBS       = -limf -lm -ldl $(OSTHREADLIBDIR) $(OSTHREADLIB) \
@@ -92,7 +101,7 @@ CRYPTLIBS     = -lcrypt
 ifeq ($(F77),ifort)
 F77           = ifort
 F77FLAGS      = -fPIC
-ifeq ($(findstring $(ICC_MAJOR),11 10 9),)
+ifeq ($(findstring $(ICC_MAJOR),17 16 11 10 9),)
 F77LIBS      := -L$(shell which ifort | sed -e 's|bin/intel64/ifort|compiler/lib|') \
                 -lifcore
 F77FLAGS     += -m64

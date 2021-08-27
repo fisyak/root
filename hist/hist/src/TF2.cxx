@@ -644,8 +644,8 @@ Double_t TF2::GetSave(const Double_t *xx)
    if (dy <= 0) return 0;
 
    //we make a bilinear interpolation using the 4 points surrounding x,y
-   Int_t ibin    = Int_t((x-xmin)/dx);
-   Int_t jbin    = Int_t((y-ymin)/dy);
+   Int_t ibin    = Int_t((x-xmin)/dx); if (ibin >= npx) ibin = npx - 1;
+   Int_t jbin    = Int_t((y-ymin)/dy); if (jbin >= npy) jbin = npy - 1;
    Double_t xlow = xmin + ibin*dx;
    Double_t ylow = ymin + jbin*dy;
    Double_t t    = (x-xlow)/dx;

@@ -424,6 +424,7 @@ void TMVA::VariableGaussTransform::GetCumulativeDist( const std::vector< Event*>
          for (Int_t ibin=1, ibinEnd=fCumulativeDist[ivar][icls]->GetNbinsX(); ibin <=ibinEnd ; ibin++){
             Float_t val = (fCumulativeDist[ivar][icls])->GetBinContent(ibin);
             if (val>0) sum += val;
+	    if (total > 0)
             (fCumulativeDist[ivar][icls])->SetBinContent(ibin,sum/total);
          }
          // create PDf

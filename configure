@@ -55,6 +55,7 @@ options="                    \
    enable_builtin_lz4        \
    enable_cxx11              \
    enable_cxx14              \
+   enable_cxx17              \
    enable_libcxx             \
    enable_castor             \
    enable_chirp              \
@@ -150,6 +151,7 @@ for c in $options ; do eval ${c}_explicit="" ; done
 
 enable_cxx11=no
 enable_cxx14=no
+enable_cxx17=no
 enable_libcxx=no
 enable_cling=no
 enable_cocoa=
@@ -1654,6 +1656,7 @@ enable/disable options, prefix with either --enable- or --disable-
   builtin-lz4        Build included liblz4, or use system liblz4
   cxx11              Build using C++11 compatible mode, requires gcc > 4.7.x or clang
   cxx14              Build using C++14 compatible mode, requires gcc > 4.9.x or clang
+  cxx17              Build using C++17 compatible mode, requires gcc >=7.1.x
   libcxx             Build using libc++, required by clang cxx11 and cxx14 option (MacOS X only, for the time being)
   castor             CASTOR support, requires libshift from CASTOR >= 1.5.2
   chirp              Chirp filesystem support, requires cctools >= 3.2.2
@@ -2288,8 +2291,8 @@ if test $# -gt 0 ; then
       # Build steering option
       #
       --build=*)      rootbuild="ROOTBUILD      := $optarg"  ;;
-      --cflags=*)      usercflags=$optarg ;;
-      --cxxflags=*)    usercxxflags=$optarg ;;
+      --cflags=*)      usercflags="$usercflags $optarg" ;;
+      --cxxflags=*)    usercxxflags="$usercxxflags $optarg" ;;
       ################################################################
       #
       # Install path options
@@ -2614,6 +2617,34 @@ if test "x$enable_cxx14" = "xyes"; then
         result "yes"
     fi
 fi
+######################################################################
+#
+### echo %%% C++17 - compile using c++17 compatible option
+#
+# needs gcc > 7.0.x
+usecxx17="undef"
+if test "x$enable_cxx17" = "xyes"; then
+    message "Checking whether c++17 mode is supported"
+    check_cxxopt -std=c++1y
+    if test $cxxopt_result -eq 0 ; then
+        enable_cxx17="no"
+        result "no"
+        result "`basename $0`: c++17 mode is requested but the current compiler does not support it."
+        exit 1
+    else
+        usecxx11="define"
+        usecxx17="define"
+        # on OS X libcxx is required for C++11 support with clang
+        # so turn the option on when using clang
+        if test "x$platform" = "xmacosx" && echo $altcxx | grep 'clang++' > /dev/null 2>&1; then
+            enable_libcxx="yes"
+        fi
+        if test "x$platform" = "xmacosx" && echo $altcxx | grep 'icc' > /dev/null 2>&1; then
+            enable_libcxx="yes"
+        fi
+        result "yes"
+    fi
+fi
 
 ######################################################################
 #
@@ -2705,7 +2736,7 @@ if test ! "x$enable_x11" = "xno" ; then
         ${finkdir:+$finkdir/lib} \
         /usr/lib /usr/X11R6/lib /usr/lib/X11 /usr/openwin/lib \
         /usr/local/lib /usr/local/lib/X11 /usr/local/X11R6/lib \
-        /usr/X11/lib /usr/lib/X11R5
+        /usr/X11/lib /usr/lib/X11R5 /usr/lib
     x11libdir=$found_dir
 
     if test "x$found_lib" = "x" ; then
@@ -6436,7 +6467,8 @@ if test ! "x$enable_mathmore" = "xno"; then
     # check for gsl version >= 1.10
     if test ! "x$found_dir" = "x"; then
         message "Checking for GSL version >= 1.10"
-        gsl_version=`grep "define GSL_VERSION" $found_dir/gsl/gsl_version.h | sed 's/^.*"\([0-9]\..*[0-9]\)"/\1/' |  awk 'BEGIN { FS="." } { printf "%d", $1 * 1000 + $2 }'`
+#        gsl_version=`grep "define GSL_VERSION" $found_dir/gsl/gsl_version.h | sed 's/^.*"\([0-9]\..*[0-9]\)"/\1/' |  awk 'BEGIN { FS="." } { printf "%d", $1 * 1000 + $2 }'`
+        gsl_version=`grep "define GSL_VERSION" $found_dir/gsl/gsl_version.h | awk -F\" '{print $2}' |  awk 'BEGIN { FS="." } { printf "%d", $1 * 1000 + $2 }'`
         if test $gsl_version -lt 1010; then
             gslskip="skip"
             result "no"
@@ -7252,7 +7284,8 @@ if test ! "x$haveconfig" = "x" ; then
           mv Makefile.tmpp Makefile.tmp
        fi
     fi
-
+    echo "============================ usercflags = $usercflags ================"
+    echo "============================ usercxxflags = $usercxxflags ================"
     sed -e "s|@useconfig@|TRUE|"                       \
         -e "s|@cflags@|$haveconfig $usercflags|"       \
         -e "s|@usercflags@|$usercflags|"               \
@@ -7323,6 +7356,8 @@ fi
 #---------------------------------------------------------------------
 # config/Makefile.config
 #
+    echo "============================ usercflags = $usercflags ================"
+    echo "============================ usercxxflags = $usercxxflags ================"
 message "Writing $MAKEOUT"
 sed -e "s|@aclocaldir@|$aclocaldir|"            \
     -e "s|@afslib@|$afslib|"                    \
@@ -7610,6 +7645,7 @@ sed -e "s|@srcdir@|$ac_srcdir|"                 \
     -e "s|@buildnetxng@|$buildnetxng|"          \
     -e "s|@c++11@|$enable_cxx11|"               \
     -e "s|@c++14@|$enable_cxx14|"               \
+    -e "s|@c++17@|$enable_cxx17|"               \
     -e "s|@libc++@|$enable_libcxx|"             \
     -e "s|@werror@|$enable_werror|"             \
     < Makefile.tmp > $MAKEOUT
@@ -7668,6 +7704,7 @@ sed \
     -e "s|@hasvc@|$hasvc|"                 \
     -e "s|@usec++11@|$usecxx11|"           \
     -e "s|@usec++14@|$usecxx14|"           \
+    -e "s|@usec++17@|$usecxx17|"           \
     -e "s|@uselibc++@|$uselibcxx|"         \
     < RConfigure.tmp > RConfigure-out.tmp
 rm -f RConfigure.tmp
@@ -7774,6 +7811,8 @@ else
     altld2="$altld"
 fi
 
+#    echo "============================ usercflags = $usercflags ================"
+#    echo "============================ usercxxflags = $usercxxflags ================"
 sed -e "s|@architecture@|$arch|"           \
     -e "s|@platform@|$platform|"           \
     -e "s|@prefix@|$prefix2|"              \

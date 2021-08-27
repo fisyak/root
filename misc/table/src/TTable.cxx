@@ -125,7 +125,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include <assert.h>
-
+#include <sstream>
 #ifdef WIN32
 # include <float.h>
 #endif
@@ -1682,7 +1682,7 @@ const Char_t *TTable::Print(Int_t row, Int_t rownumber, const Char_t *, const Ch
          isdate = kFALSE;
          if (strcmp((*member).fColumnName,"fDatime") == 0 && membertype == "UInt_t")
                                                                                    isdate = kTRUE;
-         cout << membertype.Data();
+//          cout << membertype.Data();
 
          // Add the dimensions to "array" members
          Int_t dim = (*member).fDimensions;
@@ -1703,46 +1703,87 @@ const Char_t *TTable::Print(Int_t row, Int_t rownumber, const Char_t *, const Ch
          thisLoopLenth = TMath::Min(rowCount,rowStep);
          Int_t indexOffset;
          Bool_t breakLoop = kFALSE;
-
+	 std::string LineOld;
+	 Int_t same = 0;
          for (indexOffset=0; indexOffset < arrayLength && !breakLoop; indexOffset++) {
             nextRow = startRow;
-
-            if (!indexOffset) cout << "\t" << (*member).fColumnName;
-            else              cout << "\t" << setw(strlen((*member).fColumnName)) << " ";
-
-            if (dim) {
-               for (Int_t i=0;i<dim;i++) cout << "["<<dec<<arrayLayout[i]<<"]";
-               ArrayLayout(arrayLayout,(*member).fIndexArray,dim);
-            }
-            cout << "\t";
-            if ( strlen((*member).fColumnName)+3*dim < 8) cout << "\t";
+	    std::stringbuf Line;
+//             if (!indexOffset) cout << "\t" << (*member).fColumnName;
+//             else              cout << "\t" << setw(strlen((*member).fColumnName)) << " ";
+	    std::ostream out (&Line);
+	    if (dim) {
+// 	      for (Int_t i=0;i<dim;i++) {
+// 		cout << "["<<dec<<arrayLayout[i]<<"]";
+// 	      }
+	    }
+//             cout << "\t"; 
+//             if ( strlen((*member).fColumnName)+3*dim < 8) {cout << "\t"; }
 
             for (thisStepRows = 0;thisStepRows < thisLoopLenth; thisStepRows++,nextRow += GetRowSize()) {
                const char *pointer = nextRow + offset  + indexOffset*(*member).fTypeSize;
                if (isdate) {
                   cdatime = (UInt_t*)pointer;
                   TDatime::GetDateTime(cdatime[0],cdate,ctime);
-                  cout << cdate << "/" << ctime;
+//                   cout << cdate << "/" << ctime; 
+                  out << cdate << "/" << ctime; 
                } else if ((*member).fType == kChar && dim == 1) {
                   char charbuffer[11];
                   strlcpy(charbuffer,pointer,TMath::Min(10,arrayLength)+1);
                   charbuffer[10] = 0;
-                  cout << "\"" << charbuffer;
-                  if (arrayLength > 10)
-                     cout << " . . . ";
-                  cout << "\"";
+//                   cout << "\"" << charbuffer;
+                  out << "\"" << charbuffer;
+                  if (arrayLength > 10) {
+//                     cout << " . . . "; 
+                     out << " . . . "; 
+		  }
+//                   cout << "\""; 
+                  out << "\""; 
                   breakLoop = kTRUE;
                } else {
-                  AsString((void *)pointer,EColumnType((*member).fType),width,cout);
-                  cout << " :";
+//                   AsString((void *)pointer,EColumnType((*member).fType),width,cout);
+                  AsString((void *)pointer,EColumnType((*member).fType),width,out);
+//                   cout << " :";
+                  out << " :";
                }
             }
             // Encode  the column's comment
             if (indexOffset==0) {
                TDataSet *nxc = nextComment();
-               cout << " " << (const char *)(nxc ? nxc->GetTitle() : "no comment");
+//                cout << " " << (const char *)(nxc ? nxc->GetTitle() : "no comment");
+               out << " " << (const char *)(nxc ? nxc->GetTitle() : "no comment");
             }
-            cout << endl;
+//             cout << endl;
+	    if (!indexOffset) {
+	      cout << membertype.Data();
+	      cout << "\t" << (*member).fColumnName;
+	    }              
+	    if (dim) {
+	      if (indexOffset) ArrayLayout(arrayLayout,(*member).fIndexArray,dim);
+	      if (indexOffset && Line.str() == LineOld) {
+		same++;
+		if (indexOffset == arrayLength - 1) {
+		  cout << "\t " << setw(strlen((*member).fColumnName));
+		  for (Int_t i=0;i<dim;i++) {
+		    cout << "["<<dec<<arrayLayout[i]<<"]";
+		  }
+		} else if (same == 1) {cout << "..." << endl; continue;
+		} else continue;
+	      } else {
+		if (indexOffset) cout << "\t " << setw(strlen((*member).fColumnName));
+		for (Int_t i=0;i<dim;i++) {
+		  cout << "["<<dec<<arrayLayout[i]<<"]";
+		}
+		LineOld = Line.str();
+	      }
+	      cout << "\t"; 
+	      if ( strlen((*member).fColumnName)+3*dim < 8) {cout << "\t"; }
+	      cout << Line.str() << endl; 
+	    } else {
+	      cout << "\t"; 
+	      if ( strlen((*member).fColumnName)+3*dim < 8) {cout << "\t"; }
+	      cout << Line.str() << endl; 
+	      LineOld = "";
+	    }
          }
          if (arrayLayout) delete [] arrayLayout;
       }

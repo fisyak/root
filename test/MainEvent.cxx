@@ -141,13 +141,17 @@ int main(int argc, char **argv)
    if (arg4 == 35) { write = 0; read  = 2;}  //netfile + read random
    if (arg4 == 36) { write = 1; }            //netfile + write sequential
    Int_t branchStyle = 1; //new style by default
+#if 1
+   //   split = -10;
+   Event::Class()->IgnoreTObjectStreamer();  
+   //   Track::Class()->IgnoreTObjectStreamer();
+#endif
    if (split < 0) {branchStyle = 0; split = -1-split;}
 
    TFile *hfile;
    TTree *tree;
    TTreePerfStats *ioperf = nullptr;
    Event *event = 0;
-
    // Fill event, header and tracks with some random numbers
    //   Create a timer object to benchmark this loop
    TStopwatch timer;
@@ -234,7 +238,9 @@ int main(int argc, char **argv)
       TTree::SetBranchStyle(branchStyle);
       TBranch *branch = tree->Branch("event", &event, bufsize,split);
       branch->SetAutoDelete(kFALSE);
+#if 1
       if(split >= 0 && branchStyle) tree->BranchRef();
+#endif
       Float_t ptmin = 1;
 
       for (ev = 0; ev < nevent; ev++) {

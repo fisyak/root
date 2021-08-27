@@ -251,7 +251,7 @@ TMatrixD* TMVA::Tools::GetSQRootMatrix( TMatrixDSym* symMat )
    // of course the resulting sqrtMat is also symmetric, but it's easier to
    // treat it as a general matrix
    Int_t n = symMat->GetNrows();
-
+   if (!n) return 0;
    // compute eigenvectors
    TMatrixDSymEigen* eigen = new TMatrixDSymEigen( *symMat );
 

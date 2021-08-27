@@ -2037,7 +2037,7 @@ Int_t TLinearFitter::EvalRobust(Double_t h)
    //See class description for the algorithm details
 
    fRobust = kTRUE;
-   Double_t kEps = 1e-13;
+   Double_t kEps = 2e-13;
    Int_t nmini = 300;
    Int_t i, j, maxind=0, k, k1 = 500;
    Int_t nbest = 10;
@@ -2094,7 +2094,8 @@ Int_t TLinearFitter::EvalRobust(Double_t h)
          for (j=0; j<fNfunctions; j++)
             fParams(j) = cstock(j, i);
          chi2 = 1;
-         while (chi2 > kEps) {
+	 Int_t iter = 0;
+         while (chi2 > kEps && iter++ < 113) {
             chi2 = CStep(2, fH, residuals,index, index, -1, -1);
             if (TMath::Abs(chi2 - bestchi2[i]) < kEps)
                break;
