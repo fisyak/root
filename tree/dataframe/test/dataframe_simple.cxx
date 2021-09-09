@@ -19,9 +19,6 @@
 #include <set>
 #include <random>
 
-#include "MaxSlotHelper.h"
-#include "SimpleFiller.h"
-
 using namespace ROOT;
 using namespace ROOT::RDF;
 using namespace ROOT::VecOps;
@@ -29,7 +26,7 @@ using namespace ROOT::VecOps;
 // Fixture for all tests in this file. If parameter is true, run with implicit MT, else run sequentially
 class RDFSimpleTests : public ::testing::TestWithParam<bool> {
 protected:
-   RDFSimpleTests() : NSLOTS(GetParam() ? std::min(4u, std::thread::hardware_concurrency()) : 1u)
+   RDFSimpleTests() : NSLOTS(GetParam() ? 4u : 1u)
    {
       if (GetParam())
          ROOT::EnableImplicitMT(NSLOTS);
@@ -602,6 +599,27 @@ TEST_P(RDFSimpleTests, Graph)
    }
 }
 
+class MaxSlotHelper : public ROOT::Detail::RDF::RActionImpl<MaxSlotHelper> {
+   const std::shared_ptr<unsigned int> fMaxSlot; // final result
+   std::vector<unsigned int> fMaxSlots;          // per-thread partial results
+public:
+   MaxSlotHelper(unsigned int nSlots)
+      : fMaxSlot(std::make_shared<unsigned int>(std::numeric_limits<unsigned int>::lowest())),
+        fMaxSlots(nSlots, std::numeric_limits<unsigned int>::lowest())
+   {
+   }
+   MaxSlotHelper(MaxSlotHelper &&) = default;
+   MaxSlotHelper(const MaxSlotHelper &) = delete;
+   using Result_t = unsigned int;
+   std::shared_ptr<unsigned int> GetResultPtr() const { return fMaxSlot; }
+   void Initialize() {}
+   void InitTask(TTreeReader *, unsigned int) {}
+   void Exec(unsigned int slot, unsigned int /*slot2*/) { fMaxSlots[slot] = std::max(fMaxSlots[slot], slot); }
+   void Finalize() { *fMaxSlot = *std::max_element(fMaxSlots.begin(), fMaxSlots.end()); }
+
+   std::string GetActionName() { return "MaxSlot"; }
+};
+
 TEST_P(RDFSimpleTests, BookCustomAction)
 {
    RDataFrame d(1);
@@ -610,18 +628,6 @@ TEST_P(RDFSimpleTests, BookCustomAction)
 
    auto maxSlot0 = d.Book<unsigned int>(MaxSlotHelper(nWorkers), {"tdfslot_"});
    auto maxSlot1 = d.Book<unsigned int>(MaxSlotHelper(nWorkers), {"rdfslot_"});
-   EXPECT_EQ(*maxSlot0, expected);
-   EXPECT_EQ(*maxSlot1, expected);
-}
-
-TEST_P(RDFSimpleTests, BookCustomActionJitted)
-{
-   RDataFrame d(1);
-   const auto nWorkers = std::max(1u, ROOT::GetThreadPoolSize());
-   const auto expected = nWorkers-1;
-
-   auto maxSlot0 = d.Book(MaxSlotHelper(nWorkers), {"tdfslot_"});
-   auto maxSlot1 = d.Book(MaxSlotHelper(nWorkers), {"rdfslot_"});
    EXPECT_EQ(*maxSlot0, expected);
    EXPECT_EQ(*maxSlot1, expected);
 }
@@ -958,23 +964,6 @@ TEST_P(RDFSimpleTests, ChainWithDifferentTreeNames)
 TEST_P(RDFSimpleTests, WritingToFundamentalType)
 {
    EXPECT_THROW(ROOT::RDataFrame(1).Define("x", [] { return 1; }).Filter("x = 42"), std::runtime_error);
-}
-
-TEST_P(RDFSimpleTests, FillWithCustomClass)
-{
-   SimpleFiller sf; // defined as a variable to exercise passing lvalues into `Fill`
-   auto simplefilled = ROOT::RDataFrame(10).Define("x", [] { return 42.; }).Fill<double>(sf, {"x"});
-   auto &h = simplefilled->GetHisto();
-   EXPECT_DOUBLE_EQ(h.GetMean(), 42.);
-   EXPECT_EQ(h.GetEntries(), 10);
-}
-
-TEST_P(RDFSimpleTests, FillWithCustomClassJitted)
-{
-   auto simplefilled = ROOT::RDataFrame(10).Define("x", [] { return 42.; }).Fill(SimpleFiller{}, {"x"});
-   auto &h = simplefilled->GetHisto();
-   EXPECT_DOUBLE_EQ(h.GetMean(), 42.);
-   EXPECT_EQ(h.GetEntries(), 10);
 }
 
 // run single-thread tests

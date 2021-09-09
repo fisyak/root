@@ -12,7 +12,6 @@
 ROOT_STANDARD_LIBRARY_PACKAGE(ROOTGraphicsPrimitives
   HEADERS
     ROOT/RBox.hxx
-    ROOT/RFont.hxx
     ROOT/RFrameTitle.hxx
     ROOT/RLegend.hxx
     ROOT/RLine.hxx
@@ -21,7 +20,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTGraphicsPrimitives
     ROOT/RText.hxx
   SOURCES
     src/RBox.cxx
-    src/RFont.cxx
     src/RLegend.cxx
     src/RLine.cxx
     src/RMarker.cxx

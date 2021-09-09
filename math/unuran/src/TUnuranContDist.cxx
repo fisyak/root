@@ -22,31 +22,33 @@
 
 ClassImp(TUnuranContDist);
 
-TUnuranContDist::TUnuranContDist(const ROOT::Math::IGenFunction *pdf, const ROOT::Math::IGenFunction *dpdf,
-                                 const ROOT::Math::IGenFunction *cdf, bool isLogPdf, bool copyFunc)
-   : fPdf(pdf), fDPdf(dpdf), fCdf(cdf), fXmin(1.), fXmax(-1.), fMode(0), fArea(0), fIsLogPdf(isLogPdf), fHasDomain(0),
-     fHasMode(0), fHasArea(0), fOwnFunc(copyFunc)
+TUnuranContDist::TUnuranContDist (const ROOT::Math::IGenFunction & pdf, const ROOT::Math::IGenFunction * deriv, bool isLogPdf, bool copyFunc  ) :
+   fPdf(&pdf),
+   fDPdf(deriv),
+   fCdf(nullptr),
+   fXmin(1.),
+   fXmax(-1.),
+   fMode(0),
+   fArea(0),
+   fIsLogPdf(isLogPdf),
+   fHasDomain(0),
+   fHasMode(0),
+   fHasArea(0),
+   fOwnFunc(copyFunc)
 {
    // Constructor from generic function interfaces
    // manage the functions and clone them if flag copyFunc is true
    if (fOwnFunc) {
-      if (fPdf) 
-         fPdf = fPdf->Clone();
-      if (fDPdf)
-         fDPdf = fDPdf->Clone();
-      if (fCdf)
-         fCdf = fCdf->Clone();
+      fPdf = fPdf->Clone();
+      if (fDPdf) fDPdf = fDPdf->Clone();
    }
 }
 
-TUnuranContDist::TUnuranContDist (const ROOT::Math::IGenFunction & pdf, const ROOT::Math::IGenFunction * deriv, bool isLogPdf, bool copyFunc  ) :
-   TUnuranContDist(&pdf,deriv, nullptr, isLogPdf, copyFunc)
-{}
 
-TUnuranContDist::TUnuranContDist (TF1 * pdf, TF1 * deriv, TF1 * cdf, bool isLogPdf  ) :
+TUnuranContDist::TUnuranContDist (TF1 * pdf, TF1 * deriv, bool isLogPdf  ) :
    fPdf(  (pdf) ? new ROOT::Math::WrappedTF1 ( *pdf) : nullptr ),
    fDPdf( (deriv) ?  new ROOT::Math::WrappedTF1 ( *deriv) : nullptr ),
-   fCdf( (cdf) ?  new ROOT::Math::WrappedTF1 ( *cdf) : nullptr),
+   fCdf(nullptr),
    fXmin(1.),
    fXmax(-1.),
    fMode(0),
@@ -61,9 +63,6 @@ TUnuranContDist::TUnuranContDist (TF1 * pdf, TF1 * deriv, TF1 * cdf, bool isLogP
    // function pointers are managed by class
 }
 
-TUnuranContDist::TUnuranContDist (TF1 * pdf, TF1 * deriv, bool isLogPdf  ) :
-   TUnuranContDist(pdf,deriv, nullptr, isLogPdf)
-   {}
 
 TUnuranContDist::TUnuranContDist(const TUnuranContDist & rhs) :
    TUnuranBaseDist(),
@@ -142,11 +141,9 @@ double TUnuranContDist::Pdf ( double x) const {
 double TUnuranContDist::DPdf( double x) const {
    // evaluate the derivative of the pdf
    // if derivative function is not given is evaluated numerically
-   // in case a pdf is available, otherwise a NaN is returned
    if (fDPdf) {
       return (*fDPdf)(x);
    }
-   if (!fPdf) return TMath::QuietNaN();
    // do numerical derivation using numerical derivation
    ROOT::Math::RichardsonDerivator rd;
    static double gEps = 0.001;
@@ -161,7 +158,6 @@ double TUnuranContDist::Cdf(double x) const {
       return (*fCdf)(x);
    }
    // do numerical integration
-   if (!fPdf) return TMath::QuietNaN();
    ROOT::Math::Integrator ig;
    if (fXmin > fXmax) return ig.Integral( *fPdf );
    else

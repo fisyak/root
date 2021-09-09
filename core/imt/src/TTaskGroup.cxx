@@ -20,7 +20,6 @@
 #endif
 
 #include <type_traits>
-#include <stdexcept>
 
 /**
 \class ROOT::Experimental::TTaskGroup

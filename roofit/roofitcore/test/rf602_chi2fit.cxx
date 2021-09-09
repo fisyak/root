@@ -19,7 +19,7 @@
 #include "RooChebychev.h"
 #include "RooAddPdf.h"
 #include "RooChi2Var.h"
-#include "RooMinimizer.h"
+#include "RooMinuit.h"
 #include "TCanvas.h"
 #include "RooPlot.h"
 using namespace RooFit ;
@@ -71,8 +71,8 @@ public:
   // by the number of events in the dataset
   RooChi2Var chi2("chi2","chi2",model,*dh) ;
 
-  // Use RooMinimizer interface to minimize chi^2
-  RooMinimizer m(chi2) ;
+  // Use RooMinuit interface to minimize chi^2
+  RooMinuit m(chi2) ;
   m.migrad() ;
   m.hesse() ;
 

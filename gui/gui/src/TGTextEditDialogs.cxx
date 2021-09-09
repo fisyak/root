@@ -20,17 +20,16 @@
 
 **************************************************************************/
 
-
-/** \class TGTextEditDialogs
-    \ingroup guiwidgets
-
-This file defines several dialogs that are used by the TGTextEdit
-widget via its associated context popup menu.
-The following dialogs are available: TGSearchDialog, TGGotoDialog
-and TGPrintDialog.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGTextEditDialogs                                                    //
+//                                                                      //
+// This file defines several dialogs that are used by the TGTextEdit    //
+// widget via its associated context popup menu.                        //
+// The following dialogs are available: TGSearchDialog, TGGotoDialog    //
+// and TGPrintDialog.                                                   //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGTextEditDialogs.h"
 #include "TGButton.h"

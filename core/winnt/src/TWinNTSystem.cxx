@@ -60,7 +60,6 @@
 #include <list>
 #include <shlobj.h>
 #include <conio.h>
-#include <time.h>
 
 #if defined (_MSC_VER) && (_MSC_VER >= 1400)
    #include <intrin.h>
@@ -930,7 +929,7 @@ namespace {
       // ensure window title has been updated
       ::Sleep(40);
       // look for NewWindowTitle
-      gConsoleWindow = (ULongptr_t)::FindWindow(0, pszNewWindowTitle);
+      gConsoleWindow = (ULong_t)::FindWindow(0, pszNewWindowTitle);
       if (gConsoleWindow) {
          // restore original window title
          ::ShowWindow((HWND)gConsoleWindow, SW_RESTORE);
@@ -953,7 +952,7 @@ namespace {
 ///////////////////////////////////////////////////////////////////////////////
 ClassImp(TWinNTSystem);
 
-ULongptr_t gConsoleWindow = 0;
+ULong_t gConsoleWindow = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
@@ -1187,13 +1186,13 @@ const char *TWinNTSystem::BaseName(const char *name)
 
 void TWinNTSystem::SetProgname(const char *name)
 {
-   size_t idot = 0;
+   ULong_t  idot = 0;
    char *dot = nullptr;
    char *progname;
    char *fullname = nullptr; // the program name with extension
 
   // On command prompt the progname can be supplied with no extension (under Windows)
-   size_t namelen = name ? strlen(name) : 0;
+   ULong_t namelen=name ? strlen(name) : 0;
    if (name && namelen > 0) {
       // Check whether the name contains "extention"
       fullname = new char[namelen+5];
@@ -1203,7 +1202,7 @@ void TWinNTSystem::SetProgname(const char *name)
 
       progname = StrDup(BaseName(fullname));
       dot = strrchr(progname, '.');
-      idot = dot ? (size_t)(dot - progname) : strlen(progname);
+      idot = dot ? (ULong_t)(dot - progname) : strlen(progname);
 
       char *which = nullptr;
 
@@ -2053,7 +2052,7 @@ void *TWinNTSystem::OpenDirectory(const char *fdir)
    else
       strlcpy(dir, sdir,MAX_PATH);
 
-   size_t nche = strlen(dir)+3;
+   int nche = strlen(dir)+3;
    char *entry = new char[nche];
    struct _stati64 finfo;
 
@@ -2603,7 +2602,7 @@ int TWinNTSystem::GetPathInfo(const char *path, FileStat_t &buf)
    // Remove trailing backslashes
    const char *proto = (strstr(path, "file:///")) ? "file://" : "file:";
    char *newpath = StrDup(StripOffProto(path, proto));
-   size_t l = strlen(newpath);
+   int l = strlen(newpath);
    while (l > 1) {
       if (newpath[--l] != '\\' || newpath[--l] != '/') {
          break;
@@ -3875,10 +3874,10 @@ void TWinNTSystem::Exit(int code, Bool_t mode)
             TIter next(gROOT->GetListOfBrowsers());
             while ((b = (TBrowser*) next()))
                gROOT->ProcessLine(TString::Format("\
-                  if (((TBrowser*)0x%zx)->GetBrowserImp() &&\
-                      ((TBrowser*)0x%zx)->GetBrowserImp()->GetMainFrame()) \
-                     ((TBrowser*)0x%zx)->GetBrowserImp()->GetMainFrame()->CloseWindow();\
-                  else delete (TBrowser*)0x%zx", (size_t)b, (size_t)b, (size_t)b, (size_t)b));
+                  if (((TBrowser*)0x%lx)->GetBrowserImp() &&\
+                      ((TBrowser*)0x%lx)->GetBrowserImp()->GetMainFrame()) \
+                     ((TBrowser*)0x%lx)->GetBrowserImp()->GetMainFrame()->CloseWindow();\
+                  else delete (TBrowser*)0x%lx", (ULong_t)b, (ULong_t)b, (ULong_t)b, (ULong_t)b));
          }
       }
    }
@@ -4390,7 +4389,7 @@ Bool_t TWinNTSystem::DispatchTimers(Bool_t mode)
 
    fInsideNotify = kTRUE;
 
-   TListIter it(fTimers);
+   TOrdCollectionIter it((TOrdCollection*)fTimers);
    TTimer *t;
    Bool_t  timedout = kFALSE;
 

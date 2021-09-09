@@ -173,15 +173,15 @@ TDataMember::TDataMember(DataMemberInfo_t *info, TClass *cl) : TDictionary()
 {
    fInfo        = info;
    fClass       = cl;
-   fDataType    = nullptr;
-   fOptions     = nullptr;
-   fValueSetter = nullptr;
-   fValueGetter = nullptr;
+   fDataType    = 0;
+   fOptions     = 0;
+   fValueSetter = 0;
+   fValueGetter = 0;
    fOffset      = -1;
    fProperty    = -1;
    fSTLCont     = -1;
    fArrayDim    = -1;
-   fArrayMaxIndex=nullptr;
+   fArrayMaxIndex=0;
    if (!fInfo && !fClass) return; // default ctor is called
 
    Init(false);
@@ -204,7 +204,7 @@ void TDataMember::Init(bool afterReading)
    const char *t = GetTitle();
    if (t && t[0] != '!')
       SetBit(kObjIsPersistent);
-   fDataType = nullptr;
+   fDataType = 0;
    if (IsBasic() || IsEnum()) {
       if (IsBasic()) {
          const char *name = GetFullTypeName();
@@ -216,7 +216,7 @@ void TDataMember::Init(bool afterReading)
             name = GetTypeName();
          fDataType = gROOT->GetType(name);
 
-         if (fDataType==nullptr) {
+         if (fDataType==0) {
             // humm we did not find it ... maybe it's a typedef that has not been loaded yet.
             // (this can happen if the executable does not have a TApplication object).
             fDataType = gROOT->GetType(name,kTRUE);
@@ -258,12 +258,12 @@ void TDataMember::Init(bool afterReading)
    } else if (!strncmp(GetFullTypeName(),"Bool_t",6)){
 
       fOptions = new TList();
-      TOptionListItem *it = new TOptionListItem(this,1,0,0,"ON",nullptr);
+      TOptionListItem *it = new TOptionListItem(this,1,0,0,"ON",0);
       fOptions->Add(it);
-      it = new TOptionListItem(this,0,0,0,"Off",nullptr);
+      it = new TOptionListItem(this,0,0,0,"Off",0);
       fOptions->Add(it);
 
-   } else fOptions = nullptr;
+   } else fOptions = 0;
 
 }
 
@@ -279,14 +279,14 @@ TDataMember::TDataMember(const TDataMember& dm) :
   fSTLCont(dm.fSTLCont),
   fProperty(dm.fProperty),
   fArrayDim(dm.fArrayDim),
-  fArrayMaxIndex( dm.fArrayDim ? new Int_t[dm.fArrayDim] : nullptr),
+  fArrayMaxIndex( dm.fArrayDim ? new Int_t[dm.fArrayDim] : 0),
   fArrayIndex(dm.fArrayIndex),
   fTypeName(dm.fTypeName),
   fFullTypeName(dm.fFullTypeName),
   fTrueTypeName(dm.fTrueTypeName),
-  fValueGetter(nullptr),
-  fValueSetter(nullptr),
-  fOptions(dm.fOptions ? (TList*)dm.fOptions->Clone() : nullptr)
+  fValueGetter(0),
+  fValueSetter(0),
+  fOptions(dm.fOptions ? (TList*)dm.fOptions->Clone() : 0)
 {
    for(Int_t d = 0; d < fArrayDim; ++d)
       fArrayMaxIndex[d] = dm.fArrayMaxIndex[d];
@@ -299,12 +299,12 @@ TDataMember& TDataMember::operator=(const TDataMember& dm)
 {
    if(this!=&dm) {
       gCling->DataMemberInfo_Delete(fInfo);
-      delete fValueSetter; fValueSetter = nullptr;
-      delete fValueGetter; fValueGetter = nullptr;
+      delete fValueSetter;
+      delete fValueGetter;
       if (fOptions) {
          fOptions->Delete();
          delete fOptions;
-         fOptions = nullptr;
+         fOptions = 0;
       }
 
       TDictionary::operator=(dm);
@@ -315,14 +315,14 @@ TDataMember& TDataMember::operator=(const TDataMember& dm)
       fSTLCont=dm.fSTLCont;
       fProperty=dm.fProperty;
       fArrayDim = dm.fArrayDim;
-      fArrayMaxIndex = dm.fArrayDim ? new Int_t[dm.fArrayDim] : nullptr;
+      fArrayMaxIndex = dm.fArrayDim ? new Int_t[dm.fArrayDim] : 0;
       for(Int_t d = 0; d < fArrayDim; ++d)
          fArrayMaxIndex[d] = dm.fArrayMaxIndex[d];
       fArrayIndex = dm.fArrayIndex;
       fTypeName=dm.fTypeName;
       fFullTypeName=dm.fFullTypeName;
       fTrueTypeName=dm.fTrueTypeName;
-      fOptions = dm.fOptions ? (TList*)dm.fOptions->Clone() : nullptr;
+      fOptions = dm.fOptions ? (TList*)dm.fOptions->Clone() : 0;
    }
    return *this;
 }
@@ -385,7 +385,7 @@ const char *TDataMember::GetArrayIndex() const
 TDictionary::DeclId_t TDataMember::GetDeclId() const
 {
    if (fInfo) return gInterpreter->GetDeclId(fInfo);
-   else return nullptr;
+   else return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -431,7 +431,7 @@ const char *TDataMember::GetTrueTypeName() const
 ////////////////////////////////////////////////////////////////////////////////
 /// Get offset from "this".
 
-Longptr_t TDataMember::GetOffset() const
+Long_t TDataMember::GetOffset() const
 {
    if (fOffset>=0) return fOffset;
 
@@ -480,7 +480,7 @@ Longptr_t TDataMember::GetOffset() const
 ////////////////////////////////////////////////////////////////////////////////
 /// Get offset from "this" using the information in CINT only.
 
-Longptr_t TDataMember::GetOffsetCint() const
+Long_t TDataMember::GetOffsetCint() const
 {
    if (fOffset>=0) return fOffset;
 
@@ -568,9 +568,9 @@ Bool_t TDataMember::IsValid()
          TListOfDataMembers *lst = dynamic_cast<TListOfDataMembers*>(fClass->GetListOfDataMembers());
          lst->Update(this);
       }
-      return newId != nullptr;
+      return newId != 0;
    }
-   return fInfo != nullptr;
+   return fInfo != 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -624,9 +624,10 @@ void TDataMember::ExtractOptionsFromComment()
 
    char cmt[2048];
    char opt[2048];
-   const char *ptr1 = nullptr;
-   char *ptr2    = nullptr;
-   char *ptr3    = nullptr;
+   const char *ptr1    = 0;
+   char *ptr2    = 0;
+   char *ptr3    = 0;
+   char *tok     = 0;
    Int_t cnt     = 0;
    Int_t token_cnt;
    Int_t i;
@@ -640,12 +641,12 @@ void TDataMember::ExtractOptionsFromComment()
    //let's cut the part lying between {}
    char *rest;
    ptr1 = R__STRTOK_R(opt_ptr, "{}", &rest); // starts tokenizing:extracts "*OPTION={"
-   if (ptr1 == nullptr) {
+   if (ptr1 == 0) {
       Fatal("TDataMember","Internal error, found \"*OPTION={\" but not \"{}\" in %s.",GetTitle());
       return;
    }
    ptr1 = R__STRTOK_R(nullptr, "{}", &rest); // And now we have what we need in ptr1!!!
-   if (ptr1 == nullptr) {
+   if (ptr1 == 0) {
       Fatal("TDataMember","Internal error, found \"*OPTION={\" but not \"{}\" in %s.",GetTitle());
       return;
    }
@@ -657,28 +658,31 @@ void TDataMember::ExtractOptionsFromComment()
    // We'll put'em in an array for convenience;
    // You have to do it in this manner because you cannot use nested tokenizing
 
-   std::vector<std::string> tokens;           // a storage for these sub-tokens.
+   char *tokens[256];           // a storage for these sub-tokens.
    token_cnt = 0;
    cnt       = 0;
 
    do {                          //tokenizing loop
       ptr1 = R__STRTOK_R((char *)(cnt++ ? nullptr : opt), ";", &rest);
-      if (ptr1) {
-         tokens.emplace_back(ptr1);
+      if (ptr1){
+         Int_t nch = strlen(ptr1)+1;
+         tok=new char[nch];
+         strlcpy(tok,ptr1,nch);
+         tokens[token_cnt]=tok;
          token_cnt++;
       }
    } while (ptr1);
 
    // OK! Now let's check whether we have Get/Set methods encode in any string
    for (i=0;i<token_cnt;i++) {
-      if (strstr(tokens[i].c_str(),"GetMethod")) {
-         ptr1 = R__STRTOK_R(const_cast<char *>(tokens[i].c_str()), "\"", &rest); // tokenizing-strip text "GetMethod"
-         if (ptr1 == nullptr) {
+      if (strstr(tokens[i],"GetMethod")) {
+         ptr1 = R__STRTOK_R(tokens[i], "\"", &rest); // tokenizing-strip text "GetMethod"
+         if (ptr1 == 0) {
             Fatal("TDataMember","Internal error, found \"GetMethod\" but not \"\\\"\" in %s.",GetTitle());
             return;
          }
          ptr1 = R__STRTOK_R(nullptr, "\"", &rest); // tokenizing - name is in ptr1!
-         if (ptr1 == nullptr) {
+         if (ptr1 == 0) {
             Fatal("TDataMember","Internal error, found \"GetMethod\" but not \"\\\"\" in %s.",GetTitle());
             return;
          }
@@ -690,14 +694,14 @@ void TDataMember::ExtractOptionsFromComment()
          continue; //next item!
       }
 
-      if (strstr(tokens[i].c_str(),"SetMethod")) {
-         ptr1 = R__STRTOK_R(const_cast<char *>(tokens[i].c_str()), "\"", &rest);
-         if (ptr1 == nullptr) {
+      if (strstr(tokens[i],"SetMethod")) {
+         ptr1 = R__STRTOK_R(tokens[i], "\"", &rest);
+         if (ptr1 == 0) {
             Fatal("TDataMember","Internal error, found \"SetMethod\" but not \"\\\"\" in %s.",GetTitle());
             return;
          }
          ptr1 = R__STRTOK_R(nullptr, "\"", &rest); // name of Setter in ptr1
-         if (ptr1 == nullptr) {
+         if (ptr1 == 0) {
             Fatal("TDataMember","Internal error, found \"SetMethod\" but not \"\\\"\" in %s.",GetTitle());
             return;
          }
@@ -713,14 +717,14 @@ void TDataMember::ExtractOptionsFromComment()
    std::unique_ptr<TList> optionlist{new TList()};       //storage for options strings
 
    for (i=0;i<token_cnt;i++) {
-      if (strstr(tokens[i].c_str(),"Items")) {
-         ptr1 = R__STRTOK_R(const_cast<char *>(tokens[i].c_str()), "()", &rest);
-         if (ptr1 == nullptr) {
+      if (strstr(tokens[i],"Items")) {
+         ptr1 = R__STRTOK_R(tokens[i], "()", &rest);
+         if (ptr1 == 0) {
             Fatal("TDataMember","Internal error, found \"Items\" but not \"()\" in %s.",GetTitle());
             return;
          }
          ptr1 = R__STRTOK_R(nullptr, "()", &rest);
-         if (ptr1 == nullptr) {
+         if (ptr1 == 0) {
             Fatal("TDataMember","Internal error, found \"Items\" but not \"()\" in %s.",GetTitle());
             return;
          }
@@ -751,8 +755,8 @@ void TDataMember::ExtractOptionsFromComment()
 
    TIter next(optionlist.get());                //we'll iterate through all
                                           //strings containing options
-   TOptionListItem *it  = nullptr;
-   TOptionListItem *it1 = nullptr;
+   TOptionListItem *it  = 0;
+   TOptionListItem *it1 = 0;
    while ((it=(TOptionListItem*)next())) {
 
       ptr1 = it->fOptName;  // We will change the value of OptName ... but it is fine since we delete the object at the end of the loop.
@@ -795,6 +799,12 @@ void TDataMember::ExtractOptionsFromComment()
 
    }
 
+   // Garbage collection
+
+   //And dispose tokens string...
+   for (i=0;i<token_cnt;i++)
+      if(tokens[i])
+         delete [] tokens[i];
 }
 
 
@@ -914,16 +924,16 @@ Bool_t TDataMember::Update(DataMemberInfo_t *info)
       SafeDelete(fOptions);
    }
 
-   if (info == nullptr) {
+   if (info == 0) {
       fOffset      = -1;
       fProperty    = -1;
       fSTLCont     = -1;
       fArrayDim    = -1;
       delete [] fArrayMaxIndex;
-      fArrayMaxIndex=nullptr;
+      fArrayMaxIndex=0;
       fArrayIndex.Clear();
 
-      fInfo = nullptr;
+      fInfo = 0;
       return kTRUE;
    } else {
       fInfo = info;

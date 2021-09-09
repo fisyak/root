@@ -137,8 +137,7 @@ std::string ComposeRVecTypeName(const std::string &valueType)
 
 std::string GetLeafTypeName(TLeaf *leaf, const std::string &colName)
 {
-   const char *colTypeCStr = leaf->GetTypeName();
-   std::string colType = colTypeCStr == nullptr ? "" : colTypeCStr;
+   std::string colType = leaf->GetTypeName();
    if (colType.empty())
       throw std::runtime_error("Could not deduce type of leaf " + colName);
    if (leaf->GetLeafCount() != nullptr && leaf->GetLenStatic() == 1) {
@@ -179,7 +178,7 @@ std::string GetBranchOrLeafTypeName(TTree &t, const std::string &colName)
       }
    }
    if (leaf)
-      return GetLeafTypeName(leaf, std::string(leaf->GetFullName()));
+      return GetLeafTypeName(leaf, colName);
 
    // we could not find a leaf named colName, so we look for a branch called like this
    auto branch = t.GetBranch(colName.c_str());
@@ -203,11 +202,11 @@ std::string GetBranchOrLeafTypeName(TTree &t, const std::string &colName)
             }
             return be->GetClassName();
          }
-      } else if (branch->IsA() == TBranch::Class() && branch->GetListOfLeaves()->GetEntriesUnsafe() == 1) {
+      } else if (branch->IsA() == TBranch::Class() && branch->GetListOfLeaves()->GetEntries() == 1) {
          // normal branch (not a TBranchElement): if it has only one leaf, we pick the type of the leaf:
          // RDF and TTreeReader allow referring to branch.leaf as just branch if branch has only one leaf
          leaf = static_cast<TLeaf *>(branch->GetListOfLeaves()->UncheckedAt(0));
-         return GetLeafTypeName(leaf, std::string(leaf->GetFullName()));
+         return GetLeafTypeName(leaf, colName + '.' + leaf->GetName());
       }
    }
 
@@ -226,11 +225,6 @@ std::string ColumnName2ColumnTypeName(const std::string &colName, TTree *tree, R
 {
    std::string colType;
 
-   // must check defines first: we want Redefines to have precedence over everything else
-   if (colType.empty() && define) {
-      colType = define->GetTypeName();
-   }
-
    if (ds && ds->HasColumn(colName))
       colType = ds->GetTypeName(colName);
 
@@ -243,6 +237,10 @@ std::string ColumnName2ColumnTypeName(const std::string &colName, TTree *tree, R
          auto &valueType = split[1];
          colType = ComposeRVecTypeName(valueType);
       }
+   }
+
+   if (colType.empty() && define) {
+      colType = define->GetTypeName();
    }
 
    if (colType.empty())
@@ -353,18 +351,6 @@ bool IsInternalColumn(std::string_view colName)
                            ('r' == str[0] || 't' == str[0]) && // starts with r or t
                            0 == strncmp("df", str + 1, 2);     // 2nd and 3rd letters are df
    return goodPrefix && '_' == colName.back();                 // also ends with '_'
-}
-
-unsigned int GetColumnWidth(const std::vector<std::string>& names, const unsigned int minColumnSpace)
-{
-   auto columnWidth = 0u;
-   for (const auto& name : names) {
-      const auto length = name.length();
-      if (length > columnWidth)
-         columnWidth = length;
-   }
-   columnWidth = (columnWidth / minColumnSpace + 1) * minColumnSpace;
-   return columnWidth;
 }
 
 } // end NS RDF

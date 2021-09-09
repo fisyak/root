@@ -27,7 +27,6 @@
 #include <ROOT/RConfig.hxx>
 #include <ROOT/FoundationUtils.hxx>
 #include "Rtypes.h"
-#include "strlcpy.h"
 
 #include "RStl.h"
 
@@ -109,11 +108,11 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 /// Add default parameter to the scope if needed.
 
-static clang::NestedNameSpecifier *AddDefaultParametersNNS(const clang::ASTContext& Ctx,
+static clang::NestedNameSpecifier* AddDefaultParametersNNS(const clang::ASTContext& Ctx,
                                                            clang::NestedNameSpecifier* scope,
                                                            const cling::Interpreter &interpreter,
                                                            const ROOT::TMetaUtils::TNormalizedCtxt &normCtxt) {
-   if (!scope) return nullptr;
+   if (!scope) return 0;
 
    const clang::Type* scope_type = scope->getAsType();
    if (scope_type) {
@@ -158,11 +157,11 @@ static bool CheckDefinition(const clang::CXXRecordDecl *cl, const clang::CXXReco
 /// instantiating the class template instance and replace it with the
 /// partially sugared types we have from 'instance'.
 
-static clang::NestedNameSpecifier *ReSubstTemplateArgNNS(const clang::ASTContext &Ctxt,
+static clang::NestedNameSpecifier* ReSubstTemplateArgNNS(const clang::ASTContext &Ctxt,
                                                          clang::NestedNameSpecifier *scope,
                                                          const clang::Type *instance)
 {
-   if (!scope) return nullptr;
+   if (!scope) return 0;
 
    const clang::Type* scope_type = scope->getAsType();
    if (scope_type) {
@@ -211,7 +210,8 @@ static const clang::FieldDecl *GetDataMemberFromAll(const clang::CXXRecordDecl &
          return *field_iter;
       }
    }
-   return nullptr;
+   return 0;
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -220,11 +220,10 @@ static bool CXXRecordDecl__FindOrdinaryMember(const clang::CXXBaseSpecifier *Spe
                                               clang::CXXBasePath &Path,
                                               const char *Name)
 {
-   if (!Specifier) return false;
    clang::RecordDecl *BaseRecord = Specifier->getType()->getAs<clang::RecordType>()->getDecl();
 
    const clang::CXXRecordDecl *clxx = llvm::dyn_cast<clang::CXXRecordDecl>(BaseRecord);
-   if (!clxx) return false;
+   if (clxx == 0) return false;
 
    const clang::FieldDecl *found = GetDataMemberFromAll(*clxx,(const char*)Name);
    if (found) {
@@ -272,7 +271,7 @@ static const clang::FieldDecl *GetDataMemberFromAllParents(const clang::CXXRecor
          return found;
       }
    }
-   return nullptr;
+   return 0;
 }
 
 static
@@ -1645,8 +1644,8 @@ bool ROOT::TMetaUtils::hasOpaqueTypedef(const AnnotatedRecordDecl &cl,
                                         const cling::Interpreter &interp,
                                         const TNormalizedCtxt &normCtxt)
 {
-   const clang::CXXRecordDecl *clxx =  llvm::dyn_cast<clang::CXXRecordDecl>(cl.GetRecordDecl());
-   if (!clxx || clxx->getTemplateSpecializationKind() == clang::TSK_Undeclared) return false;
+   const clang::CXXRecordDecl* clxx =  llvm::dyn_cast<clang::CXXRecordDecl>(cl.GetRecordDecl());
+   if (clxx->getTemplateSpecializationKind() == clang::TSK_Undeclared) return 0;
 
    clang::QualType instanceType = interp.getLookupHelper().findType(cl.GetNormalizedName(),
                                                                     cling::LookupHelper::WithDiagnostics);
@@ -1790,7 +1789,7 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
    }
 
    if (HasIOConstructor(decl, args, ctorTypes, interp)) {
-      finalString << "   static void *new_" << mappedname.c_str() << "(void *p = nullptr);" << "\n";
+      finalString << "   static void *new_" << mappedname.c_str() << "(void *p = 0);" << "\n";
 
       if (args.size()==0 && NeedDestructor(decl, interp))
       {
@@ -1902,11 +1901,11 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
 
    finalString << "   static TGenericClassInfo *GenerateInitInstanceLocal(const " << csymbol << "*)" << "\n" << "   {" << "\n";
 
-   finalString << "      " << csymbol << " *ptr = nullptr;" << "\n";
+   finalString << "      " << csymbol << " *ptr = 0;" << "\n";
 
    //fprintf(fp, "      static ::ROOT::ClassInfo< %s > \n",classname.c_str());
    if (ClassInfo__HasMethod(decl,"IsA",interp) ) {
-      finalString << "      static ::TVirtualIsAProxy* isa_proxy = new ::TInstrumentedIsAProxy< "  << csymbol << " >(nullptr);" << "\n";
+      finalString << "      static ::TVirtualIsAProxy* isa_proxy = new ::TInstrumentedIsAProxy< "  << csymbol << " >(0);" << "\n";
    }
    else {
       finalString << "      static ::TVirtualIsAProxy* isa_proxy = new ::TIsAProxy(typeid(" << csymbol << "));" << "\n";
@@ -2013,7 +2012,6 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
          case ROOT::kSTLvector:
          case ROOT::kSTLlist:
          case ROOT::kSTLdeque:
-         case ROOT::kROOTRVec:
             methodTCP="Pushback";
             break;
          case ROOT::kSTLforwardlist:
@@ -2081,20 +2079,20 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
 
    if (!isStdNotString && !ROOT::TMetaUtils::hasOpaqueTypedef(cl, interp, normCtxt)) {
       // The GenerateInitInstance for STL are not unique and should not be externally accessible
-      finalString << "   TGenericClassInfo *GenerateInitInstance(const " << csymbol << "*)" << "\n" << "   {\n      return GenerateInitInstanceLocal((" << csymbol << "*)nullptr);\n   }" << "\n";
+      finalString << "   TGenericClassInfo *GenerateInitInstance(const " << csymbol << "*)" << "\n" << "   {\n      return GenerateInitInstanceLocal((" << csymbol << "*)0);\n   }" << "\n";
    }
 
    finalString << "   // Static variable to force the class initialization" << "\n";
    // must be one long line otherwise UseDummy does not work
 
 
-   finalString << "   static ::ROOT::TGenericClassInfo *_R__UNIQUE_DICT_(Init) = GenerateInitInstanceLocal((const " << csymbol << "*)nullptr); R__UseDummy(_R__UNIQUE_DICT_(Init));" << "\n";
+   finalString << "   static ::ROOT::TGenericClassInfo *_R__UNIQUE_DICT_(Init) = GenerateInitInstanceLocal((const " << csymbol << "*)0x0); R__UseDummy(_R__UNIQUE_DICT_(Init));" << "\n";
 
    if (!ClassInfo__HasMethod(decl,"Dictionary",interp) || IsTemplate(*decl)) {
       finalString <<  "\n" << "   // Dictionary for non-ClassDef classes" << "\n"
                   << "   static TClass *" << mappedname << "_Dictionary() {\n"
                   << "      TClass* theClass ="
-                  << "::ROOT::GenerateInitInstanceLocal((const " << csymbol << "*)nullptr)->GetClass();\n"
+                  << "::ROOT::GenerateInitInstanceLocal((const " << csymbol << "*)0x0)->GetClass();\n"
                   << "      " << mappedname << "_TClassManip(theClass);\n";
       finalString << "   return theClass;\n";
       finalString << "   }\n\n";
@@ -2267,15 +2265,14 @@ int ROOT::TMetaUtils::WriteNamespaceHeader(std::ostream &out, const clang::DeclC
    //    cl.Fullname(),namespace_obj.Fullname());
    if (ctxt && ctxt->isNamespace()) {
       closing_brackets = WriteNamespaceHeader(out,ctxt->getParent());
-      const clang::NamespaceDecl *ns = llvm::dyn_cast<clang::NamespaceDecl>(ctxt);
-      if (ns) {
-         for (int indent = 0; indent < closing_brackets; ++indent)
-            out << "   ";
-         if (ns->isInline())
-            out << "inline ";
-         out << "namespace " << ns->getNameAsString() << " {" << std::endl;
-         closing_brackets++;
+      for (int indent = 0; indent < closing_brackets; ++indent) {
+         out << "   ";
       }
+      const clang::NamespaceDecl *ns = llvm::dyn_cast<clang::NamespaceDecl>(ctxt);
+      if (ns->isInline())
+         out << "inline ";
+      out << "namespace " << ns->getNameAsString() << " {" << std::endl;
+      closing_brackets++;
    }
 
    return closing_brackets;
@@ -2848,7 +2845,7 @@ clang::RecordDecl *ROOT::TMetaUtils::GetUnderlyingRecordDecl(clang::QualType typ
 
    if (rawtype->isFundamentalType() || rawtype->isEnumeralType()) {
       // not an object.
-      return nullptr;
+      return 0;
    }
    return rawtype->getAsCXXRecordDecl();
 }
@@ -3189,12 +3186,14 @@ llvm::StringRef ROOT::TMetaUtils::DataMemberInfo__ValidArrayIndex(const clang::D
          }
       } else { // current token is not a digit
          // first let's see if it is a data member:
+         int found = 0;
          const clang::CXXRecordDecl *parent_clxx = llvm::dyn_cast<clang::CXXRecordDecl>(m.getDeclContext());
-         const clang::FieldDecl *index1 = nullptr;
+         const clang::FieldDecl *index1 = 0;
          if (parent_clxx)
             index1 = GetDataMemberFromAll(*parent_clxx, current );
          if ( index1 ) {
             if ( IsFieldDeclInt(index1) ) {
+               found = 1;
                // Let's see if it has already been written down in the
                // Streamer.
                // Let's see if we already wrote it down in the
@@ -3228,9 +3227,7 @@ llvm::StringRef ROOT::TMetaUtils::DataMemberInfo__ValidArrayIndex(const clang::D
          } else {
             // There is no variable by this name in this class, let see
             // the base classes!:
-            int found = 0;
-            if (parent_clxx)
-               index1 = GetDataMemberFromAllParents( *parent_clxx, current );
+            index1 = GetDataMemberFromAllParents( *parent_clxx, current );
             if ( index1 ) {
                if ( IsFieldDeclInt(index1) ) {
                   found = 1;
@@ -3280,49 +3277,50 @@ llvm::StringRef ROOT::TMetaUtils::DataMemberInfo__ValidArrayIndex(const clang::D
 
 void ROOT::TMetaUtils::GetCppName(std::string &out, const char *in)
 {
-   unsigned int i = 0;
-   char c;
-   out.clear();
-   while((c = in[i++])) {
-      const char *repl = nullptr;
-      switch(c) {
-         case '+': repl = "pL"; break;
-         case '-': repl = "mI"; break;
-         case '*': repl = "mU"; break;
-         case '/': repl = "dI"; break;
-         case '&': repl = "aN"; break;
-         case '%': repl = "pE"; break;
-         case '|': repl = "oR"; break;
-         case '^': repl = "hA"; break;
-         case '>': repl = "gR"; break;
-         case '<': repl = "lE"; break;
-         case '=': repl = "eQ"; break;
-         case '~': repl = "wA"; break;
-         case '.': repl = "dO"; break;
-         case '(': repl = "oP"; break;
-         case ')': repl = "cP"; break;
-         case '[': repl = "oB"; break;
-         case ']': repl = "cB"; break;
-         case '!': repl = "nO"; break;
-         case ',': repl = "cO"; break;
-         case '$': repl = "dA"; break;
-         case ' ': repl = "sP"; break;
-         case ':': repl = "cL"; break;
-         case '"': repl = "dQ"; break;
-         case '@': repl = "aT"; break;
-         case '\'': repl = "sQ"; break;
-         case '\\': repl = "fI"; break;
+   out.resize(strlen(in)*2);
+   unsigned int i=0,j=0,c;
+   while((c=in[i])) {
+      if (out.capacity() < (j+3)) {
+         out.resize(2*j+3);
       }
-      if (repl)
-         out.append(repl);
-      else
-         out.push_back(c);
+      switch(c) { // We resized the underlying buffer if needed
+         case '+': strcpy(const_cast<char*>(out.data())+j,"pL"); j+=2; break;
+         case '-': strcpy(const_cast<char*>(out.data())+j,"mI"); j+=2; break;
+         case '*': strcpy(const_cast<char*>(out.data())+j,"mU"); j+=2; break;
+         case '/': strcpy(const_cast<char*>(out.data())+j,"dI"); j+=2; break;
+         case '&': strcpy(const_cast<char*>(out.data())+j,"aN"); j+=2; break;
+         case '%': strcpy(const_cast<char*>(out.data())+j,"pE"); j+=2; break;
+         case '|': strcpy(const_cast<char*>(out.data())+j,"oR"); j+=2; break;
+         case '^': strcpy(const_cast<char*>(out.data())+j,"hA"); j+=2; break;
+         case '>': strcpy(const_cast<char*>(out.data())+j,"gR"); j+=2; break;
+         case '<': strcpy(const_cast<char*>(out.data())+j,"lE"); j+=2; break;
+         case '=': strcpy(const_cast<char*>(out.data())+j,"eQ"); j+=2; break;
+         case '~': strcpy(const_cast<char*>(out.data())+j,"wA"); j+=2; break;
+         case '.': strcpy(const_cast<char*>(out.data())+j,"dO"); j+=2; break;
+         case '(': strcpy(const_cast<char*>(out.data())+j,"oP"); j+=2; break;
+         case ')': strcpy(const_cast<char*>(out.data())+j,"cP"); j+=2; break;
+         case '[': strcpy(const_cast<char*>(out.data())+j,"oB"); j+=2; break;
+         case ']': strcpy(const_cast<char*>(out.data())+j,"cB"); j+=2; break;
+         case '!': strcpy(const_cast<char*>(out.data())+j,"nO"); j+=2; break;
+         case ',': strcpy(const_cast<char*>(out.data())+j,"cO"); j+=2; break;
+         case '$': strcpy(const_cast<char*>(out.data())+j,"dA"); j+=2; break;
+         case ' ': strcpy(const_cast<char*>(out.data())+j,"sP"); j+=2; break;
+         case ':': strcpy(const_cast<char*>(out.data())+j,"cL"); j+=2; break;
+         case '"': strcpy(const_cast<char*>(out.data())+j,"dQ"); j+=2; break;
+         case '@': strcpy(const_cast<char*>(out.data())+j,"aT"); j+=2; break;
+         case '\'': strcpy(const_cast<char*>(out.data())+j,"sQ"); j+=2; break;
+         case '\\': strcpy(const_cast<char*>(out.data())+j,"fI"); j+=2; break;
+         default: out[j++]=c; break;
+      }
+      ++i;
    }
+   out.resize(j);
 
    // Remove initial numbers if any
-   auto firstNonNumber = out.find_first_not_of("0123456789");
-   if (firstNonNumber != std::string::npos)
-      out.replace(0,firstNonNumber,"");
+   std::size_t firstNonNumber = out.find_first_not_of("0123456789");
+   out.replace(0,firstNonNumber,"");
+
+   return;
 }
 
 static clang::SourceLocation
@@ -3687,8 +3685,8 @@ static bool areEqualTypes(const clang::TemplateArgument& tArg,
          = llvm::dyn_cast_or_null<ClassTemplateSpecializationDecl>(newArg.getAsType()->getAsCXXRecordDecl());
 //         std::cout << "nSTdecl is " << nTSTdecl << std::endl;
 
-      isEqual =  (nTSTdecl && nTSTdecl->getMostRecentDecl() == TSTdecl->getMostRecentDecl()) ||
-                 (tParQualType.getTypePtr() == newArg.getAsType().getTypePtr());
+      isEqual =  nTSTdecl->getMostRecentDecl() == TSTdecl->getMostRecentDecl() ||
+                 tParQualType.getTypePtr() == newArg.getAsType().getTypePtr();
    }
 
 
@@ -3876,13 +3874,6 @@ static void KeepNParams(clang::QualType& normalizedType,
          break;
       }
    }
-
-   if (!ctdWithDefaultArgs) {
-      Error("KeepNParams", "Not found template default arguments\n");
-      normalizedType=originalNormalizedType;
-      return;
-   }
-
    TemplateParameterList* tParsPtr = ctdWithDefaultArgs->getTemplateParameters();
    const TemplateParameterList& tPars = *tParsPtr;
    const TemplateArgumentList& tArgs = ctsd->getTemplateArgs();
@@ -4486,13 +4477,7 @@ ROOT::ESTLType ROOT::TMetaUtils::IsSTLCont(const clang::RecordDecl &cl)
    //                           For example: vector<deque<int>> has answer -1
 
    if (!IsStdClass(cl)) {
-      auto *nsDecl = llvm::dyn_cast<clang::NamespaceDecl>(cl.getDeclContext());
-      if (cl.getName() != "RVec" || nsDecl == nullptr || nsDecl->getName() != "VecOps")
-         return ROOT::kNotSTL;
-
-      auto *parentNsDecl = llvm::dyn_cast<clang::NamespaceDecl>(cl.getDeclContext()->getParent());
-      if (parentNsDecl == nullptr || parentNsDecl->getName() != "ROOT")
-         return ROOT::kNotSTL;
+      return ROOT::kNotSTL;
    }
 
    return STLKind(cl.getName());
@@ -4686,8 +4671,6 @@ clang::QualType ROOT::TMetaUtils::ReSubstTemplateArg(clang::QualType input, cons
    const clang::ClassTemplateSpecializationDecl* TSTdecl
       = llvm::dyn_cast_or_null<const clang::ClassTemplateSpecializationDecl>(instance->getAsCXXRecordDecl());
 
-   if (!TSTdecl) return input;
-
    const clang::SubstTemplateTypeParmType *substType
       = llvm::dyn_cast<clang::SubstTemplateTypeParmType>(input.getTypePtr());
 
@@ -4845,7 +4828,7 @@ ROOT::ESTLType ROOT::TMetaUtils::STLKind(const llvm::StringRef type)
 {
    static const char *stls[] =                  //container names
       {"any","vector","list", "deque","map","multimap","set","multiset","bitset",
-         "forward_list","unordered_set","unordered_multiset","unordered_map","unordered_multimap", "RVec", 0};
+         "forward_list","unordered_set","unordered_multiset","unordered_map","unordered_multimap",0};
    static const ROOT::ESTLType values[] =
       {ROOT::kNotSTL, ROOT::kSTLvector,
        ROOT::kSTLlist, ROOT::kSTLdeque,
@@ -4855,7 +4838,6 @@ ROOT::ESTLType ROOT::TMetaUtils::STLKind(const llvm::StringRef type)
        ROOT::kSTLforwardlist,
        ROOT::kSTLunorderedset, ROOT::kSTLunorderedmultiset,
        ROOT::kSTLunorderedmap, ROOT::kSTLunorderedmultimap,
-       ROOT::kROOTRVec,
        ROOT::kNotSTL
       };
    //              kind of stl container
@@ -4865,10 +4847,10 @@ ROOT::ESTLType ROOT::TMetaUtils::STLKind(const llvm::StringRef type)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const clang::TypedefNameDecl *ROOT::TMetaUtils::GetAnnotatedRedeclarable(const clang::TypedefNameDecl *TND)
+const clang::TypedefNameDecl* ROOT::TMetaUtils::GetAnnotatedRedeclarable(const clang::TypedefNameDecl* TND)
 {
    if (!TND)
-      return nullptr;
+      return 0;
 
    TND = TND->getMostRecentDecl();
    while (TND && !(TND->hasAttrs()))
@@ -4879,10 +4861,10 @@ const clang::TypedefNameDecl *ROOT::TMetaUtils::GetAnnotatedRedeclarable(const c
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const clang::TagDecl *ROOT::TMetaUtils::GetAnnotatedRedeclarable(const clang::TagDecl *TD)
+const clang::TagDecl* ROOT::TMetaUtils::GetAnnotatedRedeclarable(const clang::TagDecl* TD)
 {
    if (!TD)
-      return nullptr;
+      return 0;
 
    TD = TD->getMostRecentDecl();
    while (TD && !(TD->hasAttrs() && TD->isThisDeclarationADefinition()))
@@ -4941,11 +4923,11 @@ void ROOT::TMetaUtils::ExtractCtxtEnclosingNameSpaces(const clang::DeclContext& 
 /// Extract the names and types of containing scopes.
 /// Stop if a class is met and return its pointer.
 
-const clang::RecordDecl *ROOT::TMetaUtils::ExtractEnclosingScopes(const clang::Decl& decl,
+const clang::RecordDecl* ROOT::TMetaUtils::ExtractEnclosingScopes(const clang::Decl& decl,
                                                                   std::list<std::pair<std::string,unsigned int> >& enclosingSc)
 {
    const clang::DeclContext* enclosingDeclCtxt = decl.getDeclContext();
-   if (!enclosingDeclCtxt) return nullptr;
+   if (!enclosingDeclCtxt) return 0;
 
    unsigned int scopeType;
 
@@ -4962,6 +4944,7 @@ const clang::RecordDecl *ROOT::TMetaUtils::ExtractEnclosingScopes(const clang::D
    }
 
    return nullptr;
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////

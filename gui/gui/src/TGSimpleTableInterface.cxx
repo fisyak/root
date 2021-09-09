@@ -14,20 +14,19 @@
 
 ClassImp(TGSimpleTableInterface);
 
-
-/** \class TGSimpleTableInterface
-    \ingroup guiwidgets
-
-TGSimpleTableInterface is a very simple implementation of a
-TVirtualTableInterface. This interface provides a TGTable with data
-from a two dimensional array of doubles in memory. It is mostly
-meant as an example implementation for a TVirtualTableInterface.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGSimpleTableInterface                                               //
+//                                                                      //
+// TGSimpleTableInterface is a very simple implementation of a          //
+// TVirtualTableInterface. This interface provides a TGTable with data  //
+// from a two dimensional array of doubles in memory. It is mostly      //
+// meant as an example implementation for a TVirtualTableInterface.     //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-/// TGSimpleTableInterface constructor.
+/// TGSimpleTableInterfac constructor.
 
 TGSimpleTableInterface::TGSimpleTableInterface (Double_t **data,
                                                 UInt_t nrows, UInt_t ncolumns)

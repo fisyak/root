@@ -45,7 +45,7 @@ inline void CPyCppyy::CPPMethod::Copy_(const CPPMethod& /* other */)
 }
 
 //----------------------------------------------------------------------------
-inline void CPyCppyy::CPPMethod::Destroy_()
+inline void CPyCppyy::CPPMethod::Destroy_() const
 {
 // destroy executor and argument converters
     if (fExecutor && fExecutor->HasState()) delete fExecutor;
@@ -55,11 +55,6 @@ inline void CPyCppyy::CPPMethod::Destroy_()
     }
 
     delete fArgIndices;
-
-    fExecutor = nullptr;
-    fArgIndices = nullptr;
-    fConverters.clear();
-    fArgsRequired = -1;
 }
 
 //----------------------------------------------------------------------------

@@ -59,10 +59,16 @@ TSQLObjectInfo::~TSQLObjectInfo()
 {
 }
 
+/**
+\class TSQLObjectData
+\ingroup IO
+Keeps the data requested from the SQL server for an object.
+*/
+
 ClassImp(TSQLObjectData);
 
 ////////////////////////////////////////////////////////////////////////////////
-/// default constructor
+/// default contrsuctor
 
 TSQLObjectData::TSQLObjectData()
    : TObject(), fInfo(0), fObjId(0), fOwner(kFALSE), fClassData(0), fBlobData(0), fBlobStmt(0), fLocatedColumn(-1),
@@ -72,7 +78,7 @@ TSQLObjectData::TSQLObjectData()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// normal constructor,
+/// normal contrsuctor,
 
 TSQLObjectData::TSQLObjectData(TSQLClassInfo *sqlinfo, Long64_t objid, TSQLResult *classdata, TSQLRow *classrow,
                                TSQLResult *blobdata, TSQLStatement *blobstmt)

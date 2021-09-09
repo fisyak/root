@@ -66,15 +66,13 @@ const char *filters[] = {
    "*.txt"
 };
 
-
-/** \class TCursorSwitcher
-    \ingroup guiwidgets
-
-Helper class used to change the cursor in a method and restore the
-original one when going out of the method scope.
-
-*/
-
+//_____________________________________________________________________________
+//
+// TCursorSwitcher
+//
+// Helper class used to change the cursor in a method and restore the
+// original one when going out of the method scope.
+//_____________________________________________________________________________
 
 ///////////////////////////////////////////////////////////////////////////////
 class TCursorSwitcher {
@@ -92,15 +90,13 @@ public:
    }
 };
 
-
-/** \class TGFileBrowser
-    \ingroup guiwidgets
-
-System file browser, used as TRootBrowser plug-in.
-This class is the real core of the ROOT browser.
-
-*/
-
+//_____________________________________________________________________________
+//
+// TGFileBrowser
+//
+// System file browser, used as TRootBrowser plug-in.
+// This class is the real core of the ROOT browser.
+//_____________________________________________________________________________
 
 ClassImp(TGFileBrowser);
 
@@ -279,7 +275,7 @@ static Bool_t IsObjectEditable(TClass *cl)
       cl = base->GetClassPointer();
       if (cl && TClass::GetClass(Form("%sEditor", cl->GetName())))
          return kTRUE;
-      if (cl && IsObjectEditable(cl))
+      if (IsObjectEditable(cl))
          return kTRUE;
    }
    return kFALSE;
@@ -441,6 +437,9 @@ void TGFileBrowser::AddRemoteFile(TObject *obj)
    TGPicture *pic;
 
    FileStat_t sbuf;
+
+   type    = 0;
+   is_link = kFALSE;
 
    TRemoteObject *robj = (TRemoteObject *)obj;
 
@@ -735,7 +734,7 @@ void TGFileBrowser::AddFSDirectory(const char *entry, const char *path,
    TGListTreeItem *item = 0;
    if ((opt == 0) || (!opt[0])) {
       if (fRootDir == 0 && !fListTree->FindChildByName(0, rootdir))
-         fRootDir = fListTree->AddItem(0, rootdir);
+         item = fRootDir = fListTree->AddItem(0, rootdir);
       return;
    }
    if (strstr(opt, "SetRootDir")) {

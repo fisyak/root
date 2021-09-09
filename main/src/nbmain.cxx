@@ -43,10 +43,10 @@ using namespace std;
 
 #ifdef WIN32
 #include <process.h>
-constexpr const char *pathsep = "\\";
+static string pathsep("\\");
 #define execlp _execlp
 #else
-constexpr const char *pathsep = "/";
+static string pathsep("/");
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -224,6 +224,5 @@ int main(int argc, char **argv)
    fprintf(stderr,
            "Error starting ROOT notebook -- please check that Jupyter is installed\n");
 
-   delete [] jargv;
    return 1;
 }

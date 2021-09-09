@@ -23,9 +23,6 @@ protected :
    Double_t              fDz;   // half length
 // methods
 
-   TGeoTube(const TGeoTube&) = delete;
-   TGeoTube& operator=(const TGeoTube&) = delete;
-
 public:
    // constructors
    TGeoTube();

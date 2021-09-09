@@ -33,10 +33,9 @@ an event-list.
 REveSelectorToEventList::REveSelectorToEventList(TEventList* evl, const char* sel) :
    TSelectorDraw(), fEvList(evl)
 {
-   fInputList.SetOwner(kTRUE);
-   fInputList.Add(new TNamed("varexp", ""));
-   fInputList.Add(new TNamed("selection", sel));
-   SetInputList(&fInputList);
+   fInput.Add(new TNamed("varexp", ""));
+   fInput.Add(new TNamed("selection", sel));
+   SetInputList(&fInput);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,15 +68,14 @@ REvePointSelector::REvePointSelector(TTree* t,
                                      const char* vexp, const char* sel) :
    TSelectorDraw(),
 
-   fSelectTree  (t),
+   fTree      (t),
    fConsumer  (c),
    fVarexp    (vexp),
    fSelection (sel),
    fSubIdExp  (),
    fSubIdNum  (0)
 {
-   fInputList.SetOwner(kTRUE);
-   SetInputList(&fInputList);
+   SetInputList(&fInput);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -99,15 +97,15 @@ Long64_t REvePointSelector::Select(const char* selection)
    else
       sel = fSelection;
 
-   fInputList.Delete();
-   fInputList.Add(new TNamed("varexp",    var.Data()));
-   fInputList.Add(new TNamed("selection", sel.Data()));
+   fInput.Delete();
+   fInput.Add(new TNamed("varexp",    var.Data()));
+   fInput.Add(new TNamed("selection", sel.Data()));
 
    if (fConsumer)
       fConsumer->InitFill(fSubIdNum);
 
-   if (fSelectTree)
-      fSelectTree->Process(this, "goff");
+   if (fTree)
+      fTree->Process(this, "goff");
 
    return fSelectedRows;
 }
@@ -117,7 +115,7 @@ Long64_t REvePointSelector::Select(const char* selection)
 
 Long64_t REvePointSelector::Select(TTree *t, const char *selection)
 {
-   fSelectTree = t;
+   fTree = t;
    return Select(selection);
 }
 

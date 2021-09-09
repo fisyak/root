@@ -20,6 +20,35 @@
 
 **************************************************************************/
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// A number of different layout classes (TGLayoutManager,               //
+// TGVerticalLayout, TGHorizontalLayout, TGLayoutHints, etc.).          //
+//                                                                      //
+//                                                                      //
+// Concerning the TGMatrixLayout class:                                 //
+//                                                                      //
+// It arranges frames in a matrix-like way.                             //
+// This manager provides :                                              //
+// - a column number (0 means unlimited)                                //
+// - a row number (0 means unlimited)                                   //
+// - horizontal & vertical separators                                   //
+//                                                                      //
+// Notes : If both column and row are fixed values, any remaining       //
+//         frames outside the count won't be managed.                   //
+//         Unlimited rows means the frame can expand downward           //
+//         (the default behaviour in most UI).                          //
+//         Both unlimited rows and columns is undefined (read: will     //
+//         crash the algorithm ;-).                                     //
+//         With fixed dimensions, frames are always arranged in rows.   //
+//         That is: 1st frame is at position (0,0), next one is at      //
+//         row(0), column(1) and so on...                               //
+//         When specifying one dimension as unlimited (i.e. row=0 or    //
+//         column=0) the frames are arranged according to the direction //
+//         of the fixed dimension. This layout manager does not make    //
+//         use of TGLayoutHints.                                        //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGLayout.h"
 #include "TGFrame.h"
@@ -283,6 +312,7 @@ void TGVerticalLayout::Layout()
                } else {
                   extra_space = esize_expand >> 1;
                }
+               y += extra_space;
                top += extra_space;
             }
          }
@@ -446,6 +476,7 @@ void TGHorizontalLayout::Layout()
                } else {
                   extra_space = esize_expand >> 1;
                }
+               x += extra_space;
                left += extra_space;
             }
          }
@@ -806,7 +837,7 @@ TGDimension TGTileLayout::GetDefaultSize() const
 
    next.Reset();
    // coverity[returned_pointer]
-   while (next()) {
+   while ((ptr = (TGFrameElement *) next())) {
       x += max_osize.fWidth + fSep;
       if (x + max_osize.fWidth > max_size.fWidth) {
          x = fSep;
@@ -898,7 +929,7 @@ TGDimension TGListLayout::GetDefaultSize() const
    x = fSep; y = fSep << 1;
 
    next.Reset();
-   while (next()) {
+   while ((ptr = (TGFrameElement *) next())) {
       y += (Int_t)max_osize.fHeight + fSep + (fSep >> 1);
       if (y + max_osize.fHeight > max_size.fHeight) {
          y = fSep << 1;
@@ -969,11 +1000,11 @@ TGDimension TGListDetailsLayout::GetDefaultSize() const
    return TGDimension( fWidth ? fWidth : max_osize.fWidth, y);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Save layout hints as a C++ statement(s) on output stream out
-
+// ________________________________________________________________________
 void TGLayoutHints::SavePrimitive(std::ostream &out, Option_t * option/*= ""*/)
 {
+
+   // Save layout hints as a C++ statement(s) on output stream out
 
    TString hints;
    UInt_t pad = GetPadLeft()+GetPadRight()+GetPadTop()+GetPadBottom();
@@ -1029,51 +1060,51 @@ void TGLayoutHints::SavePrimitive(std::ostream &out, Option_t * option/*= ""*/)
    out<< ")";
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Save vertical layout manager as a C++ statement(s) on output stream
-
+// __________________________________________________________________________
 void TGVerticalLayout::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
+
+   // Save vertical layout manager as a C++ statement(s) on output stream
 
    out << "new TGVerticalLayout(" << fMain->GetName() << ")";
 
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Save horizontal layout manager as a C++ statement(s) on output stream
-
+// __________________________________________________________________________
 void TGHorizontalLayout::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
+
+   // Save horizontal layout manager as a C++ statement(s) on output stream
 
    out << "new TGHorizontalLayout(" << fMain->GetName() << ")";
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Save row layout manager as a C++ statement(s) on output stream
-
+// __________________________________________________________________________
 void TGRowLayout::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
+
+   // Save row layout manager as a C++ statement(s) on output stream
 
    out << "new TGRowLayout(" << fMain->GetName() << ","
                              << fSep << ")";
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Save column layout manager as a C++ statement(s) on output stream
-
+// __________________________________________________________________________
 void TGColumnLayout::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
+
+   // Save column layout manager as a C++ statement(s) on output stream
 
    out << "new TGColumnLayout(" << fMain->GetName() << ","
                                 << fSep << ")";
 
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Save matrix layout manager as a C++ statement(s) on output stream
-
+// __________________________________________________________________________
 void TGMatrixLayout::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
+
+   // Save matrix layout manager as a C++ statement(s) on output stream
 
    out << "new TGMatrixLayout(" << fMain->GetName() << ","
                                 << fRows << ","
@@ -1083,33 +1114,33 @@ void TGMatrixLayout::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Save tile layout manager as a C++ statement(s) on output stream
-
+// __________________________________________________________________________
 void TGTileLayout::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
+
+   // Save tile layout manager as a C++ statement(s) on output stream
 
    out << "new TGTileLayout(" << fMain->GetName() << ","
                               << fSep << ")";
 
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Save list layout manager as a C++ statement(s) on output stream
-
+// __________________________________________________________________________
 void TGListLayout::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
+
+   // Save list layout manager as a C++ statement(s) on output stream
 
    out << "new TGListLayout(" << fMain->GetName() << ","
                               << fSep << ")";
 
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Save list details layout manager as a C++ statement(s) on out stream
-
+// __________________________________________________________________________
 void TGListDetailsLayout::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
+
+   // Save list details layout manager as a C++ statement(s) on out stream
 
    out << "new TGListDetailsLayout(" << fMain->GetName() << ","
                                      << fSep << "," << fWidth << ")";

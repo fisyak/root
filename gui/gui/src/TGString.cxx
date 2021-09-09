@@ -20,20 +20,15 @@
 
 **************************************************************************/
 
-
-/** \class  TGString
-    \ingroup guiwidgets
-
-TGString wraps a TString and adds some graphics routines like
-drawing, size of string on screen depending on font, etc.
-
-\class TGHotString
-\ingroup guiwidgets
-
-TGHotString is a string with a "hot" character underlined.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGString and TGHotString                                             //
+//                                                                      //
+// TGString wraps a TString and adds some graphics routines like        //
+// drawing, size of string on screen depending on font, etc.            //
+// TGHotString is a string with a "hot" character unerlined.            //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGString.h"
 #include "TVirtualX.h"
@@ -44,7 +39,7 @@ ClassImp(TGString);
 ClassImp(TGHotString);
 
 ////////////////////////////////////////////////////////////////////////////////
-/// constructor
+/// cconstructor
 
 TGString::TGString(const TGString *s) : TString(s->Data())
 {

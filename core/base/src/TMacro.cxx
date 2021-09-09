@@ -61,7 +61,7 @@ ClassImp(TMacro);
 ////////////////////////////////////////////////////////////////////////////////
 /// Create an empty macro, use AddLine() or ReadFile() to fill this macro.
 
-TMacro::TMacro(): TNamed(), fLines(nullptr)
+TMacro::TMacro(): TNamed(), fLines(0)
 {
 }
 
@@ -183,7 +183,7 @@ void TMacro::Browse(TBrowser * /*b*/)
       return;
    }
    if (opt.Contains(".C")) {
-      const char *cmd = Form(".x %s((TMacro*)0x%zx)",opt.Data(),(size_t)this);
+      const char *cmd = Form(".x %s((TMacro*)0x%lx)",opt.Data(),(ULong_t)this);
       gROOT->ProcessLine(cmd);
       return;
    }
@@ -196,7 +196,7 @@ void TMacro::Browse(TBrowser * /*b*/)
 TMD5 *TMacro::Checksum()
 {
    if (!fLines || fLines->GetSize() <= 0)
-      return (TMD5 *)nullptr;
+      return (TMD5 *)0;
 
    TMD5 *md5 = new TMD5;
 
@@ -265,9 +265,9 @@ Bool_t TMacro::Load() const
 /// Returns the result of the macro (return value or value of the last
 /// expression), cast to a Long_t.
 
-Longptr_t TMacro::Exec(const char *params, Int_t* error)
+Long_t TMacro::Exec(const char *params, Int_t* error)
 {
-   if ( !gROOT->GetGlobalFunction(GetName(), nullptr, kTRUE) ) {
+   if ( !gROOT->GetGlobalFunction(GetName(), 0, kTRUE) ) {
       if (!Load()) {
          if (error) *error = 1;
          return 0;
@@ -277,7 +277,7 @@ Longptr_t TMacro::Exec(const char *params, Int_t* error)
    // if macro has been executed, look for global function with name
    // of macro and re-execute this global function, if not found then
    // macro is unnamed macro, which we re-execute from file
-   if ( gROOT->GetGlobalFunction(GetName(), nullptr, kTRUE) ) {
+   if ( gROOT->GetGlobalFunction(GetName(), 0, kTRUE) ) {
       gROOT->SetExecutingMacro(kTRUE);
       TString exec = GetName();
       TString p = params;
@@ -286,7 +286,7 @@ Longptr_t TMacro::Exec(const char *params, Int_t* error)
          exec += "(" + p + ")";
       else
          exec += "()";
-      Longptr_t ret = gROOT->ProcessLine(exec, error);
+      Long_t ret = gROOT->ProcessLine(exec, error);
       //enable gROOT->Reset
       gROOT->SetExecutingMacro(kFALSE);
       return ret;
@@ -302,13 +302,13 @@ Longptr_t TMacro::Exec(const char *params, Int_t* error)
 
 TObjString *TMacro::GetLineWith(const char *text) const
 {
-   if (!fLines) return nullptr;
+   if (!fLines) return 0;
    TIter next(fLines);
    TObjString *obj;
    while ((obj = (TObjString*) next())) {
       if (strstr(obj->GetName(),text)) return obj;
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

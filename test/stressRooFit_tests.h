@@ -21,7 +21,6 @@
 #include "TCanvas.h"
 #include "RooPlot.h"
 #include "RooUnitTest.h"
-#include "RooHelpers.h"
 
 using namespace RooFit ;
 
@@ -2904,23 +2903,17 @@ public:
   // C a l c u l a t e   i n t e g r a l   o f   n o r m a l i z e d   p d f   i n   R
   // ----------------------------------------------------------------------------------
 
-  {
-    // To remove the INFO:NumericIntegration ouput from the stressRooFit output,
-    // change the message level locally.
-    RooHelpers::LocalChangeMsgLevel chmsglvl{RooFit::INFO, 0u, RooFit::NumIntegration, false};
+  // Create integral over normalized pdf model over x,y,z in "R" region
+  RooAbsReal* intPdf = pxyz.createIntegral(RooArgSet(x,y,z),RooArgSet(x,y,z),"R") ;
 
-    // Create integral over normalized pdf model over x,y,z in "R" region
-    RooAbsReal* intPdf = pxyz.createIntegral(RooArgSet(x,y,z),RooArgSet(x,y,z),"R") ;
-
-    // Plot value of integral as function of pdf parameter z0
-    RooPlot* frame = z0.frame(Title("Integral of pxyz over x,y,z in region R")) ;
-    intPdf->plotOn(frame) ;
+  // Plot value of integral as function of pdf parameter z0
+  RooPlot* frame = z0.frame(Title("Integral of pxyz over x,y,z in region R")) ;
+  intPdf->plotOn(frame) ;
 
 
-    regPlot(frame,"rf313_plot1") ;
+  regPlot(frame,"rf313_plot1") ;
 
-    delete intPdf ;
-  }
+  delete intPdf ;
 
   return kTRUE;
   }
@@ -3396,7 +3389,7 @@ public:
 #include "RooGenericPdf.h"
 #include "RooPolynomial.h"
 #include "RooChi2Var.h"
-#include "RooMinimizer.h"
+#include "RooMinuit.h"
 #include "TCanvas.h"
 #include "RooPlot.h"
 #include "RooFitResult.h"
@@ -3501,7 +3494,7 @@ public:
   // data using sum-of-weights-squared errors does give correct error
   // estimates
   RooChi2Var chi2("chi2","chi2",p2,*binnedData) ;
-  RooMinimizer m(chi2) ;
+  RooMinuit m(chi2) ;
   m.migrad() ;
   m.hesse() ;
 
@@ -3975,7 +3968,7 @@ public:
   sample.defineType("control") ;
 
   // Construct combined dataset in (x,sample)
-  RooDataSet combData("combData","combined data",x,Index(sample),Import({{"physics",data}, {"control",data_ctl}})) ;
+  RooDataSet combData("combData","combined data",x,Index(sample),Import("physics",*data),Import("control",*data_ctl)) ;
 
 
 
@@ -4287,7 +4280,7 @@ public:
 #include "RooGaussian.h"
 #include "RooProdPdf.h"
 #include "RooAddPdf.h"
-#include "RooMinimizer.h"
+#include "RooMinuit.h"
 #include "RooNLLVar.h"
 #include "RooFitResult.h"
 #include "RooPlot.h"
@@ -4330,7 +4323,7 @@ public:
   // -------------------------------------------------------------------------------
 
   // Create MINUIT interface object
-  RooMinimizer m(nll) ;
+  RooMinuit m(nll) ;
 
   // Call MIGRAD to minimize the likelihood
   m.migrad() ;
@@ -4402,7 +4395,7 @@ public:
 #include "RooChebychev.h"
 #include "RooAddPdf.h"
 #include "RooChi2Var.h"
-#include "RooMinimizer.h"
+#include "RooMinuit.h"
 #include "TCanvas.h"
 #include "RooPlot.h"
 using namespace RooFit ;
@@ -4454,8 +4447,8 @@ public:
   // by the number of events in the dataset
   RooChi2Var chi2("chi2","chi2",model,*dh) ;
 
-  // Use RooMinimizer interface to minimize chi^2
-  RooMinimizer m(chi2) ;
+  // Use RooMinuit interface to minimize chi^2
+  RooMinuit m(chi2) ;
   m.migrad() ;
   m.hesse() ;
 
@@ -4589,7 +4582,7 @@ public:
 #include "RooAddPdf.h"
 #include "RooNLLVar.h"
 #include "RooProfileLL.h"
-#include "RooMinimizer.h"
+#include "RooMinuit.h"
 #include "TCanvas.h"
 #include "RooPlot.h"
 using namespace RooFit ;
@@ -4630,7 +4623,7 @@ public:
   RooNLLVar nll("nll","nll",model,*data) ;
 
   // Minimize likelihood w.r.t all parameters before making plots
-  RooMinimizer(nll).migrad() ;
+  RooMinuit(nll).migrad() ;
 
   // Plot likelihood scan frac
   RooPlot* frame1 = frac.frame(Bins(10),Range(0.01,0.95),Title("LL and profileLL in frac")) ;
@@ -4898,7 +4891,7 @@ public:
 #include "RooDataSet.h"
 #include "RooPolyVar.h"
 #include "RooChi2Var.h"
-#include "RooMinimizer.h"
+#include "RooMinuit.h"
 #include "TCanvas.h"
 #include "RooPlot.h"
 #include "TRandom.h"
@@ -5858,20 +5851,20 @@ public:
   RooPlot* frame2 = dt.frame(Title("B decay distribution of mixed events (B0/B0bar)")) ;
 
   data->plotOn(frame2,Cut("mixState==mixState::mixed&&tagFlav==tagFlav::B0")) ;
-  bmix.plotOn(frame2,Slice({{&tagFlav,"B0"}, {&mixState,"mixed"}})) ;
+  bmix.plotOn(frame2,Slice(tagFlav,"B0"),Slice(mixState,"mixed")) ;
 
   data->plotOn(frame2,Cut("mixState==mixState::mixed&&tagFlav==tagFlav::B0bar"),MarkerColor(kCyan)) ;
-  bmix.plotOn(frame2,Slice({{&tagFlav,"B0bar"}, {&mixState,"mixed"}}),LineColor(kCyan),Name("alt")) ;
+  bmix.plotOn(frame2,Slice(tagFlav,"B0bar"),Slice(mixState,"mixed"),LineColor(kCyan),Name("alt")) ;
 
 
   // Plot unmixed slice for B0 and B0bar tagged data separately
   RooPlot* frame3 = dt.frame(Title("B decay distribution of unmixed events (B0/B0bar)")) ;
 
   data->plotOn(frame3,Cut("mixState==mixState::unmixed&&tagFlav==tagFlav::B0")) ;
-  bmix.plotOn(frame3,Slice({{&tagFlav,"B0"}, {&mixState,"unmixed"}})) ;
+  bmix.plotOn(frame3,Slice(tagFlav,"B0"),Slice(mixState,"unmixed")) ;
 
   data->plotOn(frame3,Cut("mixState==mixState::unmixed&&tagFlav==tagFlav::B0bar"),MarkerColor(kCyan)) ;
-  bmix.plotOn(frame3,Slice({{&tagFlav,"B0bar"}, {&mixState,"unmixed"}}),LineColor(kCyan),Name("alt")) ;
+  bmix.plotOn(frame3,Slice(tagFlav,"B0bar"),Slice(mixState,"unmixed"),LineColor(kCyan),Name("alt")) ;
 
 
 

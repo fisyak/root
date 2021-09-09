@@ -113,6 +113,7 @@ upper_pad.Draw()
 lower_pad.Draw()
 
 # Fit signal + background model to data
+upper_pad.cd()
 fit = ROOT.TF1("fit", "([0]+[1]*x+[2]*x^2+[3]*x^3)+[4]*exp(-0.5*((x-[5])/[6])^2)", 105, 160)
 fit.FixParameter(5, 125.0)
 fit.FixParameter(4, 119.1)
@@ -120,23 +121,7 @@ fit.FixParameter(6, 2.39)
 fit.SetLineColor(2)
 fit.SetLineStyle(1)
 fit.SetLineWidth(2)
-data.Fit("fit", "0", "", 105, 160)
-
-# Draw data
-upper_pad.cd()
-data.SetMarkerStyle(20)
-data.SetMarkerSize(1.2)
-data.SetLineWidth(2)
-data.SetLineColor(ROOT.kBlack)
-data.SetMinimum(1e-3)
-data.SetMaximum(8e3)
-data.GetYaxis().SetLabelSize(0.045)
-data.GetYaxis().SetTitleSize(0.05)
-data.SetStats(0)
-data.SetTitle("")
-data.Draw("E")
-
-# Draw fit
+data.Fit("fit", "", "E SAME", 105, 160)
 fit.Draw("SAME")
 
 # Draw background
@@ -147,6 +132,19 @@ bkg.SetLineColor(4)
 bkg.SetLineStyle(2)
 bkg.SetLineWidth(2)
 bkg.Draw("SAME")
+
+# Draw data
+data.SetMarkerStyle(20)
+data.SetMarkerSize(1.2)
+data.SetLineWidth(2)
+data.SetLineColor(ROOT.kBlack)
+data.Draw("E SAME")
+data.SetMinimum(1e-3)
+data.SetMaximum(8e3)
+data.GetYaxis().SetLabelSize(0.045)
+data.GetYaxis().SetTitleSize(0.05)
+data.SetStats(0)
+data.SetTitle("")
 
 # Scale simulated events with luminosity * cross-section / sum of weights
 # and merge to single Higgs signal
@@ -160,7 +158,7 @@ higgs.Draw("HIST SAME")
 # Draw ratio
 lower_pad.cd()
 
-ratiobkg = ROOT.TH1I("zero", "", 100, 105, 160)
+ratiobkg = ROOT.TF1("zero", "0", 105, 160)
 ratiobkg.SetLineColor(4)
 ratiobkg.SetLineStyle(2)
 ratiobkg.SetLineWidth(2)
@@ -177,7 +175,7 @@ ratiobkg.GetYaxis().SetTitleOffset(0.7)
 ratiobkg.GetYaxis().SetNdivisions(503, False)
 ratiobkg.GetYaxis().ChangeLabel(-1, -1, 0)
 ratiobkg.GetXaxis().SetTitle("m_{#gamma#gamma} [GeV]")
-ratiobkg.Draw("AXIS")
+ratiobkg.Draw()
 
 ratiosig = ROOT.TH1F("ratiosig", "ratiosig", 5500, 105, 160)
 ratiosig.Eval(fit)
@@ -189,9 +187,9 @@ ratiosig.Draw("SAME")
 
 ratiodata = data.Clone()
 ratiodata.Add(bkg, -1)
+ratiodata.Draw("E SAME")
 for i in range(1, data.GetNbinsX()):
     ratiodata.SetBinError(i, data.GetBinError(i))
-ratiodata.Draw("E SAME")
 
 # Add legend
 upper_pad.cd()
@@ -205,7 +203,7 @@ legend.AddEntry(data, "Data" ,"lep")
 legend.AddEntry(bkg, "Background", "l")
 legend.AddEntry(fit, "Signal + Bkg.", "l")
 legend.AddEntry(higgs, "Signal", "l")
-legend.Draw()
+legend.Draw("SAME")
 
 # Add ATLAS label
 text = ROOT.TLatex()

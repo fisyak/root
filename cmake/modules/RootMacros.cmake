@@ -300,12 +300,12 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
           if(NOT ${dir} MATCHES "^[$]")
              list(APPEND incdirs ${dir})
           endif()
-          string(FIND ${dir} "${CMAKE_SOURCE_DIR}" src_dir_in_dir)
-          if(${src_dir_in_dir} EQUAL 0)
+          if(${dir} MATCHES "^${CMAKE_SOURCE_DIR}")
              list(APPEND headerdirs ${dir})
           endif()
        endforeach()
     endif()
+
 
     # if (cxxmodules OR runtime_cxxmodules)
     # Comments from Vassil:
@@ -410,14 +410,14 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
         else()
           set(incdirs_in_build)
           set(incdirs_in_prefix ${headerdirs_dflt})
+          string(REGEX REPLACE "([][+.*()^])" "\\\\\\1" _source_dir "${CMAKE_SOURCE_DIR}")
+          string(REGEX REPLACE "([][+.*()^])" "\\\\\\1" _binary_dir "${CMAKE_BINARY_DIR}")
+          string(REGEX REPLACE "([][+.*()^])" "\\\\\\1" _curr_binary_dir "${CMAKE_CURRENT_BINARY_DIR}")
           foreach(incdir ${incdirs})
-            string(FIND ${incdir} "${CMAKE_SOURCE_DIR}" src_dir_in_dir)
-            string(FIND ${incdir} "${CMAKE_BINARY_DIR}" bin_dir_in_dir)
-            string(FIND ${incdir} "${CMAKE_CURRENT_BINARY_DIR}" cur_dir_in_dir)
             if(NOT IS_ABSOLUTE ${incdir}
-               OR ${src_dir_in_dir} EQUAL 0
-               OR ${bin_dir_in_dir} EQUAL 0
-               OR ${cur_dir_in_dir} EQUAL 0)
+               OR ${incdir} MATCHES "^${_source_dir}"
+               OR ${incdir} MATCHES "^${_binary_dir}"
+               OR ${incdir} MATCHES "^${_curr_binary_dir}")
               list(APPEND incdirs_in_build ${incdir})
             else()
               list(APPEND incdirs_in_prefix ${incdir})
@@ -1054,11 +1054,11 @@ function(ROOT_OBJECT_LIBRARY library)
       set(obj ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.build/${CMAKE_CFG_INTDIR}/${library}.build/Objects-normal/x86_64/${name}${CMAKE_CXX_OUTPUT_EXTENSION})
     else()
       if(IS_ABSOLUTE ${s})
-        string(FIND ${s} "${CMAKE_CURRENT_SOURCE_DIR}" src_dir_in_src)
-        string(FIND ${s} "${CMAKE_CURRENT_BINARY_DIR}" bin_dir_in_src)
-        if(${src_dir_in_src} EQUAL 0)
+        string(REGEX REPLACE "([][.?*+|()$^-])" "\\\\\\1" escaped_source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+        string(REGEX REPLACE "([][.?*+|()$^-])" "\\\\\\1" escaped_binary_dir "${CMAKE_CURRENT_BINARY_DIR}")
+        if(${s} MATCHES "^${escaped_source_dir}")
           string(REPLACE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${library}.dir src ${s})
-        elseif(${bin_dir_in_src} EQUAL 0)
+        elseif(${s} MATCHES "^${escaped_binary_dir}")
           string(REPLACE ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${library}.dir src ${s})
         else()
           #message(WARNING "Unknown location of source ${s} for object library ${library}")
@@ -1439,16 +1439,14 @@ set(ROOT_TEST_DRIVER ${CMAKE_CURRENT_LIST_DIR}/RootTestDriver.cmake)
 #                        [BUILD target] [PROJECT project]
 #                        [PASSREGEX exp] [FAILREGEX epx]
 #                        [PASSRC code]
-#                        [RESOURCE_LOCK lock]
-#                        [FIXTURES_SETUP ...] [FIXTURES_CLEANUP ...] [FIXTURES_REQUIRED ...]
 #                        [LABELS label1 label2]
 #                        [PYTHON_DEPS numpy numba keras torch ...] # List of python packages required to run this test.
 #                                                              A fixture will be added the tries to import them before the test starts.)
 #
 function(ROOT_ADD_TEST test)
   CMAKE_PARSE_ARGUMENTS(ARG "DEBUG;WILLFAIL;CHECKOUT;CHECKERR;RUN_SERIAL"
-                            "TIMEOUT;BUILD;INPUT;OUTPUT;ERROR;SOURCE_DIR;BINARY_DIR;WORKING_DIR;PROJECT;PASSRC;RESOURCE_LOCK"
-                            "COMMAND;COPY_TO_BUILDDIR;DIFFCMD;OUTCNV;OUTCNVCMD;PRECMD;POSTCMD;ENVIRONMENT;COMPILEMACROS;DEPENDS;PASSREGEX;OUTREF;ERRREF;FAILREGEX;LABELS;PYTHON_DEPS;FIXTURES_SETUP;FIXTURES_CLEANUP;FIXTURES_REQUIRED"
+                            "TIMEOUT;BUILD;INPUT;OUTPUT;ERROR;SOURCE_DIR;BINARY_DIR;WORKING_DIR;PROJECT;PASSRC"
+                            "COMMAND;COPY_TO_BUILDDIR;DIFFCMD;OUTCNV;OUTCNVCMD;PRECMD;POSTCMD;ENVIRONMENT;COMPILEMACROS;DEPENDS;PASSREGEX;OUTREF;ERRREF;FAILREGEX;LABELS;PYTHON_DEPS"
                             ${ARGN})
 
   #- Handle COMMAND argument
@@ -1623,27 +1621,6 @@ function(ROOT_ADD_TEST test)
     if (gnuinstall)
       set_property(TEST ${test} PROPERTY ENVIRONMENT ROOTIGNOREPREFIX=1)
     endif()
-  endif()
-
-  #- provided fixtures and resource lock are set here
-  if (ARG_FIXTURES_SETUP)
-    set_property(TEST ${test} PROPERTY
-      FIXTURES_SETUP ${ARG_FIXTURES_SETUP})
-  endif()
-
-  if (ARG_FIXTURES_CLEANUP)
-    set_property(TEST ${test} PROPERTY
-      FIXTURES_CLEANUP ${ARG_FIXTURES_CLEANUP})
-  endif()
-
-  if (ARG_FIXTURES_REQUIRED)
-    set_property(TEST ${test} PROPERTY
-      FIXTURES_REQUIRED ${ARG_FIXTURES_REQUIRED})
-  endif()
-
-  if (ARG_RESOURCE_LOCK)
-    set_property(TEST ${test} PROPERTY
-      RESOURCE_LOCK ${ARG_RESOURCE_LOCK})
   endif()
 
   set_property(TEST ${test} APPEND PROPERTY ENVIRONMENT ROOT_HIST=0)

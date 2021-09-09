@@ -15,7 +15,7 @@ using namespace ROOT::Experimental;
 
 /** Provider for drawing of ROOT7 classes */
 
-class TLeafDraw7Provider : public TLeafProvider {
+class TLeafDraw7Provider : public TLeafProvider<void> {
 public:
    bool AddHist(std::shared_ptr<RPadBase> &subpad, TH1 *hist, const std::string &opt)
    {

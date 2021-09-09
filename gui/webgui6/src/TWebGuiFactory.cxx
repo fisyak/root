@@ -14,7 +14,7 @@
 #include "TWebCanvas.h"
 #include "TEnv.h"
 
-#include <memory>
+#include <ROOT/RMakeUnique.hxx>
 
 /** \class TWebGuiFactory
 \ingroup webgui6

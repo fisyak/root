@@ -1043,7 +1043,6 @@ void* TGenCollectionProxy::At(UInt_t idx)
    if ( fEnv && fEnv->fObject ) {
       switch (fSTL_type) {
       case ROOT::kSTLvector:
-      case ROOT::kROOTRVec:  // TODO will be unnecessary with RVec 2.0: RVec<bool> won't be a special case
          if ((*fValue).fKind == kBool_t) {
             auto vec = (std::vector<bool> *)(fEnv->fObject);
             fEnv->fLastValueVecBool = (*vec)[idx];
@@ -1208,7 +1207,6 @@ void* TGenCollectionProxy::Allocate(UInt_t n, Bool_t /* forceDelete */ )
          case ROOT::kSTLlist:
          case ROOT::kSTLforwardlist:
          case ROOT::kSTLdeque:
-         case ROOT::kROOTRVec:
             if( (fProperties & kNeedDelete) ) {
                Clear("force");
             }
@@ -1600,7 +1598,6 @@ TVirtualCollectionProxy::CreateIterators_t TGenCollectionProxy::GetFunctionCreat
 //   else
 //      fprintf(stderr,"a generic iterator\n");
 
-   // TODO could we do better than SlowCreateIterators for RVec?
    if (fSTL_type==ROOT::kSTLvector || (fProperties & kIsEmulated))
       return fFunctionCreateIterators = TGenCollectionProxy__VectorCreateIterators;
    else if ( (fProperties & kIsAssociative) && read)
@@ -1627,7 +1624,6 @@ TVirtualCollectionProxy::CopyIterator_t TGenCollectionProxy::GetFunctionCopyIter
 
    if ( !fValue.load(std::memory_order_relaxed) ) InitializeEx(kFALSE);
 
-   // TODO can we do better than the default for RVec?
    if (fSTL_type==ROOT::kSTLvector || (fProperties & kIsEmulated))
       return fFunctionCopyIterator = TGenCollectionProxy__VectorCopyIterator;
    else if ( (fProperties & kIsAssociative) && read)
@@ -1655,7 +1651,6 @@ TVirtualCollectionProxy::Next_t TGenCollectionProxy::GetFunctionNext(Bool_t read
 
    if ( !fValue.load(std::memory_order_relaxed) ) InitializeEx(kFALSE);
 
-   // TODO can we do better than the default for RVec?
    if (fSTL_type==ROOT::kSTLvector || (fProperties & kIsEmulated))
       return fFunctionNextIterator = TGenCollectionProxy__VectorNext;
    else if ( (fProperties & kIsAssociative) && read)
@@ -1681,7 +1676,6 @@ TVirtualCollectionProxy::DeleteIterator_t TGenCollectionProxy::GetFunctionDelete
 
    if ( !fValue.load(std::memory_order_relaxed) ) InitializeEx(kFALSE);
 
-   // TODO can we do better than the default for RVec?
    if (fSTL_type==ROOT::kSTLvector || (fProperties & kIsEmulated))
       return fFunctionDeleteIterator = TGenCollectionProxy__VectorDeleteSingleIterators;
    else if ( (fProperties & kIsAssociative) && read)
@@ -1707,7 +1701,6 @@ TVirtualCollectionProxy::DeleteTwoIterators_t TGenCollectionProxy::GetFunctionDe
 
    if ( !fValue.load(std::memory_order_relaxed) ) InitializeEx(kFALSE);
 
-   // TODO could RVec use something faster than SlowCopyIterator?
    if (fSTL_type==ROOT::kSTLvector || (fProperties & kIsEmulated))
       return fFunctionDeleteTwoIterators = TGenCollectionProxy__VectorDeleteTwoIterators;
    else if ( (fProperties & kIsAssociative) && read)

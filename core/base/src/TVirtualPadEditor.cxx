@@ -20,7 +20,7 @@ Abstract base class used by ROOT graphics editor
 #include "TEnv.h"
 #include "TVirtualPad.h"
 
-TVirtualPadEditor *TVirtualPadEditor::fgPadEditor  = nullptr;
+TVirtualPadEditor *TVirtualPadEditor::fgPadEditor  = 0;
 TString            TVirtualPadEditor::fgEditorName = "";
 
 ClassImp(TVirtualPadEditor);
@@ -53,11 +53,11 @@ TVirtualPadEditor *TVirtualPadEditor::LoadEditor()
                                               fgEditorName);
    if (h) {
       if (h->LoadPlugin() == -1)
-         return nullptr;
-      return (TVirtualPadEditor*) h->ExecPlugin(1, gPad ? gPad->GetCanvas() : nullptr);
+         return 0;
+      return (TVirtualPadEditor*) h->ExecPlugin(1, gPad ? gPad->GetCanvas() : 0);
    }
 
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -86,7 +86,7 @@ void TVirtualPadEditor::SetPadEditorName(const char *name)
 {
    if (fgEditorName == name) return;
    delete fgPadEditor;
-   fgPadEditor = nullptr;
+   fgPadEditor = 0;
    fgEditorName = name;
 }
 
@@ -120,7 +120,7 @@ void TVirtualPadEditor::Terminate()
    if (!fgPadEditor) return;
 
    delete fgPadEditor;
-   fgPadEditor = nullptr;
+   fgPadEditor = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

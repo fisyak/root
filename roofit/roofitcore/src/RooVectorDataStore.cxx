@@ -39,12 +39,12 @@ which returns spans pointing directly to the data.
 #include "RooFormulaVar.h"
 #include "RooRealVar.h"
 #include "RooCategory.h"
+#include "RooNameSet.h"
 #include "RooHistError.h"
 #include "RooTrace.h"
-#include "RunContext.h"
 #include "RooHelpers.h"
+#include "RunContext.h"
 
-#include "ROOT/StringUtils.hxx"
 #include "TList.h"
 #include "TBuffer.h"
 
@@ -76,7 +76,7 @@ RooVectorDataStore::RooVectorDataStore() :
 
 ////////////////////////////////////////////////////////////////////////////////
 
-RooVectorDataStore::RooVectorDataStore(std::string_view name, std::string_view title, const RooArgSet& vars, const char* wgtVarName) :
+RooVectorDataStore::RooVectorDataStore(const char* name, const char* title, const RooArgSet& vars, const char* wgtVarName) :
   RooAbsDataStore(name,title,varsNoWeight(vars,wgtVarName)),
   _varsww(vars),
   _wgtVar(weightVar(vars,wgtVarName)),
@@ -286,7 +286,7 @@ RooVectorDataStore::RooVectorDataStore(const RooVectorDataStore& other, const Ro
 
 ////////////////////////////////////////////////////////////////////////////////
 
-RooVectorDataStore::RooVectorDataStore(std::string_view name, std::string_view title, RooAbsDataStore& tds, 
+RooVectorDataStore::RooVectorDataStore(const char *name, const char *title, RooAbsDataStore& tds, 
 			 const RooArgSet& vars, const RooFormulaVar* cutVar, const char* cutRange,
 			 std::size_t nStart, std::size_t nStop, Bool_t /*copyCache*/, const char* wgtVarName) :
 
@@ -351,6 +351,20 @@ RooVectorDataStore::~RooVectorDataStore()
   delete _cache ;
   TRACE_DESTROY
 }
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Return true if currently loaded coordinate is considered valid within
+/// the current range definitions of all observables
+
+Bool_t RooVectorDataStore::valid() const 
+{
+  return kTRUE ;
+}
+
+
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -452,6 +466,18 @@ const RooArgSet* RooVectorDataStore::getNative(Int_t index) const
 
   return &_vars;
 }
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Load data point at `index`, and return its weight.
+Double_t RooVectorDataStore::weight(Int_t index) const 
+{
+  get(index) ;
+  return weight() ;
+}
+
+
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -601,7 +627,7 @@ void RooVectorDataStore::loadValues(const RooAbsDataStore *ads, const RooFormula
 
   std::vector<std::string> ranges;
   if (rangeName) {
-   ranges = ROOT::Split(rangeName, ",");
+   ranges = RooHelpers::tokenise(rangeName, ",");
   }
 
   reserve(numEntries() + (nevent - nStart));
@@ -982,6 +1008,7 @@ void RooVectorDataStore::cacheArgs(const RooAbsArg* owner, RooArgSet& newVarSet,
   std::vector<RooArgSet*> argObsList ;
 
   // Now need to attach branch buffers of clones
+  RooArgSet *anset(0), *acset(0) ;
   for (const auto arg : cloneSet) {
     arg->attachToVStore(*newCache) ;
     
@@ -992,17 +1019,20 @@ void RooVectorDataStore::cacheArgs(const RooAbsArg* owner, RooArgSet& newVarSet,
     const char* catNset = arg->getStringAttribute("CATNormSet") ;
     if (catNset) {
 //       cout << "RooVectorDataStore::cacheArgs() cached node " << arg->GetName() << " has a normalization set specification CATNormSet = " << catNset << endl ;
-
-      RooArgSet anset = RooHelpers::selectFromArgSet(nset ? *nset : RooArgSet{}, catNset);
-      normSet = (RooArgSet*) anset.selectCommon(*argObs) ;
+      RooNameSet rns ;
+      rns.setNameList(catNset) ;
+      anset = rns.select(nset?*nset:RooArgSet()) ;
+      normSet = (RooArgSet*) anset->selectCommon(*argObs) ;
       
     }
     const char* catCset = arg->getStringAttribute("CATCondSet") ;
     if (catCset) {
 //       cout << "RooVectorDataStore::cacheArgs() cached node " << arg->GetName() << " has a conditional observable set specification CATCondSet = " << catCset << endl ;
-
-      RooArgSet acset = RooHelpers::selectFromArgSet(nset ? *nset : RooArgSet{}, catCset);
-      argObs->remove(acset,kTRUE,kTRUE) ;
+      RooNameSet rns ;
+      rns.setNameList(catCset) ;
+      acset = rns.select(nset?*nset:RooArgSet()) ;
+      
+      argObs->remove(*acset,kTRUE,kTRUE) ;
       normSet = argObs ;
     }
 

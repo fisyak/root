@@ -13,6 +13,16 @@
 #define ROOT_TRootControlBar
 
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TRootControlBar                                                      //
+//                                                                      //
+// This class provides an interface to the GUI dependent functions of   //
+// the TControlBar class. A control bar is a horizontal or vertical bar //
+// with a number of buttons (text or picture buttons).                  //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
 #include "TControlBarImp.h"
 #include "TGFrame.h"
 
@@ -23,9 +33,9 @@ class TList;
 class TRootControlBar : public TGMainFrame, public TControlBarImp {
 
 private:
-   TList          *fWidgets; ///< list of TGTextButton or TGPictureButtons
-   TGLayoutHints  *fL1;      ///< button layout hints
-   UInt_t          fBwidth;  ///< button width in pixels
+   TList          *fWidgets; // list of TGTextButton or TGPictureButtons
+   TGLayoutHints  *fL1;      // button layout hints
+   UInt_t          fBwidth;  // button width in pixels
 
 public:
    TRootControlBar(TControlBar *c = nullptr, const char *title = "ROOT Control Bar",

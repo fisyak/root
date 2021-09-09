@@ -21,16 +21,16 @@
 ///
 /// \class TMPWorkerTree
 ///
-/// This class works in conjunction with TTreeProcessorMP, reacting to messages
+/// This class works in conjuction with TTreeProcessorMP, reacting to messages
 /// received from it as specified by the Notify and HandleInput methods.
 ///
 /// \class TMPWorkerTreeFunc
 ///
-/// Templated derivation of TMPWorkerTree handlign generic function tree processing.
+/// Templated derivation of TMPWorkerTree handlign generic function tree processing. 
 ///
 /// \class TMPWorkerTreeSel
 ///
-/// Templated derivation of TMPWorkerTree handlign selector tree processing.
+/// Templated derivation of TMPWorkerTree handlign selector tree processing. 
 ///
 //////////////////////////////////////////////////////////////////////////
 
@@ -42,7 +42,6 @@
 /// This separation is in place because the instantiation of a worker
 /// must be done once _before_ forking, while the initialization of the
 /// members must be done _after_ forking by each of the children processes.
-
 TMPWorkerTree::TMPWorkerTree()
    : TMPWorker(), fFileNames(), fTreeName(), fTree(nullptr), fFile(nullptr), fEntryList(nullptr), fFirstEntry(0),
      fTreeCache(0), fTreeCacheIsLearning(kFALSE), fUseTreeCache(kTRUE), fCacheSize(-1)
@@ -74,7 +73,7 @@ TMPWorkerTree::~TMPWorkerTree()
 }
 
 //////////////////////////////////////////////////////////////////////////
-/// Auxiliary method for common initialization
+/// Auxilliary method for common initializations
 void TMPWorkerTree::Setup()
 {
    Int_t uc = gEnv->GetValue("MultiProc.UseTreeCache", 1);
@@ -175,7 +174,7 @@ void TMPWorkerTree::SetupTreeCache(TTree *tree)
 }
 
 //////////////////////////////////////////////////////////////////////////
-/// Init overload defining max entries
+/// Init overload definign max entries
 
 void TMPWorkerTree::Init(Int_t fd, UInt_t workerN)
 {
@@ -233,9 +232,7 @@ void TMPWorkerTreeSel::SendResult()
    MPSend(GetSocket(), MPCode::kProcResult, fSelector.GetOutputList());
 }
 
-//////////////////////////////////////////////////////////////////////////
 /// Selector specialization
-
 void TMPWorkerTreeSel::Process(UInt_t code, MPCodeBufPair &msg)
 {
    //evaluate the index of the file to process in fFileNames
@@ -270,8 +267,7 @@ void TMPWorkerTreeSel::Process(UInt_t code, MPCodeBufPair &msg)
    return;
 }
 
-//////////////////////////////////////////////////////////////////////////
-/// Load the required tree and evaluate the processing range
+/// Load the requierd tree and evaluate the processing range
 
 Int_t TMPWorkerTree::LoadTree(UInt_t code, MPCodeBufPair &msg, Long64_t &start, Long64_t &finish, TEntryList **enl,
                               std::string &errmsg)

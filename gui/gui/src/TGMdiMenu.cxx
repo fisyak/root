@@ -30,14 +30,13 @@
 
 **************************************************************************/
 
-
-/** \class TGMdiMenu.
-    \ingroup guiwidgets
-
-This file contains the TGMdiMenuBar class.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGMdiMenu.                                                           //
+//                                                                      //
+// This file contains the TGMdiMenuBar class.                           //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGMdi.h"
 #include "TGMdiMenu.h"

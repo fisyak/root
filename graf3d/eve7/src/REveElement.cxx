@@ -28,9 +28,9 @@
 #include "TColor.h"
 
 #include <cassert>
-#include <algorithm>
 
-#include <nlohmann/json.hpp>
+
+#include <algorithm>
 
 using namespace ROOT::Experimental;
 namespace REX = ROOT::Experimental;
@@ -439,6 +439,7 @@ void REveElement::VizDB_Apply(const std::string& tag)
    if (ApplyVizTag(tag))
    {
       PropagateVizParamsToProjecteds();
+      REX::gEve->Redraw3D();
    }
 }
 
@@ -452,6 +453,7 @@ void REveElement::VizDB_Reapply()
    {
       CopyVizParamsFromDB();
       PropagateVizParamsToProjecteds();
+      REX::gEve->Redraw3D();
    }
 }
 
@@ -473,6 +475,7 @@ void REveElement::VizDB_UpdateModel(Bool_t update)
          // XXX have a matching fVizModel. Or something.
          Error("VizDB_UpdateModel", "update from vizdb -> elements not implemented.");
          // fVizModel->PropagateVizParamsToElements(fVizModel);
+         // REX::gEve->Redraw3D();
       }
    }
    else
@@ -497,7 +500,9 @@ void REveElement::VizDB_Insert(const std::string& tag, Bool_t replace, Bool_t up
       return;
    }
    el->CopyVizParams(this);
-   REX::gEve->InsertVizDBEntry(tag, el, replace, update);
+   Bool_t succ = REX::gEve->InsertVizDBEntry(tag, el, replace, update);
+   if (succ && update)
+      REX::gEve->Redraw3D();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -561,7 +566,7 @@ TClass *REveElement::IsA() const
 void REveElement::ExportToCINT(const char *var_name)
 {
    const char* cname = IsA()->GetName();
-   gROOT->ProcessLine(TString::Format("%s* %s = (%s*)0x%zx;", cname, var_name, cname, (size_t)this));
+   gROOT->ProcessLine(TString::Format("%s* %s = (%s*)0x%lx;", cname, var_name, cname, (ULong_t)this));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1205,6 +1210,7 @@ void REveElement::Annihilate()
    AnnihilateRecursively();
 
    // XXXX ????? Annihilate flag ???? Is it different than regular remove ????
+   // REX::gEve->Redraw3D();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1235,6 +1241,7 @@ void REveElement::Destroy()
 
    PreDeleteElement();
    delete this;
+   REX::gEve->Redraw3D();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1277,6 +1284,8 @@ void REveElement::DestroyElements()
          RemoveElement(c);
       }
    }
+
+   REX::gEve->Redraw3D();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

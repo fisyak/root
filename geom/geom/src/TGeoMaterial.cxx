@@ -18,7 +18,6 @@ Base class describing materials.
 */
 
 #include <iostream>
-#include <limits>
 #include "TMath.h"
 #include "TObjArray.h"
 #include "TGeoElement.h"
@@ -797,20 +796,11 @@ void TGeoMixture::AverageProperties()
 void TGeoMixture::AddElement(Double_t a, Double_t z, Double_t weight)
 {
    TGeoElementTable *table = gGeoManager->GetElementTable();
-
-   // Check preconditions
-   if (weight < 0e0)    {
-      Fatal("AddElement", "Cannot add element with negative weight %g to mixture %s", weight, GetName());
-   }
-   else if ( weight < std::numeric_limits<Double_t>::epsilon() )   {
-      return;
-   }
-   else if (z<1 || z>table->GetNelements()-1)   {
+   if (z<1 || z>table->GetNelements()-1)
       Fatal("AddElement", "Cannot add element having Z=%d to mixture %s", (Int_t)z, GetName());
-   }
    Int_t i;
    for (i=0; i<fNelements; i++) {
-      if (!fElements && TMath::Abs(z-fZmixture[i])<1.e-6  && TMath::Abs(a-fAmixture[i])<1.e-6) {
+      if (TMath::Abs(z-fZmixture[i])<1.e-6  && TMath::Abs(a-fAmixture[i])<1.e-6) {
          fWeights[i] += weight;
          AverageProperties();
          return;
@@ -859,18 +849,6 @@ void TGeoMixture::AddElement(TGeoMaterial *mat, Double_t weight)
 {
    TGeoElement *elnew, *elem;
    Double_t a,z;
-
-   // Check preconditions
-   if (!mat)   {
-      Fatal("AddElement", "Cannot add INVALID material to mixture %s", GetName());
-   }
-   else if (weight < 0e0)   {
-      Fatal("AddElement", "Cannot add material %s with negative weight %g to mixture %s",
-            mat->GetName(), weight, GetName());
-   }
-   else if ( weight < std::numeric_limits<Double_t>::epsilon() )   {
-      return;
-   }
    if (!mat->IsMixture()) {
       elem = mat->GetBaseElement();
       if (elem) {
@@ -895,7 +873,7 @@ void TGeoMixture::AddElement(TGeoMaterial *mat, Double_t weight)
       if (!elnew) continue;
       // check if we have the element already defined in the parent mixture
       for (j=0; j<fNelements; j++) {
-         if ( fWeights[j] < 0e0 ) continue;
+         if (fWeights[j]<=0) continue;
          elem = GetElement(j);
          if (elem == elnew) {
             // element found, compute new weight
@@ -920,29 +898,13 @@ void TGeoMixture::AddElement(TGeoElement *elem, Double_t weight)
    TGeoElementTable *table = gGeoManager->GetElementTable();
    if (!fElements) fElements = new TObjArray(128);
    Bool_t exist = kFALSE;
-
-   // Check preconditions
-   if (!elem)   {
-      Fatal("AddElement", "Cannot add INVALID element to mixture %s", GetName());
-   }
-   else if (weight < 0e0)   {
-      Fatal("AddElement", "Cannot add element %s with negative weight %g to mixture %s",
-            elem->GetName(), weight, GetName());
-   }
-   else if ( weight < std::numeric_limits<Double_t>::epsilon() )   {
-      return;
-   }
    // If previous elements were defined by A/Z, add corresponding TGeoElements
    for (Int_t i=0; i<fNelements; i++) {
       elemold = (TGeoElement*)fElements->At(i);
-      if (!elemold)  {
-        fElements->AddAt(elemold = table->GetElement((Int_t)fZmixture[i]), i);
-      }
+      if (!elemold) fElements->AddAt(elemold = table->GetElement((Int_t)fZmixture[i]), i);
       if (elemold == elem) exist = kTRUE;
    }
-   if (!exist)   {
-     fElements->AddAtAndExpand(elem, fNelements);
-   }
+   if (!exist) fElements->AddAtAndExpand(elem, fNelements);
    AddElement(elem->A(), elem->Z(), weight);
 }
 
@@ -1095,10 +1057,6 @@ void TGeoMixture::Print(const Option_t * /*option*/) const
    printf("Mixture %s %s   Aeff=%g Zeff=%g rho=%g radlen=%g intlen=%g index=%i\n", GetName(), GetTitle(),
           fA,fZ,fDensity, fRadLen, fIntLen, fIndex);
    for (Int_t i=0; i<fNelements; i++) {
-      if (fElements && fElements->At(i)) {
-         fElements->At(i)->Print();
-         continue;
-      }
       if (fNatoms) printf("   Element #%i : %s  Z=%6.2f A=%6.2f w=%6.3f natoms=%d\n", i, GetElement(i)->GetName(),fZmixture[i],
              fAmixture[i], fWeights[i], fNatoms[i]);
       else printf("   Element #%i : %s  Z=%6.2f A=%6.2f w=%6.3f\n", i, GetElement(i)->GetName(),fZmixture[i],

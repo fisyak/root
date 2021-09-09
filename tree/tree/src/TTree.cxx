@@ -44,17 +44,16 @@ Making several branches is particularly interesting in the data analysis phase,
 when it is desirable to have a high reading rate and not all columns are equally interesting
 
 ## Table of contents:
-- [Creating a TTree](\ref creatingattree)
-- [Add a Column of Fundamental Types and Arrays thereof](\ref addcolumnoffundamentaltypes)
-- [Add a Column of a STL Collection instances](\ref addingacolumnofstl)
-- [Add a column holding an object](\ref addingacolumnofobjs)
-- [Add a column holding a TObjectArray](\ref addingacolumnofobjs)
-- [Fill the tree](\ref fillthetree)
-- [Add a column to an already existing Tree](\ref addcoltoexistingtree)
-- [An Example](\ref fullexample)
+- [Creating a TTree](#creatingattree)
+- [Add a Column of Fundamental Types and Arrays thereof](#addcolumnoffundamentaltypes)
+- [Add a Column of a STL Collection instances](#addingacolumnofstl)
+- [Add a column holding an object](#addingacolumnofobjs)
+- [Add a column holding a TObjectArray](#addingacolumnofobjs)
+- [Fill the tree](#fillthetree)
+- [Add a column to an already existing Tree](#addcoltoexistingtree)
+- [An Example](#fullexample)
 
-\anchor creatingattree
-## Creating a TTree
+## <a name="creatingattree"></a>Creating a TTree
 
 ~~~ {.cpp}
     TTree tree(name, title)
@@ -68,8 +67,7 @@ structures.
 
 In the following, the details about the creation of different types of branches are given.
 
-\anchor addcolumnoffundamentaltypes
-## Add a column (`branch`) of fundamental types and arrays thereof
+## <a name="addcolumnoffundamentaltypes"></a>Add a column (`branch`) of fundamental types and arrays thereof
 This strategy works also for lists of variables, e.g. to describe simple structures.
 It is strongly recommended to persistify those as objects rather than lists of leaves.
 
@@ -129,8 +127,7 @@ It is strongly recommended to persistify those as objects rather than lists of l
   the standard rules of opaque typedefs annotation are valid. For example, if only
   18 bits were sufficient, the syntax would become: `myArr[myArrSize]/d[0,twopi,18]`
 
-\anchor addingacolumnofstl
-## Adding a column of STL collection instances (e.g. std::vector, std::list, std::unordered_map)
+## <a name="addingacolumnofstl"></a>Adding a column of STL collection instances (e.g. std::vector, std::list, std::unordered_map)
 
 ~~~ {.cpp}
     auto branch = tree.Branch( branchname, STLcollection, buffsize, splitlevel);
@@ -150,8 +147,7 @@ In case of dynamic structures changing with each entry for example, one must
 redefine the branch address before filling the branch again.
 This is done via the TBranch::SetAddress member function.
 
-\anchor addingacolumnofobjs
-## Add a column of objects
+## <a name="addingacolumnofobjs">Add a column of objects
 
 ~~~ {.cpp}
     MyClass object;
@@ -204,8 +200,7 @@ is not taken over by the TTree.  I.e. even though an object will be allocated
 by TTree::Branch if the pointer p_object is zero, the object will <b>not</b>
 be deleted when the TTree is deleted.
 
-\anchor addingacolumnoftclonesarray
-## Add a column of TClonesArray instances
+## <a name="addingacolumnoftclonesarray">Add a column of TClonesArray instances
 
 *It is recommended to use STL containers instead of TClonesArrays*.
 
@@ -218,8 +213,7 @@ For example, if the TClonesArray is an array of TTrack objects,
 this function will create one subbranch for each data member of
 the object TTrack.
 
-\anchor fillthetree
-## Fill the Tree:
+## <a name="fillthetree">Fill the Tree:
 
 A TTree instance is filled with the invocation of the TTree::Fill method:
 ~~~ {.cpp}
@@ -228,8 +222,7 @@ A TTree instance is filled with the invocation of the TTree::Fill method:
 Upon its invocation, a loop on all defined branches takes place that for each branch invokes
 the TBranch::Fill method.
 
-\anchor addcoltoexistingtree
-## Add a column to an already existing Tree
+## <a name="addcoltoexistingtree">Add a column to an already existing Tree
 
 You may want to add a branch to an existing tree. For example,
 if one variable in the tree was computed with a certain algorithm,
@@ -263,8 +256,7 @@ causes a new TTree instance to be written and the previous one to be deleted.
 For this reasons, ROOT offers the concept of friends for TTree and TChain:
 if is good practice to rely on friend trees rather than adding a branch manually.
 
-\anchor fullexample
-## An Example
+## <a name="fullexample">An Example
 
 Begin_Macro
 ../../../tutorials/tree/tree.C
@@ -3256,8 +3248,8 @@ TTree* TTree::CloneTree(Long64_t nentries /* = -1 */, Option_t* option /* = "" *
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Set branch addresses of passed tree equal to ours.
-/// If undo is true, reset the branch addresses instead of copying them.
-/// This ensures 'separation' of a cloned tree from its original.
+/// If undo is true, reset the branch address instead of copying them.
+/// This insures 'separation' of a cloned tree from its original
 
 void TTree::CopyAddresses(TTree* tree, Bool_t undo)
 {
@@ -3820,14 +3812,12 @@ Long64_t TTree::Draw(const char* varexp, const TCut& selection, Option_t* option
    return TTree::Draw(varexp, selection.GetTitle(), option, nentries, firstentry);
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-/// \brief Draw expression varexp for entries and objects that pass a (optional) selection.
+////////////////////////////////////////////////////////////////////////////////
+/// Draw expression varexp for specified entries.
 ///
 /// \return -1 in case of error or number of selected events in case of success.
 ///
-/// \param [in] varexp
-/// \parblock
-///  A string that takes one of these general forms:
+/// \param [in] varexp is an expression of the general form
 ///  - "e1"           produces a 1-d histogram (TH1F) of expression "e1"
 ///  - "e1:e2"        produces an unbinned 2-d scatter-plot (TGraph) of "e1"
 ///                   on the y-axis versus "e2" on the x-axis
@@ -3838,50 +3828,55 @@ Long64_t TTree::Draw(const char* varexp, const TCut& selection, Option_t* option
 ///                   (to create histograms in the 2, 3, and 4 dimensional case,
 ///                   see section "Saving the result of Draw to an histogram")
 ///
-///   Examples:
-///    - "x": the simplest case, it draws a 1-Dim histogram of column x
-///    - "sqrt(x)", "x*y/z": draw histogram with the values of the specified numerical expression across TTree events
-///    - "y:sqrt(x)": 2-Dim histogram of y versus sqrt(x)
-///    - "px:py:pz:2.5*E": produces a 3-d scatter-plot of px vs py ps pz
-///                        and the color number of each marker will be 2.5*E.
-///                        If the color number is negative it is set to 0.
-///                        If the color number is greater than the current number of colors
-///                        it is set to the highest color number. The default number of
-///                        colors is 50. See TStyle::SetPalette for setting a new color palette.
+///   Example:
+///    -  varexp = x     simplest case: draw a 1-Dim distribution of column named x
+///    -  varexp = sqrt(x)            : draw distribution of sqrt(x)
+///    -  varexp = x*y/z
+///    -  varexp = y:sqrt(x) 2-Dim distribution of y versus sqrt(x)
+///    -  varexp = px:py:pz:2.5*E  produces a 3-d scatter-plot of px vs py ps pz
+///               and the color number of each marker will be 2.5*E.
+///               If the color number is negative it is set to 0.
+///               If the color number is greater than the current number of colors
+///               it is set to the highest color number.The default number of
+///               colors is 50. see TStyle::SetPalette for setting a new color palette.
 ///
-///   The expressions can use all the operations and built-in functions
-///   supported by TFormula (see TFormula::Analyze()), including free
-///   functions taking numerical arguments (e.g. TMath::Bessel()).
+///   Note that the variables e1, e2 or e3 may contain a selection.
+///   example, if e1= x*(y<0), the value histogrammed will be x if y<0
+///   and will be 0 otherwise.
+///
+///   The expressions can use all the operations and build-in functions
+///   supported by TFormula (See TFormula::Analyze), including free
+///   standing function taking numerical arguments (TMath::Bessel).
 ///   In addition, you can call member functions taking numerical
-///   arguments. For example, these are two valid expressions:
+///   arguments. For example:
 ///   ~~~ {.cpp}
 ///       TMath::BreitWigner(fPx,3,2)
 ///       event.GetHistogram()->GetXaxis()->GetXmax()
 ///   ~~~
-///   \endparblock
-/// \param [in] selection
-/// \parblock
-/// A string containing a selection expression.
-///   In a selection all usual C++ mathematical and logical operators are allowed.
+///   Note: You can only pass expression that depend on the TTree's data
+///   to static functions and you can only call non-static member function
+///   with 'fixed' parameters.
+///
+/// \param [in] selection is an expression with a combination of the columns.
+///   In a selection all the C++ operators are authorized.
 ///   The value corresponding to the selection expression is used as a weight
-///   to fill the histogram (a weight of 0 is equivalent to not filling the histogram).\n
-///   \n
-///   Examples:
-///    - "x<y && sqrt(z)>3.2": returns a weight = 0 or 1
-///    - "(x+y)*(sqrt(z)>3.2)": returns a weight = x+y if sqrt(z)>3.2, 0 otherwise\n
-///   \n
-///   If the selection expression returns an array, it is iterated over in sync with the
-///   array returned by the varexp argument (as described below in "Drawing expressions using arrays and array
-///   elements"). For example, if, for a given event, varexp evaluates to
-///   `{1., 2., 3.}` and selection evaluates to `{0, 1, 0}`, the resulting histogram is filled with the value 2. For example, for each event here we perform a simple object selection:
-///   ~~~{.cpp}
-///   // Muon_pt is an array: fill a histogram with the array elements > 100 in each event
-///   tree->Draw('Muon_pt', 'Muon_pt > 100')
+///   to fill the histogram.
+///   If the expression includes only boolean operations, the result
+///   is 0 or 1. If the result is 0, the histogram is not filled.
+///   In general, the expression may be of the form:
+///   ~~~ {.cpp}
+///       value*(boolean expression)
 ///   ~~~
-///  \endparblock
-/// \param [in] option
-/// \parblock
-/// The drawing option.
+///   if boolean expression is true, the histogram is filled with
+///   a `weight = value`.
+///   Examples:
+///    -  selection1 = "x<y && sqrt(z)>3.2"
+///    -  selection2 = "(x+y)*(sqrt(z)>3.2)"
+///    -  selection1 returns a weight = 0 or 1
+///    -  selection2 returns a weight = x+y if sqrt(z)>3.2
+///                  returns a weight = 0 otherwise.
+///
+/// \param [in] option is the drawing option.
 ///    - When an histogram is produced it can be any histogram drawing option
 ///      listed in THistPainter.
 ///    - when no option is specified:
@@ -3903,9 +3898,10 @@ Long64_t TTree::Draw(const char* varexp, const TCut& selection, Option_t* option
 ///    - if expression has more than four fields the option "PARA"or "CANDLE"
 ///      can be used.
 ///    - If option contains the string "goff", no graphics is generated.
-/// \endparblock
-/// \param [in] nentries The number of entries to process (default is all)
-/// \param [in] firstentry The first entry to process (default is 0)
+///
+/// \param [in] nentries is the number of entries to process (default is all)
+///
+/// \param [in] firstentry is the first entry to process (default is 0)
 ///
 /// ### Drawing expressions using arrays and array elements
 ///
@@ -4175,7 +4171,7 @@ Long64_t TTree::Draw(const char* varexp, const TCut& selection, Option_t* option
 /// -  `Sum$(formula )`  : return the sum of the value of the elements of the
 ///     formula given as a parameter.  For example the mean for all the elements in
 ///     one entry can be calculated with: `Sum$(formula )/Length$(formula )`
-/// -  `Min$(formula )` : return the minimum (within one TTree entry) of the value of the
+/// -  `Min$(formula )` : return the minimun (within one TTree entry) of the value of the
 ///     elements of the formula given as a parameter.
 /// -  `Max$(formula )` : return the maximum (within one TTree entry) of the value of the
 ///     elements of the formula given as a parameter.
@@ -5597,6 +5593,7 @@ Long64_t TTree::GetEntriesFriend() const
 
 Int_t TTree::GetEntry(Long64_t entry, Int_t getall)
 {
+
    // We already have been visited while recursively looking
    // through the friends tree, let return
    if (kGetEntry & fFriendLockStatus) return 0;
@@ -6432,10 +6429,10 @@ Int_t TTree::LoadBaskets(Long64_t maxmemory)
 
 Long64_t TTree::LoadTree(Long64_t entry)
 {
-   // We have already been visited while recursively looking
-   // through the friend trees, let's return
+   // We already have been visited while recursively looking
+   // through the friends tree, let return
    if (kLoadTree & fFriendLockStatus) {
-      // We need to return a negative value to avoid a circular list of friends
+      // We need to return a negative value to avoid a circular list of friend
       // to think that there is always an entry somewhere in the list.
       return -1;
    }

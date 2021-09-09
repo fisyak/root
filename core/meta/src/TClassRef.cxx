@@ -37,14 +37,14 @@ TClassRef::TClassRef(const TClassRef &org) :
 /// class object.
 
 TClassRef::TClassRef(const char *classname) :
-    fClassName(classname), fClassPtr(nullptr)
+    fClassName(classname), fClassPtr(0)
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Add reference to specified class object.
 
-TClassRef::TClassRef(TClass *cl) : fClassPtr(nullptr)
+TClassRef::TClassRef(TClass *cl) : fClassPtr(0)
 {
    if (cl) {
       fClassName = cl->GetName();
@@ -72,7 +72,7 @@ void TClassRef::Assign(TClass* rhs)
       fClassPtr  = rhs->GetPersistentRef();
       fClassName = rhs->GetName();
    } else {
-      fClassPtr  = nullptr;
+      fClassPtr  = 0;
       fClassName.clear();
    }
 }
@@ -83,14 +83,14 @@ void TClassRef::Assign(TClass* rhs)
 TClass *TClassRef::InternalGetClass() const
 {
    if (fClassPtr && *fClassPtr) return *fClassPtr;
-   if (fClassName.size()==0) return nullptr;
+   if (fClassName.size()==0) return 0;
 
    TClass *cl = TClass::GetClass(fClassName.c_str());
    if (cl) {
       (const_cast<TClassRef*>(this))->fClassPtr = cl->GetPersistentRef();
       return cl;
    } else {
-      return nullptr;
+      return 0;
    }
 }
 

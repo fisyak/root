@@ -49,10 +49,11 @@ integration is performed in the various implementations of the RooAbsIntegrator 
 #include "RooTrace.h"
 #include "RooHelpers.h"
 
+#include "ROOT/RMakeUnique.hxx"
+
 #include "TClass.h"
 
 #include <iostream>
-#include <memory>
 
 using namespace std;
 
@@ -1041,6 +1042,22 @@ const RooArgSet& RooRealIntegral::parameters() const
 
   return *_params ;
 }
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Dummy
+
+void RooRealIntegral::operModeHook()
+{
+  if (_operMode==ADirty) {    
+//     cout << "RooRealIntegral::operModeHook(" << GetName() << " warning: mode set to ADirty" << endl ;
+//     if (TString(GetName()).Contains("FULL")) {
+//       cout << "blah" << endl ;
+//     }
+  }
+}
+
 
 
 ////////////////////////////////////////////////////////////////////////////////

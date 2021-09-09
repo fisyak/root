@@ -20,16 +20,15 @@
 
 **************************************************************************/
 
-
-/** \class TGTextEdit
-    \ingroup guiwidgets
-
-A TGTextEdit is a specialization of TGTextView. It provides the
-text edit functionality to the static text viewing widget.
-For the messages supported by this widget see the TGView class.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGTextEdit                                                           //
+//                                                                      //
+// A TGTextEdit is a specialization of TGTextView. It provides the      //
+// text edit functionality to the static text viewing widget.           //
+// For the messages supported by this widget see the TGView class.      //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGTextEdit.h"
 #include "TGTextEditDialogs.h"
@@ -280,7 +279,7 @@ TGTextEdit::~TGTextEdit()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Initialize a text edit widget.
+/// Initiliaze a text edit widget.
 
 void TGTextEdit::Init()
 {
@@ -1870,6 +1869,7 @@ void TGTextEdit::DelChar()
          pos2.fY = ToScrYCoord(fCurrent.fY+1);
          pos.fY = fCurrent.fY - 1;
          fText->DelLine(fCurrent.fY);
+         len = fText->GetLineLength(fCurrent.fY-1);
 
          if (ToScrXCoord(pos.fX, fCurrent.fY-1) >= (Int_t)fCanvas->GetWidth()) {
             SetHsbPosition((ToScrXCoord(pos.fX, pos.fY)+fVisible.fX-fCanvas->GetWidth()/2)/fScrollVal.fX);

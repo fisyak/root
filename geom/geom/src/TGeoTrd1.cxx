@@ -196,6 +196,7 @@ Bool_t TGeoTrd1::Contains(const Double_t *point) const
 
 Double_t TGeoTrd1::DistFromInside(const Double_t *point, const Double_t *dir, Int_t iact, Double_t step, Double_t *safe) const
 {
+   Double_t snxt = TGeoShape::Big();
    if (iact<3 && safe) {
    // compute safe distance
       *safe = Safety(point, kTRUE);
@@ -238,7 +239,8 @@ Double_t TGeoTrd1::DistFromInside(const Double_t *point, const Double_t *dir, In
       dist[2]=(fDy-point[1])/dir[1];
    }
    if (dist[2]<=0) return 0.0;
-   return dist[TMath::LocMin(3,dist)];
+   snxt = dist[TMath::LocMin(3,dist)];
+   return snxt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -312,6 +314,7 @@ void TGeoTrd1::GetOppositeCorner(const Double_t * /*point*/, Int_t inorm, Double
 
 Double_t TGeoTrd1::DistFromOutside(const Double_t *point, const Double_t *dir, Int_t iact, Double_t step, Double_t *safe) const
 {
+   Double_t snxt = TGeoShape::Big();
    if (iact<3 && safe) {
    // compute safe distance
       *safe = Safety(point, kFALSE);
@@ -333,7 +336,7 @@ Double_t TGeoTrd1::DistFromOutside(const Double_t *point, const Double_t *dir, I
    if (point[2]<=-fDz) {
       if (dir[2]<=0) return TGeoShape::Big();
       in = kFALSE;
-      Double_t snxt = -(fDz+point[2])/dir[2];
+      snxt = -(fDz+point[2])/dir[2];
       // find extrapolated X and Y
       xnew = point[0]+snxt*dir[0];
       if (TMath::Abs(xnew) <= fDx1) {
@@ -343,7 +346,7 @@ Double_t TGeoTrd1::DistFromOutside(const Double_t *point, const Double_t *dir, I
    } else if (point[2]>=fDz) {
       if (dir[2]>=0) return TGeoShape::Big();
       in = kFALSE;
-      Double_t snxt = (fDz-point[2])/dir[2];
+      snxt = (fDz-point[2])/dir[2];
       // find extrapolated X and Y
       xnew = point[0]+snxt*dir[0];
       if (TMath::Abs(xnew) <= fDx2) {
@@ -356,7 +359,7 @@ Double_t TGeoTrd1::DistFromOutside(const Double_t *point, const Double_t *dir, I
       cn = -dir[0]+fx*dir[2];
       if (cn>=0) return TGeoShape::Big();
       in = kFALSE;
-      Double_t snxt = (point[0]+distx)/cn;
+      snxt = (point[0]+distx)/cn;
       // find extrapolated Y and Z
       ynew = point[1]+snxt*dir[1];
       if (TMath::Abs(ynew) <= fDy) {
@@ -368,7 +371,7 @@ Double_t TGeoTrd1::DistFromOutside(const Double_t *point, const Double_t *dir, I
       cn = dir[0]+fx*dir[2];
       if (cn>=0) return TGeoShape::Big();
       in = kFALSE;
-      Double_t snxt = (distx-point[0])/cn;
+      snxt = (distx-point[0])/cn;
       // find extrapolated Y and Z
       ynew = point[1]+snxt*dir[1];
       if (TMath::Abs(ynew) < fDy) {
@@ -381,7 +384,7 @@ Double_t TGeoTrd1::DistFromOutside(const Double_t *point, const Double_t *dir, I
       cn = -dir[1];
       if (cn>=0) return TGeoShape::Big();
       in = kFALSE;
-      Double_t snxt = (point[1]+fDy)/cn;
+      snxt = (point[1]+fDy)/cn;
       // find extrapolated X and Z
       znew = point[2]+snxt*dir[2];
       if (TMath::Abs(znew) < fDz) {
@@ -393,7 +396,7 @@ Double_t TGeoTrd1::DistFromOutside(const Double_t *point, const Double_t *dir, I
       cn = dir[1];
       if (cn>=0) return TGeoShape::Big();
       in = kFALSE;
-      Double_t snxt = (fDy-point[1])/cn;
+      snxt = (fDy-point[1])/cn;
       // find extrapolated X and Z
       znew = point[2]+snxt*dir[2];
       if (TMath::Abs(znew) < fDz) {

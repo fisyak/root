@@ -122,7 +122,7 @@ public:
    const clang::Type *GetClassAsType() const;
    int                MaxIndex(int dim) const;
    int                Next();
-   Longptr_t          Offset();
+   long               Offset();
    long               Property() const;
    long               TypeProperty() const;
    int                TypeSize() const;

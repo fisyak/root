@@ -25,16 +25,15 @@
 const UInt_t kLogElemFilled = BIT(17); // If the log element has been retrieved at least once
 const UInt_t kDefaultActive = BIT(18); // If the log element is active by default
 
-
-/** \class  TProofProgressLog
-    \ingroup sessionviewer
-
-Dialog used to display Proof session logs from the Proof progress
-dialog.
-It uses TProofMgr::GetSessionLogs() mechanism internally
-
-*/
-
+///////////////////////////////////////////////////////////////////////////
+//                                                                       //
+// TProofProgressLog                                                     //
+//                                                                       //
+// Dialog used to display Proof session logs from the Proof progress     //
+// dialog.                                                               //
+// It uses TProofMgr::GetSessionLogs() mechanism internally              //
+//                                                                       //
+///////////////////////////////////////////////////////////////////////////
 
 ClassImp(TProofProgressLog);
 
@@ -125,7 +124,7 @@ void TProofProgressLog::Init(Int_t w, Int_t h)
    clearall->Connect("Clicked()", "TProofProgressLog", this, "Select(=1)");
    hfselbox->AddFrame(clearall, new TGLayoutHints(kLHintsCenterY | kLHintsRight, 10, 0, 0, 0));
 
-   //select the default actives to start with
+   //select the defaut actives to start with
    Select(0, kFALSE);
 
    //Display button
@@ -337,7 +336,7 @@ void TProofProgressLog::BuildLogList(Bool_t create)
 
    if (fSessionUrl.IsNull()) {
       if (gDebug > 0)
-         Info("BuildLogList", "session URL undefined - do nothing");
+         Info("BuildLogList", "sesssion URL undefined - do nothing");
       return;
    }
    TProofMgr *mgr = TProof::Mgr(fSessionUrl.Data());
@@ -649,16 +648,13 @@ void TProofProgressLog::Rebuild()
    if (sameurl) {
       idx = fSessNum->GetIntNumber();
       if (idx == fSessionIdx) {
-         Info("Rebuild", "same parameters {%s, %s}, {%d, %d}: no need to rebuild TProofLog",
+         Info("Rebuild", "same paremeters {%s, %s}, {%d, %d}: no need to rebuild TProofLog",
                          url.GetUrl(), urlref.GetUrl(), idx, fSessionIdx);
          return;
       }
    }
    // Cleanup current TProofLog
-   if (fProofLog) {
-      delete fProofLog;
-      fProofLog = nullptr;
-   }
+   if (fProofLog) delete fProofLog;
 
    // Set new parameters
    fSessionUrl = fUrlText->GetText();
@@ -667,7 +663,7 @@ void TProofProgressLog::Rebuild()
    // Rebuild the list now
    BuildLogList(kFALSE);
 
-   // Select the default actives to start with
+   // Select the defaut actives to start with
    Select(0, kFALSE);
    // Redraw
    fLogList->Layout();

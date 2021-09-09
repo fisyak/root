@@ -36,20 +36,13 @@ namespace Detail {
 class RFieldBase;
 class RFieldValue;
 class RPageSource;
-} // namespace Detail
 
-namespace Internal {
-class RNTupleColumnReader;
-}
+} // namespace Detail
 
 class RNTupleDS final : public ROOT::RDF::RDataSource {
    /// Clones of the first source, one for each slot
    std::vector<std::unique_ptr<ROOT::Experimental::Detail::RPageSource>> fSources;
 
-   /// We prepare a column reader prototype for every column. If a column reader is actually requested
-   /// in GetColumnReaders(), we move a clone of the prototype into the hands of RDataFrame.
-   /// Only the clone connects to the backing page store and acquires I/O resources.
-   std::vector<std::unique_ptr<ROOT::Experimental::Internal::RNTupleColumnReader>> fColumnReaderPrototypes;
    std::vector<std::string> fColumnNames;
    std::vector<std::string> fColumnTypes;
    std::vector<size_t> fActiveColumns;
@@ -57,28 +50,16 @@ class RNTupleDS final : public ROOT::RDF::RDataSource {
    unsigned fNSlots = 0;
    bool fHasSeenAllRanges = false;
 
-   /// Provides the RDF column "colName" given the field identified by fieldID. For records and collections,
-   /// AddField recurses into the sub fields. The skeinIDs is the list of field IDs of the outer collections
-   /// of fieldId. For instance, if fieldId refers to an `std::vector<Jet>`, with
-   /// struct Jet {
-   ///    float pt;
-   ///    float eta;
-   /// };
-   /// AddField will recurse into Jet.pt and Jet.eta and provide the two inner fields as std::vector<float> each.
-   void AddField(const RNTupleDescriptor &desc,
-                 std::string_view colName,
-                 DescriptorId_t fieldId,
-                 std::vector<DescriptorId_t> skeinIDs);
+   void AddFields(const RNTupleDescriptor &desc, DescriptorId_t parentId);
 
 public:
    explicit RNTupleDS(std::unique_ptr<ROOT::Experimental::Detail::RPageSource> pageSource);
-   ~RNTupleDS();
+   ~RNTupleDS() = default;
    void SetNSlots(unsigned int nSlots) final;
    const std::vector<std::string> &GetColumnNames() const final { return fColumnNames; }
    bool HasColumn(std::string_view colName) const final;
    std::string GetTypeName(std::string_view colName) const final;
    std::vector<std::pair<ULong64_t, ULong64_t>> GetEntryRanges() final;
-   std::string GetLabel() final { return "RNTupleDS"; }
 
    bool SetEntry(unsigned int slot, ULong64_t entry) final;
 

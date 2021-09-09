@@ -14,7 +14,6 @@
 #include <ROOT/RPageStorageFile.hxx>
 #include <ROOT/RStringView.hxx>
 
-#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -70,9 +69,6 @@ public:
    RPage PopulatePage(ColumnHandle_t, ROOT::Experimental::NTupleSize_t) final { return RPage(); }
    RPage PopulatePage(ColumnHandle_t, const ROOT::Experimental::RClusterIndex &) final { return RPage(); }
    void ReleasePage(RPage &) final {}
-   void LoadSealedPage(
-      ROOT::Experimental::DescriptorId_t, const ROOT::Experimental::RClusterIndex &, RSealedPage &) final
-   { }
    std::unique_ptr<RCluster> LoadCluster(
       ROOT::Experimental::DescriptorId_t clusterId,
       const ROOT::Experimental::Detail::RPageSource::ColumnSet_t &columns) final
@@ -295,7 +291,7 @@ TEST(PageStorageFile, LoadCluster)
 
    auto modelWrite = ROOT::Experimental::RNTupleModel::Create();
    auto wrPt = modelWrite->MakeField<float>("pt", 42.0);
-   auto wrTag = modelWrite->MakeField<std::int32_t>("tag", 0);
+   auto wrTag = modelWrite->MakeField<int32_t>("tag", 0);
 
    {
       ROOT::Experimental::RNTupleWriter ntuple(

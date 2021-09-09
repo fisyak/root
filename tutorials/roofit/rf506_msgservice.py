@@ -20,12 +20,13 @@ s = ROOT.RooRealVar("s", "s", 1, -10, 10)
 gauss = ROOT.RooGaussian("g", "g", x, m, s)
 
 # Construct poly(x,p0)
-p0 = ROOT.RooRealVar("p0", "p0", 0.01, 0.0, 1.0)
-poly = ROOT.RooPolynomial("p", "p", x, [p0])
+p0 = ROOT.RooRealVar("p0", "p0", 0.01, 0., 1.)
+poly = ROOT.RooPolynomial("p", "p", x, ROOT.RooArgList(p0))
 
 # model = f*gauss(x) + (1-f)*poly(x)
-f = ROOT.RooRealVar("f", "f", 0.5, 0.0, 1.0)
-model = ROOT.RooAddPdf("model", "model", [gauss, poly], [f])
+f = ROOT.RooRealVar("f", "f", 0.5, 0., 1.)
+model = ROOT.RooAddPdf("model", "model", ROOT.RooArgList(
+    gauss, poly), ROOT.RooArgList(f))
 
 data = model.generate(ROOT.RooArgSet(x), 10)
 
@@ -58,20 +59,28 @@ ROOT.RooMsgService.instance().getStream(1).removeTopic(ROOT.RooFit.Integration)
 # -----------------------------------------------------------------------
 
 # Show DEBUG level message on function tracing, ROOT.RooGaussian only
-ROOT.RooMsgService.instance().addStream(ROOT.RooFit.DEBUG, Topic=ROOT.RooFit.Tracing, ClassName="RooGaussian")
+ROOT.RooMsgService.instance().addStream(
+    ROOT.RooFit.DEBUG,
+    ROOT.RooFit.Topic(
+        ROOT.RooFit.Tracing),
+    ROOT.RooFit.ClassName("RooGaussian"))
 
 # Perform a fit to generate some tracing messages
-model.fitTo(data, Verbose=True)
+model.fitTo(data, ROOT.RooFit.Verbose(ROOT.kTRUE))
 
 # Reset message service to default stream configuration
 ROOT.RooMsgService.instance().reset()
 
 # Show DEBUG level message on function tracing on all objects, output to
 # file
-ROOT.RooMsgService.instance().addStream(ROOT.RooFit.DEBUG, Topic=ROOT.RooFit.Tracing, OutputFile="rf506_debug.log")
+ROOT.RooMsgService.instance().addStream(
+    ROOT.RooFit.DEBUG,
+    ROOT.RooFit.Topic(
+        ROOT.RooFit.Tracing),
+    ROOT.RooFit.OutputFile("rf506_debug.log"))
 
 # Perform a fit to generate some tracing messages
-model.fitTo(data, Verbose=True)
+model.fitTo(data, ROOT.RooFit.Verbose(ROOT.kTRUE))
 
 # Reset message service to default stream configuration
 ROOT.RooMsgService.instance().reset()
@@ -80,7 +89,8 @@ ROOT.RooMsgService.instance().reset()
 # ---------------------------------------------------------------------
 
 # Show DEBUG level messages on client/server link state management
-ROOT.RooMsgService.instance().addStream(ROOT.RooFit.DEBUG, Topic=ROOT.RooFit.LinkStateMgmt)
+ROOT.RooMsgService.instance().addStream(
+    ROOT.RooFit.DEBUG, ROOT.RooFit.Topic(ROOT.RooFit.LinkStateMgmt))
 ROOT.RooMsgService.instance().Print("v")
 
 # Clone composite pdf g to trigger some link state management activity

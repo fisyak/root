@@ -21,6 +21,7 @@
 #include "RooSetProxy.h"
 #include "RooAICRegistry.h"
 #include "RooNormSetCache.h"
+#include "RooNameSet.h"
 #include "RooObjCacheManager.h"
 
 class RooAddModel : public RooResolutionModel {
@@ -53,9 +54,12 @@ public:
     // Return extended mode capabilities    
     return (_haveLastCoef || _allExtendable) ? MustBeExtended : CanNotBeExtended; 
   }
-  /// Return expected number of events for extended likelihood calculation, which
-  /// is the sum of all coefficients.
   virtual Double_t expectedEvents(const RooArgSet* nset) const ;
+  virtual Double_t expectedEvents(const RooArgSet& nset) const { 
+    // Return expected number of events for extended likelihood calculation
+    // which is the sum of all coefficients
+    return expectedEvents(&nset) ; 
+  }
 
   const RooArgList& pdfList() const { 
     // Return list of component p.d.fs
@@ -108,7 +112,7 @@ protected:
     virtual RooArgList containedArgs(Action) ;
 
   } ;
-  mutable RooObjCacheManager _projCacheMgr ;  //! Manager of cache with coefficient projections and transformations
+  mutable RooObjCacheManager _projCacheMgr ;  // Manager of cache with coefficient projections and transformations
   CacheElem* getProjCache(const RooArgSet* nset, const RooArgSet* iset=0, const char* rangeName=0) const ;
   void updateCoefficients(CacheElem& cache, const RooArgSet* nset) const ;
 
@@ -121,7 +125,7 @@ protected:
     virtual RooArgList containedArgs(Action) ;
   } ;
   
-  mutable RooObjCacheManager _intCacheMgr ; //! Manager of cache with integrals
+  mutable RooObjCacheManager _intCacheMgr ; // Manager of cache with integrals
  
   mutable RooAICRegistry _codeReg ;  //! Registry of component analytical integration codes
 
@@ -138,7 +142,7 @@ protected:
 
 private:
 
-  ClassDef(RooAddModel,2) // Resolution model representing a sum of resolution models
+  ClassDef(RooAddModel,1) // Resolution model representing a sum of resolution models
 };
 
 #endif

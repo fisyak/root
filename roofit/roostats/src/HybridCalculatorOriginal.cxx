@@ -256,7 +256,7 @@ HybridResult* HybridCalculatorOriginal::Calculate(TH1& data, unsigned int nToys,
 {
 
    /// convert data TH1 histogram to a RooDataHist
-   auto dataHistName = std::string(GetName()) + "_roodatahist";
+   TString dataHistName = GetName(); dataHistName += "_roodatahist";
    RooDataHist dataHist(dataHistName,"Data distribution as RooDataHist converted from TH1",*fObservables,&data);
 
    HybridResult* result = Calculate(dataHist,nToys,usePriors);

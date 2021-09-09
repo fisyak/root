@@ -5,7 +5,6 @@ namespace ROOT {
 namespace Fit {
 namespace ExecutionPolicy {
 
-  /*
 constexpr ROOT::EExecutionPolicy
    _R__DEPRECATED_626("ROOT::Fit::ExecutionPolicy is being deprecated."
                       "Use ROOT::EExecutionPolicy::kMultiThread instead.")
@@ -20,7 +19,6 @@ constexpr ROOT::EExecutionPolicy _R__DEPRECATED_626(
    "ROOT::Fit::ExecutionPolicy is being deprecated."
    "Use ROOT::EExecutionPolicy::kSequential instead.")
       kSerial = ROOT::EExecutionPolicy::kSequential;
-  */
 
 } // namespace ExecutionPolicy
 } // Fit ns

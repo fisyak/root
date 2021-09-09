@@ -1,5 +1,5 @@
 /*************************************************************************
- * Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -33,25 +33,6 @@ namespace Experimental {
 class RLegend : public RPave {
 
 public:
-
-   /** \class RCustomDrawable
-   \ingroup GrafROOT7
-   \brief Special drawable to let provide line, fill or marker attributes for legend
-   \author Sergey Linev <S.Linev@gsi.de>
-   \date 2021-07-06
-   \warning This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback
-   is welcome!
-   */
-
-   class RCustomDrawable final : public RDrawable {
-   public:
-      RCustomDrawable() : RDrawable("lentry") {}
-
-      RAttrLine line{this, "line"};          ///<! line attributes
-      RAttrFill fill{this, "fill"};          ///<! fill attributes
-      RAttrMarker marker{this, "marker"};    ///<! marker attributes
-   };
-
    /** \class REntry
    \ingroup GrafROOT7
    \brief An entry in RLegend, references RDrawable and its attributes
@@ -67,57 +48,117 @@ public:
 
       std::string fLabel; ///< label shown for the entry
 
-      bool fLine{true}, fFill{false}, fMarker{false}, fError{false}; ///< enable line, fill, marker, error showing
+      bool fLine{true}, fFill{false}, fMarker{false}; ///< enable line, fill, marker showing
 
       Internal::RIOShared<RDrawable> fDrawable; ///< reference to RDrawable
 
       std::string fDrawableId; ///< drawable id, used only when display item
 
-      bool IsCustomDrawable() const { return dynamic_cast<const RCustomDrawable *>(fDrawable.get()) != nullptr; }
+      bool IsCustomDrawable() const { return fDrawableId == "custom"; }
 
-      void DecodeOptions(const std::string &opt)
+      bool EnsureCustomDrawable()
       {
-         if (opt.find('l') != std::string::npos) SetLine(true);
-         if (opt.find('f') != std::string::npos) SetFill(true);
-         if (opt.find('m') != std::string::npos) SetMarker(true);
-         if (opt.find('e') != std::string::npos) SetError(true);
+         if (!IsCustomDrawable())
+            return false;
+
+         if (!fDrawable)
+            fDrawable = std::make_shared<RDrawable>("lentry");
+
+         return true;
       }
 
    public:
       REntry() = default;
 
       /** Create entry without reference to existing drawable object, can assign attributes */
-      REntry(const std::string &lbl, const std::string &opt)
+      REntry(const std::string &lbl)
       {
-         fDrawableId = "custom";
          fLabel = lbl;
-         DecodeOptions(opt);
+         fDrawableId = "custom";
       }
 
       /** Create entry with reference to existing drawable object */
-      REntry(std::shared_ptr<RDrawable> drawable, const std::string &lbl, const std::string &opt)
+      REntry(std::shared_ptr<RDrawable> drawable, const std::string &lbl)
       {
          fDrawable = drawable;
          fLabel = lbl;
-         DecodeOptions(opt);
       }
 
-      REntry &SetLabel(const std::string &lbl) { fLabel = lbl; return *this; }
+      REntry &SetLabel(const std::string &lbl)
+      {
+         fLabel = lbl;
+         return *this;
+      }
       const std::string &GetLabel() const { return fLabel; }
 
-      REntry &SetLine(bool on = true) { fLine = on; return *this; }
+      REntry &SetLine(bool on = true)
+      {
+         fLine = on;
+         return *this;
+      }
       bool GetLine() const { return fLine; }
 
-      REntry &SetFill(bool on = true) { fFill = on; return *this; }
+      REntry &SetAttrLine(const RAttrLine &attr)
+      {
+         if (EnsureCustomDrawable()) {
+            RAttrLine(fDrawable.get()) = attr;
+            SetLine(true);
+         }
+         return *this;
+      }
+
+      RAttrLine GetAttrLine() const
+      {
+         if (IsCustomDrawable() && fDrawable)
+            return RAttrLine(const_cast<RDrawable *>(fDrawable.get()));
+         return {};
+      }
+
+      REntry &SetFill(bool on = true)
+      {
+         fFill = on;
+         return *this;
+      }
       bool GetFill() const { return fFill; }
 
-      REntry &SetMarker(bool on = true) { fMarker = on; return *this; }
+      REntry &SetAttrFill(const RAttrFill &attr)
+      {
+         if (EnsureCustomDrawable()) {
+            RAttrFill(fDrawable.get()) = attr;
+            SetFill(true);
+         }
+         return *this;
+      }
+
+      RAttrFill GetAttrFill() const
+      {
+         if (IsCustomDrawable() && fDrawable)
+            return RAttrFill(const_cast<RDrawable *>(fDrawable.get()));
+         return {};
+      }
+
+      REntry &SetMarker(bool on = true)
+      {
+         fMarker = on;
+         return *this;
+      }
       bool GetMarker() const { return fMarker; }
 
-      REntry &SetError(bool on = true) { fError = on; return *this; }
-      bool GetError() const { return fError; }
+      REntry &SetAttrMarker(const RAttrMarker &attr)
+      {
+         if (EnsureCustomDrawable()) {
+            RAttrMarker(fDrawable.get()) = attr;
+            SetMarker(true);
+         }
+         return *this;
+      }
 
-      std::shared_ptr<RDrawable> GetDrawable() const { return fDrawable.get_shared(); }
+      RAttrMarker GetAttrMarker() const
+      {
+         if (IsCustomDrawable() && fDrawable)
+            return RAttrMarker(const_cast<RDrawable *>(fDrawable.get()));
+         return {};
+      }
    };
 
 private:
@@ -165,28 +206,23 @@ public:
 
    RLegend(const std::string &title) : RLegend() { SetTitle(title); }
 
-   RLegend(const RPadPos &offset, const RPadExtent &size) : RLegend()
+   RLegend &SetTitle(const std::string &title)
    {
-      offsetX = offset.Horiz();
-      offsetY = offset.Vert();
-      width = size.Horiz();
-      height = size.Vert();
+      fTitle = title;
+      return *this;
    }
-
-   RLegend &SetTitle(const std::string &title) { fTitle = title; return *this; }
    const std::string &GetTitle() const { return fTitle; }
 
-   std::shared_ptr<RCustomDrawable> AddEntry(const std::string &lbl, const std::string &opt = "")
+   REntry &AddEntry(const std::string &lbl)
    {
-      fEntries.emplace_back(lbl, opt);
-      auto drawable = std::make_shared<RCustomDrawable>();
-      fEntries.back().fDrawable = drawable;
-      return drawable;
+      fEntries.emplace_back(lbl);
+      return fEntries.back();
    }
 
-   void AddEntry(const std::shared_ptr<RDrawable> &drawable, const std::string &lbl, const std::string &opt = "")
+   REntry &AddEntry(std::shared_ptr<RDrawable> drawable, const std::string &lbl)
    {
-      fEntries.emplace_back(drawable, lbl, opt);
+      fEntries.emplace_back(drawable, lbl);
+      return fEntries.back();
    }
 
    auto NumEntries() const { return fEntries.size(); }

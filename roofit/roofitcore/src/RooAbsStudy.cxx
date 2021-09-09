@@ -130,9 +130,9 @@ void RooAbsStudy::aggregateSummaryOutput(TList* chunkList)
 {
   if (!chunkList) return ;
 
-  TIter iter = chunkList->MakeIterator() ;
+  TIterator* iter = chunkList->MakeIterator() ;
   TObject* obj ;
-  while((obj=iter.Next())) {
+  while((obj=iter->Next())) {
 
     //cout << "RooAbsStudy::aggregateSummaryOutput(" << GetName() << ") processing object " << obj->GetName() << endl ;
 
@@ -152,11 +152,12 @@ void RooAbsStudy::aggregateSummaryOutput(TList* chunkList)
     if (dlist) {
       if (TString(dlist->GetName()).BeginsWith(Form("%s_detailed_data",GetName()))) {
 	//cout << "RooAbsStudy::aggregateSummaryOutput(" << GetName() << ") found detail block " <<dlist->GetName() << " with " << dlist->GetSize() << " entries" << endl ;
-	TIter diter = dlist->MakeIterator() ;
+	TIterator* diter = dlist->MakeIterator() ;
 	TNamed* dobj ;
-	while((dobj=(TNamed*)diter.Next())) {	  
+	while((dobj=(TNamed*)diter->Next())) {	  
 	  storeDetailedOutput(*dobj) ;
 	}
+	delete diter ;
       }
     }
   }

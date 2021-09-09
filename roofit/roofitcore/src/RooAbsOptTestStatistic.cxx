@@ -114,14 +114,15 @@ RooAbsOptTestStatistic:: RooAbsOptTestStatistic()
 /// \param[in] cloneInputData Not used. Data is always cloned.
 /// \param[in] integrateOverBinsPrecision If > 0, PDF in binned fits are integrated over the bins. This sets the precision. If = 0,
 /// only unbinned PDFs fit to RooDataHist are integrated. If < 0, PDFs are never integrated.
-RooAbsOptTestStatistic::RooAbsOptTestStatistic(const char *name, const char *title, RooAbsReal& real,
-                                               RooAbsData& indata, const RooArgSet& projDeps,
-                                               RooAbsTestStatistic::Configuration const& cfg) :
-  RooAbsTestStatistic(name,title,real,indata,projDeps,cfg),
+RooAbsOptTestStatistic::RooAbsOptTestStatistic(const char *name, const char *title, RooAbsReal& real, RooAbsData& indata,
+					       const RooArgSet& projDeps, const char* rangeName, const char* addCoefRangeName,
+					       Int_t nCPU, RooFit::MPSplit interleave, Bool_t verbose, Bool_t splitCutRange, Bool_t /*cloneInputData*/,
+					       double integrateOverBinsPrecision) :
+  RooAbsTestStatistic(name,title,real,indata,projDeps,rangeName, addCoefRangeName, nCPU, interleave, verbose, splitCutRange),
   _projDeps(0),
   _sealed(kFALSE), 
   _optimized(kFALSE),
-  _integrateBinsPrecision(cfg.integrateOverBinsPrecision)
+  _integrateBinsPrecision(integrateOverBinsPrecision)
 {
   // Don't do a thing in master mode
 
@@ -141,7 +142,7 @@ RooAbsOptTestStatistic::RooAbsOptTestStatistic(const char *name, const char *tit
   _origFunc = 0 ; //other._origFunc ;
   _origData = 0 ; // other._origData ;
 
-  initSlave(real, indata, projDeps, _rangeName.c_str(), _addCoefRangeName.c_str()) ;
+  initSlave(real,indata,projDeps,rangeName,addCoefRangeName) ;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

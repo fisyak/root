@@ -317,6 +317,7 @@ REveGeoShape *REveGeoShape::ImportShapeExtract(REveGeoShapeExtract* gse,
                                                REveElement*         parent)
 {
    REveGeoManagerHolder gmgr(fgGeoManager);
+   REveManager::RRedrawDisabler redrawOff(REX::gEve);
    REveGeoShape* gsre = SubImportShapeExtract(gse, parent);
    gsre->StampObjProps();
    return gsre;

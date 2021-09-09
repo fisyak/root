@@ -591,7 +591,7 @@ const char *TAxis::GetTicks() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// This helper function checks if there is a bin without a label
+/// this helper function checks if there is a bin without a label
 /// if all bins have labels, the axis can / will become alphanumeric
 
 Bool_t TAxis::HasBinWithoutLabel() const

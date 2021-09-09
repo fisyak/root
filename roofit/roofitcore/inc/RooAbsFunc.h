@@ -40,6 +40,9 @@ public:
   }
 
   virtual Double_t operator()(const Double_t xvector[]) const = 0;
+  virtual RooSpan<const double> getValues(std::vector<RooSpan<const double>> /*coordinates*/) const {
+    throw std::logic_error("Not implemented.");
+  }
   virtual Double_t getMinLimit(UInt_t dimension) const = 0;
   virtual Double_t getMaxLimit(UInt_t dimension) const = 0;
 
@@ -65,12 +68,12 @@ public:
     return "(unnamed)" ; 
   }  
 
-  virtual std::list<Double_t>* binBoundaries(Int_t) const { return nullptr; }
+  virtual std::list<Double_t>* binBoundaries(Int_t) const { return 0 ; }
 
-  /// Interface for returning an optional hint for initial sampling points when constructing a curve
-  /// projected on observable.
   virtual std::list<Double_t>* plotSamplingHint(RooAbsRealLValue& /*obs*/, Double_t /*xlo*/, Double_t /*xhi*/) const {
-    return nullptr;
+    // Interface for returning an optional hint for initial sampling points when constructing a curve 
+    // projected on observable.  
+    return 0 ; 
   }
 
 protected:

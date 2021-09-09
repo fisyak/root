@@ -32,6 +32,8 @@
 #include "TLegend.h"
 #include "TMath.h"
 
+#include "ROOT/RMakeUnique.hxx"
+
 #include <iostream>
 #include <memory>
 

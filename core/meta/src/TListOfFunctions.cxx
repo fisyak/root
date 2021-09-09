@@ -28,7 +28,7 @@ ClassImp(TListOfFunctions);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TListOfFunctions::TListOfFunctions(TClass *cl) : fClass(cl),fIds(nullptr),fUnloaded(nullptr),fLastLoadMarker(0)
+TListOfFunctions::TListOfFunctions(TClass *cl) : fClass(cl),fIds(0),fUnloaded(0),fLastLoadMarker(0)
 {
    fIds = new TExMap;
    fUnloaded = new THashList;
@@ -178,7 +178,7 @@ TObject *TListOfFunctions::FindObject(const char *name) const
 
       TInterpreter::DeclId_t decl;
       if (fClass) decl = gInterpreter->GetFunction(fClass->GetClassInfo(),name);
-      else        decl = gInterpreter->GetFunction(nullptr,name);
+      else        decl = gInterpreter->GetFunction(0,name);
       if (decl) result = const_cast<TListOfFunctions*>(this)->Get(decl);
    }
    return result;
@@ -210,7 +210,7 @@ TList* TListOfFunctions::GetListForObjectNonConst(const char* name)
 
    // Update if needed.
    std::vector<DeclId_t> overloadDecls;
-   ClassInfo_t* ci = fClass ? fClass->GetClassInfo() : nullptr;
+   ClassInfo_t* ci = fClass ? fClass->GetClassInfo() : 0;
    gInterpreter->GetFunctionOverloads(ci, name, overloadDecls);
    for (std::vector<DeclId_t>::const_iterator iD = overloadDecls.begin(),
            eD = overloadDecls.end(); iD != eD; ++iD) {
@@ -238,7 +238,7 @@ TList* TListOfFunctions::GetListForObject(const char* name) const
 
 TList* TListOfFunctions::GetListForObject(const TObject* obj) const
 {
-   if (!obj) return nullptr;
+   if (!obj) return 0;
    return const_cast<TListOfFunctions*>(this)
       ->GetListForObjectNonConst(obj->GetName());
 }
@@ -249,7 +249,7 @@ TList* TListOfFunctions::GetListForObject(const TObject* obj) const
 
 TFunction *TListOfFunctions::Find(DeclId_t id) const
 {
-   if (!id) return nullptr;
+   if (!id) return 0;
 
    R__LOCKGUARD(gInterpreterMutex);
    return (TFunction*)fIds->GetValue((Long64_t)id);
@@ -261,7 +261,7 @@ TFunction *TListOfFunctions::Find(DeclId_t id) const
 
 TFunction *TListOfFunctions::Get(DeclId_t id)
 {
-   if (!id) return nullptr;
+   if (!id) return 0;
 
    R__LOCKGUARD(gInterpreterMutex);
    //need the Find and possible Add to be one atomic operation
@@ -269,9 +269,9 @@ TFunction *TListOfFunctions::Get(DeclId_t id)
    if (f) return f;
 
    if (fClass) {
-      if (!gInterpreter->ClassInfo_Contains(fClass->GetClassInfo(),id)) return nullptr;
+      if (!gInterpreter->ClassInfo_Contains(fClass->GetClassInfo(),id)) return 0;
    } else {
-      if (!gInterpreter->ClassInfo_Contains(nullptr,id)) return nullptr;
+      if (!gInterpreter->ClassInfo_Contains(0,id)) return 0;
    }
 
    MethodInfo_t *m = gInterpreter->MethodInfo_Factory(id);
@@ -348,7 +348,7 @@ TObject* TListOfFunctions::Remove(TObject *obj)
    }
    UnmapObject(obj);
    if (found) return obj;
-   else return nullptr;
+   else return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -356,7 +356,7 @@ TObject* TListOfFunctions::Remove(TObject *obj)
 
 TObject* TListOfFunctions::Remove(TObjLink *lnk)
 {
-   if (!lnk) return nullptr;
+   if (!lnk) return 0;
 
    TObject *obj = lnk->GetObject();
 
@@ -373,7 +373,7 @@ TObject* TListOfFunctions::Remove(TObjLink *lnk)
 
 void TListOfFunctions::Load()
 {
-   if (fClass && fClass->GetClassInfo() == nullptr) return;
+   if (fClass && fClass->GetClassInfo() == 0) return;
 
    R__LOCKGUARD(gInterpreterMutex);
 

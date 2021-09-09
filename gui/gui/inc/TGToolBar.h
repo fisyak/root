@@ -13,6 +13,15 @@
 #define ROOT_TGToolBar
 
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGToolBar                                                            //
+//                                                                      //
+// A toolbar is a composite frame that contains TGPictureButtons.       //
+// Often used in combination with a TGHorizontal3DLine.                 //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
 #include "TGFrame.h"
 
 class TGButton;
@@ -33,9 +42,9 @@ struct ToolBarData_t {
 class TGToolBar : public TGCompositeFrame {
 
 protected:
-   TList   *fPictures;      ///< list of pictures that should be freed
-   TList   *fTrash;         ///< list of buttons and layout hints to be deleted
-   TMap    *fMapOfButtons;  ///< map of button/id pairs in this group
+   TList   *fPictures;      // list of pictures that should be freed
+   TList   *fTrash;         // list of buttons and layout hints to be deleted
+   TMap    *fMapOfButtons;  // map of button/id pairs in this group
 
 private:
    TGToolBar(const TGToolBar&) = delete;

@@ -9,6 +9,14 @@
  *************************************************************************/
 
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TPieSliceEditor                                                     //
+//                                                                      //
+//  Editor for changing pie-chart's slice attributes.                   //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
 #ifndef ROOT_TPieSliceEditor
 #define ROOT_TPieSliceEditor
 #include "TGedFrame.h"
@@ -23,9 +31,9 @@ private:
    TPieSlice *fPieSlice;
 
 protected:
-   TGTextEntry *fTitle;          ///< Slice label
-   TGNumberEntry *fValue;        ///< Value of the slice
-   TGNumberEntry *fOffset;       ///< Grafical offset in the radial direction
+   TGTextEntry *fTitle;          // Slice label
+   TGNumberEntry *fValue;        // Value of the slice
+   TGNumberEntry *fOffset;    // Grafical offset in the radial direction
 
    void ConnectSignals2Slots();
 

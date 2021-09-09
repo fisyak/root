@@ -1,4 +1,3 @@
-import importlib
 import types
 import sys
 import os
@@ -75,17 +74,6 @@ def _create_rdf_experimental_distributed_module(parent):
         experimental)
 
     return experimental
-
-
-def _subimport(name):
-    # type: (str) -> types.ModuleType
-    """
-    Import and return the Python module with the input name.
-
-    Helper function for the __reduce__ method of the ROOTFacade class.
-    """
-    return importlib.import_module(name)
-
 
 class ROOTFacade(types.ModuleType):
     """Facade class for ROOT module"""
@@ -265,40 +253,12 @@ class ROOTFacade(types.ModuleType):
                 logons = [
                     os.path.join(str(self.TROOT.GetEtcDir()), 'system' + name),
                     os.path.expanduser(os.path.join('~', name))
-                ]
+                    ]
                 if logons[-1] != os.path.join(os.getcwd(), name):
                     logons.append(name)
                 for rootlogon in logons:
                     if os.path.exists(rootlogon):
                         self.TApplication.ExecuteFile(rootlogon)
-
-    def __reduce__(self):
-        # type: () -> types.ModuleType
-        """
-        Reduction function of the ROOT facade to customize the (pickle)
-        serialization step.
-
-        Defines the ingredients needed for a correct serialization of the
-        facade, that is a function that imports a Python module and the name of
-        that module, which corresponds to this facade's __name__ attribute. This
-        method helps serialization tools like `cloudpickle`, especially used in
-        distributed environments, that always need to include information about
-        the ROOT module in the serialization step. For example, the following
-        snippet would not work without this method::
-
-            import ROOT
-            import cloudpickle
-
-            def foo():
-                return ROOT.TH1F()
-
-            cloudpickle.loads(cloudpickle.dumps(foo))
-
-        In particular, it would raise::
-
-            TypeError: cannot pickle 'ROOTFacade' object
-        """
-        return _subimport, (self.__name__,)
 
     # Inject version as __version__ property in ROOT module
     @property
@@ -335,18 +295,6 @@ class ROOTFacade(types.ModuleType):
         except:
             raise Exception('Failed to pythonize the namespace RDF')
         del type(self).RDF
-        return ns
-
-    # Overload RooFit namespace
-    @property
-    def RooFit(self):
-        from .pythonization._roofit import pythonize_roofit_namespace
-        ns = self._fallback_getattr('RooFit')
-        try:
-            pythonize_roofit_namespace(ns)
-        except:
-            raise Exception('Failed to pythonize the namespace RooFit')
-        del type(self).RooFit
         return ns
 
     # Overload TMVA namespace

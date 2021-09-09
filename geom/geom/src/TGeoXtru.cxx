@@ -555,6 +555,7 @@ Double_t TGeoXtru::DistFromOutside(const Double_t *point, const Double_t *dir, I
    Double_t stepmax = step;
    if (stepmax>TGeoShape::Big()) stepmax = TGeoShape::Big();
    Double_t snext = 0.;
+   Double_t dist = TGeoShape::Big();
    Int_t i, iv;
    Double_t pt[3];
    memcpy(pt,point,3*sizeof(Double_t));
@@ -592,7 +593,7 @@ Double_t TGeoXtru::DistFromOutside(const Double_t *point, const Double_t *dir, I
    }
    // Check if the bounding box is missed by the track
    if (!TGeoBBox::Contains(pt)) {
-      Double_t dist = TGeoBBox::DistFromOutside(pt,dir,3);
+      dist = TGeoBBox::DistFromOutside(pt,dir,3);
       if (dist>stepmax) return TGeoShape::Big();
       if (dist>1E-6) dist-=1E-6; // decrease snext to make sure we do not cross the xtru
       else dist = 0;
@@ -612,7 +613,7 @@ Double_t TGeoXtru::DistFromOutside(const Double_t *point, const Double_t *dir, I
       // loop lateral planes to see if we cross something
       xtru->SetIz(iz);
       for (iv=0; iv<fNvert; iv++) {
-         Double_t dist = DistToPlane(pt,dir,iz,iv,stepmax,kFALSE);
+         dist = DistToPlane(pt,dir,iz,iv,stepmax,kFALSE);
          if (dist<stepmax) {
             xtru->SetSeg(iv);
             if (convex) return (snext+dist);
@@ -630,7 +631,7 @@ Double_t TGeoXtru::DistFromOutside(const Double_t *point, const Double_t *dir, I
       xtru->SetIz(iz);
       if (TGeoShape::IsSameWithinTolerance(fZ[iz],fZ[iz+1])) xtru->SetIz(-1);
       for (iv=0; iv<fNvert; iv++) {
-         Double_t dist = DistToPlane(pt,dir,iz,iv,stepmax,kFALSE);
+         dist = DistToPlane(pt,dir,iz,iv,stepmax,kFALSE);
          if (dist<stepmax) {
             // HIT
             xtru->SetSeg(iv);
@@ -873,7 +874,8 @@ void TGeoXtru::SetSegsAndPols(TBuffer3D &buff) const
    Int_t c = GetBasicColor();
 
    Int_t i,j;
-   Int_t indx = 0, indx2, k;
+   Int_t indx, indx2, k;
+   indx = indx2 = 0;
    for (i=0; i<nz; i++) {
       // loop Z planes
       indx2 = i*nvert;
@@ -934,9 +936,11 @@ void TGeoXtru::SetSegsAndPols(TBuffer3D &buff) const
 Double_t TGeoXtru::SafetyToSector(const Double_t *point, Int_t iz, Double_t safmin, Bool_t in)
 {
    ThreadData_t& td = GetThreadData();
-   Double_t saf1, saf2, safz, safe;
+   Double_t safz = TGeoShape::Big();
+   Double_t saf1, saf2;
    Bool_t in1, in2;
    Int_t iseg;
+   Double_t safe = TGeoShape::Big();
    // segment-break case
    if (TGeoShape::IsSameWithinTolerance(fZ[iz],fZ[iz+1])) {
       safz = TMath::Abs(point[2]-fZ[iz]);

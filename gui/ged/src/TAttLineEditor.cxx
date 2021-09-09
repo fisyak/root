@@ -9,13 +9,19 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/** \class  TAttLineEditor
-    \ingroup ged
-
-Implements GUI for editing line attributes.
-           color, line width, line style
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TAttLineEditor                                                      //
+//                                                                      //
+//  Implements GUI for editing line attributes.                         //
+//           color, line width, line style                              //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+//Begin_Html
+/*
+<img src="gif/TAttLineEditor.gif">
 */
+//End_Html
 
 
 #include "TAttLineEditor.h"
@@ -201,7 +207,7 @@ void TAttLineEditor::DoLineWidth(Int_t width)
       } else {
          fAttLine->SetLineWidth(-(TMath::Abs(graphLineWidth)+width));
       }
-   } else if (fAttLine) {
+   } else {
       fAttLine->SetLineWidth(width);
    }
    Update();

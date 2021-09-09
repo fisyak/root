@@ -560,7 +560,6 @@ TLegend *TPad::BuildLegend(Double_t x1, Double_t y1, Double_t x2, Double_t y2,
             leg->AddEntry( obj, mes.Data(), opt );
          }
       }
-      opt = "";
    }
    if (leg) {
       TVirtualPad *gpadsave;
@@ -3243,10 +3242,10 @@ void TPad::FillCollideGridTGraph(TObject *o)
    Double_t ys   = (fY2-fY1)/fCGny;
 
    Int_t n = g->GetN();
-   Int_t s = TMath::Max(n/10,1);
    Double_t x1, x2, y1, y2;
-   for (Int_t i=s; i<n; i=i+s) {
-      g->GetPoint(TMath::Max(0,i-s),x1,y1);
+
+   for (Int_t i=1; i<n; i++) {
+      g->GetPoint(i-1,x1,y1);
       g->GetPoint(i  ,x2,y2);
       if (fLogx) {
          if (x1 > 0) x1 = TMath::Log10(x1);
@@ -5699,18 +5698,15 @@ void TPad::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
    char quote='"';
    char lcname[10];
    const char *cname = GetName();
-   size_t nch = strlen(cname);
-   if (nch < sizeof(lcname)) {
-      strlcpy(lcname, cname, sizeof(lcname));
-      for(size_t k = 0; k < nch; k++)
-         if (lcname[k] == ' ')
-            lcname[k] = 0;
-      if (lcname[0] != 0)
-         cname = lcname;
-      else if (this == gPad->GetCanvas())
-         cname = "c1";
-      else
-         cname = "pad";
+   Int_t nch = strlen(cname);
+   if (nch < 10) {
+      strlcpy(lcname,cname,10);
+      for (Int_t k=1;k<=nch;k++) {if (lcname[nch-k] == ' ') lcname[nch-k] = 0;}
+      if (lcname[0] == 0) {
+         if (this == gPad->GetCanvas()) {strlcpy(lcname,"c1",10);  nch = 2;}
+         else                           {strlcpy(lcname,"pad",10); nch = 3;}
+      }
+      cname = lcname;
    }
 
    //   Write pad parameters
@@ -6934,8 +6930,8 @@ TObject *TPad::WaitPrimitive(const char *pname, const char *emode)
 TObject *TPad::CreateToolTip(const TBox *box, const char *text, Long_t delayms)
 {
    if (gPad->IsBatch()) return 0;
-   return (TObject*)gROOT->ProcessLineFast(Form("new TGToolTip((TBox*)0x%zx,\"%s\",%d)",
-                                           (size_t)box,text,(Int_t)delayms));
+   return (TObject*)gROOT->ProcessLineFast(Form("new TGToolTip((TBox*)0x%lx,\"%s\",%d)",
+                                           (Long_t)box,text,(Int_t)delayms));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6945,7 +6941,7 @@ void TPad::DeleteToolTip(TObject *tip)
 {
    // delete tip;
    if (!tip) return;
-   gROOT->ProcessLineFast(Form("delete (TGToolTip*)0x%zx", (size_t)tip));
+   gROOT->ProcessLineFast(Form("delete (TGToolTip*)0x%lx", (Long_t)tip));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6956,8 +6952,8 @@ void TPad::ResetToolTip(TObject *tip)
 {
    if (!tip) return;
    // tip->Reset(this);
-   gROOT->ProcessLineFast(Form("((TGToolTip*)0x%zx)->Reset((TPad*)0x%zx)",
-                          (size_t)tip,(size_t)this));
+   gROOT->ProcessLineFast(Form("((TGToolTip*)0x%lx)->Reset((TPad*)0x%lx)",
+                          (Long_t)tip,(Long_t)this));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6967,7 +6963,7 @@ void TPad::CloseToolTip(TObject *tip)
 {
    if (!tip) return;
    // tip->Hide();
-   gROOT->ProcessLineFast(Form("((TGToolTip*)0x%zx)->Hide()",(size_t)tip));
+   gROOT->ProcessLineFast(Form("((TGToolTip*)0x%lx)->Hide()",(Long_t)tip));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7089,7 +7085,7 @@ Int_t TPad::GetGLDevice()
 
 void TPad::RecordPave(const TObject *obj)
 {
-   Emit("RecordPave(const TObject*)", (Longptr_t)obj);
+   Emit("RecordPave(const TObject*)", (Long_t)obj);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7097,7 +7093,7 @@ void TPad::RecordPave(const TObject *obj)
 
 void TPad::RecordLatex(const TObject *obj)
 {
-   Emit("RecordLatex(const TObject*)", (Longptr_t)obj);
+   Emit("RecordLatex(const TObject*)", (Long_t)obj);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

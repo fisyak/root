@@ -10,9 +10,6 @@
 #include <ROOT/Browsable/RProvider.hxx>
 #include <ROOT/Browsable/RLevelIter.hxx>
 
-#include "TTree.h"
-#include "TNtuple.h"
-#include "TBranch.h"
 #include "TBranchElement.h"
 #include "TBranchBrowsable.h"
 
@@ -20,33 +17,29 @@ using namespace ROOT::Experimental::Browsable;
 
 
 ////////////////////////////////////////////////////////////
-/// Representing TBranch in browsables
+/// Representing TBranchElement in browsables
+/// Kept here only for a demo - default TObject-based API is enough for handling TBranchElement
 
 class TBrElement : public TObjectElement {
 
 public:
    TBrElement(std::unique_ptr<RHolder> &br) : TObjectElement(br) {}
 
-   Long64_t GetSize() const override
+   virtual ~TBrElement() = default;
+
+   int GetNumChilds() override
    {
-      auto br = fObject->Get<TBranch>();
-      return br ? br->GetTotalSize() : -1;
+      auto br = fObject->Get<TBranchElement>();
+      return br && br->IsFolder() ? TObjectElement::GetNumChilds() : 0;
    }
-};
 
-////////////////////////////////////////////////////////////
-/// Representing TTree in browsables
-
-class TTreeElement : public TObjectElement {
-
-public:
-   TTreeElement(std::unique_ptr<RHolder> &br) : TObjectElement(br) {}
-
-   Long64_t GetSize() const override
+   /** Create iterator for childs elements if any */
+   std::unique_ptr<RLevelIter> GetChildsIter() override
    {
-      auto tr = fObject->Get<TTree>();
-      printf("Return TTree size %ld\n", (long) (tr ? tr->GetTotBytes() : -1));
-      return tr ? tr->GetTotBytes() : -1;
+      auto br = fObject->Get<TBranchElement>();
+      if (br && br->IsFolder())
+         return TObjectElement::GetChildsIter();
+      return nullptr;
    }
 };
 
@@ -85,17 +78,8 @@ class TBranchBrowseProvider : public RProvider {
 public:
    TBranchBrowseProvider()
    {
-      RegisterBrowse(TBranch::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
-         return std::make_shared<TBrElement>(object);
-      });
       RegisterBrowse(TBranchElement::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
          return std::make_shared<TBrElement>(object);
-      });
-      RegisterBrowse(TTree::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
-         return std::make_shared<TTreeElement>(object);
-      });
-      RegisterBrowse(TNtuple::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
-         return std::make_shared<TTreeElement>(object);
       });
    }
 

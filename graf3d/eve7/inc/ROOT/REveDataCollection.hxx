@@ -73,7 +73,7 @@ private:
    ItemsChangeFunc_t fHandlerItemsChange;
    FillImpliedSelectedFunc_t fHandlerFillImplied;
 
-   std::vector< std::unique_ptr<TTip> > fTooltipExpressions;
+   std::vector<TTip> fTooltipExpressions;
 
 public:
    REveDataItemList(const std::string& n = "Items", const std::string& t = "");
@@ -92,7 +92,7 @@ public:
 
    void ProcessSelection(ElementId_t id, bool multi, bool secondary, const std::set<int>& in_secondary_idcs);
 
-   void AddTooltipExpression(const std::string &title, const std::string &expr, bool init = true);
+   void AddTooltipExpression(const std::string &title, const std::string &expr);
 
    using REveElement::GetHighlightTooltip;
    std::string GetHighlightTooltip(const std::set<int>& secondary_idcs) const override;
@@ -102,8 +102,6 @@ public:
 
    static void DummyItemsChange(REveDataItemList*, const std::vector<int>&);
    static void DummyFillImpliedSelected(REveDataItemList*, Set_t& impSelSet);
-
-   std::vector< std::unique_ptr<TTip> >& RefToolTipExpressions() {return fTooltipExpressions;}
 };
 
 //==============================================================================
@@ -138,7 +136,7 @@ public:
   }
    REveDataItemList* GetItemList() {return fItemList;}
 
-   void SetFilterExpr(const char* filter);
+   void SetFilterExpr(const TString &filter);
    void ApplyFilter();
 
    Int_t GetNItems() const { return (Int_t) fItemList->fItems.size(); }

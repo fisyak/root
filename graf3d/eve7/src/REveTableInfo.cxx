@@ -21,8 +21,6 @@
 
 #include <sstream>
 
-#include <nlohmann/json.hpp>
-
 using namespace ROOT::Experimental;
 
 REveTableViewInfo::REveTableViewInfo(const std::string &name, const std::string &title)
@@ -42,7 +40,7 @@ void REveTableViewInfo::SetDisplayedCollection(ElementId_t collectionId)
    StampObjProps();
 }
 
-void REveTableViewInfo::AddNewColumnToCurrentCollection(const char* expr, const char* title, int prec)
+void REveTableViewInfo::AddNewColumnToCurrentCollection(const std::string &expr, const std::string &title, int prec)
 {
    if (!fDisplayedCollection)
       return;

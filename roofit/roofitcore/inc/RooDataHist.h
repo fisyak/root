@@ -20,8 +20,6 @@
 #include "RooDirItem.h"
 #include "RooArgSet.h"
 
-#include "ROOT/RStringView.hxx"
-
 #include <map>
 #include <vector>
 #include <string>
@@ -41,17 +39,15 @@ public:
 
   // Constructors, factory methods etc.
   RooDataHist() ; 
-  RooDataHist(std::string_view name, std::string_view title, const RooArgSet& vars, const char* binningName=0) ;
-  RooDataHist(std::string_view name, std::string_view title, const RooArgSet& vars, const RooAbsData& data, Double_t initWgt=1.0) ;
-  RooDataHist(std::string_view name, std::string_view title, const RooArgList& vars, const TH1* hist, Double_t initWgt=1.0) ;
-  RooDataHist(std::string_view name, std::string_view title, const RooArgList& vars, RooCategory& indexCat, std::map<std::string,TH1*> histMap, Double_t initWgt=1.0) ;
-  RooDataHist(std::string_view name, std::string_view title, const RooArgList& vars, RooCategory& indexCat, std::map<std::string,RooDataHist*> dhistMap, Double_t wgt=1.0) ;
+  RooDataHist(const char *name, const char *title, const RooArgSet& vars, const char* binningName=0) ;
+  RooDataHist(const char *name, const char *title, const RooArgSet& vars, const RooAbsData& data, Double_t initWgt=1.0) ;
+  RooDataHist(const char *name, const char *title, const RooArgList& vars, const TH1* hist, Double_t initWgt=1.0) ;
+  RooDataHist(const char *name, const char *title, const RooArgList& vars, RooCategory& indexCat, std::map<std::string,TH1*> histMap, Double_t initWgt=1.0) ;
+  RooDataHist(const char *name, const char *title, const RooArgList& vars, RooCategory& indexCat, std::map<std::string,RooDataHist*> dhistMap, Double_t wgt=1.0) ;
   //RooDataHist(const char *name, const char *title, const RooArgList& vars, Double_t initWgt=1.0) ;
-  RooDataHist(std::string_view name, std::string_view title, const RooArgList& vars, const RooCmdArg& arg1, const RooCmdArg& arg2=RooCmdArg(), const RooCmdArg& arg3=RooCmdArg(),
+  RooDataHist(const char *name, const char *title, const RooArgList& vars, const RooCmdArg& arg1, const RooCmdArg& arg2=RooCmdArg(), const RooCmdArg& arg3=RooCmdArg(),
         const RooCmdArg& arg4=RooCmdArg(),const RooCmdArg& arg5=RooCmdArg(),const RooCmdArg& arg6=RooCmdArg(),const RooCmdArg& arg7=RooCmdArg(),const RooCmdArg& arg8=RooCmdArg()) ;
   RooDataHist& operator=(const RooDataHist&) = delete;
-
-  WRITE_TSTRING_COMPATIBLE_CONSTRUCTOR(RooDataHist)
 
   RooDataHist(const RooDataHist& other, const char* newname = 0) ;
   TObject* Clone(const char* newname="") const override {
@@ -88,10 +84,6 @@ public:
 
   RooSpan<const double> getWeightBatch(std::size_t first, std::size_t len) const override;
   void getBatches(RooBatchCompute::RunContext& evalData, std::size_t begin, std::size_t len) const override;
-  /// Retrieve all bin volumes. Bins are indexed according to getIndex().
-  RooSpan<const double> binVolumes(std::size_t first, std::size_t len) const {
-    return {_binv + first, len};
-  }
 
   Double_t sum(bool correctForBinSize, bool inverseCorr=false) const ;
   Double_t sum(const RooArgSet& sumSet, const RooArgSet& sliceSet, bool correctForBinSize, bool inverseCorr=false) ;
@@ -104,7 +96,6 @@ public:
 
   /// Return weight of i-th bin. \see getIndex()
   double weight(std::size_t i) const { return _wgt[i]; }
-  double weightFast(const RooArgSet& bin, int intOrder, bool correctForBinSize, bool cdfBoundaries);
   Double_t weight(const RooArgSet& bin, Int_t intOrder=1, Bool_t correctForBinSize=kFALSE, Bool_t cdfBoundaries=kFALSE, Bool_t oneSafe=kFALSE);
   /// Return squared weight sum of i-th bin. \see getIndex()
   double weightSquared(std::size_t i) const { return get_sumw2(i); }
@@ -116,9 +107,9 @@ public:
 
   TIterator* sliceIterator(RooAbsArg& sliceArg, const RooArgSet& otherArgs) ;
 
-  void weightError(double& lo, double& hi, ErrorType etype=Poisson) const override;
-  /// \copydoc RooAbsData::weightError(RooAbsData::ErrorType) const
-  double weightError(ErrorType etype=Poisson) const override {
+  void weightError(Double_t& lo, Double_t& hi, ErrorType etype=Poisson) const override;
+  /// Return the error of the weight of the last-retrieved entry. See also weightError(Double_t&,Double_t&,ErrorType) const.
+  Double_t weightError(ErrorType etype=Poisson) const override {
     // Return symmetric error on current bin calculated either from Poisson statistics or from SumOfWeights
     Double_t lo,hi ;
     weightError(lo,hi,etype) ;
@@ -133,28 +124,11 @@ public:
   virtual void printMultiline(std::ostream& os, Int_t content, Bool_t verbose=kFALSE, TString indent="") const override;
   virtual void printArgs(std::ostream& os) const override;
   virtual void printValue(std::ostream& os) const override;
-  void printDataHistogram(std::ostream& os, RooRealVar* obs) const;
 
   void SetName(const char *name) override;
   void SetNameTitle(const char *name, const char* title) override;
 
-  Int_t getIndex(const RooAbsCollection& coord, Bool_t fast = false) const;
-  /// \copydoc getIndex(const RooAbsCollection&,Bool_t) const
-  ///
-  /// \note This overload only exists because there is an implicit conversion from RooAbsArg
-  /// to RooArgSet, and this needs to remain supported. This enables code like
-  /// ```
-  /// RooRealVar x(...);
-  /// dataHist.getIndex(x);
-  /// ```
-  /// It is, however, recommended to use
-  /// ```
-  /// dataHist.getIndex(RooArgSet(x));
-  /// ```
-  /// in this case.
-  Int_t getIndex(const RooArgSet& coord, Bool_t fast = false) const {
-    return getIndex(static_cast<const RooAbsCollection&>(coord), fast);
-  }
+  Int_t getIndex(const RooArgSet& coord, Bool_t fast = false) const;
 
   void removeSelfFromDir() { removeFromDir(this) ; }
 
@@ -208,22 +182,13 @@ public:
   ///@}
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  /// Structure to cache information on the histogram variable that is
-  /// frequently used for histogram weights retrieval.
-  struct VarInfo {
-    size_t nRealVars = 0;
-    size_t realVarIdx1 = 0;
-    size_t realVarIdx2 = 0;
-    bool initialized = false;
-  };
-
 protected:
 
   friend class RooAbsCachedPdf ;
   friend class RooAbsCachedReal ;
   friend class RooDataHistSliceIter ;
 
-  std::size_t calcTreeIndex(const RooAbsCollection& coords, bool fast) const;
+  std::size_t calcTreeIndex(const RooArgSet& coords, bool fast) const;
   /// Legacy overload to calculate the tree index from the current value of `_vars`.
   /// \deprecated Use calcTreeIndex(const RooArgSet&,bool) const.
   Int_t calcTreeIndex() const { return static_cast<Int_t>(calcTreeIndex(_vars, true)); }
@@ -231,11 +196,11 @@ protected:
   void setAllWeights(Double_t value) ;
  
   void initialize(const char* binningName=0,Bool_t fillTree=kTRUE) ;
-  RooDataHist(std::string_view name, std::string_view title, RooDataHist* h, const RooArgSet& varSubset, 
+  RooDataHist(const char* name, const char* title, RooDataHist* h, const RooArgSet& varSubset, 
         const RooFormulaVar* cutVar, const char* cutRange, Int_t nStart, Int_t nStop, Bool_t copyCache) ;
   RooAbsData* reduceEng(const RooArgSet& varSubset, const RooFormulaVar* cutVar, const char* cutRange=0, 
                   std::size_t nStart=0, std::size_t nStop=std::numeric_limits<std::size_t>::max(), Bool_t copyCache=kTRUE) override;
-  double interpolateDim(int iDim, double xval, size_t centralIdx, int intOrder, bool correctForBinSize, bool cdfBoundaries) ;
+  Double_t interpolateDim(RooRealVar& dim, const RooAbsBinning* binning, Double_t xval, Int_t intOrder, Bool_t correctForBinSize, Bool_t cdfBoundaries) ;
   const std::vector<double>& calculatePartialBinVolume(const RooArgSet& dimSet) const ;
   void checkBinBounds() const;
 
@@ -268,6 +233,7 @@ protected:
   mutable double* _sumw2{nullptr}; //[_arrSize] Sum of weights^2
   double*         _binv {nullptr}; //[_arrSize] Bin volume array
 
+  RooArgSet  _realVars ; // Real dimensions of the dataset 
   mutable std::vector<double> _maskedWeights; //! Copy of _wgtVec, but masked events have a weight of zero.
  
   mutable std::size_t _curIndex{std::numeric_limits<std::size_t>::max()}; // Current index
@@ -281,16 +247,12 @@ protected:
   mutable Int_t _cache_sum_valid{kInvalid}; //! Is cache sum valid? Needs to be Int_t instead of CacheSumState_t for subclasses.
   mutable Double_t _cache_sum{0.}; //! Cache for sum of entries ;
 
-private:
-  double weightInterpolated(const RooArgSet& bin, int intOrder, bool correctForBinSize, bool cdfBoundaries);
 
+private:
   void _adjustBinning(RooRealVar &theirVar, const TAxis &axis, RooRealVar *ourVar, Int_t *offset);
   void registerWeightArraysToDataStore() const;
 
-  VarInfo _varInfo; //!
-  VarInfo const& getVarInfo();
-
-  ClassDefOverride(RooDataHist, 6) // Binned data set
+  ClassDefOverride(RooDataHist, 5) // Binned data set
 };
 
 #endif

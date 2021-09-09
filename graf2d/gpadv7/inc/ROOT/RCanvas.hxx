@@ -52,11 +52,8 @@ private:
    /// Title of the canvas.
    std::string fTitle;
 
-   /// Width of the canvas in pixels
-   int fWidth{0};
-
-   /// Height of the canvas in pixels
-   int fHeight{0};
+   /// Size of the canvas in pixels,
+   std::array<RPadLength::Pixel, 2> fSize;
 
    /// Modify counter, incremented every time canvas is changed
    Version_t fModified{1}; ///<!
@@ -65,9 +62,6 @@ private:
    /// Unmapped canvases (those that never had `Draw()` invoked) might not have
    /// a painter.
    std::unique_ptr<Internal::RVirtualCanvasPainter> fPainter; ///<!
-
-   /// indicate if Show() method was called before
-   bool fShown{false}; ///<!
 
    /// Disable copy construction for now.
    RCanvas(const RCanvas &) = delete;
@@ -82,7 +76,7 @@ public:
    static std::shared_ptr<RCanvas> Create(const std::string &title);
 
    /// Create a temporary RCanvas; for long-lived ones please use Create().
-   RCanvas() : RPadBase("canvas") {}
+   RCanvas() = default;
 
    ~RCanvas() = default;
 
@@ -91,30 +85,26 @@ public:
    /// Access to the top-most canvas, if any (non-const version).
    RCanvas *GetCanvas() override { return this; }
 
-   /// Set canvas pixel size - width and height
-   void SetSize(int width, int height)
+   /// Return canvas pixel size as array with two elements - width and height
+   const std::array<RPadLength::Pixel, 2> &GetSize() const { return fSize; }
+
+   /// Set canvas pixel size as array with two elements - width and height
+   RCanvas &SetSize(const std::array<RPadLength::Pixel, 2> &sz)
    {
-      fWidth = width;
-      fHeight = height;
+      fSize = sz;
+      return *this;
    }
 
-   /// Set canvas width
-   void SetWidth(int width) { fWidth = width; }
-
-   /// Set canvas height
-   void SetHeight(int height) { fHeight = height; }
-
-   /// Get canvas width
-   int GetWidth() const { return fWidth; }
-
-   /// Get canvas height
-   int GetHeight() const { return fHeight; }
+   /// Set canvas pixel size - width and height
+   RCanvas &SetSize(const RPadLength::Pixel &width, const RPadLength::Pixel &height)
+   {
+      fSize[0] = width;
+      fSize[1] = height;
+      return *this;
+   }
 
    /// Display the canvas.
    void Show(const std::string &where = "");
-
-   bool IsShown() const { return fShown; }
-   void ClearShown() { fShown = false; }
 
    /// Returns window name used to display canvas
    std::string GetWindowAddr() const;
@@ -133,19 +123,11 @@ public:
       return fPainter->AddPanel(panel->GetWindow());
    }
 
-   /// Get modify counter
+   // Get modify counter
    uint64_t GetModified() const { return fModified; }
 
    // Set newest version to all primitives
    void Modified() { SetDrawableVersion(IncModified()); }
-
-   /// Set newest version to specified drawable
-   void Modified(std::shared_ptr<RDrawable> drawable)
-   {
-      // TODO: may be check that drawable belong to the canvas
-      if (drawable)
-         drawable->SetDrawableVersion(IncModified());
-   }
 
    // Return if canvas was modified and not yet updated
    bool IsModified() const;
@@ -159,9 +141,6 @@ public:
    /// Save canvas in image file
    bool SaveAs(const std::string &filename);
 
-   /// Provide JSON which can be used for offline display
-   std::string CreateJSON();
-
    /// Get the canvas's title.
    const std::string &GetTitle() const { return fTitle; }
 
@@ -173,6 +152,12 @@ public:
    }
 
    void ResolveSharedPtrs();
+
+   /// Convert a `Pixel` position to Canvas-normalized positions.
+   std::array<RPadLength::Normal, 2> PixelsToNormal(const std::array<RPadLength::Pixel, 2> &pos) const final
+   {
+      return {{pos[0] / fSize[0], pos[1] / fSize[1]}};
+   }
 
    static const std::vector<std::shared_ptr<RCanvas>> GetCanvases();
 

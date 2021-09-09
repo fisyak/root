@@ -209,7 +209,7 @@ Int_t RooBinning::rawBinNumber(Double_t x) const
 Double_t RooBinning::nearestBoundary(Double_t x) const
 {
   Double_t xl, xh;
-  if (binEdges(binNumber(x), xl, xh)) return 0;
+  binEdges(binNumber(x), xl, xh);
   return (std::abs(xl - x) < std::abs(xh - x)) ? xl : xh;
 }
 

@@ -37,7 +37,7 @@ from JupyROOT.helpers import handlers
 
 # We want iPython to take over the graphics
 ROOT.gROOT.SetBatch()
-ROOT.gROOT.SetWebDisplay("jupyter")
+
 
 cppMIME = 'text/x-c++src'
 
@@ -114,13 +114,6 @@ def TBufferJSONAvailable():
        return True
    print(TBufferJSONErrorMessage, file=sys.stderr)
    return False
-
-def RCanvasAvailable():
-   if not hasattr(ROOT,"Experimental"):
-       return False
-   if not hasattr(ROOT.Experimental,"RCanvas"):
-       return False
-   return True
 
 _enableJSVis = False
 _enableJSVisDebug = False
@@ -326,7 +319,7 @@ def produceCanvasJson(canvas):
 
    ROOT.TColor.DefinedColors()
 
-   canvas_json = ROOT.TBufferJSON.ConvertToJSON(canvas, 23)
+   canvas_json = ROOT.TBufferJSON.ConvertToJSON(canvas, 3)
 
    # Cleanup primitives after conversion
    if style is not None: prim.Remove(style)
@@ -412,11 +405,6 @@ def GetCanvasDrawers():
     lOfC = ROOT.gROOT.GetListOfCanvases()
     return [NotebookDrawer(can) for can in lOfC if can.IsDrawn()]
 
-def GetRCanvasDrawers():
-    if not RCanvasAvailable(): return []
-    lOfC = ROOT.Experimental.RCanvas.GetCanvases()
-    return [NotebookDrawer(can.__smartptr__().get()) for can in lOfC if can.IsShown()]
-
 def GetGeometryDrawer():
     if not hasattr(ROOT,'gGeoManager'): return
     if not ROOT.gGeoManager: return
@@ -426,7 +414,7 @@ def GetGeometryDrawer():
         return NotebookDrawer(vol)
 
 def GetDrawers():
-    drawers = GetCanvasDrawers() + GetRCanvasDrawers()
+    drawers = GetCanvasDrawers()
     geometryDrawer = GetGeometryDrawer()
     if geometryDrawer: drawers.append(geometryDrawer)
     return drawers
@@ -441,15 +429,9 @@ def DrawCanvases():
     for drawer in drawers:
         drawer.Draw()
 
-def DrawRCanvases():
-    rdrawers = GetRCanvasDrawers()
-    for drawer in rdrawers:
-        drawer.Draw()
-
 def NotebookDraw():
     DrawGeometry()
     DrawCanvases()
-    DrawRCanvases()
 
 class CaptureDrawnPrimitives(object):
     '''
@@ -472,20 +454,13 @@ class NotebookDrawer(object):
 
     def __init__(self, theObject):
         self.drawableObject = theObject
-        self.isRCanvas = False
-        self.isCanvas = False
-        if hasattr(self.drawableObject,"ResolveSharedPtrs"):
-            self.isRCanvas = True
-        else:
-            self.isCanvas = self.drawableObject.ClassName() == "TCanvas"
+        self.isCanvas = self.drawableObject.ClassName() == "TCanvas"
 
     def __del__(self):
-        if self.isRCanvas:
-            self.drawableObject.ClearShown()
-        elif self.isCanvas:
-            self.drawableObject.ResetDrawn()
-        else:
-            ROOT.gGeoManager.SetUserPaintVolume(None)
+       if self.isCanvas:
+           self.drawableObject.ResetDrawn()
+       else:
+           ROOT.gGeoManager.SetUserPaintVolume(None)
 
     def _getListOfPrimitivesNamesAndTypes(self):
        """
@@ -510,7 +485,6 @@ class NotebookDrawer(object):
     def _canJsDisplay(self):
         if not TBufferJSONAvailable():
            return False
-        if self.isRCanvas: return True
         if not self.isCanvas: return True
         # to be optimised
         if not _enableJSVis: return False
@@ -524,10 +498,7 @@ class NotebookDrawer(object):
 
     def _getJsCode(self):
         # produce JSON for the canvas
-        if self.isRCanvas:
-            json = self.drawableObject.CreateJSON()
-        else:
-            json = produceCanvasJson(self.drawableObject).Data()
+        json = produceCanvasJson(self.drawableObject)
 
         # Here we could optimise the string manipulation
         divId = 'root_plot_' + str(self._getUID())
@@ -541,14 +512,9 @@ class NotebookDrawer(object):
             width = self.drawableObject.GetWh()
             options = ""
 
-        if self.isRCanvas:
-            if (self.drawableObject.GetWidth() > 0): width = self.drawableObject.GetWidth()
-            if (self.drawableObject.GetHeight() > 0): height = self.drawableObject.GetHeight()
-            options = ""
-
         thisJsCode = _jsCode.format(jsCanvasWidth = height,
                                     jsCanvasHeight = width,
-                                    jsonContent = json,
+                                    jsonContent = json.Data(),
                                     jsDrawOptions = options,
                                     jsDivId = divId)
         return thisJsCode

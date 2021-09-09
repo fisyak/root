@@ -1091,7 +1091,8 @@ void TGHtml::TokenizerAppend(const char *text)
    } else if (fNText + len >= fNAlloc) {
       fNAlloc += len + 100;
       char *tmp = new char[fNAlloc];
-      strlcpy(tmp, fZText, fNAlloc);
+      // coverity[secure_coding]
+      strcpy(tmp, fZText);
       delete[] fZText;
       fZText = tmp;
    }
@@ -1102,7 +1103,8 @@ void TGHtml::TokenizerAppend(const char *text)
       return;
    }
 
-   strlcpy(&fZText[fNText], text, fNAlloc - fNText);
+   // coverity[secure_coding]
+   strcpy(&fZText[fNText], text);
    fNText += len;
    fNComplete = Tokenize();
 }
@@ -1142,7 +1144,7 @@ TGHtmlElement *TGHtml::InsertToken(TGHtmlElement *pToken,
       if (pElem == 0) return 0;
       if (zArgs) {
          // coverity[secure_coding]
-         strcpy (((TGHtmlTextElement *)pElem)->fZText, zArgs); // NOLINT
+         strcpy (((TGHtmlTextElement *)pElem)->fZText, zArgs);
          pElem->fCount = (Html_16_t) strlen(zArgs);
       }
    } else if (!strcmp(zType, "Space")) {
@@ -1384,7 +1386,7 @@ char *TGHtml::DumpToken(TGHtmlElement *p)
                     ((TGHtmlMarkupElement *)p)->fArgv[j]);
          }
          // coverity[secure_coding]
-         strlcat(zBuf, ">", sizeof(zBuf));
+         strcat(zBuf, ">");
          break;
    }
    return zBuf;

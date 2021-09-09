@@ -31,7 +31,6 @@ extern "C" {
 #include <string>
 #include <vector>
 #include <array>
-#include <typeinfo>
 
 #include "ESTLType.h"
 

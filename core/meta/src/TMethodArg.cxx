@@ -34,7 +34,7 @@ ClassImp(TMethodArg);
 
 TMethodArg::TMethodArg(MethodArgInfo_t *info, TFunction *method) : TDictionary()
 {
-   fDataMember = nullptr;
+   fDataMember = 0;
    fInfo       = info;
    fMethod     = method;
    if (fInfo) {
@@ -101,7 +101,7 @@ Long_t TMethodArg::Property() const
 
 TList *TMethodArg::GetOptions() const
 {
-   return (TList*)(fDataMember ? fDataMember->GetOptions() : nullptr);
+   return (TList*)(fDataMember ? fDataMember->GetOptions() : 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

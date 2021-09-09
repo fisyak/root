@@ -13,7 +13,6 @@ if(WIN32)
   ROOT_EXECUTABLE(bindexplib
     win/bindexplib/bindexplib.cxx
   )
-  file(COPY win/w32pragma.h DESTINATION ${CMAKE_BINARY_DIR}/include/)
 endif()
 
 ROOT_EXECUTABLE(rmkdepend
@@ -26,7 +25,8 @@ ROOT_EXECUTABLE(rmkdepend
   rmkdepend/pr.c
 )
 
-if(NOT MSVC AND _BUILD_TYPE_UPPER MATCHES "DEBUG|RELWITHDEBINFO")
+if(NOT MSVC)
+IF(CMAKE_BUILD_TYPE MATCHES "Debug|RelWithDebInfo")
   file(GLOB PRETTY_PRINTERS "gdbPrinters/*.so-gdb.py")
   set(PRETTY_PRINTER_DESTS)
   foreach(PRETTY_PRINTER ${PRETTY_PRINTERS})
@@ -46,4 +46,5 @@ if(NOT MSVC AND _BUILD_TYPE_UPPER MATCHES "DEBUG|RELWITHDEBINFO")
   install(FILES ${PRETTY_PRINTER_DESTS}
           DESTINATION ${CMAKE_INSTALL_LIBDIR}
           CONFIGURATIONS Debug RelWithDebInfo)
+ENDIF()
 endif()

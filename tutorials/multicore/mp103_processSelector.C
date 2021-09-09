@@ -8,6 +8,7 @@
 ///
 /// \authors Anda Chelba, Gerardo Ganis
 
+#include "ROOT/RMakeUnique.hxx"
 #include "TString.h"
 #include "TROOT.h"
 #include "TChain.h"
@@ -16,8 +17,6 @@
 #include "TH1F.h"
 #include "TTreeReader.h"
 #include "ROOT/TTreeProcessorMP.hxx"
-
-#include <memory>
 
 const auto file0 = "http://root.cern.ch/files/h1/dstarmb.root";
 const std::vector<std::string> files = {file0,

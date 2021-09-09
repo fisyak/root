@@ -228,6 +228,7 @@ TGeoPhysicalNode *TGeoParallelWorld::FindNextBoundary(Double_t point[3], Double_
 //   while ((pnode = (TGeoPhysicalNode*)next())) {
 //      if (pnode->IsMatchingState(nav)) return 0;
 //   }
+   Double_t snext = TGeoShape::Big();
    step = stepmax;
    TGeoVoxelFinder *voxels = fVolume->GetVoxels();
    Int_t idaughter = -1; // nothing crossed
@@ -244,7 +245,7 @@ TGeoPhysicalNode *TGeoParallelWorld::FindNextBoundary(Double_t point[3], Double_
          if (voxels->IsSafeVoxel(point, i, stepmax)) continue;
          current->MasterToLocal(point, lpoint);
          current->MasterToLocalVect(dir, ldir);
-         Double_t snext = current->GetVolume()->GetShape()->DistFromOutside(lpoint, ldir, 3, step);
+         snext = current->GetVolume()->GetShape()->DistFromOutside(lpoint, ldir, 3, step);
          if (snext < step) {
             step = snext;
             idaughter = i;
@@ -276,7 +277,7 @@ TGeoPhysicalNode *TGeoParallelWorld::FindNextBoundary(Double_t point[3], Double_
          current = fVolume->GetNode(vlist[i]);
          current->MasterToLocal(point, lpoint);
          current->MasterToLocalVect(dir, ldir);
-         Double_t snext = current->GetVolume()->GetShape()->DistFromOutside(lpoint, ldir, 3, step);
+         snext = current->GetVolume()->GetShape()->DistFromOutside(lpoint, ldir, 3, step);
          if (snext < step - 1.E-8) {
             step = snext;
             idaughter = vlist[i];

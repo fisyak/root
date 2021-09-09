@@ -21,10 +21,6 @@
 /** \class TGeoTrack
 \ingroup Geometry_classes
 
-\deprecated
-Use of TGeoTrack is deprecated. For the event display please switch to TEve (using TEveTracks
-or TEvePointSet to display tracks specifically) or to [REve](https://root.cern/doc/master/tracks_8C_source.html).
-
 Class for user-defined tracks attached to a geometry.
 Tracks are 3D objects made of points and they store a
 pointer to a TParticle. The geometry manager holds a list
@@ -135,8 +131,7 @@ void TGeoTrack::AnimateTrack(Double_t tmin, Double_t tmax, Double_t nframes, Opt
    box[3] = box[4] = box[5] = 100;
    gGeoManager->SetTminTmax(0,0);
    Draw(opt.Data());
-   Double_t start[6] = {0,0,0,0,0,0};
-   Double_t end[6] = {0,0,0,0,0,0};
+   Double_t start[6], end[6];
    Int_t i, j;
    Double_t dlat=0, dlong=0, dpsi=0;
    Double_t dd[6] = {0,0,0,0,0,0};

@@ -38,17 +38,21 @@ public:
 	    const RooCmdArg& arg7=RooCmdArg::none(), const RooCmdArg& arg8=RooCmdArg::none(),const RooCmdArg& arg9=RooCmdArg::none()) ;
 
   RooNLLVar(const char *name, const char *title, RooAbsPdf& pdf, RooAbsData& data,
-            RooAbsTestStatistic::Configuration const& cfg, bool extended);
+	    Bool_t extended, const char* rangeName=0, const char* addCoefRangeName=0, 
+	    Int_t nCPU=1, RooFit::MPSplit interleave=RooFit::BulkPartition, Bool_t verbose=kTRUE, Bool_t splitRange=kFALSE, 
+	    Bool_t cloneData=kTRUE, Bool_t binnedL=kFALSE, double integrateBinsPrecision = -1.) ;
   
   RooNLLVar(const char *name, const char *title, RooAbsPdf& pdf, RooAbsData& data,
-            const RooArgSet& projDeps, RooAbsTestStatistic::Configuration const& cfg,
-            bool extended = false) ;
+	    const RooArgSet& projDeps, Bool_t extended=kFALSE, const char* rangeName=0, 
+	    const char* addCoefRangeName=0, Int_t nCPU=1, RooFit::MPSplit interleave=RooFit::BulkPartition, Bool_t verbose=kTRUE, Bool_t splitRange=kFALSE, 
+	    Bool_t cloneData=kTRUE, Bool_t binnedL=kFALSE, double integrateBinsPrecision = -1.) ;
 
   RooNLLVar(const RooNLLVar& other, const char* name=0);
   virtual TObject* clone(const char* newname) const { return new RooNLLVar(*this,newname); }
 
   virtual RooAbsTestStatistic* create(const char *name, const char *title, RooAbsReal& pdf, RooAbsData& adata,
-                                      const RooArgSet& projDeps, RooAbsTestStatistic::Configuration const& cfg);
+				      const RooArgSet& projDeps, const char* rangeName, const char* addCoefRangeName=0, 
+				      Int_t nCPU=1, RooFit::MPSplit interleave=RooFit::BulkPartition, Bool_t verbose=kTRUE, Bool_t splitRange=kFALSE, Bool_t binnedL=kFALSE);
   
   virtual ~RooNLLVar();
 
@@ -60,8 +64,6 @@ public:
     _batchEvaluations = on;
   }
 
-  using ComputeResult = std::pair<ROOT::Math::KahanSum<double>, double>;
-
 protected:
 
   virtual Bool_t processEmptyDataSets() const { return _extended ; }
@@ -70,14 +72,18 @@ protected:
   static RooArgSet _emptySet ; // Supports named argument constructor
 
 private:
-  ComputeResult computeBatched(std::size_t stepSize, std::size_t firstEvent, std::size_t lastEvent) const;
-  ComputeResult computeScalar(std::size_t stepSize, std::size_t firstEvent, std::size_t lastEvent) const;
+  std::tuple<double, double, double> computeBatched(
+      std::size_t stepSize, std::size_t firstEvent, std::size_t lastEvent) const;
+
+  std::tuple<double, double, double> computeScalar(
+        std::size_t stepSize, std::size_t firstEvent, std::size_t lastEvent) const;
 
   Bool_t _extended{false};
   bool _batchEvaluations{false};
   Bool_t _weightSq{false}; // Apply weights squared?
   mutable Bool_t _first{true}; //!
-  ROOT::Math::KahanSum<double> _offsetSaveW2{0.0}; //!
+  Double_t _offsetSaveW2{false}; //!
+  Double_t _offsetCarrySaveW2{false}; //!
 
   mutable std::vector<Double_t> _binw ; //!
   mutable RooRealSumPdf* _binnedPdf{nullptr}; //!

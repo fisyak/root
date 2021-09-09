@@ -98,7 +98,7 @@ TObject *TViewPubDataMembers::FindObject(const char * name) const
             return p;
       }
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,7 +113,7 @@ TObject *TViewPubDataMembers::FindObject(const TObject * obj) const
       TObject *result = cl->GetListOfDataMembers(kFALSE)->FindObject(obj);
       if (result) return result;
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -221,7 +221,7 @@ TObject  *TViewPubDataMembers::At(Int_t idx) const
          }
       }
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -231,7 +231,7 @@ TObject  *TViewPubDataMembers::At(Int_t idx) const
 TObject  *TViewPubDataMembers::After(const TObject * /* obj */) const
 {
    ::Error("TViewPubDataMembers::After","Operation not allowed on a view.");
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -241,7 +241,7 @@ TObject  *TViewPubDataMembers::After(const TObject * /* obj */) const
 TObject  *TViewPubDataMembers::Before(const TObject * /* obj */) const
 {
    ::Error("TViewPubDataMembers::Before","Operation not allowed on a view.");
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -251,7 +251,7 @@ TObject  *TViewPubDataMembers::Before(const TObject * /* obj */) const
 TObject  *TViewPubDataMembers::First() const
 {
    ::Error("TViewPubDataMembers::First","Operation not allowed on a view.");
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -261,7 +261,7 @@ TObject  *TViewPubDataMembers::First() const
 TObjLink *TViewPubDataMembers::FirstLink() const
 {
    ::Error("TViewPubDataMembers::FirstLink","Operation not allowed on a view.");
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -271,7 +271,7 @@ TObjLink *TViewPubDataMembers::FirstLink() const
 TObject **TViewPubDataMembers::GetObjectRef(const TObject * /* obj */) const
 {
    ::Error("TViewPubDataMembers::GetObjectRef","Operation not yet allowed on a view.");
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -310,7 +310,7 @@ void TViewPubDataMembers::Load()
 TObject  *TViewPubDataMembers::Last() const
 {
    ::Error("TViewPubDataMembers::Last","Operation not allowed on a view.");
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -320,7 +320,7 @@ TObject  *TViewPubDataMembers::Last() const
 TObjLink *TViewPubDataMembers::LastLink() const
 {
    ::Error("TViewPubDataMembers::LastLink","Operation not allowed on a view.");
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -339,7 +339,7 @@ void TViewPubDataMembers::RecursiveRemove(TObject * /* obj */)
 TObject   *TViewPubDataMembers::Remove(TObject * /* obj */)
 {
    ::Error("TViewPubDataMembers::Remove","Operation not allowed on a view.");
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -349,7 +349,7 @@ TObject   *TViewPubDataMembers::Remove(TObject * /* obj */)
 TObject   *TViewPubDataMembers::Remove(TObjLink * /* lnk */)
 {
    ::Error("TViewPubDataMembers::Remove","Operation not allowed on a view.");
-   return nullptr;
+   return 0;
 }
 
 /** \class TViewPubDataMembersIter
@@ -363,7 +363,7 @@ Iterator of over the view's content.
 /// is kIterForward. To go backward use kIterBackward.
 
 TViewPubDataMembersIter::TViewPubDataMembersIter(const TViewPubDataMembers *l, Bool_t dir)
-: fView(l),fClassIter(l->GetListOfClasses(),dir), fIter((TCollection *)nullptr),
+: fView(l),fClassIter(l->GetListOfClasses(),dir), fIter((TCollection *)0),
 fStarted(kFALSE), fDirection(dir)
 {
 }
@@ -414,7 +414,7 @@ TViewPubDataMembersIter &TViewPubDataMembersIter::operator=(const TViewPubDataMe
 
 TObject *TViewPubDataMembersIter::Next()
 {
-   if (!fView) return nullptr;
+   if (!fView) return 0;
 
    if (!fStarted) {
       TClass *current = (TClass*)fClassIter();
@@ -423,7 +423,7 @@ TObject *TViewPubDataMembersIter::Next()
          fIter.~TIter();
          new (&(fIter)) TIter(current->GetListOfDataMembers(kFALSE),fDirection);
       } else {
-         return nullptr;
+         return 0;
       }
    }
 
@@ -438,7 +438,7 @@ TObject *TViewPubDataMembersIter::Next()
             new (&(fIter)) TIter(current->GetListOfDataMembers(kFALSE),fDirection);
             continue;
          } else {
-            return nullptr;
+            return 0;
          }
       } else if (obj->Property() & kIsPublic) {
          // If it is public we found the next one.
@@ -447,7 +447,7 @@ TObject *TViewPubDataMembersIter::Next()
 
    }
    // Not reachable.
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

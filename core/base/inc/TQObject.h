@@ -146,7 +146,7 @@ public:
    /// ~~~
    ///
    /// If we call Emit with an array of the parameters, they should be converted
-   /// to Longptr_t type.
+   /// to long type.
    /// Example:
    /// ~~~ {.cpp}
    ///    TQObject *processor; // data processor
@@ -155,9 +155,9 @@ public:
    ///    processor->Connect("Evaluated(Float_t,Float_t)",
    ///                       "TH1F",hist,"Fill12(Axis_t,Axis_t)");
    ///
-   ///    Longptr_t args[2];
-   ///    args[0] = (Longptr_t)processor->GetValue(1);
-   ///    args[1] = (Longptr_t)processor->GetValue(2);
+   ///    Long_t args[2];
+   ///    args[0] = (Long_t)processor->GetValue(1);
+   ///    args[1] = (Long_t)processor->GetValue(2);
    ///
    ///    processor->Emit("Evaluated(Float_t,Float_t)",args);
    /// ~~~

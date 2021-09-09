@@ -33,13 +33,12 @@ attributes.
 ## Marker attributes
 The marker attributes are:
 
-  - [Marker color](\ref ATTMARKER1)
-  - [Marker style](\ref ATTMARKER2)
-    - [Marker line width](\ref ATTMARKER21)
-  - [Marker size](\ref M3)
+  - [Marker color](#M1)
+  - [Marker style](#M2)
+    - [Marker line width](#M21)
+  - [Marker size](#M3)
 
-\anchor ATTMARKER1
-## Marker color
+## <a name="M1"></a> Marker color
 The marker color is a color index (integer) pointing in the ROOT color
 table.
 The marker color of any class inheriting from `TAttMarker` can
@@ -70,8 +69,7 @@ The transparency is available on all platforms when the flag `OpenGL.CanvasPrefe
 in `$ROOTSYS/etc/system.rootrc`, or on Mac with the Cocoa backend. On the file output
 it is visible with PDF, PNG, Gif, JPEG, SVG, TeX ... but not PostScript.
 
-\anchor ATTMARKER2
-## Marker style
+## <a name="M2"></a> Marker style
 
 The Marker style defines the markers' shape.
 The marker style of any class inheriting from `TAttMarker` can
@@ -134,8 +132,7 @@ Begin_Macro
 }
 End_Macro
 
-\anchor ATTMARKER21
-### Marker line width
+### <a name="M21"></a> Marker line width
 
 The line width of a marker is not actually a marker attribute since it does
 only apply to open marker symbols and marker symbols consisting of lines. All
@@ -159,8 +156,7 @@ Begin_Macro
 }
 End_Macro
 
-\anchor M3
-## Marker size
+## <a name="M3"></a> Marker size
 
 Various marker sizes are shown in the figure below. The default marker size=1
 is shown in the top left corner. Marker sizes smaller than 1 can be

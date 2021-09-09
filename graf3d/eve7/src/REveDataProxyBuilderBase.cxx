@@ -14,8 +14,6 @@
 #include <ROOT/REveProjectionManager.hxx>
 #include <ROOT/REveViewContext.hxx>
 #include <ROOT/REveCompound.hxx>
-#include <ROOT/RLogger.hxx>
-#include <ROOT/REveScene.hxx>
 
 #include <cassert>
 
@@ -71,7 +69,7 @@ void REveDataProxyBuilderBase::Build()
 {
    if (m_collection)
    {
-      // printf("REveDataProxyBuilderBase::Build %p %s products %lu\n", m_collection, m_collection->GetCName(), m_products.size());
+      // printf("Base %p %s %s\n", m_collection, m_collection->GetCName(), m_type.c_str());
       try
       {
          auto itemSize = m_collection->GetNItems(); //cashed
@@ -83,47 +81,60 @@ void REveDataProxyBuilderBase::Build()
 
          for (auto &pp: m_products)
          {
-            REveElement* product = pp->m_elements;
-            auto oldSize = product->NumChildren();
+            // printf("build() %s \n", m_collection->GetCName());
+            REveElement* elms = pp->m_elements;
+            auto oldSize = elms->NumChildren();
+
             if (HaveSingleProduct())
             {
-               Build(m_collection, product, pp->m_viewContext);
+               Build(m_collection, elms, pp->m_viewContext);
             }
             else
             {
-               BuildViewType(m_collection, product, pp->m_viewType, pp->m_viewContext);
+               BuildViewType(m_collection, elms, pp->m_viewType, pp->m_viewContext);
             }
 
             // Project all children of current product.
             // If product is not registered into any projection-manager,
             // this does nothing.
-            REveProjectable* pableProduct = dynamic_cast<REveProjectable*>(product);
-            if (pableProduct->HasProjecteds())
+            REveProjectable* pable = dynamic_cast<REveProjectable*>(elms);
+            if (pable->HasProjecteds())
             {
                // loop projected holders
-               for (auto &projectedProduct: pableProduct->RefProjecteds())
+               for (auto &prj: pable->RefProjecteds())
                {
-                  REveProjectionManager *pmgr = projectedProduct->GetManager();
+                  REveProjectionManager *pmgr = prj->GetManager();
                   Float_t oldDepth = pmgr->GetCurrentDepth();
                   pmgr->SetCurrentDepth(m_layer);
                   Int_t cnt = 0;
-                  REveElement *projectedProductAsElement = projectedProduct->GetProjectedAsElement();
-                  // printf("projectedProduct children %d, product children %d\n", projectedProductAsElement->NumChildren(), product->NumChildren());
-                  auto parentIt = projectedProductAsElement->RefChildren().begin();
-                  for (auto &holder: product->RefChildren())
+
+                  REveElement *projectedAsElement = prj->GetProjectedAsElement();
+                  auto parentIt = projectedAsElement->RefChildren().begin();
+                  for (auto &prod: elms->RefChildren())
                   {
-                     // reused projected holder
-                     if (cnt < oldSize) 
+                      // reused projected holder
+                     if (cnt < oldSize)
                      {
-                        pmgr->SubImportChildren(holder, *parentIt);
+                        /*
+                        // AMT no use case for this at the moment
+                        if ((*parentIt)->NumChildren()) {
+                            // update projected (mislleading name)
+                           for ( REveElement::List_i pci = (*parentIt)->BeginChildren(); pci != (*parentIt)->EndChildren(); pci++)
+                               pmgr->ProjectChildrenRecurse(*pci);
+                        }
+                        */
+                        // import projectable
+                        pmgr->SubImportChildren(prod, *parentIt);
+
                         ++parentIt;
                      }
                      else if (cnt < itemSize)
                      {
                         // new product holder
-                        pmgr->SubImportElements(holder, projectedProductAsElement);
+                        pmgr->SubImportElements(prod, projectedAsElement);
                      }
-                     else {
+                     else
+                     {
                         break;
                      }
                      ++cnt;
@@ -131,11 +142,25 @@ void REveDataProxyBuilderBase::Build()
                   pmgr->SetCurrentDepth(oldDepth);
                }
             }
+
+            /*
+            if (m_interactionList && itemSize > oldSize)
+            {
+               auto elIt = elms->RefChildren().begin();
+               for (size_t cnt = 0; cnt < itemSize; ++cnt, ++elIt)
+               {
+                  if (cnt >= oldSize )
+                       m_interactionList->Added(*elIt, cnt);
+               }
+            }
+            */
          }
       }
-      catch (const std::runtime_error &iException) {
-         R__LOG_ERROR(REveLog()) << "Caught exception in build function for item " << m_collection->GetName() << ":\n"
-                 << iException.what() << std::endl;
+      catch (const std::runtime_error& iException)
+      {
+         std::cout << "Caught exception in build function for item " << m_collection->GetName() << ":\n"
+                              << iException.what() << std::endl;
+         exit(1);
       }
    }
 }
@@ -181,7 +206,7 @@ REveDataProxyBuilderBase::CreateProduct( const std::string& viewType, const REve
    if (m_collection)
    {
       // debug info in eve browser
-      product->m_elements->SetName(TString::Format("product %s viewtype %s", m_collection->GetCName(), viewType.c_str()).Data());
+      product->m_elements->SetName(Form("product %s", m_collection->GetCName()));
    }
    return product->m_elements;
 }
@@ -260,14 +285,7 @@ REveDataProxyBuilderBase::SetupElement(REveElement* el, bool color)
    }
 }
 
-//------------------------------------------------------------------------------
 
-void REveDataProxyBuilderBase::ScaleChanged()
-{
-   for (auto &prod : m_products) {
-      ScaleProduct(prod->m_elements, prod->m_viewType);
-   }
-}
 //------------------------------------------------------------------------------
 
 void REveDataProxyBuilderBase::Clean()

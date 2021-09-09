@@ -54,6 +54,4 @@
 #pragma link C++ class tuple<ROOT::Experimental::RAxisIrregular,ROOT::Experimental::RAxisEquidistant,ROOT::Experimental::RAxisIrregular>+;
 #pragma link C++ class tuple<ROOT::Experimental::RAxisIrregular,ROOT::Experimental::RAxisIrregular,ROOT::Experimental::RAxisEquidistant>+;
 #pragma link C++ class tuple<ROOT::Experimental::RAxisIrregular,ROOT::Experimental::RAxisIrregular,ROOT::Experimental::RAxisIrregular>+;
-
-#pragma link C++ namespace ROOT::Experimental;
 #endif

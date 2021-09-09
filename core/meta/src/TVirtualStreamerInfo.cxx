@@ -23,7 +23,7 @@ Abstract Interface class describing Streamer information for one class.
 #include "TError.h"
 #include "TObjArray.h"
 
-TVirtualStreamerInfo *TVirtualStreamerInfo::fgInfoFactory    = nullptr;
+TVirtualStreamerInfo *TVirtualStreamerInfo::fgInfoFactory    = 0;
 
 Bool_t  TVirtualStreamerInfo::fgCanDelete        = kTRUE;
 Bool_t  TVirtualStreamerInfo::fgOptimize         = kTRUE;
@@ -104,10 +104,10 @@ const char *TVirtualStreamerInfo::GetElementCounterStart(const char *dmTitle)
       if ( (*lbracket) != '/' && !isspace(*lbracket) ) {
          // Allow only comment delimiters and white spaces
          // before the array information.
-         return nullptr;
+         return 0;
       }
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -135,11 +135,11 @@ TStreamerBasicType *TVirtualStreamerInfo::GetElementCounter(const char *countNam
       // internal recursion prevention (setting and testing kBuildRunning).
       info = cl->GetStreamerInfo();
    }
-   if (!info) return nullptr;
+   if (!info) return 0;
    TStreamerElement *element = (TStreamerElement *)info->GetElements()->FindObject(countName);
-   if (!element) return nullptr;
+   if (!element) return 0;
    if (element->IsA() == TStreamerBasicType::Class()) return (TStreamerBasicType*)element;
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -185,7 +185,7 @@ TVirtualStreamerInfo *TVirtualStreamerInfo::Factory()
                     "The plugin handler for TVirtualStreamerInfo was found but failed to load!");
          }
          fgInfoFactory = (TVirtualStreamerInfo*) h->ExecPlugin(0);
-         if (fgInfoFactory == nullptr) {
+         if (fgInfoFactory == 0) {
             ::Fatal("TVirtualStreamerInfo::Factory",
                     "The plugin handler for TVirtualStreamerInfo was found but failed to create the factory object!");
          }

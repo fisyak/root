@@ -16,15 +16,14 @@
 # A cache to speed-up the reading of ROOT datasets
 
 ## Table of Contents
-- [Motivation](\ref motivation)
-- [General Description](\ref description)
-- [Changes in behaviour](\ref changesbehaviour)
-- [Self-optimization](\ref cachemisses)
-- [Examples of usage](\ref examples)
-- [Check performance and stats](\ref checkPerf)
+- [Motivation](#motivation)
+- [General Description](#description)
+- [Changes in behaviour](#changesbehaviour)
+- [Self-optimization](#cachemisses)
+- [Examples of usage](#examples)
+- [Check performance and stats](#checkPerf)
 
-\anchor motivation
-## Motivation: why having a cache is needed?
+## <a name="motivation"></a>Motivation: why having a cache is needed?
 
 When writing a TTree, the branch buffers are kept in memory.
 A typical branch buffersize (before compression) is typically 32 KBytes.
@@ -55,8 +54,7 @@ when the next request comes.
 Yes, some corner cases. For example, when reading only a small fraction of all
 entries such that not all branch buffers are read.
 
-\anchor description
-## General Description
+## <a name="description"></a>General Description
 This class acts as a file cache, registering automatically the baskets from
 the branches being processed via direct manipulation of TTrees or with tools
 such as TTree::Draw, TTree::Process, TSelector, TTreeReader and RDataFrame
@@ -76,8 +74,7 @@ environment variable `ROOT_TTREECACHE_SIZE` or the TTreeCache.Size option.
 The entry range for which the cache is active can also be set with the
 SetEntryRange method.
 
-\anchor changesbehaviour
-## Changes of behavior when using TChain and TEventList
+## <a name="changesbehaviour"></a>Changes of behavior when using TChain and TEventList
 
 The usage of TChain or TEventList have influence on the behaviour of the cache:
 
@@ -107,8 +104,7 @@ The learning period is stopped (and prefetching is started) when:
    - A 'cached' TChain switches over to a new file.
 
 
-\anchor cachemisses
-## Self-optimization in presence of cache misses
+## <a name="cachemisses"></a>Self-optimization in presence of cache misses
 
 The TTreeCache can optimize its behavior on a cache miss. When
 miss optimization is enabled (see the SetOptimizeMisses method),
@@ -129,8 +125,7 @@ Additionally, on the first miss of an event, we must iterate through all the
 This can be potentially a CPU-expensive operation compared to, e.g., the
 latency of a SSD.  This is why the miss cache is currently disabled by default.
 
-\anchor examples
-## Example usages of TTreeCache
+## <a name="examples"></a>Example usages of TTreeCache
 
 A few use cases are discussed below. A cache may be created with automatic
 sizing when a TTree is used:
@@ -266,8 +261,7 @@ rely on the system to cache the right branches.
     }
 ~~~
 
-\anchor checkPerf
-## How can the usage and performance of TTreeCache be verified?
+##  <a name="checkPerf"></a>How can the usage and performance of TTreeCache be verified?
 
 Once the event loop terminated, the number of effective system reads for a
 given file can be checked with a code like the following:

@@ -99,7 +99,7 @@ TTask::TTask()
    fActive      = kTRUE;
    fBreakin     = 0;
    fBreakout    = 0;
-   fTasks       = nullptr;
+   fTasks       = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -188,8 +188,8 @@ void TTask::Abort()
       return;
    }
    CleanTasks();
-   fgBeginTask  = nullptr;
-   fgBreakPoint = nullptr;
+   fgBeginTask  = 0;
+   fgBreakPoint = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -242,13 +242,13 @@ void TTask::Continue()
       printf(" No task to continue\n");
       return;
    }
-   fgBreakPoint = nullptr;
+   fgBreakPoint = 0;
 
    fgBeginTask->ExecuteTasks(fOption.Data());
 
    if (!fgBreakPoint) {
       fgBeginTask->CleanTasks();
-      fgBeginTask = nullptr;
+      fgBeginTask = 0;
    }
 }
 
@@ -279,7 +279,7 @@ void TTask::ExecuteTask(Option_t *option)
 
    fOption = option;
    fgBeginTask = this;
-   fgBreakPoint = nullptr;
+   fgBreakPoint = 0;
 
    if (fBreakin) return;
    if (gDebug > 1) {
@@ -297,7 +297,7 @@ void TTask::ExecuteTask(Option_t *option)
 
    if (!fgBreakPoint) {
       fgBeginTask->CleanTasks();
-      fgBeginTask = nullptr;
+      fgBeginTask = 0;
    }
 }
 

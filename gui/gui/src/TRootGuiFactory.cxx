@@ -9,15 +9,14 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TRootGuiFactory
-    \ingroup guiwidgets
-
-This class is a factory for ROOT GUI components. It overrides
-the member functions of the ABS TGuiFactory.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TRootGuiFactory                                                      //
+//                                                                      //
+// This class is a factory for ROOT GUI components. It overrides        //
+// the member functions of the ABS TGuiFactory.                         //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TRootGuiFactory.h"
 #include "TRootApplication.h"

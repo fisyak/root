@@ -14,12 +14,15 @@
 
 #include "ROOT/REveUtil.hxx"
 
+#include "TObject.h"
+
 #include "TMath.h"
 
 namespace ROOT {
 namespace Experimental {
 
-class REveRGBAPalette : public REveRefCnt
+class REveRGBAPalette : public TObject,
+                        public REveRefCnt
 {
    friend class REveRGBAPaletteEditor;
    friend class REveRGBAPaletteSubEditor;
@@ -30,8 +33,8 @@ public:
    enum ELimitAction_e { kLA_Cut, kLA_Mark, kLA_Clip, kLA_Wrap };
 
 private:
-   REveRGBAPalette(const REveRGBAPalette&) = delete;
-   REveRGBAPalette& operator=(const REveRGBAPalette&) = delete;
+   REveRGBAPalette(const REveRGBAPalette&);            // Not implemented
+   REveRGBAPalette& operator=(const REveRGBAPalette&); // Not implemented
 
 protected:
    Double_t  fUIf;       // UI representation calculated as: d = fUIf*i + fUIc
@@ -149,9 +152,13 @@ public:
    void   SetOverColorPixel(Pixel_t pix);
    void   SetOverColorRGBA(UChar_t r, UChar_t g, UChar_t b, UChar_t a=255);
 
-   void OnZeroRefCount() override { delete this; }
+   virtual void OnZeroRefCount() { delete this; }
 
+   // ================================================================
+
+   ClassDef(REveRGBAPalette, 0); // A generic, speed-optimised mapping from value to RGBA color supporting different wrapping and range truncation modes.
 };
+
 
 /******************************************************************************/
 // Inlines for REveRGBAPalette

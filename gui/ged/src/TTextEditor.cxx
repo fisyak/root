@@ -15,14 +15,6 @@
 ClassImp(TTextEditor);
 
 
-/** \class TTextEditor
-\ingroup ged
-
-Editor for changing TText's and TLatex's attributes.
-
-*/
-
-
 enum ELatexID{
    kText_Text = 0, kText_Xpos, kText_Ypos, kText_Angle, kText_Size
 };

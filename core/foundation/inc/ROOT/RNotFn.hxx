@@ -31,7 +31,7 @@ namespace std {
 namespace Detail {
 template <typename F>
 class not_fn_t {
-   std::decay_t<F> fFun;
+   typename std::decay<F>::type fFun;
 
 public:
    explicit not_fn_t(F &&f) : fFun(std::forward<F>(f)) {}
@@ -40,13 +40,13 @@ public:
 
    template <class... Args>
    auto operator()(Args &&... args) & -> decltype(
-      !std::declval<std::result_of_t<std::decay_t<F>(Args...)>>())
+      !std::declval<typename std::result_of<typename std::decay<F>::type(Args...)>::type>())
    {
       return !fFun(std::forward<Args>(args)...);
    }
    template <class... Args>
    auto operator()(Args &&... args) const & -> decltype(
-      !std::declval<std::result_of_t<std::decay_t<F> const(Args...)>>())
+      !std::declval<typename std::result_of<typename std::decay<F>::type const(Args...)>::type>())
    {
       return !fFun(std::forward<Args>(args)...);
    }

@@ -9,15 +9,14 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TSessionViewer
-    \ingroup sessionviewer
-
-Widget used to manage PROOF or local sessions, PROOF connections,
-queries construction and results handling.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TSessionViewer                                                       //
+//                                                                      //
+// Widget used to manage PROOF or local sessions, PROOF connections,    //
+// queries construction and results handling.                           //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TApplication.h"
 #include "TROOT.h"

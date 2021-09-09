@@ -10,7 +10,7 @@
 
 #include "TWebPS.h"
 
-#include <memory>
+#include <ROOT/RMakeUnique.hxx>
 
 /** \class TWebPS
 \ingroup webgui6

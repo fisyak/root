@@ -29,8 +29,8 @@ ClassImp(TListOfFunctionTemplates);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TListOfFunctionTemplates::TListOfFunctionTemplates(TClass *cl) : fClass(cl),fIds(nullptr),
-                          fUnloaded(nullptr),fLastLoadMarker(0)
+TListOfFunctionTemplates::TListOfFunctionTemplates(TClass *cl) : fClass(cl),fIds(0),
+                          fUnloaded(0),fLastLoadMarker(0)
 {
    fIds = new TExMap;
    fUnloaded = new THashList;
@@ -181,7 +181,7 @@ TObject *TListOfFunctionTemplates::FindObject(const char *name) const
 
       TInterpreter::DeclId_t decl;
       if (fClass) decl = gInterpreter->GetFunctionTemplate(fClass->GetClassInfo(),name);
-      else        decl = gInterpreter->GetFunctionTemplate(nullptr,name);
+      else        decl = gInterpreter->GetFunctionTemplate(0,name);
       if (decl) result = const_cast<TListOfFunctionTemplates*>(this)->Get(decl);
    }
    return result;
@@ -213,7 +213,7 @@ TList* TListOfFunctionTemplates::GetListForObjectNonConst(const char* name)
 
    // Update if needed.
    std::vector<DeclId_t> overloadDecls;
-   ClassInfo_t* ci = fClass ? fClass->GetClassInfo() : nullptr;
+   ClassInfo_t* ci = fClass ? fClass->GetClassInfo() : 0;
    gInterpreter->GetFunctionOverloads(ci, name, overloadDecls);
    for (std::vector<DeclId_t>::const_iterator iD = overloadDecls.begin(),
            eD = overloadDecls.end(); iD != eD; ++iD) {
@@ -241,7 +241,7 @@ TList* TListOfFunctionTemplates::GetListForObject(const char* name) const
 
 TList* TListOfFunctionTemplates::GetListForObject(const TObject* obj) const
 {
-   if (!obj) return nullptr;
+   if (!obj) return 0;
    return const_cast<TListOfFunctionTemplates*>(this)
       ->GetListForObjectNonConst(obj->GetName());
 }
@@ -252,14 +252,14 @@ TList* TListOfFunctionTemplates::GetListForObject(const TObject* obj) const
 
 TFunctionTemplate *TListOfFunctionTemplates::Get(DeclId_t id)
 {
-   if (!id) return nullptr;
+   if (!id) return 0;
 
    TFunctionTemplate *f = (TFunctionTemplate*)fIds->GetValue((Long64_t)id);
    if (!f) {
       if (fClass) {
-         if (!gInterpreter->ClassInfo_Contains(fClass->GetClassInfo(),id)) return nullptr;
+         if (!gInterpreter->ClassInfo_Contains(fClass->GetClassInfo(),id)) return 0;
       } else {
-         if (!gInterpreter->ClassInfo_Contains(nullptr,id)) return nullptr;
+         if (!gInterpreter->ClassInfo_Contains(0,id)) return 0;
       }
 
       R__LOCKGUARD(gInterpreterMutex);
@@ -277,7 +277,7 @@ TFunctionTemplate *TListOfFunctionTemplates::Get(DeclId_t id)
       }
       if (!f) {
          if (fClass) f = new TFunctionTemplate(m, fClass);
-         else f = new TFunctionTemplate(m, nullptr);
+         else f = new TFunctionTemplate(m, 0);
       }
       // Calling 'just' THahList::Add would turn around and call
       // TListOfFunctionTemplates::AddLast which should *also* do the fIds->Add.
@@ -330,7 +330,7 @@ TObject* TListOfFunctionTemplates::Remove(TObject *obj)
    }
    UnmapObject(obj);
    if (found) return obj;
-   else return nullptr;
+   else return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -338,7 +338,7 @@ TObject* TListOfFunctionTemplates::Remove(TObject *obj)
 
 TObject* TListOfFunctionTemplates::Remove(TObjLink *lnk)
 {
-   if (!lnk) return nullptr;
+   if (!lnk) return 0;
 
    TObject *obj = lnk->GetObject();
 
@@ -355,7 +355,7 @@ TObject* TListOfFunctionTemplates::Remove(TObjLink *lnk)
 
 void TListOfFunctionTemplates::Load()
 {
-   if (fClass && fClass->GetClassInfo() == nullptr) return;
+   if (fClass && fClass->GetClassInfo() == 0) return;
 
    R__LOCKGUARD(gInterpreterMutex);
 

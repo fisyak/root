@@ -37,11 +37,6 @@ public:
   PiecewiseInterpolation(const PiecewiseInterpolation& other, const char* name = 0);
   virtual TObject* clone(const char* newname) const { return new PiecewiseInterpolation(*this, newname); }
 
-  /// Return pointer to the nominal hist function.
-  const RooAbsReal* nominalHist() const {
-    return &_nominal.arg();
-  }
-
   //  virtual Double_t defaultErrorLevel() const ;
 
   //  void printMetaArgs(std::ostream& os) const ;
@@ -83,7 +78,7 @@ protected:
     RooArgList _highIntList ;
     // will want std::vector<RooRealVar*> for low and high also
   } ;
-  mutable RooObjCacheManager _normIntMgr ; ///<! The integration cache manager
+  mutable RooObjCacheManager _normIntMgr ; // The integration cache manager
 
   RooRealProxy _nominal;           // The nominal value
   RooArgList   _ownedList ;       // List of owned components
@@ -96,9 +91,8 @@ protected:
   std::vector<int> _interpCode;
 
   Double_t evaluate() const;
-  RooSpan<double> evaluateSpan(RooBatchCompute::RunContext& evalData, const RooArgSet* normSet) const;
 
-  ClassDef(PiecewiseInterpolation,4) // Sum of RooAbsReal objects
+  ClassDef(PiecewiseInterpolation,3) // Sum of RooAbsReal objects
 };
 
 #endif

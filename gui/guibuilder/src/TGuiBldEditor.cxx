@@ -9,13 +9,11 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/** \class TGuiBldEditor
-    \ingroup guibuilder
-
-The property editor
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGuiBldEditor - the property editor                                  //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGuiBldEditor.h"
 #include "TRootGuiBuilder.h"
@@ -491,8 +489,8 @@ void TGuiBldEditor::Reset()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Popup dialog to set layout of edited frame off. If layout is on, all
-/// the elements in the frame get laid out automatically.
+/// Popup dialog to set layout of editted frame off. If layout is on, all
+/// the elements in the frame get layouted automatically.
 
 void TGuiBldEditor::SwitchLayout()
 {

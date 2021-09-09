@@ -33,7 +33,7 @@ ClassImp(TListOfEnums);
 /// Constructor.
 
 TListOfEnums::TListOfEnums(TClass *cl /*=0*/) :
-   THashList(listSize), fClass(cl), fIds(nullptr), fUnloaded(nullptr), fIsLoaded(kFALSE), fLastLoadMarker(0)
+   THashList(listSize), fClass(cl), fIds(0), fUnloaded(0), fIsLoaded(kFALSE), fLastLoadMarker(0)
 {
    fIds = new TExMap(listSize);
    fUnloaded = new THashList(listSize);
@@ -178,7 +178,7 @@ void TListOfEnums::Delete(Option_t *option /* ="" */)
 
 TEnum *TListOfEnums::Find(DeclId_t id) const
 {
-   if (!id) return nullptr;
+   if (!id) return 0;
 
    return (TEnum *)fIds->GetValue((Long64_t)id);
 }
@@ -189,7 +189,7 @@ TEnum *TListOfEnums::Find(DeclId_t id) const
 
 TEnum *TListOfEnums::Get(DeclId_t id, const char *name)
 {
-   if (!id) return nullptr;
+   if (!id) return 0;
 
    TEnum *e = Find(id);
    if (e) return e;
@@ -205,7 +205,7 @@ TEnum *TListOfEnums::Get(DeclId_t id, const char *name)
    if (e) {
       // In this case, we update the declId, update its constants and add the enum to the ids map and return.
       // At this point it is like it came from the interpreter.
-      if (nullptr == e->GetDeclId()){
+      if (0 == e->GetDeclId()){
          e->Update(id);
          fIds->Add((Long64_t)id, (Long64_t)e);
          gInterpreter->UpdateEnumConstants(e, fClass);
@@ -220,11 +220,11 @@ TEnum *TListOfEnums::Get(DeclId_t id, const char *name)
          // So this decl can not possibly be part of this class.
          // [In addition calling GetClassInfo would trigger a late parsing
          //  of the header which we want to avoid].
-         return nullptr;
+         return 0;
       }
-      if (!gInterpreter->ClassInfo_Contains(fClass->GetClassInfo(), id)) return nullptr;
+      if (!gInterpreter->ClassInfo_Contains(fClass->GetClassInfo(), id)) return 0;
    } else {
-      if (!gInterpreter->ClassInfo_Contains(nullptr, id)) return nullptr;
+      if (!gInterpreter->ClassInfo_Contains(0, id)) return 0;
    }
 
    R__LOCKGUARD(gInterpreterMutex);
@@ -297,7 +297,7 @@ TObject *TListOfEnums::Remove(TObject *obj)
    }
    UnmapObject(obj);
    if (found) return obj;
-   else return nullptr;
+   else return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -305,7 +305,7 @@ TObject *TListOfEnums::Remove(TObject *obj)
 
 TObject *TListOfEnums::Remove(TObjLink *lnk)
 {
-   if (!lnk) return nullptr;
+   if (!lnk) return 0;
 
    TObject *obj = lnk->GetObject();
 
@@ -328,7 +328,7 @@ void TListOfEnums::Load()
    }
 
    // This will provoke the parsing of the headers if need be.
-   if (fClass && fClass->GetClassInfo() == nullptr) return;
+   if (fClass && fClass->GetClassInfo() == 0) return;
 
    R__LOCKGUARD(gInterpreterMutex);
 
@@ -358,7 +358,7 @@ void TListOfEnums::Load()
    std::forward_list<TEnum*> respownedEnums;
    for (auto enumAsObj : *fUnloaded){
       TEnum* en = static_cast<TEnum*>(enumAsObj);
-      if (nullptr == en->GetDeclId()){
+      if (0 == en->GetDeclId()){
          THashList::AddLast(en);
          respownedEnums.push_front(en);
       }

@@ -26,9 +26,6 @@ protected :
    Double_t              fPhi1;   // lower phi limit
    Double_t              fPhi2;   // higher phi limit
 
-   TGeoSphere(const TGeoSphere&) = delete;
-   TGeoSphere& operator=(const TGeoSphere&) = delete;
-
 public:
    // constructors
    TGeoSphere();

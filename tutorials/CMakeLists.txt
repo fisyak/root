@@ -83,8 +83,6 @@ if (NOT dataframe)
     list(APPEND dataframe_veto graphs/timeSeriesFromCSV_TDF.C)
     # TMVA tutorials dependent on RDataFrame
     list(APPEND dataframe_veto tmva/tmva*.C)
-    # RooFit tutorial depending on RDataFrame
-    list(APPEND dataframe_veto roofit/rf408*)
 elseif(MSVC AND NOT win_broken_tests)
     list(APPEND dataframe_veto dataframe/*.py)
 endif()
@@ -92,12 +90,6 @@ endif()
 if(NOT sqlite)
     # RDF+SQlite tutorials
     list(APPEND dataframe_veto dataframe/*SQlite*)
-endif()
-if(NOT davix)
-    list(APPEND dataframe_veto dataframe/df027_SQliteDependencyOverVersion.C)
-    list(APPEND dataframe_veto dataframe/df028_SQliteIPLocation.C)
-    list(APPEND dataframe_veto dataframe/df029_SQlitePlatformDistribution.C)
-    list(APPEND dataframe_veto dataframe/df030_SQliteVersionsOfROOT.C)
 endif()
 
 if(MACOSX_VERSION VERSION_EQUAL 10.13)
@@ -120,13 +112,8 @@ else()
   if(MSVC AND NOT win_broken_tests)
     set(roofit_veto roofit/rf104_classfactory.C
                     roofit/rf104_classfactory.py
-                    roofit/rf316_llratioplot.py
                     roofit/rf401_importttreethx.C
-                    roofit/rf401_importttreethx.py
-                    roofit/rf408_RDataFrameToRooFit.py
                     roofit/rf512_wsfactory_oper.C
-                    roofit/rf512_wsfactory_oper.py
-                    roofit/rf708_bphysics.py
     )
   endif()
 endif()
@@ -157,8 +144,6 @@ if(NOT xrootd)
                   dataframe/df105_WBosonAnalysis.py
                   dataframe/df106_HiggsToFourLeptons.py
                   dataframe/df107_SingleTopAnalysis.py
-                  v7/df104.py
-                  v7/df105.py
                   )
 endif()
 
@@ -187,7 +172,6 @@ if(NOT ROOT_mathmore_FOUND)
       math/LegendreAssoc.C
       math/Legendre.C
       math/mathmoreIntegration.C
-      math/multivarGaus.C
       math/tStudent.C
       math/normalDist.C
       roostats/TestNonCentral.C
@@ -201,10 +185,6 @@ if(NOT ROOT_fftw3_FOUND)
                  roofit/rf210_angularconv.C
                  roofit/rf211_paramconv.C
                  roofit/rf512_wsfactory_oper.C
-                 roofit/rf208_convolution.py
-                 roofit/rf210_angularconv.py
-                 roofit/rf211_paramconv.py
-                 roofit/rf512_wsfactory_oper.py
                  fft/FFT.C
                  fit/fitConvolution.C)
 endif()
@@ -261,19 +241,6 @@ else()
   if(MSVC AND NOT win_broken_tests)
     list(APPEND tmva_veto tmva/tmva103_Application.C tmva/envelope/classification.C)
   endif()
-  #these depends on external packages
-  find_python_module(torch QUIET)
-  find_python_module(keras QUIET)
-  if (NOT PY_KERAS_FOUND)
-    list(APPEND tmva_veto tmva/TMVA_SOFIE_Keras.C)
-  endif()
-  if (NOT PY_TORCH_FOUND)
-    list(APPEND tmva_veto tmva/TMVA_SOFIE_PyTorch.C)
-  endif()
-  if (NOT tmva-sofie)
-    list(APPEND tmva_veto tmva/TMVA_SOFIE_ONNX.C)
-  endif()
-  
 endif()
 
 if (NOT ROOT_pythia6_FOUND)
@@ -301,16 +268,14 @@ if(root7)
   if(NOT davix)
     list(APPEND root7_veto v7/ntuple/ntpl003_lhcbOpenData.C)
     list(APPEND root7_veto v7/ntuple/ntpl004_dimuon.C)
-    list(APPEND root7_veto v7/global_temperatures.cxx)
+    list(APPEND root7_veto v7/climate/global_temperatures.C)
   endif()
   if(NOT dataframe)
-    list(APPEND root7_veto v7/global_temperatures.cxx)
+    list(APPEND root7_veto v7/climate/global_temperatures.C)
     list(APPEND root7_veto v7/ntuple/ntpl004_dimuon.C)
-    list(APPEND root7_veto rcanvas/df104.py)
-    list(APPEND root7_veto rcanvas/df105.py)
   endif()
 else()
-  file(GLOB v7_veto_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/ v7/*.py v7/*.cxx v7/*/*.cxx v7/*.C v7/*/*.C rcanvas/*.py rcanvas/*.cxx)
+  file(GLOB v7_veto_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/ v7/*.cxx v7/*/*.cxx v7/*.C v7/*/*.C)
   list(APPEND root7_veto ${v7_veto_files})
 endif()
 
@@ -326,6 +291,7 @@ set(extra_veto
   rootlogon.C          # Helper macro
   rootlogoff.C         # Helper macro
   legacy/rootmarks.C          # Instrumentation. Not a standalone tutorial
+  legacy/memstat/memstatExample.C   # Instrumentation. Not a standalone tutorial
   multicore/mp_H1_lambdas.C # not a tutorial; used by mp104_processH1.C et al.
   html/*.C
   net/*.C
@@ -344,7 +310,9 @@ set(extra_veto
   tree/h1chain.C
   http/*.C
   eve7/*.C
-  r/rootlogon.C)
+  r/rootlogon.C
+  legacy/thread/threadsh1.C # disabled on 6.22 and 6.24 due to randomic failures on some platforms
+)
 
 set(all_veto hsimple.C
              geom/geometry.C
@@ -380,8 +348,6 @@ file(GLOB_RECURSE tutorials RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.C)
 if(root7 AND webgui)
   file(GLOB_RECURSE tutorials_v7 RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} v7/*.cxx)
   list(APPEND tutorials ${tutorials_v7})
-  file(GLOB_RECURSE tutorials_rcanvas RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} rcanvas/*.cxx)
-  list(APPEND tutorials ${tutorials_rcanvas})
 endif()
 file(GLOB tutorials_veto RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${all_veto})
 
@@ -443,7 +409,7 @@ set(hist-hbars-depends  tutorial-tree-cernbuild)
 set(benchmarks-depends tutorial-hsimple
                        tutorial-fit-fit1
                        tutorial-fit-myfit
-					   tutorial-hist-h1ReadAndDraw
+                       tutorial-hist-h1draw
                        tutorial-hist-FirstContour
                        tutorial-geom-na49view
                        tutorial-tree-ntuple1
@@ -659,18 +625,15 @@ if(ROOT_pyroot_FOUND)
 
   #---Python tutorials dependencies--------------------------------------
   set(pyroot-ntuple1-depends tutorial-pyroot-hsimple-py)
-  set(pyroot-h1ReadAndDraw-depends tutorial-pyroot-hsimple-py)
+  set(pyroot-h1draw-depends tutorial-pyroot-hsimple-py)
   set(pyroot-benchmarks-depends tutorial-pyroot-hsimple-py
                                 tutorial-pyroot-fit1-py
                                 tutorial-pyroot-na49view-py
-								tutorial-pyroot-h1ReadAndDraw-py
+                                tutorial-pyroot-h1draw-py
                                 tutorial-pyroot-ntuple1-py)
   set(pyroot-fit1-depends tutorial-pyroot-fillrandom-py)
   set(pyroot-na49view-depends tutorial-pyroot-geometry-py)
-  set(roofit-rf503_wspaceread-depends tutorial-roofit-rf502_wspacewrite-py)
-
-  # Avoid a race condition: make sure Python tutorial is ran after C++ tutorial
-  set(roofit-rf104_classfactory-depends tutorial-roofit-rf104_classfactory)
+  set(roofit-rf104_classfactory-depends tutorial-roofit-rf104_classfactory) #Race condition
 
   #----------------------------------------------------------------------
   # List requirements for python tutorials.

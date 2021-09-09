@@ -19,6 +19,7 @@
 #include <utility>
 
 namespace ROOT {
+namespace Experimental {
 
 TBufferMerger::TBufferMerger(const char *name, Option_t *option, Int_t compress)
 {
@@ -127,12 +128,11 @@ void TBufferMerger::MergeImpl()
       queue.pop();
    }
 
-   fMerger.PartialMerge(TFileMerger::kAll | TFileMerger::kIncremental | TFileMerger::kDelayWrite |
-                        TFileMerger::kKeepCompression);
+   fMerger.PartialMerge(TFileMerger::kAll | TFileMerger::kIncremental | TFileMerger::kDelayWrite | TFileMerger::kKeepCompression);
    fMerger.Reset();
 }
 
-bool TBufferMerger::TryMerge(ROOT::TBufferMergerFile *memfile)
+bool TBufferMerger::TryMerge(ROOT::Experimental::TBufferMergerFile *memfile)
 {
    if (fMergeMutex.try_lock()) {
       memfile->WriteStreamerInfo();
@@ -144,4 +144,5 @@ bool TBufferMerger::TryMerge(ROOT::TBufferMergerFile *memfile)
       return false;
 }
 
+} // namespace Experimental
 } // namespace ROOT

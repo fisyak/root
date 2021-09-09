@@ -41,8 +41,8 @@ ClassImp(TMethod);
 TMethod::TMethod(MethodInfo_t *info, TClass *cl) : TFunction(info)
 {
    fClass        = cl;
-   fGetterMethod = nullptr;
-   fSetterMethod = nullptr;
+   fGetterMethod = 0;
+   fSetterMethod = 0;
    fMenuItem     = kMenuNoMenu;
 
    if (fInfo) {
@@ -58,8 +58,8 @@ TMethod::TMethod(const TMethod& orig) : TFunction(orig)
    fClass        = orig.fClass;
    fMenuItem     = orig.fMenuItem;
    fGetter       = orig.fGetter;
-   fGetterMethod = nullptr;
-   fSetterMethod = nullptr;
+   fGetterMethod = 0;
+   fSetterMethod = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -74,10 +74,10 @@ TMethod& TMethod::operator=(const TMethod& rhs)
       fGetter       = rhs.fGetter;
       if (fGetterMethod)
          delete fGetterMethod;
-      fGetterMethod = nullptr;
+      fGetterMethod = 0;
       if (fSetterMethod)
          delete fSetterMethod;
-      fSetterMethod = nullptr;
+      fSetterMethod = 0;
    }
    return *this;
 }
@@ -144,31 +144,31 @@ TDataMember *TMethod::FindDataMember()
 
       // if we found any argument-specifying hints  - parse it
 
-      if (!fMethodArgs) return nullptr;
+      if (!fMethodArgs) return 0;
 
       Int_t nchs = strlen(argstring);    // workspace...
       char *argstr = new char[nchs+1];   // workspace...
-      char *ptr1 = nullptr;
-      char *tok  = nullptr;
-      char *ptr2 = nullptr;
+      char *ptr1 = 0;
+      char *tok  = 0;
+      char *ptr2 = 0;
       Int_t i;
 
       strlcpy(argstr,argstring,nchs+1);       //let's move it to "workspace"  copy
       char *rest;
       ptr2 = R__STRTOK_R(argstr, "{}", &rest); // extract the data!
-      if (ptr2 == nullptr) {
+      if (ptr2 == 0) {
          Fatal("FindDataMember","Internal error found '*ARGS=\"' but not \"{}\" in %s",GetCommentString());
          delete [] argstr;
-         return nullptr;
+         return 0;
       }
-      ptr2 = R__STRTOK_R((char *)nullptr, "{}", &rest);
+      ptr2 = R__STRTOK_R((char *)0, "{}", &rest);
 
       //extract argument tokens//
       char *tokens[20];
       Int_t cnt       = 0;
       Int_t token_cnt = 0;
       do {
-         ptr1 = R__STRTOK_R((char *)(cnt++ ? nullptr : ptr2), ",;", &rest); // extract tokens
+         ptr1 = R__STRTOK_R((char *)(cnt++ ? 0 : ptr2), ",;", &rest); // extract tokens
                                                                    // separated by , or ;
          if (ptr1) {
             Int_t nch = strlen(ptr1);
@@ -180,19 +180,20 @@ TDataMember *TMethod::FindDataMember()
       } while (ptr1);
 
       //now let's  parse all argument tokens...
-      TClass     *cl = nullptr;
-      TMethodArg *a  = nullptr;
-      TMethodArg *ar = nullptr;
-      TDataMember *member = nullptr;
+      TClass     *cl = 0;
+      TMethodArg *a  = 0;
+      TMethodArg *ar = 0;
+      TDataMember *member = 0;
 
       for (i=0; i<token_cnt;i++) {
+         cnt = 0;
          ptr1 = R__STRTOK_R(tokens[i], "=>", &rest);         // LeftHandedSide=methodarg
-         ptr2 = R__STRTOK_R((char *) nullptr, "=>", &rest);  // RightHandedSide-points to datamember
+         ptr2 = R__STRTOK_R((char *)0, "=>", &rest);         // RightHandedSide-points to datamember
 
          //find the MethodArg
-         a      = nullptr;
-         ar     = nullptr;
-         member = nullptr;
+         a      = 0;
+         ar     = 0;
+         member = 0;
          TIter nextarg(fMethodArgs);     // iterate through all arguments.
          while ((ar = (TMethodArg*)nextarg())) {
             if (!strcmp(ptr1,ar->GetName())) {
@@ -217,9 +218,9 @@ TDataMember *TMethod::FindDataMember()
    // if not found in comment string - try to guess it from name!
    } else {
       if (fMethodArgs)
-         if (fMethodArgs->GetSize() != 1) return nullptr;
+         if (fMethodArgs->GetSize() != 1) return 0;
 
-      TMethodArg *a = nullptr;
+      TMethodArg *a = 0;
       if (fMethodArgs) a = (TMethodArg*)(fMethodArgs->First());
 
       char dataname[67]    = "";
@@ -232,7 +233,7 @@ TDataMember *TMethod::FindDataMember()
       else if (strncmp(funcname, "Has", 3) == 0)
          snprintf(basename,64,"%s", funcname+3);
       else
-         return nullptr;
+         return 0;
 
       snprintf(dataname,67,"f%s",basename);
 
@@ -254,7 +255,7 @@ TDataMember *TMethod::FindDataMember()
    }
 
    //if nothing found - return null -pointer:
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -283,9 +284,9 @@ Bool_t TMethod::IsValid()
          MethodInfo_t *info = gInterpreter->MethodInfo_Factory(newId);
          Update(info);
       }
-      return newId != nullptr;
+      return newId != 0;
    }
-   return fInfo != nullptr;
+   return fInfo != 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -344,8 +345,8 @@ void TMethod::SetMenuItem(const char *docstring)
 Bool_t TMethod::Update(MethodInfo_t *info)
 {
    if (TFunction::Update(info)) {
-      delete fGetterMethod; fGetterMethod = nullptr;
-      delete fSetterMethod; fSetterMethod = nullptr;
+      delete fGetterMethod; fGetterMethod = 0;
+      delete fSetterMethod; fSetterMethod = 0;
       if (fInfo) {
          SetMenuItem(gCling->MethodInfo_Title(fInfo));
       }

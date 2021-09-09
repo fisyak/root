@@ -147,6 +147,22 @@ TClingCXXRecMethIter::InstantiateTemplateWithDefaults(const clang::RedeclarableT
    if (templateParms->getMinRequiredArguments() > 0)
       return nullptr;
 
+   if (templateParms->size() > 0) {
+      NamedDecl *arg0 = *templateParms->begin();
+      if (arg0->isTemplateParameterPack())
+         return nullptr;
+      if (auto TTP = dyn_cast<TemplateTypeParmDecl>(*templateParms->begin())) {
+         if (!TTP->hasDefaultArgument())
+            return nullptr;
+      } else if (auto NTTP = dyn_cast<NonTypeTemplateParmDecl>(*templateParms->begin())) {
+         if (!NTTP->hasDefaultArgument())
+            return nullptr;
+      } else {
+         // TemplateTemplateParmDecl, pack
+         return nullptr;
+      }
+   }
+
    const FunctionDecl *templatedDecl = llvm::dyn_cast<FunctionDecl>(TD->getTemplatedDecl());
    const Decl *declCtxDecl = dyn_cast<Decl>(TD->getDeclContext());
 
@@ -158,29 +174,26 @@ TClingCXXRecMethIter::InstantiateTemplateWithDefaults(const clang::RedeclarableT
    // If the function argument type is dependent (a1 and a2) we need to
    // substitute the types first, using the template arguments derived from the
    // template parameters' defaults.
-   llvm::SmallVector<TemplateArgument, 8> defaultTemplateArgs;
-   for (const NamedDecl *templateParm: *templateParms) {
+   llvm::SmallVector<TemplateArgument, 8> defaultTemplateArgs(templateParms->size());
+   for (int iParam = 0, nParams = templateParms->size(); iParam < nParams; ++iParam) {
+      const NamedDecl *templateParm = templateParms->getParam(iParam);
       if (templateParm->isTemplateParameterPack()) {
-         // This would inject an emprt parameter pack, which is a good default.
-         // But for cases where instantiation fails, this hits bug in unloading
-         // of the failed instantiation, causing a missing symbol in subsequent
-         // transactions where a Decl instantiated by the failed instatiation
-         // is not re-emitted. So for now just give up default-instantiating
-         // templates with parameter packs, even if this is simply a work-around.
-         //defaultTemplateArgs.emplace_back(ArrayRef<TemplateArgument>{}); // empty pack.
+         // shouldn't end up here
+         assert(0 && "unexpected template parameter pack");
          return nullptr;
-      } else if (auto TTP = dyn_cast<TemplateTypeParmDecl>(templateParm)) {
+      }
+      if (auto TTP = dyn_cast<TemplateTypeParmDecl>(templateParm)) {
          if (!TTP->hasDefaultArgument())
             return nullptr;
-         defaultTemplateArgs.emplace_back(TTP->getDefaultArgument());
+         defaultTemplateArgs[iParam] = TemplateArgument(TTP->getDefaultArgument());
       } else if (auto NTTP = dyn_cast<NonTypeTemplateParmDecl>(templateParm)) {
          if (!NTTP->hasDefaultArgument())
             return nullptr;
-         defaultTemplateArgs.emplace_back(NTTP->getDefaultArgument());
+         defaultTemplateArgs[iParam] = TemplateArgument(NTTP->getDefaultArgument());
       } else if (auto TTP = dyn_cast<TemplateTemplateParmDecl>(templateParm)) {
          if (!TTP->hasDefaultArgument())
             return nullptr;
-         defaultTemplateArgs.emplace_back(TTP->getDefaultArgument().getArgument());
+         defaultTemplateArgs[iParam] = TemplateArgument(TTP->getDefaultArgument().getArgument());
       } else {
          // shouldn't end up here
          assert(0 && "unexpected template parameter kind");
@@ -258,9 +271,7 @@ TClingMethodInfo::TClingMethodInfo(cling::Interpreter *interp,
 
       // Assemble special functions (or FunctionTemplate-s) that are synthesized from DefinitionData but
       // won't be enumerated as part of decls_begin()/decls_end().
-      llvm::SmallVector<NamedDecl*, 16> Ctors;
-      SemaRef.LookupConstructors(CXXRD, Ctors);
-      for (clang::NamedDecl *ctor : Ctors) {
+      for (clang::NamedDecl *ctor : SemaRef.LookupConstructors(CXXRD)) {
          // Filter out constructor templates, they are not functions we can iterate over:
          if (auto *CXXCD = llvm::dyn_cast<clang::CXXConstructorDecl>(ctor))
             SpecFuncs.emplace_back(CXXCD);
@@ -634,7 +645,7 @@ const char *TClingMethodInfo::GetPrototype()
          buf += " const";
       }
    }
-   return buf.c_str();  // NOLINT
+   return buf.c_str();
 }
 
 const char *TClingMethodInfo::Name() const

@@ -78,7 +78,7 @@ class TStreamerElement;
 
 void Debug(Int_t level, const char *va_(fmt), ...)
 {
-   // Use this function in case an error occurred.
+   // Use this function in case an error occured.
 
    if (gDebug>=level) {
       va_list ap;
@@ -205,9 +205,6 @@ namespace Internal {
       */
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Constructor.
-
    TTreeProxyGenerator::TTreeProxyGenerator(TTree* tree,
                                             const char *script,
                                             const char *fileprefix,
@@ -222,15 +219,14 @@ namespace Internal {
       fMaxUnrolling(maxUnrolling),
       fCurrentListOfTopProxies(&fListOfTopProxies)
    {
+      // Constructor.
+
       ParseOptions();
 
       AnalyzeTree(fTree);
 
       WriteProxy();
    }
-
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Constructor.
 
    TTreeProxyGenerator::TTreeProxyGenerator(TTree* tree,
                                             const char *script, const char *cutscript,
@@ -246,6 +242,8 @@ namespace Internal {
       fMaxUnrolling(maxUnrolling),
       fCurrentListOfTopProxies(&fListOfTopProxies)
    {
+      // Constructo.
+
       ParseOptions();
 
       AnalyzeTree(fTree);
@@ -253,20 +251,18 @@ namespace Internal {
       WriteProxy();
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Return true if we should create a nested class representing this class
-
    Bool_t TTreeProxyGenerator::NeedToEmulate(TClass *cl, UInt_t /* level */)
    {
+      // Return true if we should create a nested class representing this class
+
       return cl!=0 && cl->TestBit(TClass::kIsEmulation);
    }
-
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Add a Class Descriptor.
 
    TBranchProxyClassDescriptor*
    TTreeProxyGenerator::AddClass( TBranchProxyClassDescriptor* desc )
    {
+      // Add a Class Descriptor.
+
       if (desc==0) return 0;
 
       TBranchProxyClassDescriptor *existing =
@@ -292,11 +288,10 @@ namespace Internal {
       return desc;
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Add Friend descriptor.
-
    void TTreeProxyGenerator::AddFriend( TFriendProxyDescriptor* desc )
    {
+      // Add Friend descriptor.
+
       if (desc==0) return;
 
       TFriendProxyDescriptor *existing =
@@ -333,7 +328,7 @@ namespace Internal {
 
             desc->SetTitle(newtitle);
 
-            // Restart of the beginning of the loop.
+            // Restart of the begining of the loop.
             next = &fListOfFriends;
          }
       }
@@ -341,11 +336,10 @@ namespace Internal {
       fListOfFriends.Add(desc);
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Add a forward declaration request.
-
    void TTreeProxyGenerator::AddForward( const char *classname )
    {
+      // Add a forward declaration request.
+
       TObject *obj = fListOfForwards.FindObject(classname);
       if (obj) return;
 
@@ -362,19 +356,17 @@ namespace Internal {
       return;
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Add a forward declaration request.
-
    void TTreeProxyGenerator::AddForward(TClass *cl)
    {
+      // Add a forward declaration request.
+
       if (cl) AddForward(cl->GetName());
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Add a forward declaration request.
-
    void TTreeProxyGenerator::AddPragma(const char *pragma_text)
    {
+      // Add a forward declaration request.
+
       TIter i( &fListOfPragmas );
       for(TObjString *n = (TObjString*) i(); n; n = (TObjString*)i() ) {
          if (pragma_text == n->GetString()) {
@@ -386,11 +378,10 @@ namespace Internal {
 
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Add a branch descriptor.
-
    void TTreeProxyGenerator::AddDescriptor(TBranchProxyDescriptor *desc)
    {
+      // Add a branch descriptor.
+
       if (desc) {
          TBranchProxyDescriptor *existing =
             (TBranchProxyDescriptor*)((*fCurrentListOfTopProxies)(desc->GetName()));
@@ -406,12 +397,11 @@ namespace Internal {
       }
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Generate an enum for a given type if it is not known in the list of class
-   /// unless the type itself a template.
-
    void TTreeProxyGenerator::AddMissingClassAsEnum(const char *clname, Bool_t isscope)
    {
+      // Generate an enum for a given type if it is not known in the list of class
+      // unless the type itself a template.
+
       if (!TClassEdit::IsStdClass(clname) && !TClass::GetClass(clname) && gROOT->GetType(clname) == 0) {
 
          TObject *obj = fListOfForwards.FindObject(clname);
@@ -431,12 +421,11 @@ namespace Internal {
       }
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Check if the template parameter refers to an enum and/or a missing class (we can't tell those 2 apart unless
-   /// the name as template syntax).
-
    void TTreeProxyGenerator::CheckForMissingClass(const char *clname)
    {
+      // Check if the template parameter refers to an enum and/or a missing class (we can't tell those 2 apart unless
+      // the name as template syntax).
+
       UInt_t len = strlen(clname);
       UInt_t nest = 0;
       UInt_t last = 0;
@@ -457,7 +446,7 @@ namespace Internal {
                break;
             case '>':
                if (nest == 0) return; // The name is not well formed, give up.
-               --nest; /* intentional fall through to the next case */
+               --nest; /* intentional fall throught to the next case */
             case ',':
                if ((clname[i] == ',' && nest == 1) || (clname[i] == '>' && nest == 0)) {
                   TString incName(clname + last, i - last);
@@ -476,13 +465,12 @@ namespace Internal {
       AddMissingClassAsEnum(TClassEdit::ShortType(clname, TClassEdit::kDropTrailStar | TClassEdit::kLong64).c_str(),kFALSE);
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Analyze the sub-branch and populate the TTreeProxyGenerator or the topdesc with
-   /// its findings.
-
    UInt_t TTreeProxyGenerator::AnalyzeBranches(UInt_t level,TBranchProxyClassDescriptor *topdesc,
                                                TBranchElement *branch, TVirtualStreamerInfo *info)
    {
+      // Analyze the sub-branch and populate the TTreeProxyGenerator or the topdesc with
+      // its findings.
+
       if (info==0) info = branch->GetInfo();
 
       TIter branches( branch->GetListOfBranches() );
@@ -490,15 +478,14 @@ namespace Internal {
       return AnalyzeBranches( level, topdesc, branches, info );
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Analyze the list of sub branches of a TBranchElement by looping over
-   /// the streamer elements and create the appropriate class proxies.
-
    UInt_t TTreeProxyGenerator::AnalyzeBranches(UInt_t level,
                                                TBranchProxyClassDescriptor *topdesc,
                                                TIter &branches,
                                                TVirtualStreamerInfo *info)
    {
+      // Analyze the list of sub branches of a TBranchElement by looping over
+      // the streamer elements and create the appropriate class proxies.
+
 /*
 
    Find the content class name (GetClassName)
@@ -593,7 +580,7 @@ namespace Internal {
          }
 
          if (info->GetClass()->GetCollectionProxy() && strcmp(element->GetName(),"This")==0) {
-            // Skip the artificial streamer element.
+            // Skip the artifical streamer element.
             continue;
          }
 
@@ -919,13 +906,12 @@ namespace Internal {
       return lookedAt;
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Analyze the leaf and populate the `TTreeProxyGenerator or
-   /// the topdesc with its findings.
-
    UInt_t TTreeProxyGenerator::AnalyzeOldLeaf(TLeaf *leaf, UInt_t /* level */,
                                               TBranchProxyClassDescriptor *topdesc)
    {
+      // Analyze the leaf and populate the `TTreeProxyGenerator or
+      // the topdesc with its findings.
+
       if (leaf->IsA()==TLeafObject::Class()) {
          Error("AnalyzeOldLeaf","TLeafObject not supported yet");
          return 0;
@@ -1044,16 +1030,15 @@ namespace Internal {
 
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Analyze the branch and populate the TTreeProxyGenerator or the topdesc with
-   /// its findings.  Sometimes several branch of the mom are also analyzed,
-   /// the number of such branches is returned (this happens in the case of
-   /// embedded objects inside an object inside a clones array split more than
-   /// one level.
-
    UInt_t TTreeProxyGenerator::AnalyzeOldBranch(TBranch *branch, UInt_t level,
                                                 TBranchProxyClassDescriptor *topdesc)
    {
+      // Analyze the branch and populate the TTreeProxyGenerator or the topdesc with
+      // its findings.  Sometimes several branch of the mom are also analyzed,
+      // the number of such branches is returned (this happens in the case of
+      // embedded objects inside an object inside a clones array split more than
+      // one level.
+
       UInt_t extraLookedAt = 0;
       TString prefix;
 
@@ -1102,11 +1087,10 @@ namespace Internal {
 
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Analyze a TTree and its (potential) friends.
-
    void TTreeProxyGenerator::AnalyzeTree(TTree *tree)
    {
+      // Analyze a TTree and its (potential) friends.
+
       TIter next( tree->GetListOfBranches() );
       TBranch *branch;
       while ( (branch = (TBranch*)next()) ) {
@@ -1264,14 +1248,13 @@ namespace Internal {
       fCurrentListOfTopProxies = &fListOfTopProxies;
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Analyze the element and populate the TTreeProxyGenerator or the topdesc with
-   /// its findings.
-
    void TTreeProxyGenerator::AnalyzeElement(TBranch *branch, TStreamerElement *element,
                                             UInt_t level, TBranchProxyClassDescriptor *topdesc,
                                             const char *path)
    {
+      // Analyze the element and populate the TTreeProxyGenerator or the topdesc with
+      // its findings.
+
       TString dataMemberName;
       TString pxDataMemberName;
       TString type;
@@ -1304,7 +1287,7 @@ namespace Internal {
          containerName = cl->GetName();
          cl = cl->GetCollectionProxy()->GetValueClass();
          if (!cl) {
-            // Skip the artificial streamer element.
+            // Skip the artifical streamer element.
             return;
          }
          // else return;
@@ -1540,7 +1523,7 @@ namespace Internal {
       }
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
+   /////////////////////////////////////////////////////////////////////////////
    /// Parse the options string.
 
    void TTreeProxyGenerator::ParseOptions()
@@ -1554,7 +1537,7 @@ namespace Internal {
       }
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
+   /////////////////////////////////////////////////////////////////////////////
    /// Add the "pragma C++ class" if needed and return
    /// true if it has been added _or_ if it is known to
    /// not be needed.
@@ -1578,7 +1561,7 @@ namespace Internal {
       return kFALSE;
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
+   /////////////////////////////////////////////////////////////////////////////
    /// Add the "pragma C++ class" if needed and return
    /// true if it has been added _or_ if it is known to
    /// not be needed.
@@ -1591,7 +1574,7 @@ namespace Internal {
 
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
+   /////////////////////////////////////////////////////////////////////////////
    /// Check whether the file exist and do something useful if it does
 
    void TTreeProxyGenerator::WriteProxy()

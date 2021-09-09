@@ -6,7 +6,7 @@
 
 INCLUDE (CheckCXXSourceCompiles)
 
-#---Define a function not to pollute the top level namespace with unneeded variables-----------------------
+#---Define a function to do not polute the top level namespace with unneeded variables-----------------------
 function(RootConfigure)
 
 #---Define all sort of variables to bridge between the old Module.mk and the new CMake equivalents-----------
@@ -225,6 +225,8 @@ set(gfallibdir ${GFAL_LIBRARY_DIR})
 set(gfallib ${GFAL_LIBRARY})
 set(gfalincdir ${GFAL_INCLUDE_DIR})
 
+set(buildmemstat ${value${memstat}})
+
 set(buildalien ${value${alien}})
 set(alienlibdir ${ALIEN_LIBRARY_DIR})
 set(alienlib ${ALIEN_LIBRARY})
@@ -274,8 +276,13 @@ set(gvizcflags)
 
 set(buildpython ${value${pyroot}})
 set(pythonlibdir ${PYTHON_LIBRARY_DIR})
-set(pythonlib ${PYTHON_LIBRARIES})
-set(pythonincdir ${PYTHON_INCLUDE_DIRS})
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.14)
+  set(pythonlib ${PYTHON_LIBRARIES})
+  set(pythonincdir ${PYTHON_INCLUDE_DIRS})
+else()
+  set(pythonlib ${PYTHON_LIBRARY})
+  set(pythonincdir ${PYTHON_INCLUDE_DIR})
+endif()
 set(pythonlibflags)
 
 set(buildxml ${value${xml}})
@@ -402,6 +409,11 @@ if(vc)
   set(hasvc define)
 else()
   set(hasvc undef)
+endif()
+if(vmc)
+  set(hasvmc define)
+else()
+  set(hasvmc undef)
 endif()
 if(vdt)
   set(hasvdt define)
@@ -644,12 +656,6 @@ else()
    set(hashardwareinterferencesize undef)
 endif()
 
-if(root7 AND webgui)
-   set(root_browser_class "ROOT::Experimental::RWebBrowserImp")
-else()
-   set(root_browser_class "TRootBrowser")
-endif()
-
 #---root-config----------------------------------------------------------------------------------------------
 ROOT_GET_OPTIONS(features ENABLED)
 set(features "cxx${CMAKE_CXX_STANDARD} ${features}")
@@ -810,12 +816,6 @@ if(APPLE AND runtime_cxxmodules)
   set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS} -undefined dynamic_lookup")
 endif()
 
-# ROOTBUILD definition (it is defined in compiledata.h and used by ACLIC
-# to decide whether (by default) to optimize or not optimize the user scripts.)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-  set(ROOTBUILD "debug")
-endif()
-
 if(WIN32)
   # We cannot use the compiledata.sh script for windows
   configure_file(${CMAKE_SOURCE_DIR}/cmake/scripts/compiledata.win32.in ${CMAKE_BINARY_DIR}/ginclude/compiledata.h NEWLINE_STYLE UNIX)
@@ -824,13 +824,14 @@ else()
     ${CMAKE_BINARY_DIR}/ginclude/compiledata.h "${CMAKE_CXX_COMPILER}"
         "${CMAKE_CXX_FLAGS_RELEASE}" "${CMAKE_CXX_FLAGS_DEBUG}" "${CMAKE_CXX_FLAGS}"
         "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS}" "${CMAKE_EXE_FLAGS}" "so"
-        "${libdir}" "-lCore" "-lRint" "${incdir}" "" "" "${ROOT_ARCHITECTURE}" "${ROOTBUILD}")
+        "${libdir}" "-lCore" "-lRint" "${incdir}" "" "" "${ROOT_ARCHITECTURE}" "")
 endif()
 
 #---Get the value of CMAKE_CXX_FLAGS provided by the user in the command line
 set(usercflags ${CMAKE_CXX_FLAGS-CACHED})
 file(REMOVE ${CMAKE_BINARY_DIR}/installtree/root-config)
 configure_file(${CMAKE_SOURCE_DIR}/config/root-config.in ${CMAKE_BINARY_DIR}/installtree/root-config @ONLY NEWLINE_STYLE UNIX)
+configure_file(${CMAKE_SOURCE_DIR}/config/memprobe.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/memprobe @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.sh ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.sh @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.csh ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.csh @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.fish ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.fish @ONLY NEWLINE_STYLE UNIX)
@@ -852,7 +853,6 @@ if(WIN32)
 endif()
 
 #--Local root-configure
-set(all_features ${ROOT_ALL_OPTIONS})
 set(prefix $ROOTSYS)
 set(bindir $ROOTSYS/bin)
 set(libdir $ROOTSYS/lib)
@@ -876,7 +876,8 @@ install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.sh
                           WORLD_READ
               DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-install(FILES ${CMAKE_BINARY_DIR}/installtree/root-config
+install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/memprobe
+              ${CMAKE_BINARY_DIR}/installtree/root-config
               ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/roots
               ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/proofserv
               PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ

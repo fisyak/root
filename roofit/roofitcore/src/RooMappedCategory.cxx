@@ -37,10 +37,10 @@
 
 class RooMappedCategoryCache : public RooAbsCache {
   public:
-    RooMappedCategoryCache(RooAbsArg* owner) : RooAbsCache(owner)
+    RooMappedCategoryCache(RooAbsArg* owner = 0) : RooAbsCache(owner)
   { initialise(); }
-    RooMappedCategoryCache(const RooAbsCache& /*other*/, RooAbsArg* owner) :
-      RooAbsCache(owner)
+    RooMappedCategoryCache(const RooAbsCache& other, RooAbsArg* owner = 0) :
+      RooAbsCache(other, owner)
     { initialise(); }
 
     // look up our parent's output based on our parent's input category index
@@ -343,7 +343,6 @@ RooMappedCategory::Entry& RooMappedCategory::Entry::operator=(const RooMappedCat
 
   if (_regexp) {
     delete _regexp ;
-    _regexp = nullptr;
   }
 
   return *this;

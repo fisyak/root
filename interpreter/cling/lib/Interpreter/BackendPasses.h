@@ -52,7 +52,13 @@ namespace cling {
     BackendPasses(const clang::CodeGenOptions &CGOpts,
                   const clang::TargetOptions & /*TOpts*/,
                   const clang::LangOptions & /*LOpts*/,
-                  llvm::TargetMachine& TM);
+                  llvm::TargetMachine& TM):
+      m_TM(TM),
+      m_CGOpts(CGOpts) //,
+      //m_TOpts(TOpts),
+      //m_LOpts(LOpts)
+    {}
+
     ~BackendPasses();
 
     void runOnModule(llvm::Module& M, int OptLevel);

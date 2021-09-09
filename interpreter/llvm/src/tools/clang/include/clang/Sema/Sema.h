@@ -3463,8 +3463,7 @@ public:
   LabelDecl *LookupOrCreateLabel(IdentifierInfo *II, SourceLocation IdentLoc,
                                  SourceLocation GnuLabelLoc = SourceLocation());
 
-  void LookupConstructors(CXXRecordDecl *Class,
-                          llvm::SmallVectorImpl<NamedDecl*> &Constructors);
+  DeclContextLookupResult LookupConstructors(CXXRecordDecl *Class);
   CXXConstructorDecl *LookupDefaultConstructor(CXXRecordDecl *Class);
   CXXConstructorDecl *LookupCopyingConstructor(CXXRecordDecl *Class,
                                                unsigned Quals);

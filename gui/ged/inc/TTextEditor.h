@@ -9,6 +9,14 @@
  *************************************************************************/
 
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TTextEditor                                                         //
+//                                                                      //
+//  Editor for changing TText's and TLatex's attributes.                //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
 #ifndef ROOT_TTextEditor
 #define ROOT_TTextEditor
 
@@ -24,11 +32,11 @@ private:
    TText *fEditedText;
 
 protected:
-   TGTextEntry   *fText;  ///< Text
-   TGNumberEntry *fAngle; ///< Text's angle
-   TGNumberEntry *fSize;  ///< Text's angle
-   TGNumberEntry *fXpos;  ///< Text's X position
-   TGNumberEntry *fYpos;  ///< Text's Y position
+   TGTextEntry   *fText;  // Text
+   TGNumberEntry *fAngle; // Text's angle
+   TGNumberEntry *fSize;  // Text's angle
+   TGNumberEntry *fXpos;  // Text's X position
+   TGNumberEntry *fYpos;  // Text's Y position
 
    void ConnectSignals2Slots();
 

@@ -1156,7 +1156,7 @@ void TFormLeafInfoClones::Swap(TFormLeafInfoClones &other)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Exception safe assignment operator
+/// Exception safe assignement operator
 
 TFormLeafInfoClones &TFormLeafInfoClones::operator=(const TFormLeafInfoClones &orig)
 {
@@ -1354,7 +1354,7 @@ void TFormLeafInfoCollectionObject::Swap(TFormLeafInfoCollectionObject &other)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Exception safe assignment operator
+/// Exception safe assignement operator
 
 TFormLeafInfoCollectionObject &TFormLeafInfoCollectionObject::operator=(const TFormLeafInfoCollectionObject &orig)
 {
@@ -1451,7 +1451,7 @@ void * TFormLeafInfoCollectionObject::GetValuePointer(char *where, Int_t instanc
 /// member on a generic collection object stored in a TTree.
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Constructor.
+/// Cosntructor.
 
 TFormLeafInfoCollection::TFormLeafInfoCollection(TClass* classptr,
                                                  Long_t offset,
@@ -1492,7 +1492,7 @@ TFormLeafInfoCollection::TFormLeafInfoCollection(TClass* motherclassptr,
                                       ? elementclassptr->GetName()
                                       : ( motherclassptr
                                           ? motherclassptr->GetName()
-                                          : "Unknown")
+                                          : "Unknwon")
                                       ) ),
    fTop(top),
    fCollClass( 0),
@@ -1983,7 +1983,7 @@ TFormLeafInfoPointer::TFormLeafInfoPointer(TClass* classptr,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Copy the object and all of its content.
+/// Copy the object and all of its contnet.
 
 TFormLeafInfo* TFormLeafInfoPointer::DeepCopy() const
 {
@@ -2182,7 +2182,7 @@ TFormLeafInfo* TFormLeafInfoMethod::DeepCopy() const
 ////////////////////////////////////////////////////////////////////////////////
 /// Return the TClass corresponding to the return type of the function
 /// if it is an object type or if the return type is a reference (&) then
-/// return the TClass corresponding to the reference.
+/// return the TClass corresponding to the referencee.
 
 TClass *TFormLeafInfoMethod::ReturnTClass(TMethodCall *mc)
 {
@@ -2200,7 +2200,7 @@ TClass *TFormLeafInfoMethod::ReturnTClass(TMethodCall *mc)
       TInterpreter::SuspendAutoLoadingRAII autoloadOff(gInterpreter);
       TClassEdit::GetNormalizedName(return_type, mc->GetMethod()->GetReturnTypeName());
    }
-   // Beyond this point we no longer 'need' the lock.
+   // Beyhond this point we no longer 'need' the lock.
    // How TClass::GetClass will take at least the read lock to search
    // So keeping it just a little longer is likely to be faster
    // than releasing and retaking it.
@@ -2271,7 +2271,7 @@ void *TFormLeafInfoMethod::GetLocalValuePointer( TLeaf *from,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return the address of the local underlying value.
+/// Return the address of the lcoal underlying value.
 
 void *TFormLeafInfoMethod::GetLocalValuePointer(char *from,
                                                 Int_t /*instance*/)
@@ -2498,7 +2498,7 @@ void TFormLeafInfoMultiVarDim::LoadSizes(TBranch* branch)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return the index value of the primary index.
+/// Return the index vlaue of the primary index.
 
 Int_t TFormLeafInfoMultiVarDim::GetPrimaryIndex()
 {
@@ -2621,7 +2621,7 @@ TFormLeafInfo* TFormLeafInfoMultiVarDimDirect::DeepCopy() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return the underlying value.
+/// Return the undersying value.
 
 template <typename T>
 T TFormLeafInfoMultiVarDimDirect::GetValueImpl(TLeaf *leaf, Int_t instance)
@@ -2662,7 +2662,7 @@ TFormLeafInfoMultiVarDimCollection::TFormLeafInfoMultiVarDimCollection(
                                       ? elementclassptr->GetName()
                                       : ( motherclassptr
                                           ? motherclassptr->GetName()
-                                          : "Unknown")
+                                          : "Unknwon")
                                           )
                                           )
 {
@@ -2772,7 +2772,7 @@ TFormLeafInfoMultiVarDimClones::TFormLeafInfoMultiVarDimClones(
                                       ? elementclassptr->GetName()
                                       : ( motherclassptr
                                           ? motherclassptr->GetName()
-                                          : "Unknown")
+                                          : "Unknwon")
                                           )
                                           )
 {
@@ -2983,13 +2983,11 @@ Bool_t TFormLeafInfoCast::Update()
 /// A small helper class to implement reading
 /// from the containing TTree object itself.
 
-
-////////////////////////////////////////////////////////////////////////////////
-/// Constructor.
-
 TFormLeafInfoTTree::TFormLeafInfoTTree(TTree *tree, const char *alias, TTree *current) :
 TFormLeafInfo( TTree::Class(), 0, 0 ), fTree(tree),fCurrent(current),fAlias(alias)
 {
+   // Constructor.
+
    if (fCurrent==0) fCurrent = fTree->GetFriend(alias);
 }
 
@@ -3002,11 +3000,10 @@ TFormLeafInfoTTree::TFormLeafInfoTTree(const TFormLeafInfoTTree& orig) :
    fCurrent = orig.fCurrent;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Copy the object and all its content.
-
 TFormLeafInfo* TFormLeafInfoTTree::DeepCopy() const
 {
+   // Copy the object and all its content.
+
    return new TFormLeafInfoTTree(*this);
 }
 

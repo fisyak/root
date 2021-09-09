@@ -721,6 +721,7 @@ Double_t TGeoChecker::TimingPerVolume(TGeoVolume *vol)
    Double_t theta, phi;
    Int_t idaughter;
    fTimer->Start();
+   Bool_t inside;
    for (Int_t i=0; i<1000000; i++) {
       lpt[0] = ox-dx+2*dx*gRandom->Rndm();
       lpt[1] = oy-dy+2*dy*gRandom->Rndm();
@@ -736,9 +737,10 @@ Double_t TGeoChecker::TimingPerVolume(TGeoVolume *vol)
       fGeoManager->SetCurrentDirection(dir);
       fGeoManager->SetStep(pstep);
       fGeoManager->ResetState();
+      inside = kTRUE;
       // dist = TGeoShape::Big();
       if (!vol->IsAssembly()) {
-         Bool_t inside = vol->Contains(lpt);
+         inside = vol->Contains(lpt);
          if (!inside) {
             // dist = vol->GetShape()->DistFromOutside(lpt,ldir,3,pstep);
             // if (dist>=pstep) continue;
@@ -1078,6 +1080,8 @@ TGeoOverlap *TGeoChecker::MakeCheckOverlap(const char *name, TGeoVolume *vol1, T
       return nodeovlp;
    }
    // Check overlap
+   Bool_t overlap;
+   overlap = kFALSE;
    isoverlapping = kFALSE;
    // loop all points of first candidate
    for (ip=0; ip<numPoints1; ip++) {
@@ -1085,7 +1089,7 @@ TGeoOverlap *TGeoChecker::MakeCheckOverlap(const char *name, TGeoVolume *vol1, T
       if (local[0]<1e-10 && local[1]<1e-10) continue;
       mat1->LocalToMaster(local, point);
       mat2->MasterToLocal(point, local); // now point in local reference of second
-      Bool_t overlap = shape2->Contains(local);
+      overlap = shape2->Contains(local);
       if (overlap) {
          safety = shape2->Safety(local, kTRUE);
          if (safety<ovlp) overlap=kFALSE;
@@ -1108,7 +1112,7 @@ TGeoOverlap *TGeoChecker::MakeCheckOverlap(const char *name, TGeoVolume *vol1, T
       if (local[0]<1e-10 && local[1]<1e-10) continue;
       mat2->LocalToMaster(local, point);
       mat1->MasterToLocal(point, local); // now point in local reference of first
-      Bool_t overlap = shape1->Contains(local);
+      overlap = shape1->Contains(local);
       if (overlap) {
          safety = shape1->Safety(local, kTRUE);
          if (safety<ovlp) overlap=kFALSE;
@@ -1150,7 +1154,7 @@ void TGeoChecker::CheckOverlapsBySampling(TGeoVolume *vol, Double_t /* ovlp */, 
    Double_t dz = box->GetDZ();
    Double_t pt[3];
    Double_t local[3];
-   Int_t *check_list = nullptr;
+   Int_t *check_list = 0;
    Int_t ncheck = 0;
    const Double_t *orig = box->GetOrigin();
    Int_t ipoint = 0;
@@ -1161,7 +1165,7 @@ void TGeoChecker::CheckOverlapsBySampling(TGeoVolume *vol, Double_t /* ovlp */, 
    Double_t safe;
    TString name1 = "";
    TString name2 = "";
-   TGeoOverlap **flags = nullptr;
+   TGeoOverlap **flags = 0;
    TGeoNode *node1, *node2;
    Int_t novlps = 0;
    TGeoHMatrix mat1, mat2;
@@ -1206,7 +1210,6 @@ void TGeoChecker::CheckOverlapsBySampling(TGeoVolume *vol, Double_t /* ovlp */, 
          // We really have found an overlap -> store the point in a container
          iovlp++;
          if (!novlps) {
-            if (flags) delete [] flags; // should never happen
             flags = new TGeoOverlap*[nd*nd];
             memset(flags, 0, nd*nd*sizeof(TGeoOverlap*));
          }
@@ -2509,7 +2512,7 @@ Double_t *TGeoChecker::ShootRay(Double_t *start, Double_t dirx, Double_t diry, D
             memcpy(temparray, array, 3*dim*sizeof(Double_t));
             delete [] array;
             array = temparray;
-            dim += 20;
+                  dim += 20;
          }
          memcpy(&array[3*nelem], point, 3*sizeof(Double_t));
 //         if (endnode) printf("%i (%f, %f, %f) step=%f\n", nelem, point[0], point[1], point[2], step);

@@ -15,7 +15,6 @@
 #include <ROOT/REveTrans.hxx>
 #include <ROOT/REveRenderData.hxx>
 
-#include <nlohmann/json.hpp>
 
 using namespace ROOT::Experimental;
 

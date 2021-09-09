@@ -38,20 +38,20 @@ public:
   RooArgSet* createProtoBuildConfig() ;
 
   RooSimultaneous* buildPdf(const RooArgSet& buildConfig, const RooArgSet& dependents, 
-				  const RooArgSet* auxSplitCats=0, bool verbose=false) ;
+				  const RooArgSet* auxSplitCats=0, Bool_t verbose=kFALSE) ;
 
   RooSimultaneous* buildPdf(const RooArgSet& buildConfig, const RooAbsData* dataSet, 
-				  const RooArgSet& auxSplitCats, bool verbose=false) {
+				  const RooArgSet& auxSplitCats, Bool_t verbose=kFALSE) {
     return buildPdf(buildConfig,*dataSet->get(),&auxSplitCats,verbose) ;
   }
 
   RooSimultaneous* buildPdf(const RooArgSet& buildConfig, const RooArgSet& dependents,
-				  const RooArgSet& auxSplitCats, bool verbose=false) {
+				  const RooArgSet& auxSplitCats, Bool_t verbose=kFALSE) {
     return buildPdf(buildConfig,dependents,&auxSplitCats,verbose) ;
   }
 
   RooSimultaneous* buildPdf(const RooArgSet& buildConfig, const RooAbsData* dataSet, 
-				  const RooArgSet* auxSplitCats=0, bool verbose=false) {
+				  const RooArgSet* auxSplitCats=0, Bool_t verbose=kFALSE) {
     return buildPdf(buildConfig,*dataSet->get(),auxSplitCats,verbose) ;
   }
   

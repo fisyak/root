@@ -33,7 +33,7 @@ namespace cling {
   //                            HelpCommand | FileExCommand | FilesCommand |
   //                            ClassCommand | GCommand | StoreStateCommand |
   //                            CompareStateCommand | StatsCommand | undoCommand
-  //                 LCommand := 'L' [FilePath]
+  //                 LCommand := 'L' FilePath
   //                 TCommand := 'T' FilePath FilePath
   //                 >Command := '>' FilePath
   //                 qCommand := 'q'
@@ -65,7 +65,7 @@ namespace cling {
   class MetaParser {
   private:
     MetaLexer m_Lexer;
-    MetaSema &m_Actions;
+    std::unique_ptr<MetaSema> m_Actions;
     llvm::SmallVector<Token, 2> m_TokenCache;
     llvm::SmallVector<Token, 4> m_MetaSymbolCache;
   private:
@@ -113,7 +113,8 @@ namespace cling {
     bool isShellCommand(MetaSema::ActionResult& actionResult,
                         Value* resultValue);
   public:
-    MetaParser(MetaSema &Actions, llvm::StringRef Line);
+    MetaParser(MetaSema* Actions);
+    void enterNewInputLine(llvm::StringRef Line);
 
     ///\brief Drives the recursive decendent parsing.
     ///
@@ -126,7 +127,7 @@ namespace cling {
     ///
     bool isQuitRequested() const;
 
-    MetaSema& getActions() const { return m_Actions; }
+    MetaSema& getActions() const { return *m_Actions.get(); }
   };
 } // end namespace cling
 

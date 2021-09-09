@@ -110,7 +110,7 @@ const char *TClingTypeInfo::Name() const
 
    R__LOCKGUARD(gInterpreterMutex);
    ROOT::TMetaUtils::GetFullyQualifiedTypeName(buf,fQualType,*fInterp);
-   return buf.c_str();  // NOLINT
+   return buf.c_str();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -130,16 +130,12 @@ long TClingTypeInfo::Property() const
    if (tagQT) {
       // Note: Now we have class, enum, struct, union only.
       const clang::TagDecl *TD = llvm::dyn_cast<clang::TagDecl>(tagQT->getDecl());
-      if (!TD)
-         return property;
       if (TD->isEnum()) {
          property |= kIsEnum;
       } else {
          // Note: Now we have class, struct, union only.
          const clang::CXXRecordDecl *CRD =
             llvm::dyn_cast<clang::CXXRecordDecl>(TD);
-         if (!CRD)
-            return property;
          if (CRD->isClass()) {
             property |= kIsClass;
          }
@@ -244,7 +240,7 @@ const char *TClingTypeInfo::TrueName(const ROOT::TMetaUtils::TNormalizedCtxt &no
 
    ROOT::TMetaUtils::GetNormalizedName(buf,fQualType, *fInterp, normCtxt);
 
-   return buf.c_str(); // NOLINT
+   return buf.c_str();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

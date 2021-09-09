@@ -286,7 +286,7 @@ namespace cling {
   MetaProcessor::MetaProcessor(Interpreter& interp, raw_ostream& outs)
     : m_Interp(interp), m_Outs(&outs) {
     m_InputValidator.reset(new InputValidator());
-    m_MetaSema.reset(new MetaSema(interp, *this));
+    m_MetaParser.reset(new MetaParser(new MetaSema(interp, *this)));
   }
 
   MetaProcessor::~MetaProcessor() {
@@ -311,12 +311,12 @@ namespace cling {
     }
 
     //  Check for and handle meta commands.
-    MetaParser parser(*m_MetaSema, input_line);
+    m_MetaParser->enterNewInputLine(input_line);
     MetaSema::ActionResult actionResult = MetaSema::AR_Success;
     if (!m_InputValidator->inBlockComment() &&
-         parser.isMetaCommand(actionResult, result)) {
+         m_MetaParser->isMetaCommand(actionResult, result)) {
 
-      if (parser.isQuitRequested())
+      if (m_MetaParser->isQuitRequested())
         return -1;
 
       if (actionResult != MetaSema::AR_Success)
@@ -525,7 +525,7 @@ namespace cling {
 
   void MetaProcessor::registerUnloadPoint(const Transaction* T,
                                           llvm::StringRef filename) {
-    m_MetaSema->registerUnloadPoint(T, filename);
+    m_MetaParser->getActions().registerUnloadPoint(T, filename);
   }
 
 } // end namespace cling

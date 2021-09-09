@@ -57,17 +57,21 @@ TEST(TCollection, TypedIter)
    TClass *tobjectCl = TObject::Class();
    TClass *baseClassCl = TBaseClass::Class();
 
-   for (auto bcl : *cl->GetListOfBases()) {
+   TIter next(cl->GetListOfBases());
+   while (auto bcl = next()) {
       // bcl is actually a TObject*
       EXPECT_EQ(tobjectCl, bcl->Class());
    }
 
-   for (auto bcl : TRangeStaticCast<TBaseClass>(cl->GetListOfBases())) {
+   TTypedIter<TBaseClass> bnext(cl->GetListOfBases());
+   while (auto bcl = bnext()) {
       // bcl is actually a TBaseClass*
       EXPECT_EQ(baseClassCl, bcl->Class());
    }
 
-   for (auto bcl : TRangeDynCast<TClass>(cl->GetListOfBases())) {
+   ROOT::Internal::TRangeDynCastIterator<TClass> dynnext(cl->GetListOfBases());
+   while (dynnext.Next() || dynnext != cl->GetListOfBases()->end()) {
+      auto bcl = *next;
       EXPECT_EQ(bcl, nullptr);
    }
 

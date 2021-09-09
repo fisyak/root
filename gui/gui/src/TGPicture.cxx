@@ -20,18 +20,16 @@
 
 **************************************************************************/
 
-
-/** \class TGPicture
-    \ingroup guiwidgets
-
-
-The TGPicture class implements pictures and icons used in the
-different GUI elements and widgets. The TGPicturePool class
-implements a TGPicture cache. TGPictures are created, managed and
-destroyed by the TGPicturePool.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGPicture & TGPicturePool                                            //
+//                                                                      //
+// The TGPicture class implements pictures and icons used in the        //
+// different GUI elements and widgets. The TGPicturePool class          //
+// implements a TGPicture cache. TGPictures are created, managed and    //
+// destroyed by the TGPicturePool.                                      //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGPicture.h"
 #include "TGResourcePool.h"

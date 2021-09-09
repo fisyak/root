@@ -98,7 +98,7 @@ public:
    virtual void  Browse(TBrowser *b);
    Bool_t        IsFolder() const { return kTRUE; }
    const char   *ApplicationName() const { return fName; }
-   Longptr_t     ProcessLine(const char *line, Bool_t /*sync*/ = kFALSE, Int_t *error = 0);
+   Long_t        ProcessLine(const char *line, Bool_t /*sync*/ = kFALSE, Int_t *error = 0);
 
    Int_t         SendFile(const char *file, Int_t opt = kAscii,
                           const char *rfile = 0);

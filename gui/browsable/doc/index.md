@@ -1,3 +1,3 @@
 \defgroup rbrowser Browsable object
-\ingroup webwidgets
+\ingroup webgui
 \brief The browsable objects in the Web Gui

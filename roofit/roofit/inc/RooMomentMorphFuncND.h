@@ -77,6 +77,7 @@ protected:
       {
          _frac.add(flist);
       };
+      void operModeHook(RooAbsArg::OperMode){};
       virtual ~CacheElem();
       virtual RooArgList containedArgs(Action);
       RooAbsReal *_sumFunc;
@@ -134,7 +135,7 @@ protected:
    friend class CacheElem;
    friend class Grid2;
 
-   mutable RooObjCacheManager _cacheMgr; ///<! Transient cache manager
+   mutable RooObjCacheManager _cacheMgr;
    mutable RooArgSet *_curNormSet;
 
    RooListProxy _parList;
@@ -155,7 +156,7 @@ protected:
 
    inline int sij(const int &i, const int &j) const { return (i * _obsList.getSize() + j); }
 
-   ClassDef(RooMomentMorphFuncND, 2)
+   ClassDef(RooMomentMorphFuncND, 1)
 };
 
 #endif

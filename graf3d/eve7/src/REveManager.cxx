@@ -18,40 +18,34 @@
 #include <ROOT/REveClient.hxx>
 #include <ROOT/REveGeomViewer.hxx>
 #include <ROOT/RWebWindow.hxx>
-#include <ROOT/RFileDialog.hxx>
 #include <ROOT/RLogger.hxx>
 
 #include "TGeoManager.h"
 #include "TGeoMatrix.h"
 #include "TObjString.h"
 #include "TROOT.h"
-#include "TSystem.h"
 #include "TFile.h"
 #include "TMap.h"
 #include "TExMap.h"
+#include "TMacro.h"
+#include "TFolder.h"
+#include "TSystem.h"
 #include "TEnv.h"
 #include "TColor.h"
+#include "TPluginManager.h"
 #include "TPRegexp.h"
 #include "TClass.h"
-#include "TMethod.h"
-#include "TMethodCall.h"
 #include "THttpServer.h"
-#include "TTimer.h"
-#include "TApplication.h"
 
 #include <fstream>
 #include <sstream>
 #include <iostream>
-#include <regex>
-
-#include <nlohmann/json.hpp>
 
 using namespace ROOT::Experimental;
 namespace REX = ROOT::Experimental;
 
 REveManager *REX::gEve = nullptr;
 
-thread_local std::vector<RLogEntry> gEveLogEntries;
 /** \class REveManager
 \ingroup REve
 Central application manager for Eve.
@@ -72,7 +66,11 @@ REveManager::REveManager()
    : // (Bool_t map_window, Option_t* opt) :
      fExcHandler(nullptr), fVizDB(nullptr), fVizDBReplace(kTRUE), fVizDBUpdate(kTRUE), fGeometries(nullptr),
      fGeometryAliases(nullptr),
-     fKeepEmptyCont(kFALSE)
+
+     fMacroFolder(nullptr),
+
+     fRedrawDisabled(0), fResetCameras(kFALSE), fDropLogicals(kFALSE), fKeepEmptyCont(kFALSE), fTimerActive(kFALSE),
+     fRedrawTimer()
 {
    // Constructor.
 
@@ -93,6 +91,10 @@ REveManager::REveManager()
    fVizDB->SetOwnerKeyValue();
 
    fElementIdMap[0] = nullptr; // do not increase count for null element.
+
+   fRedrawTimer.Connect("Timeout()", "ROOT::Experimental::REveManager", this, "DoRedraw3D()");
+   fMacroFolder = new TFolder("EVE", "Visualization macros");
+   gROOT->GetListOfBrowsables()->Add(fMacroFolder);
 
    fWorld = new REveScene("EveWorld", "Top-level Eve Scene");
    fWorld->IncDenyDestroy();
@@ -136,7 +138,6 @@ REveManager::REveManager()
    TColor::SetColorThreshold(0.1);
 
    fWebWindow = RWebWindow::Create();
-   fWebWindow->UseServerThreads();
    fWebWindow->SetDefaultPage("file:rootui5sys/eve7/index.html");
 
    const char *gl_viewer = gEnv->GetValue("WebEve.GLViewer", "Three");
@@ -153,8 +154,6 @@ REveManager::REveManager()
    fWebWindow->SetGeometry(900, 700); // configure predefined window geometry
    fWebWindow->SetConnLimit(100);     // maximal number of connections
    fWebWindow->SetMaxQueueLength(30); // number of allowed entries in the window queue
-
-   fMIRExecThread = std::thread{[this] { MIRExecThread(); }};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -162,9 +161,9 @@ REveManager::REveManager()
 
 REveManager::~REveManager()
 {
-   fMIRExecThread.join();
-
-   // QQQQ How do we stop THttpServer / fWebWindow?
+   // Stop timer and deny further redraw requests.
+   fRedrawTimer.Stop();
+   fTimerActive = kTRUE;
 
    fGlobalScene->DecDenyDestroy();
    fEventScene->DecDenyDestroy();
@@ -185,6 +184,9 @@ REveManager::~REveManager()
 
    fHighlight->DecDenyDestroy();
    fSelection->DecDenyDestroy();
+
+   gROOT->GetListOfBrowsables()->Remove(fMacroFolder);
+   delete fMacroFolder;
 
    delete fGeometryAliases;
    delete fGeometries;
@@ -212,9 +214,21 @@ REveScene *REveManager::SpawnNewScene(const char *name, const char *title)
    return s;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Find macro in fMacroFolder by name.
+
+TMacro *REveManager::GetMacro(const char *name) const
+{
+   return dynamic_cast<TMacro *>(fMacroFolder->FindObject(name));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Register a request for 3D redraw.
+
 void REveManager::RegisterRedraw3D()
 {
-   printf("REveManager::RegisterRedraw3D() obsolete\n");
+   fRedrawTimer.Start(0, kTRUE);
+   fTimerActive = kTRUE;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -223,7 +237,23 @@ void REveManager::RegisterRedraw3D()
 
 void REveManager::DoRedraw3D()
 {
-   printf("REveManager::DoRedraw3D() obsolete\n");
+   static const REveException eh("REveManager::DoRedraw3D ");
+   nlohmann::json jobj = {};
+
+   jobj["content"] = "BeginChanges";
+   fWebWindow->Send(0, jobj.dump());
+
+   // Process changes in scenes.
+   fWorld->ProcessChanges();
+   fScenes->ProcessSceneChanges();
+
+   jobj["content"] = "EndChanges";
+   fWebWindow->Send(0, jobj.dump());
+
+   fResetCameras = kFALSE;
+   fDropLogicals = kFALSE;
+
+   fTimerActive = kFALSE;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -231,7 +261,8 @@ void REveManager::DoRedraw3D()
 
 void REveManager::FullRedraw3D(Bool_t /*resetCameras*/, Bool_t /*dropLogicals*/)
 {
-   printf("REveManager::FullRedraw3D() obsolete\n");
+   // XXXX fScenes ->RepaintAllScenes (dropLogicals);
+   // XXXX fViewers->RepaintAllViewers(resetCameras, dropLogicals);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -286,6 +317,8 @@ void REveManager::RemoveElement(REveElement *element, REveElement *parent)
 
 REveElement *REveManager::FindElementById(ElementId_t id) const
 {
+   static const REveException eh("REveManager::FindElementById ");
+
    auto it = fElementIdMap.find(id);
    return (it != fElementIdMap.end()) ? it->second : nullptr;
 }
@@ -653,37 +686,24 @@ void REveManager::Terminate()
    REX::gEve = nullptr;
 }
 
-void REveManager::ExecuteInMainThread(std::function<void()> func)
-{
-   class XThreadTimer : public TTimer {
-      std::function<void()> foo_;
-   public:
-      XThreadTimer(std::function<void()> f) : foo_(f)
-      {
-         SetTime(0);
-         R__LOCKGUARD2(gSystemMutex);
-         gSystem->AddTimer(this);
-      }
-      Bool_t Notify() override
-      {
-         foo_();
-         gSystem->RemoveTimer(this);
-         delete this;
-         return kTRUE;
-      }
-   };
+/** \class REveManager::RExceptionHandler
+\ingroup REve
+Exception handler for Eve exceptions.
+*/
 
-   new XThreadTimer(func);
-}
+////////////////////////////////////////////////////////////////////////////////
+/// Handle exceptions deriving from REveException.
 
-void REveManager::QuitRoot()
+TStdExceptionHandler::EStatus REveManager::RExceptionHandler::Handle(std::exception &exc)
 {
-   ExecuteInMainThread([](){
-      // QQQQ Should call Terminate() but it needs to:
-      // - properly stop MIRExecThread;
-      // - shutdown civet/THttp/RWebWindow
-      gApplication->Terminate();
-   });
+   REveException *ex = dynamic_cast<REveException *>(&exc);
+   if (ex) {
+      Info("Handle", "Exception %s", ex->what());
+      // REX::gEve->SetStatusLine(ex->Data());
+      gSystem->Beep();
+      return kSEHandled;
+   }
+   return kSEProceed;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -691,12 +711,6 @@ void REveManager::QuitRoot()
 
 void REveManager::WindowConnect(unsigned connid)
 {
-   std::unique_lock<std::mutex> lock(fServerState.fMutex);
-   while (fServerState.fVal == ServerState::UpdatingScenes)
-   {
-       fServerState.fCV.wait(lock);
-   }
-
    fConnList.emplace_back(connid);
    printf("connection established %u\n", connid);
 
@@ -730,8 +744,6 @@ void REveManager::WindowConnect(unsigned connid)
          printf("   NOT sending binary, len = %d\n", scene->fTotalBinarySize);
       }
    }
-
-   fServerState.fCV.notify_all();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -739,11 +751,6 @@ void REveManager::WindowConnect(unsigned connid)
 
 void REveManager::WindowDisconnect(unsigned connid)
 {
-   std::unique_lock<std::mutex> lock(fServerState.fMutex);
-   while (fServerState.fVal != ServerState::Waiting)
-   {
-       fServerState.fCV.wait(lock);
-   }
    auto conn = fConnList.end();
    for (auto i = fConnList.begin(); i != fConnList.end(); ++i) {
       if (i->fId == connid) {
@@ -763,7 +770,6 @@ void REveManager::WindowDisconnect(unsigned connid)
       }
       fWorld->RemoveSubscriber(connid);
    }
-   fServerState.fCV.notify_all();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -781,212 +787,63 @@ void REveManager::WindowData(unsigned connid, const std::string &arg)
          break;
       }
    }
-
    // this should not happen, just check
    if (!found) {
-      R__LOG_ERROR(REveLog()) << "Internal error - no connection with id " << connid << " found";
+      R__LOG_ERROR(EveLog()) << "Internal error - no connection with id " << connid << " found";
       return;
-   }
-   // client status data
-   if (arg.compare("__REveDoneChanges") == 0)
-   {
-      std::unique_lock<std::mutex> lock(fServerState.fMutex);
-
-      for (auto &conn : fConnList) {
-         if (conn.fId == connid) {
-            conn.fState = Conn::Free;
-            break;
-         }
-      }
-
-      if (ClientConnectionsFree()) {
-         fServerState.fVal = ServerState::Waiting;
-         fServerState.fCV.notify_all();
-      }
-
-      return;
-   }
-   else if (arg.compare( 0, 10, "FILEDIALOG") == 0)
-   {
-       RFileDialog::Embedded(fWebWindow, arg);
-       return;
    }
 
    nlohmann::json cj = nlohmann::json::parse(arg);
    if (gDebug > 0)
-      ::Info("REveManager::WindowData", "MIR test %s\n", cj.dump().c_str());
-
-   std::string cmd = cj["mir"];
+      ::Info("REveManager::WindowData", "MIR test %s", cj.dump().c_str());
+   std::string mir = cj["mir"];
    int id = cj["fElementId"];
-   std::string ctype = cj["class"];
 
-   ScheduleMIR(cmd, id, ctype);
-}
+   // MIR
+   std::stringstream cmd;
 
-//
-//____________________________________________________________________
-void REveManager::ScheduleMIR(const std::string &cmd, ElementId_t id, const std::string& ctype)
-{
-   std::unique_lock<std::mutex> lock(fServerState.fMutex);
-   fMIRqueue.push(std::shared_ptr<MIR>(new MIR(cmd, id, ctype)));
-   if (fServerState.fVal == ServerState::Waiting)
-      fServerState.fCV.notify_all();
-}
-
-//
-//____________________________________________________________________
-void REveManager::ExecuteMIR(std::shared_ptr<MIR> mir)
-{
-   static const REveException eh("REveManager::ExecuteMIR ");
-
-   class ChangeSentry {
-   public:
-      ChangeSentry()
-      {
-         gEve->GetWorld()->BeginAcceptingChanges();
-         gEve->GetScenes()->AcceptChanges(true);
+   if (id == 0) {
+      cmd << "((ROOT::Experimental::REveManager *)" << std::hex << std::showbase << (size_t)this << ")->" << mir << ";";
+   } else {
+      auto el = FindElementById(id);
+      if (!el) {
+         R__LOG_ERROR(EveLog()) << "Element with id " << id << " not found";
+         return;
       }
-      ~ChangeSentry()
-      {
-         gEve->GetScenes()->AcceptChanges(false);
-         gEve->GetWorld()->EndAcceptingChanges();
-      }
-   };
-   ChangeSentry cs;
+      std::string ctype = cj["class"];
+      cmd << "((" << ctype << "*)" << std::hex << std::showbase << (size_t)el << ")->" << mir << ";";
+   }
 
-   //if (gDebug > 0)
-      ::Info("REveManager::ExecuteCommand", "MIR cmd %s", mir->fCmd.c_str());
+   fWorld->BeginAcceptingChanges();
+   fScenes->AcceptChanges(true);
+
+   if (gDebug > 0)
+      ::Info("REveManager::WindowData", "MIR cmd %s", cmd.str().c_str());
 
    try {
-      REveElement *el = FindElementById(mir->fId);
-      if ( ! el) throw eh + "Element with id " + mir->fId + " not found";
-
-      static const std::regex cmd_re("^(\\w[\\w\\d]*)\\(\\s*(.*)\\s*\\)\\s*;?\\s*$", std::regex::optimize);
-      std::smatch m;
-      std::regex_search(mir->fCmd, m, cmd_re);
-      if (m.size() != 3)
-         throw eh + "Command string parse error: '" + mir->fCmd + "'.";
-
-      static const TClass *elem_cls = TClass::GetClass<REX::REveElement>();
-
-      TClass *call_cls = TClass::GetClass(mir->fCtype.c_str());
-      if ( ! call_cls)
-         throw eh + "Class '" + mir->fCtype + "' not found.";
-
-      void *el_casted = call_cls->DynamicCast(elem_cls, el, false);
-      if ( ! el_casted)
-         throw eh + "Dynamic cast from REveElement to '" + mir->fCtype + "' failed.";
-
-      std::string tag(mir->fCtype + "::" + m.str(1));
-      std::shared_ptr<TMethodCall> mc;
-
-      auto mmi = fMethCallMap.find(tag);
-      if (mmi != fMethCallMap.end())
-      {
-         mc = mmi->second;
-      }
-      else
-      {
-         const TMethod *meth = call_cls->GetMethodAllAny(m.str(1).c_str());
-         if ( ! meth)
-            throw eh + "Can not find TMethod matching '" + m.str(1) + "'.";
-         mc = std::make_shared<TMethodCall>(meth);
-         fMethCallMap.insert(std::make_pair(tag, mc));
-      }
-
-      R__LOCKGUARD_CLING(gInterpreterMutex);
-      mc->Execute(el_casted, m.str(2).c_str());
-
-      // Alternative implementation through Cling. "Leaks" 200 kB per call.
-      // This might be needed for function calls that involve data-types TMethodCall
-      // can not handle.
-      // std::stringstream cmd;
-      // cmd << "((" << mir->fCtype << "*)" << std::hex << std::showbase << (size_t)el << ")->" << mir->fCmd << ";";
-      // std::cout << cmd.str() << std::endl;
-      // gROOT->ProcessLine(cmd.str().c_str());
-   } catch (std::exception &e) {
-      R__LOG_ERROR(REveLog()) << "REveManager::ExecuteCommand " << e.what() << std::endl;
-   } catch (...) {
-      R__LOG_ERROR(REveLog()) << "REveManager::ExecuteCommand unknow execption \n";
+      gROOT->ProcessLine(cmd.str().c_str());
    }
-}
-
-//
-//____________________________________________________________________
-void REveManager::PublishChanges()
-{
-   nlohmann::json jobj = {};
-   jobj["content"] = "BeginChanges";
-   fWebWindow->Send(0, jobj.dump());
-
-   // Process changes in scenes.
-   fWorld->ProcessChanges();
-   fScenes->ProcessSceneChanges();
-   jobj["content"] = "EndChanges";
-
-   if (!gEveLogEntries.empty()) {
-
-      constexpr static int numLevels = static_cast<int>(ELogLevel::kDebug) + 1;
-      constexpr static std::array<const char *, numLevels> sTag{
-         {"{unset-error-level please report}", "FATAL", "Error", "Warning", "Info", "Debug"}};
-
-      std::stringstream strm;
-      for (auto entry : gEveLogEntries) {
-
-         auto channel = entry.fChannel;
-         if (channel && !channel->GetName().empty())
-            strm << '[' << channel->GetName() << "] ";
-
-         int cappedLevel = std::min(static_cast<int>(entry.fLevel), numLevels - 1);
-         strm << sTag[cappedLevel];
-
-         if (!entry.fLocation.fFile.empty())
-            strm << " " << entry.fLocation.fFile << ':' << entry.fLocation.fLine;
-         if (!entry.fLocation.fFuncName.empty())
-            strm << " in " << entry.fLocation.fFuncName;
-      }
-      jobj["log"] = strm.str();
-      gEveLogEntries.clear();
+   catch (std::exception &e) {
+      std::cout << "REveManager::WindowData " << e.what() << std::endl;
+   } 
+   catch (...) {
+      std::cout << "REveManager::WindowData unknown exception.\n";
    }
 
-   fWebWindow->Send(0, jobj.dump());
+   fScenes->AcceptChanges(false);
+   fWorld->EndAcceptingChanges();
+
+   Redraw3D();
+
+   /*
+   nlohmann::json resp;
+   resp["function"] = "replaceElement";
+   //el->SetCoreJson(resp);
+   for (auto &conn : fConnList)
+      fWebWindow->Send(conn.fId, resp.dump());
+   */
 }
 
-//
-//____________________________________________________________________
-void REveManager::MIRExecThread()
-{
-#if defined(R__LINUX)
-   pthread_setname_np(pthread_self(), "mir_exec");
-#endif
-   while (true)
-   {
-      std::unique_lock<std::mutex> lock(fServerState.fMutex);
-      abcLabel:
-      if (fMIRqueue.empty())
-      {
-         fServerState.fCV.wait(lock);
-         goto abcLabel;
-      }
-      else if (fServerState.fVal == ServerState::Waiting)
-      {
-         std::shared_ptr<MIR> mir = fMIRqueue.front();
-         fMIRqueue.pop();
-
-         fServerState.fVal = ServerState::UpdatingScenes;
-         lock.unlock();
-
-         ExecuteMIR(mir);
-
-         lock.lock();
-         fServerState.fVal = fConnList.empty() ? ServerState::Waiting : ServerState::UpdatingClients;
-         PublishChanges();
-      }
-   }
-}
-
-
-//____________________________________________________________________
 void REveManager::Send(unsigned connid, const std::string &data)
 {
    fWebWindow->Send(connid, data);
@@ -997,36 +854,65 @@ void REveManager::SendBinary(unsigned connid, const void *data, std::size_t len)
    fWebWindow->SendBinary(connid, data, len);
 }
 
-bool REveManager::ClientConnectionsFree() const
+//------------------------------------------------------------------------------
+
+void REveManager::DestroyElementsOf(REveElement::List_t &els)
 {
-   for (auto &conn : fConnList) {
-      if (conn.fState != Conn::Free)
-         return false;
+   // XXXXX - not called, what's with end accepting changes?
+
+   fWorld->EndAcceptingChanges();
+   fScenes->AcceptChanges(false);
+
+   nlohmann::json jarr = nlohmann::json::array();
+
+   nlohmann::json jhdr = {};
+   jhdr["content"] = "REveManager::DestroyElementsOf";
+
+   nlohmann::json jels = nlohmann::json::array();
+
+   for (auto &ep : els) {
+      jels.push_back(ep->GetElementId());
+
+      ep->DestroyElements();
    }
 
-   return true;
+   jhdr["element_ids"] = jels;
+
+   jarr.push_back(jhdr);
+
+   std::string msg = jarr.dump();
+
+   // XXXX Do we have broadcast?
+
+   for (auto &conn : fConnList) {
+      fWebWindow->Send(conn.fId, msg);
+   }
 }
 
-void REveManager::SceneSubscriberProcessingChanges(unsigned cinnId)
+void REveManager::BroadcastElementsOf(REveElement::List_t &els)
 {
-   for (auto &conn : fConnList) {
-      if (conn.fId == cinnId)
-      {
-         conn.fState = Conn::WaitingResponse;
-         break;
-      }
-   }
-}
+   // XXXXX - not called, what's with begin accepting changes?
 
-void REveManager::SceneSubscriberWaitingResponse(unsigned cinnId)
-{
-   for (auto &conn : fConnList) {
-      if (conn.fId == cinnId)
-      {
-         conn.fState = Conn::Processing;
-         break;
+   for (auto &ep : els) {
+      REveScene *scene = dynamic_cast<REveScene *>(ep);
+      assert(scene != nullptr);
+
+      printf("\nEVEMNG ............. streaming scene %s [%s]\n", scene->GetCTitle(), scene->GetCName());
+
+      // This prepares core and render data buffers.
+      scene->StreamElements();
+
+      for (auto &conn : fConnList) {
+         printf("   sending json, len = %d --> to conn_id = %d\n", (int)scene->fOutputJson.size(), conn.fId);
+         fWebWindow->Send(conn.fId, scene->fOutputJson);
+         printf("   sending binary, len = %d --> to conn_id = %d\n", scene->fTotalBinarySize, conn.fId);
+         fWebWindow->SendBinary(conn.fId, &scene->fOutputBinary[0], scene->fTotalBinarySize);
       }
    }
+
+   // AMT: These calls may not be necessary
+   fScenes->AcceptChanges(true);
+   fWorld->BeginAcceptingChanges();
 }
 
 //////////////////////////////////////////////////////////////////
@@ -1060,80 +946,4 @@ std::shared_ptr<REveGeomViewer> REveManager::ShowGeometry(const RWebDisplayArgs 
    viewer->Show(args);
 
    return viewer;
-}
-
-//____________________________________________________________________
-void REveManager::BeginChange()
-{
-   {
-      std::unique_lock<std::mutex> lock(fServerState.fMutex);
-      while (fServerState.fVal != ServerState::Waiting) {
-         fServerState.fCV.wait(lock);
-      }
-      fServerState.fVal = ServerState::UpdatingScenes;
-   }
-   GetWorld()->BeginAcceptingChanges();
-   GetScenes()->AcceptChanges(true);
-}
-
-//____________________________________________________________________
-void REveManager::EndChange()
-{
-   GetScenes()->AcceptChanges(false);
-   GetWorld()->EndAcceptingChanges();
-
-   PublishChanges();
-
-   std::unique_lock<std::mutex> lock(fServerState.fMutex);
-   fServerState.fVal = fConnList.empty() ? ServerState::Waiting : ServerState::UpdatingClients;
-   fServerState.fCV.notify_all();
-}
-
-/** \class REveManager::ChangeGuard
-\ingroup REve
-RAII guard for locking Eve manager (ctor) and processing changes (dtor).
-*/
-
-//////////////////////////////////////////////////////////////////////
-//
-// Helper struct to guard update mechanism
-//
-REveManager::ChangeGuard::ChangeGuard()
-{
-   gEve->BeginChange();
-}
-
-REveManager::ChangeGuard::~ChangeGuard()
-{
-   gEve->EndChange();
-}
-
-/** \class REveManager::RExceptionHandler
-\ingroup REve
-Exception handler for Eve exceptions.
-*/
-
-////////////////////////////////////////////////////////////////////////////////
-/// Handle exceptions deriving from REveException.
-
-TStdExceptionHandler::EStatus REveManager::RExceptionHandler::Handle(std::exception &exc)
-{
-   REveException *ex = dynamic_cast<REveException *>(&exc);
-   if (ex) {
-      Info("Handle", "Exception %s", ex->what());
-      // REX::gEve->SetStatusLine(ex->Data());
-      gSystem->Beep();
-      return kSEHandled;
-   }
-   return kSEProceed;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Utility to stream loggs to client.
-
-bool REveManager::Logger::Handler::Emit(const RLogEntry &entry)
-{
-   gEveLogEntries.emplace_back(entry);
-   return true;
 }

@@ -51,22 +51,6 @@ In extended mode, a
 
 #include <algorithm>
 
-namespace {
-  template<class ...Args>
-  RooAbsTestStatistic::Configuration makeRooAbsTestStatisticCfg(Args const& ... args) {
-    RooAbsTestStatistic::Configuration cfg;
-    cfg.rangeName = RooCmdConfig::decodeStringOnTheFly("RooNLLVar::RooNLLVar","RangeWithName",0,"",args...);
-    cfg.addCoefRangeName = RooCmdConfig::decodeStringOnTheFly("RooNLLVar::RooNLLVar","AddCoefRange",0,"",args...);
-    cfg.nCPU = RooCmdConfig::decodeIntOnTheFly("RooNLLVar::RooNLLVar","NumCPU",0,1,args...);
-    cfg.interleave = RooFit::BulkPartition;
-    cfg.verbose = static_cast<bool>(RooCmdConfig::decodeIntOnTheFly("RooNLLVar::RooNLLVar","Verbose",0,1,args...));
-    cfg.splitCutRange = static_cast<bool>(RooCmdConfig::decodeIntOnTheFly("RooNLLVar::RooNLLVar","SplitRange",0,0,args...));
-    cfg.cloneInputData = static_cast<bool>(RooCmdConfig::decodeIntOnTheFly("RooNLLVar::RooNLLVar","CloneData",0,1,args...));
-    cfg.integrateOverBinsPrecision = RooCmdConfig::decodeDoubleOnTheFly("RooNLLVar::RooNLLVar", "IntegrateBins", 0, -1., {args...});
-    return cfg;
-  }
-}
-
 ClassImp(RooNLLVar)
 
 RooArgSet RooNLLVar::_emptySet ;
@@ -94,10 +78,16 @@ RooNLLVar::RooNLLVar(const char *name, const char* title, RooAbsPdf& pdf, RooAbs
 		     const RooCmdArg& arg4, const RooCmdArg& arg5,const RooCmdArg& arg6,
 		     const RooCmdArg& arg7, const RooCmdArg& arg8,const RooCmdArg& arg9) :
   RooAbsOptTestStatistic(name,title,pdf,indata,
-                         *static_cast<const RooArgSet*>(RooCmdConfig::decodeObjOnTheFly(
-                             "RooNLLVar::RooNLLVar","ProjectedObservables",0,&_emptySet,
-                             arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9)),
-                         makeRooAbsTestStatisticCfg(arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9))
+			 *(const RooArgSet*)RooCmdConfig::decodeObjOnTheFly("RooNLLVar::RooNLLVar","ProjectedObservables",0,&_emptySet
+									    ,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9),
+			 RooCmdConfig::decodeStringOnTheFly("RooNLLVar::RooNLLVar","RangeWithName",0,"",arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9).c_str(),
+			 RooCmdConfig::decodeStringOnTheFly("RooNLLVar::RooNLLVar","AddCoefRange",0,"",arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9).c_str(),
+			 RooCmdConfig::decodeIntOnTheFly("RooNLLVar::RooNLLVar","NumCPU",0,1,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9),
+			 RooFit::BulkPartition,
+			 RooCmdConfig::decodeIntOnTheFly("RooNLLVar::RooNLLVar","Verbose",0,1,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9),
+			 RooCmdConfig::decodeIntOnTheFly("RooNLLVar::RooNLLVar","SplitRange",0,0,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9),
+			 RooCmdConfig::decodeIntOnTheFly("RooNLLVar::RooNLLVar","CloneData",0,1,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9),
+			 RooCmdConfig::decodeDoubleOnTheFly("RooNLLVar::RooNLLVar", "IntegrateBins", 0, -1., {arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9}))
 {
   RooCmdConfig pc("RooNLLVar::RooNLLVar") ;
   pc.allowUndefined() ;
@@ -112,7 +102,10 @@ RooNLLVar::RooNLLVar(const char *name, const char* title, RooAbsPdf& pdf, RooAbs
   _batchEvaluations = pc.getInt("BatchMode");
   _weightSq = kFALSE ;
   _first = kTRUE ;
+  _offset = 0.;
+  _offsetCarry = 0.;
   _offsetSaveW2 = 0.;
+  _offsetCarrySaveW2 = 0.;
 
   _binnedPdf = 0 ;
 }
@@ -124,15 +117,18 @@ RooNLLVar::RooNLLVar(const char *name, const char* title, RooAbsPdf& pdf, RooAbs
 /// For internal use.
 
 RooNLLVar::RooNLLVar(const char *name, const char *title, RooAbsPdf& pdf, RooAbsData& indata,
-                     RooAbsTestStatistic::Configuration const& cfg, bool extended) :
-  RooAbsOptTestStatistic(name,title,pdf,indata,RooArgSet(),cfg),
+		     Bool_t extended, const char* rangeName, const char* addCoefRangeName,
+		     Int_t nCPU, RooFit::MPSplit interleave, Bool_t verbose, Bool_t splitRange, Bool_t cloneData, Bool_t binnedL,
+		     double integrateBinsPrecision) :
+  RooAbsOptTestStatistic(name,title,pdf,indata,RooArgSet(),rangeName,addCoefRangeName,nCPU,interleave,verbose,splitRange,cloneData,
+      integrateBinsPrecision),
   _extended(extended),
   _weightSq(kFALSE),
-  _first(kTRUE)
+  _first(kTRUE), _offsetSaveW2(0.), _offsetCarrySaveW2(0.)
 {
   // If binned likelihood flag is set, pdf is a RooRealSumPdf representing a yield vector
   // for a binned likelihood calculation
-  _binnedPdf = cfg.binnedL ? (RooRealSumPdf*)_funcClone : 0 ;
+  _binnedPdf = binnedL ? (RooRealSumPdf*)_funcClone : 0 ;
 
   // Retrieve and cache bin widths needed to convert un-normalized binnedPdf values back to yields
   if (_binnedPdf) {
@@ -168,16 +164,18 @@ RooNLLVar::RooNLLVar(const char *name, const char *title, RooAbsPdf& pdf, RooAbs
 /// For internal use.
 
 RooNLLVar::RooNLLVar(const char *name, const char *title, RooAbsPdf& pdf, RooAbsData& indata,
-                     const RooArgSet& projDeps,
-                     RooAbsTestStatistic::Configuration const& cfg, bool extended) :
-  RooAbsOptTestStatistic(name,title,pdf,indata,projDeps, cfg),
+		     const RooArgSet& projDeps, Bool_t extended, const char* rangeName,const char* addCoefRangeName,
+		     Int_t nCPU,RooFit::MPSplit interleave,Bool_t verbose, Bool_t splitRange, Bool_t cloneData, Bool_t binnedL,
+		     double integrateBinsPrecision) :
+  RooAbsOptTestStatistic(name,title,pdf,indata,projDeps,rangeName,addCoefRangeName,nCPU,interleave,verbose,splitRange,cloneData,
+      integrateBinsPrecision),
   _extended(extended),
   _weightSq(kFALSE),
-  _first(kTRUE)
+  _first(kTRUE), _offsetSaveW2(0.), _offsetCarrySaveW2(0.)
 {
   // If binned likelihood flag is set, pdf is a RooRealSumPdf representing a yield vector
   // for a binned likelihood calculation
-  _binnedPdf = cfg.binnedL ? (RooRealSumPdf*)_funcClone : 0 ;
+  _binnedPdf = binnedL ? (RooRealSumPdf*)_funcClone : 0 ;
 
   // Retrieve and cache bin widths needed to convert un-normalized binnedPdf values back to yields
   if (_binnedPdf) {
@@ -213,8 +211,8 @@ RooNLLVar::RooNLLVar(const RooNLLVar& other, const char* name) :
   _extended(other._extended),
   _batchEvaluations(other._batchEvaluations),
   _weightSq(other._weightSq),
-  _first(kTRUE),
-  _offsetSaveW2(other._offsetSaveW2),
+  _first(kTRUE), _offsetSaveW2(other._offsetSaveW2),
+  _offsetCarrySaveW2(other._offsetCarrySaveW2),
   _binw(other._binw) {
   _binnedPdf = other._binnedPdf ? (RooRealSumPdf*)_funcClone : 0 ;
 }
@@ -224,12 +222,14 @@ RooNLLVar::RooNLLVar(const RooNLLVar& other, const char* name) :
 /// Create a test statistic using several properties of the current instance. This is used to duplicate
 /// the test statistic in multi-processing scenarios.
 RooAbsTestStatistic* RooNLLVar::create(const char *name, const char *title, RooAbsReal& pdf, RooAbsData& adata,
-            const RooArgSet& projDeps, RooAbsTestStatistic::Configuration const& cfg) {
+            const RooArgSet& projDeps, const char* rangeName, const char* addCoefRangeName,
+            Int_t nCPU, RooFit::MPSplit interleave, bool verbose, bool splitRange, bool binnedL) {
   RooAbsPdf & thePdf = dynamic_cast<RooAbsPdf&>(pdf);
   // check if pdf can be extended
   bool extendedPdf = _extended && thePdf.canBeExtended();
-
-  auto testStat = new RooNLLVar(name, title, thePdf, adata, projDeps, cfg, extendedPdf);
+  auto testStat = new RooNLLVar(name, title, thePdf, adata,
+      projDeps, extendedPdf , rangeName, addCoefRangeName, nCPU, interleave, verbose, splitRange, false, binnedL,
+      _integrateBinsPrecision);
   testStat->batchMode(_batchEvaluations);
   return testStat;
 }
@@ -253,6 +253,7 @@ void RooNLLVar::applyWeightSquared(Bool_t flag)
     if (flag != _weightSq) {
       _weightSq = flag;
       std::swap(_offset, _offsetSaveW2);
+      std::swap(_offsetCarry, _offsetCarrySaveW2);
     }
     setValueDirty();
   } else if ( _gofOpMode==MPMaster) {
@@ -281,8 +282,7 @@ Double_t RooNLLVar::evaluatePartition(std::size_t firstEvent, std::size_t lastEv
   // prevent loss of precision - this is a factor four more expensive than
   // straight addition, but since evaluating the PDF is usually much more
   // expensive than that, we tolerate the additional cost...
-  ROOT::Math::KahanSum<double> result{0.0};
-  double sumWeight{0.0};
+  double result(0), carry(0), sumWeight(0);
 
   RooAbsPdf* pdfClone = (RooAbsPdf*) _funcClone ;
 
@@ -294,7 +294,7 @@ Double_t RooNLLVar::evaluatePartition(std::size_t firstEvent, std::size_t lastEv
 
   // If pdf is marked as binned - do a binned likelihood calculation here (sum of log-Poisson for each bin)
   if (_binnedPdf) {
-    ROOT::Math::KahanSum<double> sumWeightKahanSum{0.0};
+    double sumWeightCarry = 0.;
     for (auto i=firstEvent ; i<lastEvent ; i+=stepSize) {
 
       _dataClone->get(i) ;
@@ -321,23 +321,33 @@ Double_t RooNLLVar::evaluatePartition(std::size_t firstEvent, std::size_t lastEv
 
       } else {
 
-        result += -1*(-mu + N*log(mu) - TMath::LnGamma(N+1));
-        sumWeightKahanSum += eventWeight;
+        Double_t term = -1*(-mu + N*log(mu) - TMath::LnGamma(N+1)) ;
 
+        // TODO replace by Math::KahanSum
+        // Kahan summation of sumWeight
+        Double_t y = eventWeight - sumWeightCarry;
+        Double_t t = sumWeight + y;
+        sumWeightCarry = (t - sumWeight) - y;
+        sumWeight = t;
+
+        // Kahan summation of result
+        y = term - carry;
+        t = result + y;
+        carry = (t - result) - y;
+        result = t;
       }
     }
 
-    sumWeight = sumWeightKahanSum.Sum();
 
   } else { //unbinned PDF
 
     if (_batchEvaluations) {
-      std::tie(result, sumWeight) = computeBatched(stepSize, firstEvent, lastEvent);
+      std::tie(result, carry, sumWeight) = computeBatched(stepSize, firstEvent, lastEvent);
 #ifdef ROOFIT_CHECK_CACHED_VALUES
 
-      ROOT::Math::KahanSum<double> resultScalar, sumWeightScalar;
-      std::tie(resultScalar, sumWeightScalar) = computeScalar(stepSize, firstEvent, lastEvent);
-      double carryScalar = resultScalar.Carry();
+      double resultScalar, carryScalar, sumWeightScalar;
+      std::tie(resultScalar, carryScalar, sumWeightScalar) =
+          computeScalar(stepSize, firstEvent, lastEvent);
 
       constexpr bool alwaysPrint = false;
 
@@ -358,34 +368,22 @@ Double_t RooNLLVar::evaluatePartition(std::size_t firstEvent, std::size_t lastEv
 
 #endif
     } else { //scalar mode
-      std::tie(result, sumWeight) = computeScalar(stepSize, firstEvent, lastEvent);
+      std::tie(result, carry, sumWeight) = computeScalar(stepSize, firstEvent, lastEvent);
     }
 
     // include the extended maximum likelihood term, if requested
     if(_extended && _setNum==_extSet) {
       if (_weightSq) {
 
-
+        // TODO Batch this up
         // Calculate sum of weights-squared here for extended term
-        Double_t sumW2;
-        if (_batchEvaluations) {
-          const RooSpan<const double> eventWeights = _dataClone->getWeightBatch(0, _nEvents);
-          if (eventWeights.empty()) {
-            sumW2 = (lastEvent - firstEvent) * _dataClone->weightSquared();
-          } else {
-            ROOT::Math::KahanSum<double, 4u> kahanWeight;
-            for (std::size_t i = 0; i < eventWeights.size(); ++i) {
-              kahanWeight.AddIndexed(eventWeights[i] * eventWeights[i], i);
-            }
-            sumW2 = kahanWeight.Sum();
-          }
-        } else { // scalar mode
-          ROOT::Math::KahanSum<double> sumW2KahanSum;
-          for (decltype(_dataClone->numEntries()) i = 0; i < _dataClone->numEntries() ; i++) {
-            _dataClone->get(i);
-            sumW2KahanSum += _dataClone->weightSquared();
-          }
-          sumW2 = sumW2KahanSum.Sum();
+        Double_t sumW2(0), sumW2carry(0);
+        for (decltype(_dataClone->numEntries()) i = 0; i < _dataClone->numEntries() ; i++) {
+          _dataClone->get(i);
+          Double_t y = _dataClone->weightSquared() - sumW2carry;
+          Double_t t = sumW2 + y;
+          sumW2carry = (t - sumW2) - y;
+          sumW2 = t;
         }
 
         Double_t expected= pdfClone->expectedEvents(_dataClone->get());
@@ -409,11 +407,18 @@ Double_t RooNLLVar::evaluatePartition(std::size_t firstEvent, std::size_t lastEv
         Double_t expectedW2 = expected * sumW2 / _dataClone->sumEntries() ;
         Double_t extra= expectedW2 - sumW2*log(expected );
 
-        // Double_t extra = pdfClone->extendedTerm(sumW2, _dataClone->get());
+        // Double_t y = pdfClone->extendedTerm(sumW2, _dataClone->get()) - carry;
 
-        result += extra;
+        Double_t y = extra - carry ;
+
+        Double_t t = result + y;
+        carry = (t - result) - y;
+        result = t;
       } else {
-        result += pdfClone->extendedTerm(_dataClone->sumEntries(), _dataClone->get());
+        Double_t y = pdfClone->extendedTerm(_dataClone->sumEntries(), _dataClone->get()) - carry;
+        Double_t t = result + y;
+        carry = (t - result) - y;
+        result = t;
       }
     }
   } //unbinned PDF
@@ -422,7 +427,10 @@ Double_t RooNLLVar::evaluatePartition(std::size_t firstEvent, std::size_t lastEv
   // If part of simultaneous PDF normalize probability over
   // number of simultaneous PDFs: -sum(log(p/n)) = -sum(log(p)) + N*log(n)
   if (_simCount>1) {
-    result += sumWeight * log(1.0*_simCount);
+    Double_t y = sumWeight*log(1.0*_simCount) - carry;
+    Double_t t = result + y;
+    carry = (t - result) - y;
+    result = t;
   }
 
 
@@ -440,14 +448,19 @@ Double_t RooNLLVar::evaluatePartition(std::size_t firstEvent, std::size_t lastEv
     if (_offset==0 && result !=0 ) {
       coutI(Minimization) << "RooNLLVar::evaluatePartition(" << GetName() << ") first = "<< firstEvent << " last = " << lastEvent << " Likelihood offset now set to " << result << std::endl ;
       _offset = result ;
+      _offsetCarry = carry;
     }
 
     // Subtract offset
-    result -= _offset;
+    Double_t y = -_offset - (carry + _offsetCarry);
+    Double_t t = result + y;
+    carry = (t - result) - y;
+    result = t;
   }
 
-  _evalCarry = result.Carry();
-  return result.Sum() ;
+
+  _evalCarry = carry;
+  return result ;
 }
 
 
@@ -458,7 +471,7 @@ Double_t RooNLLVar::evaluatePartition(std::size_t firstEvent, std::size_t lastEv
 /// \param[in] firstEvent  First event to be processed.
 /// \param[in] lastEvent   First event not to be processed.
 /// \return Tuple with (Kahan sum of probabilities, carry of kahan sum, sum of weights)
-RooNLLVar::ComputeResult RooNLLVar::computeBatched(std::size_t stepSize, std::size_t firstEvent, std::size_t lastEvent) const
+std::tuple<double, double, double> RooNLLVar::computeBatched(std::size_t stepSize, std::size_t firstEvent, std::size_t lastEvent) const
 {
   const auto nEvents = lastEvent - firstEvent;
 
@@ -483,9 +496,6 @@ RooNLLVar::ComputeResult RooNLLVar::computeBatched(std::size_t stepSize, std::si
 
   for (std::size_t evtNo = firstEvent; evtNo < std::min(lastEvent, firstEvent + 10); ++evtNo) {
     _dataClone->get(evtNo);
-    if (_dataClone->weight() == 0.) // 0-weight events are not cached, so cannot compare against them.
-      continue;
-
     assert(_dataClone->valid());
     try {
       // Cross check results with strict tolerance and complain
@@ -555,17 +565,17 @@ RooNLLVar::ComputeResult RooNLLVar::computeBatched(std::size_t stepSize, std::si
 
     // Some events with evaluation errors. Return "badness" of errors.
     if (nanPacker.getPayload() > 0.) {
-      return {{nanPacker.getNaNWithPayload()}, sumOfWeights};
+      return std::tuple<double, double, double>{nanPacker.getNaNWithPayload(), 0., sumOfWeights};
     } else {
-      return {kahanSanitised, sumOfWeights};
+      return std::tuple<double, double, double>{kahanSanitised.Sum(), kahanSanitised.Carry(), sumOfWeights};
     }
   }
 
-  return {kahanProb, sumOfWeights};
+  return std::tuple<double, double, double>{kahanProb.Sum(), kahanProb.Carry(), sumOfWeights};
 }
 
 
-RooNLLVar::ComputeResult RooNLLVar::computeScalar(std::size_t stepSize, std::size_t firstEvent, std::size_t lastEvent) const {
+std::tuple<double, double, double> RooNLLVar::computeScalar(std::size_t stepSize, std::size_t firstEvent, std::size_t lastEvent) const {
   auto pdfClone = static_cast<const RooAbsPdf*>(_funcClone);
 
   ROOT::Math::KahanSum<double> kahanWeight;
@@ -590,8 +600,8 @@ RooNLLVar::ComputeResult RooNLLVar::computeScalar(std::size_t stepSize, std::siz
 
   if (packedNaN.getPayload() != 0.) {
     // Some events with evaluation errors. Return "badness" of errors.
-    return {{packedNaN.getNaNWithPayload()}, kahanWeight.Sum()};
+    return std::tuple<double, double, double>{packedNaN.getNaNWithPayload(), 0., kahanWeight.Sum()};
   }
 
-  return {kahanProb, kahanWeight.Sum()};
+  return std::tuple<double, double, double>{kahanProb.Sum(), kahanProb.Carry(), kahanWeight.Sum()};
 }

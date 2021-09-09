@@ -34,6 +34,7 @@ ClassImp(REveRGBAPalette);
 /// Constructor.
 
 REveRGBAPalette::REveRGBAPalette() :
+   TObject(),
    REveRefCnt(),
 
    fUIf(1), fUIc(0),
@@ -66,6 +67,7 @@ REveRGBAPalette::REveRGBAPalette() :
 
 REveRGBAPalette::REveRGBAPalette(Int_t min, Int_t max, Bool_t interp,
                                  Bool_t showdef, Bool_t fixcolrng) :
+   TObject(),
    REveRefCnt(),
 
    fUIf(1), fUIc(0),

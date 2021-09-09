@@ -27,7 +27,7 @@ defined types (accessible via TROOT::GetListOfTypes()).
 
 ClassImp(TDataType);
 
-TDataType* TDataType::fgBuiltins[kNumDataTypes] = {nullptr};
+TDataType* TDataType::fgBuiltins[kNumDataTypes] = {0};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default TDataType ctor. TDataTypes are constructed in TROOT via
@@ -56,10 +56,10 @@ TDataType::TDataType(TypedefInfo_t *info) : TDictionary(),
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor for basic data types, like "char", "unsigned char", etc.
 
-TDataType::TDataType(const char *typenam) : fInfo(nullptr), fProperty(kIsFundamental),
+TDataType::TDataType(const char *typenam) : fInfo(0), fProperty(kIsFundamental),
    fTypeNameIdx(-1), fTypeNameLen(0)
 {
-   fInfo = nullptr;
+   fInfo = 0;
    SetName(typenam);
    SetTitle("Builtin basic type");
 
@@ -190,39 +190,39 @@ EDataType TDataType::GetType(const std::type_info &typeinfo)
 {
    EDataType retType = kOther_t;
 
-   if (typeid(unsigned int) == typeinfo) {
+   if (!strcmp(typeid(unsigned int).name(), typeinfo.name())) {
       retType = kUInt_t;
-   } else if (typeid(int) == typeinfo) {
+   } else if (!strcmp(typeid(int).name(), typeinfo.name())) {
       retType = kInt_t;
-   } else if (typeid(ULong_t) == typeinfo) {
+   } else if (!strcmp(typeid(ULong_t).name(), typeinfo.name())) {
       retType = kULong_t;
-   } else if (typeid(Long_t) == typeinfo) {
+   } else if (!strcmp(typeid(Long_t).name(), typeinfo.name())) {
       retType = kLong_t;
-   } else if (typeid(ULong64_t) == typeinfo) {
+   } else if (!strcmp(typeid(ULong64_t).name(), typeinfo.name())) {
       retType = kULong64_t;
-   } else if (typeid(Long64_t) == typeinfo) {
+   } else if (!strcmp(typeid(Long64_t).name(), typeinfo.name())) {
       retType = kLong64_t;
-   } else if (typeid(unsigned short) == typeinfo) {
+   } else if (!strcmp(typeid(unsigned short).name(), typeinfo.name())) {
       retType = kUShort_t;
-   } else if (typeid(short) == typeinfo) {
+   } else if (!strcmp(typeid(short).name(), typeinfo.name())) {
       retType = kShort_t;
-   } else if (typeid(unsigned char) == typeinfo) {
+   } else if (!strcmp(typeid(unsigned char).name(), typeinfo.name())) {
       retType = kUChar_t;
-   } else if (typeid(char) == typeinfo) {
+   } else if (!strcmp(typeid(char).name(), typeinfo.name())) {
       retType = kChar_t;
-   } else if (typeid(Bool_t) == typeinfo) {
+   } else if (!strcmp(typeid(Bool_t).name(), typeinfo.name())) {
       retType = kBool_t;
-   } else if (typeid(float) == typeinfo) {
+   } else if (!strcmp(typeid(float).name(), typeinfo.name())) {
       retType = kFloat_t;
-   } else if (typeid(Float16_t) == typeinfo) {
+   } else if (!strcmp(typeid(Float16_t).name(), typeinfo.name())) {
       retType = kFloat16_t;
-   } else if (typeid(double) == typeinfo) {
+   } else if (!strcmp(typeid(double).name(), typeinfo.name())) {
       retType = kDouble_t;
-   } else if (typeid(Double32_t) == typeinfo) {
+   } else if (!strcmp(typeid(Double32_t).name(), typeinfo.name())) {
       retType = kDouble32_t;
-   } else if (typeid(char*) == typeinfo) {
+   } else if (!strcmp(typeid(char*).name(), typeinfo.name())) {
       retType = kCharStar;
-   } else if (typeid(signed char) == typeinfo) {
+   } else if (!strcmp(typeid(signed char).name(), typeinfo.name())) {
       retType = kDataTypeAliasSignedChar_t;
    }
    return retType;
@@ -299,7 +299,7 @@ void TDataType::SetType(const char *name)
    fType = kOther_t;
    fSize = 0;
 
-   if (name==nullptr) {
+   if (name==0) {
       return;
    } else if (!strcmp("unsigned int", name)) {
       fType = kUInt_t;
@@ -410,7 +410,7 @@ void TDataType::CheckInfo()
 
 void TDataType::AddBuiltins(TCollection* types)
 {
-   if (fgBuiltins[kChar_t] == nullptr) {
+   if (fgBuiltins[kChar_t] == 0) {
       // Add also basic types (like a identity typedef "typedef int int")
       fgBuiltins[kChar_t] = new TDataType("char");
       fgBuiltins[kUChar_t] = new TDataType("unsigned char");
@@ -442,6 +442,6 @@ void TDataType::AddBuiltins(TCollection* types)
 
 TDataType* TDataType::GetDataType(EDataType type)
 {
-   if (type == kOther_t || type >= kNumDataTypes) return nullptr;
+   if (type == kOther_t || type >= kNumDataTypes) return 0;
    return fgBuiltins[(int)type];
 }

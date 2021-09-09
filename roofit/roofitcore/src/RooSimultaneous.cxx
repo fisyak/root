@@ -68,8 +68,7 @@ in each category.
 #include "RooDataHist.h"
 #include "RooRandom.h"
 #include "RooArgSet.h"
-
-#include "ROOT/StringUtils.hxx"
+#include "RooHelpers.h"
 
 #include <iostream>
 
@@ -599,10 +598,6 @@ RooPlot* RooSimultaneous::plotOn(RooPlot *frame, RooLinkedList& cmdList) const
   pc.defineDouble("scaleFactor","Normalization",0,1.0) ;
   pc.defineInt("scaleType","Normalization",0,RooAbsPdf::Relative) ;
   pc.defineObject("sliceCatList","SliceCat",0,0,kTRUE) ;
-  // This dummy is needed for plotOn to recognize the "SliceCatMany" command.
-  // It is not used directly, but the "SliceCat" commands are nested in it.
-  // Removing this dummy definition results in "ERROR: unrecognized command: SliceCatMany".
-  pc.defineObject("dummy1","SliceCatMany",0) ;
   pc.defineObject("projSet","Project",0) ;
   pc.defineObject("sliceSet","SliceVars",0) ;
   pc.defineObject("projDataSet","ProjData",0) ;
@@ -636,7 +631,7 @@ RooPlot* RooSimultaneous::plotOn(RooPlot *frame, RooLinkedList& cmdList) const
     }
 
     // Prepare comma separated label list for parsing
-    auto catTokens = ROOT::Split(sliceCatState, ",");
+    auto catTokens = RooHelpers::tokenise(sliceCatState, ",");
 
     // Loop over all categories provided by (multiple) Slice() arguments
     TIterator* iter = sliceCatList.MakeIterator() ;
@@ -810,9 +805,9 @@ RooPlot* RooSimultaneous::plotOn(RooPlot *frame, RooLinkedList& cmdList) const
   RooArgList wgtCompList ;
 //RooAbsPdf* pdf ;
   RooRealProxy* proxy ;
-  TIter pIter = _pdfProxyList.MakeIterator() ;
+  TIterator* pIter = _pdfProxyList.MakeIterator() ;
   Double_t sumWeight(0) ;
-  while((proxy=(RooRealProxy*)pIter.Next())) {
+  while((proxy=(RooRealProxy*)pIter->Next())) {
 
     idxCatClone->setLabel(proxy->name()) ;
 

@@ -9,14 +9,19 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TAttTextEditor
-    \ingroup ged
-
-Implements GUI for editing text attributes.
-      color, font, font size and alignment
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TAttTextEditor                                                      //
+//                                                                      //
+//  Implements GUI for editing text attributes.                         //
+//          color, font, font size and alignment                        //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+//Begin_Html
+/*
+<img src="gif/TAttTextEditor.gif">
 */
+//End_Html
 
 
 #include "TAttTextEditor.h"

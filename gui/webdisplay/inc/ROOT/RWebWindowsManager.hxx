@@ -24,7 +24,6 @@
 
 class THttpServer;
 class THttpWSHandler;
-class TExec;
 
 namespace ROOT {
 namespace Experimental {
@@ -41,8 +40,6 @@ private:
    bool fUseHttpThrd{false};             ///<! use special thread for THttpServer
    bool fUseSenderThreads{false};        ///<! use extra threads for sending data from RWebWindow to clients
    float fLaunchTmout{30.};              ///<! timeout in seconds to start browser process, default 30s
-   bool fExternalProcessEvents{false};   ///<! indicate that there are external process events engine
-   std::unique_ptr<TExec> fAssgnExec;    ///<! special exec to assign thread id via ProcessEvents
 
    /// Returns true if http server use special thread for requests processing (default off)
    bool IsUseHttpThread() const { return fUseHttpThrd; }
@@ -56,15 +53,13 @@ private:
    void Unregister(RWebWindow &win);
 
    /// Show window in specified location, see Show() method for more details
-   unsigned ShowWindow(RWebWindow &win, const RWebDisplayArgs &args);
+   unsigned ShowWindow(RWebWindow &win, bool batch_mode, const RWebDisplayArgs &args);
 
    int WaitFor(RWebWindow &win, WebWindowWaitFunc_t check, bool timed = false, double tm = -1);
 
    std::string GetUrl(const RWebWindow &win, bool remote = false);
 
    bool CreateServer(bool with_http = false);
-
-   void AssignWindowThreadId(RWebWindow &win);
 
 public:
    RWebWindowsManager();

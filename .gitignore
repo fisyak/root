@@ -9,7 +9,7 @@ project.xcworkspace
 # MacOS metadata
 .DS_Store
 
-# VS Code
+# Visual Code
 .vs/
 .vscode
 .build
@@ -27,7 +27,6 @@ CMakeLists.txt.user
 .cproject
 .project
 .externalToolBuilders
-.pydevproject
 
 # Vim
 *.swp
@@ -35,4 +34,3 @@ CMakeLists.txt.user
 # Other Stuff
 tags
 *.d
-.cache

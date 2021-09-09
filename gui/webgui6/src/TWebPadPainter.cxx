@@ -15,6 +15,8 @@
 #include "TWebCanvas.h"
 #include "TBufferJSON.h"
 
+#include <ROOT/RMakeUnique.hxx>
+
 
 /** \class TWebPadPainter
 \ingroup webgui6

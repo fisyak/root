@@ -59,9 +59,9 @@ TEveMacro::TEveMacro(const char* name) :
 ////////////////////////////////////////////////////////////////////////////////
 /// Execute the macro.
 
-Longptr_t TEveMacro::Exec(const char* params, Int_t* error)
+Long_t TEveMacro::Exec(const char* params, Int_t* error)
 {
-   Longptr_t retval = -1;
+   Long_t retval = -1;
 
    if (gROOT->GetGlobalFunction(fName, 0, kTRUE) != 0)
    {

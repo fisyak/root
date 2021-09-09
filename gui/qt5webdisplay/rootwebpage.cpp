@@ -15,7 +15,6 @@
 #include <ROOT/RLogger.hxx>
 #include "TString.h"
 #include "TEnv.h"
-#include <iostream>
 
 ROOT::Experimental::RLogChannel &QtWebDisplayLog()
 {
@@ -36,24 +35,21 @@ RootWebPage::RootWebPage(QObject *parent) : QWebEnginePage(parent)
 void RootWebPage::javaScriptConsoleMessage(JavaScriptConsoleMessageLevel lvl, const QString &message, int lineNumber,
                                            const QString &src)
 {
-   TString msg = TString::Format("%s:%d: %s", src.toLatin1().constData(), lineNumber,
-                                 message.toLatin1().constData());
-
    switch (lvl) {
    case InfoMessageLevel:
-      R__LOG_DEBUG(0, QtWebDisplayLog()) << msg;
       if (fConsole > 0)
-         std::cout << msg << std::endl;
+         R__LOG_DEBUG(0, QtWebDisplayLog()) << Form("%s:%d: %s", src.toLatin1().constData(), lineNumber,
+                                     message.toLatin1().constData());
       break;
    case WarningMessageLevel:
-      R__LOG_WARNING(QtWebDisplayLog()) << msg;
-      if (fConsole > 0)
-         std::cout << msg << std::endl;
+      if (fConsole > -1)
+         R__LOG_WARNING(QtWebDisplayLog()) << Form("%s:%d: %s", src.toLatin1().constData(), lineNumber,
+                                       message.toLatin1().constData());
       break;
    case ErrorMessageLevel:
-      R__LOG_ERROR(QtWebDisplayLog()) << msg;
-      if (fConsole > 0)
-         std::cerr << msg << std::endl;
+      if (fConsole > -2)
+         R__LOG_ERROR(QtWebDisplayLog()) << Form("%s:%d: %s", src.toLatin1().constData(), lineNumber,
+                                     message.toLatin1().constData());
       break;
    }
 }

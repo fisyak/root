@@ -1,7 +1,6 @@
 import os
 import sys
 import unittest
-import warnings
 
 import DistRDF
 import pyspark
@@ -19,32 +18,23 @@ class SparkBackendInitTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """
-        Set up test environment for this class. Currently this includes:
+        Synchronize PYSPARK_PYTHON variable to the current Python executable.
 
-        - Synchronize PYSPARK_PYTHON variable to the current Python executable.
-          Needed to avoid mismatch between python versions on driver and on the
-          fake executor on the same machine.
-        - Ignore `ResourceWarning: unclosed socket` warning triggered by Spark.
-          this is ignored by default in any application, but Python's unittest
-          library overrides the default warning filters thus exposing this
-          warning
+        Needed to avoid mismatch between python versions on driver and on
+        the fake executor on the same machine.
         """
         os.environ["PYSPARK_PYTHON"] = sys.executable
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("ignore", ResourceWarning)
-
-    @classmethod
-    def tearDownClass(cls):
-        """Reset test environment."""
-        os.environ["PYSPARK_PYTHON"] = ""
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("default", ResourceWarning)
 
     def tearDown(self):
         """Stop any created SparkContext"""
         pyspark.SparkContext.getOrCreate().stop()
+
+    @classmethod
+    def tearDownClass(cls):
+        """
+        Stop the SparkContext and reset environment variable.
+        """
+        os.environ["PYSPARK_PYTHON"] = ""
 
     def test_set_spark_context_default(self):
         """
@@ -80,7 +70,7 @@ class SparkBackendInitTest(unittest.TestCase):
         sc = pyspark.SparkContext(conf=sconf)
         backend = Backend.SparkBackend(sparkcontext=sc)
 
-        self.assertEqual(backend.optimize_npartitions(), 10)
+        self.assertEqual(backend.optimize_npartitions(1), 10)
 
 
 class OperationSupportTest(unittest.TestCase):
@@ -92,32 +82,23 @@ class OperationSupportTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """
-        Set up test environment for this class. Currently this includes:
+        Synchronize PYSPARK_PYTHON variable to the current Python executable.
 
-        - Synchronize PYSPARK_PYTHON variable to the current Python executable.
-          Needed to avoid mismatch between python versions on driver and on the
-          fake executor on the same machine.
-        - Ignore `ResourceWarning: unclosed socket` warning triggered by Spark.
-          this is ignored by default in any application, but Python's unittest
-          library overrides the default warning filters thus exposing this
-          warning
+        Needed to avoid mismatch between python versions on driver and on
+        the fake executor on the same machine.
         """
         os.environ["PYSPARK_PYTHON"] = sys.executable
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("ignore", ResourceWarning)
-
-    @classmethod
-    def tearDownClass(cls):
-        """Reset test environment."""
-        os.environ["PYSPARK_PYTHON"] = ""
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("default", ResourceWarning)
 
     def tearDown(self):
         """Stop any created SparkContext"""
         pyspark.SparkContext.getOrCreate().stop()
+
+    @classmethod
+    def tearDownClass(cls):
+        """
+        Stop the SparkContext and reset environment variable.
+        """
+        os.environ["PYSPARK_PYTHON"] = ""
 
     def test_action(self):
         """Check that action nodes are classified accurately."""
@@ -163,32 +144,23 @@ class InitializationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """
-        Set up test environment for this class. Currently this includes:
+        Synchronize PYSPARK_PYTHON variable to the current Python executable.
 
-        - Synchronize PYSPARK_PYTHON variable to the current Python executable.
-          Needed to avoid mismatch between python versions on driver and on the
-          fake executor on the same machine.
-        - Ignore `ResourceWarning: unclosed socket` warning triggered by Spark.
-          this is ignored by default in any application, but Python's unittest
-          library overrides the default warning filters thus exposing this
-          warning
+        Needed to avoid mismatch between python versions on driver and on
+        the fake executor on the same machine.
         """
         os.environ["PYSPARK_PYTHON"] = sys.executable
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("ignore", ResourceWarning)
-
-    @classmethod
-    def tearDownClass(cls):
-        """Reset test environment."""
-        os.environ["PYSPARK_PYTHON"] = ""
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("default", ResourceWarning)
 
     def tearDown(self):
         """Stop any created SparkContext"""
         pyspark.SparkContext.getOrCreate().stop()
+
+    @classmethod
+    def tearDownClass(cls):
+        """
+        Stop the SparkContext and reset environment variable.
+        """
+        os.environ["PYSPARK_PYTHON"] = ""
 
     def test_initialization(self):
         """
@@ -247,32 +219,23 @@ class EmptyTreeErrorTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """
-        Set up test environment for this class. Currently this includes:
+        Synchronize PYSPARK_PYTHON variable to the current Python executable.
 
-        - Synchronize PYSPARK_PYTHON variable to the current Python executable.
-          Needed to avoid mismatch between python versions on driver and on the
-          fake executor on the same machine.
-        - Ignore `ResourceWarning: unclosed socket` warning triggered by Spark.
-          this is ignored by default in any application, but Python's unittest
-          library overrides the default warning filters thus exposing this
-          warning
+        Needed to avoid mismatch between python versions on driver and on
+        the fake executor on the same machine.
         """
         os.environ["PYSPARK_PYTHON"] = sys.executable
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("ignore", ResourceWarning)
-
-    @classmethod
-    def tearDownClass(cls):
-        """Reset test environment."""
-        os.environ["PYSPARK_PYTHON"] = ""
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("default", ResourceWarning)
 
     def tearDown(self):
         """Stop any created SparkContext"""
         pyspark.SparkContext.getOrCreate().stop()
+
+    @classmethod
+    def tearDownClass(cls):
+        """
+        Stop the SparkContext and reset environment variable.
+        """
+        os.environ["PYSPARK_PYTHON"] = ""
 
     def test_histo_from_empty_root_file(self):
         """
@@ -296,32 +259,23 @@ class ChangeAttributeTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """
-        Set up test environment for this class. Currently this includes:
+        Synchronize PYSPARK_PYTHON variable to the current Python executable.
 
-        - Synchronize PYSPARK_PYTHON variable to the current Python executable.
-          Needed to avoid mismatch between python versions on driver and on the
-          fake executor on the same machine.
-        - Ignore `ResourceWarning: unclosed socket` warning triggered by Spark.
-          this is ignored by default in any application, but Python's unittest
-          library overrides the default warning filters thus exposing this
-          warning
+        Needed to avoid mismatch between python versions on driver and on
+        the fake executor on the same machine.
         """
         os.environ["PYSPARK_PYTHON"] = sys.executable
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("ignore", ResourceWarning)
-
-    @classmethod
-    def tearDownClass(cls):
-        """Reset test environment."""
-        os.environ["PYSPARK_PYTHON"] = ""
-
-        if sys.version_info.major >= 3:
-            warnings.simplefilter("default", ResourceWarning)
 
     def tearDown(self):
         """Stop any created SparkContext"""
         pyspark.SparkContext.getOrCreate().stop()
+
+    @classmethod
+    def tearDownClass(cls):
+        """
+        Stop the SparkContext and reset environment variable.
+        """
+        os.environ["PYSPARK_PYTHON"] = ""
 
     def test_change_attribute_when_npartitions_greater_than_clusters(self):
         """

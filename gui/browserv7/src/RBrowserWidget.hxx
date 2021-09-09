@@ -43,8 +43,6 @@ public:
 
    virtual void ResetConn() {}
 
-   virtual void SetActive() {}
-
    void SetPath(const Browsable::RElementPath_t &path) { fPath = path; }
    const Browsable::RElementPath_t &GetPath() const { return fPath; }
 
@@ -63,8 +61,6 @@ protected:
 
    virtual std::shared_ptr<RBrowserWidget> Create(const std::string &) = 0;
 
-   virtual std::shared_ptr<RBrowserWidget> CreateFor(const std::string &, std::shared_ptr<Browsable::RElement> &) { return nullptr; }
-
    static ProvidersMap_t& GetMap();
 
 public:
@@ -73,8 +69,6 @@ public:
    virtual ~RBrowserWidgetProvider();
 
    static std::shared_ptr<RBrowserWidget> CreateWidget(const std::string &kind, const std::string &name);
-
-   static std::shared_ptr<RBrowserWidget> CreateWidgetFor(const std::string &kind, const std::string &name, std::shared_ptr<Browsable::RElement> &element);
 };
 
 

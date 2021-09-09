@@ -14,6 +14,7 @@
 #include "RooCategory.h"
 #include "RooDataSet.h"
 #include "RooGaussian.h"
+#include "RooConstVar.h"
 #include "RooPolynomial.h"
 #include "RooSimultaneous.h"
 #include "RooAddPdf.h"

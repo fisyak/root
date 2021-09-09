@@ -85,7 +85,7 @@ public:
 
 TTimer::TTimer(Long_t ms, Bool_t mode) : fTime(ms)
 {
-   fObject      = nullptr;
+   fObject      = 0;
    fCommand     = "";
    fSync        = mode;
    fIntSyscalls = kFALSE;
@@ -115,7 +115,7 @@ TTimer::TTimer(TObject *obj, Long_t ms, Bool_t mode) : fTime(ms)
 
 TTimer::TTimer(const char *command, Long_t ms, Bool_t mode) : fTime(ms)
 {
-   fObject      = nullptr;
+   fObject      = 0;
    fCommand     = command;
    fSync        = mode;
    fIntSyscalls = kFALSE;
@@ -173,7 +173,7 @@ void TTimer::Reset()
 
 void TTimer::SetCommand(const char *command)
 {
-   fObject  = nullptr;
+   fObject  = 0;
    fCommand = command;
 }
 
@@ -268,15 +268,4 @@ void TTimer::SingleShot(Int_t milliSec, const char *receiver_class,
                      "TTimer", &singleShotCleaner, "TurnOn()");
 
    singleShotTimer->Start(milliSec, kTRUE);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// This function checks if the timer is running within gSystem 
-/// (Has been started and did not finish yet).
-
-bool TTimer::IsRunning()
-{
-   if (gSystem && gSystem->GetListOfTimers())
-      return gSystem->GetListOfTimers()->IndexOf(this) != -1;
-   return false;
 }

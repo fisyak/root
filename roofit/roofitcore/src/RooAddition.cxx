@@ -49,7 +49,7 @@ ClassImp(RooAddition);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Empty constructor
-RooAddition::RooAddition() : _cacheMgr(this,10)
+RooAddition::RooAddition()
 {
 }
 
@@ -303,9 +303,9 @@ Double_t RooAddition::analyticalIntegral(Int_t code, const char* rangeName) cons
   if (cache==0) {
     // cache got sterilized, trigger repopulation of this slot, then try again...
     std::unique_ptr<RooArgSet> vars( getParameters(RooArgSet()) );
-    RooArgSet iset = _cacheMgr.selectFromSet2(*vars, code-1);
+    std::unique_ptr<RooArgSet> iset(  _cacheMgr.nameSet2ByIndex(code-1)->select(*vars) );
     RooArgSet dummy;
-    Int_t code2 = getAnalyticalIntegral(iset,dummy,rangeName);
+    Int_t code2 = getAnalyticalIntegral(*iset,dummy,rangeName);
     assert(code==code2); // must have revived the right (sterilized) slot...
     return analyticalIntegral(code2,rangeName);
   }

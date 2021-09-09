@@ -13,6 +13,14 @@
 #define ROOT_TGIcon
 
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGIcon                                                               //
+//                                                                      //
+// This class handles GUI icons.                                        //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
 #include "TGFrame.h"
 #include "TGDimension.h"
 
@@ -22,9 +30,9 @@ class TImage;
 class TGIcon : public TGFrame {
 
 protected:
-   const TGPicture  *fPic;     ///< icon picture
-   TImage           *fImage;   ///< image
-   TString           fPath;    ///< directory of image
+   const TGPicture  *fPic;     // icon picture
+   TImage           *fImage;   // image
+   TString           fPath;    // directory of image
 
    virtual void DoRedraw();
 

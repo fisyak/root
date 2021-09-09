@@ -22,28 +22,11 @@
 #include "TDataType.h"
 #include "TDatime.h"
 #include "snprintf.h"
-#include "strlcpy.h"
 #include <cstdlib>
 
 ClassImp(TMySQLStatement);
 
 ULong64_t TMySQLStatement::fgAllocSizeLimit = 0x8000000; // 128 Mb
-
-////////////////////////////////////////////////////////////////////////////////
-/// Return limit for maximal allocated memory for single parameter
-
-ULong_t TMySQLStatement::GetAllocSizeLimit()
-{
-   return fgAllocSizeLimit;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// Set limit for maximal allocated memory for single parameter
-
-void TMySQLStatement::SetAllocSizeLimit(ULong_t sz)
-{
-   fgAllocSizeLimit = sz;
-}
 
 #if MYSQL_VERSION_ID >= 40100
 
@@ -775,20 +758,17 @@ Bool_t TMySQLStatement::SetSQLParamType(Int_t npar, int sqltype, Bool_t sig, ULo
       case MYSQL_TYPE_DATE:
       case MYSQL_TYPE_TIMESTAMP:
       case MYSQL_TYPE_DATETIME: allocsize = sizeof(MYSQL_TIME); doreset = true; break;
-      default: SetError(-1, Form("SQL type not supported: %d", sqltype),"SetSQLParamType"); return kFALSE;
+      default: SetError(-1,"Nonsupported SQL type","SetSQLParamType"); return kFALSE;
    }
 
-   // SL: 256 bytes is default size value for string or tiny blob
-   // therefore small fgAllocSizeLimit only has effect for data over limit of 256 bytes
-   if ((fgAllocSizeLimit > 256) && (allocsize > fgAllocSizeLimit))
-      allocsize = fgAllocSizeLimit;
+   if (allocsize > fgAllocSizeLimit) allocsize = fgAllocSizeLimit;
 
    fBuffer[npar].fMem = malloc(allocsize);
    fBuffer[npar].fSize = allocsize;
    fBuffer[npar].fSqlType = sqltype;
    fBuffer[npar].fSign = sig;
 
-   if (fBuffer[npar].fMem && doreset)
+   if ((allocsize>0) && fBuffer[npar].fMem && doreset)
       memset(fBuffer[npar].fMem, 0, allocsize);
 
    fBind[npar].buffer_type = enum_field_types(sqltype);
@@ -940,9 +920,9 @@ Bool_t TMySQLStatement::SetString(Int_t npar, const char* value, Int_t maxsize)
 {
    Int_t len = value ? strlen(value) : 0;
 
-   void *addr = BeforeSet("SetString", npar, MYSQL_TYPE_STRING, true, maxsize);
+   void* addr = BeforeSet("SetString", npar, MYSQL_TYPE_STRING, true, maxsize);
 
-   if (!addr) return kFALSE;
+   if (addr==0) return kFALSE;
 
    if (len >= fBuffer[npar].fSize) {
       free(fBuffer[npar].fMem);
@@ -957,10 +937,8 @@ Bool_t TMySQLStatement::SetString(Int_t npar, const char* value, Int_t maxsize)
       fNeedParBind = kTRUE;
    }
 
-   if (value)
-      strlcpy((char*) addr, value, fBuffer[npar].fSize);
-   else
-      ((char *)addr)[0] = 0;
+   if (value) strcpy((char*) addr, value);
+   else ((char*)addr)[0]='\0';
 
    fBuffer[npar].fResLength = len;
 

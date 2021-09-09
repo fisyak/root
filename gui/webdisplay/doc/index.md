@@ -1,2 +1,3 @@
-\defgroup webdisplay Web Display
-\brief A Graphical User Interface based on WEB technology
+\defgroup webdisplay Web display
+\ingroup webgui
+\brief Classes for web display

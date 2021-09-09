@@ -13,6 +13,7 @@
 #include "RooRealVar.h"
 #include "RooDataHist.h"
 #include "RooGaussian.h"
+#include "RooConstVar.h"
 #include "RooAddPdf.h"
 #include "RooPlot.h"
 #include "TCanvas.h"

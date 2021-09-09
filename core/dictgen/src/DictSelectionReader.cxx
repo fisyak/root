@@ -104,7 +104,7 @@ DictSelectionReader::GetTmplArgList(const clang::CXXRecordDecl &cxxRcrdDecl)
    const clang::ClassTemplateSpecializationDecl *tmplSpecDecl =
       llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(&cxxRcrdDecl);
 
-   if (!tmplSpecDecl) return nullptr;
+   if (!tmplSpecDecl) return 0;
 
    return &tmplSpecDecl->getTemplateArgs();
 }

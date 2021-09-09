@@ -473,9 +473,9 @@ L500:
 
       // evaluate at new point aopt
       print.Info([&](std::ostream &os) {
-         os << "Run Migrad again at new point (#iter = " << ipt+1 << " ):";
+         os << "Run Migrad again at new point (#iter = " << ipt << " ):";
          for (unsigned i = 0; i < npar; ++i)
-            os << "\n\t - parameter " << par[i] << " fixed to " << pmid[i] + (aopt)*pdir[i];
+            os << "\n\t - parameter " << i << " fixed to " << pmid[i] + (aopt)*pdir[i];
       });
 
       for (unsigned int i = 0; i < npar; i++)

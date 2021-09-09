@@ -39,7 +39,6 @@ namespace cling {
     m_NestedTransactions.reset(0);
     m_Parent = 0;
     m_State = kCollecting;
-    m_Unloading = false;
     m_IssuedDiags = kNone;
     m_Opts = CompilationOptions();
     m_DefinitionShadowNS = 0;
@@ -95,7 +94,6 @@ namespace cling {
   }
 
   void Transaction::addNestedTransaction(Transaction* nested) {
-    assert(!m_Unloading && "Must not nest within unloading transaction");
     // Create lazily the list
     if (!m_NestedTransactions)
       m_NestedTransactions.reset(new NestedTransactions());
@@ -359,8 +357,6 @@ namespace cling {
     }
     cling::log() << indent << " state: " << stateNames[getState()]
                  << " decl groups, ";
-    if (m_Unloading)
-      cling::log() << "currently unloading, ";
     if (hasNestedTransactions())
       cling::log() << m_NestedTransactions->size();
     else

@@ -12,6 +12,15 @@
 #ifndef ROOT_TSessionDialogs
 #define ROOT_TSessionDialogs
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TSessionDialogs                                                      //
+//                                                                      //
+// This file defines several dialogs that are used by TSessionViewer.   //
+// The following dialogs are available: TNewChainDlg and TNewQueryDlg.  //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
 
 #include "TSessionViewer.h"
 

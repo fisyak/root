@@ -78,8 +78,19 @@ RooGenFitStudy::RooGenFitStudy(const RooGenFitStudy& other) :
   _params(0),
   _initParams(0)
 {  
-  for(TObject * o : other._genOpts) _genOpts.Add(o->Clone());
-  for(TObject * o : other._fitOpts) _fitOpts.Add(o->Clone());
+  TIterator* giter = other._genOpts.MakeIterator() ;
+  TObject* o ;
+  while((o=giter->Next())) {
+    _genOpts.Add(o->Clone()) ;
+  }
+  delete giter ;
+
+  TIterator* fiter = other._fitOpts.MakeIterator() ;
+  while((o=fiter->Next())) {
+    _fitOpts.Add(o->Clone()) ;
+  }
+  delete fiter ;
+
 }
 
 

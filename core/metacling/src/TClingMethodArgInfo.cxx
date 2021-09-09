@@ -128,7 +128,7 @@ const char *TClingMethodArgInfo::DefaultValue() const
       }
       out.flush();
    }
-   return buf.c_str(); // NOLINT
+   return buf.c_str();
 }
 
 const TClingTypeInfo *TClingMethodArgInfo::Type() const

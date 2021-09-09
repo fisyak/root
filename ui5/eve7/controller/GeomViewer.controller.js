@@ -837,7 +837,7 @@ sap.ui.define(['sap/ui/core/Component',
             this.geo_painter.highlightMesh(null, 0x00ff00, null, undefined, this._hover_stack, true);
       },
 
-      onBeforeRendering: function() {
+      omBeforeRendering: function() {
          this.renderingDone = false;
       },
 

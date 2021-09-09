@@ -167,8 +167,6 @@ void TMVA::likelihoodrefs(TString dataset, TDirectory *lhdir ) {
          }
       }
    }
-
-   delete [] c; // delete only array
 }
 
 void TMVA::likelihoodrefs(TString dataset, TString fin , Bool_t useTMVAStyle )

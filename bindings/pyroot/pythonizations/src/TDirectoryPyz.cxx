@@ -26,7 +26,7 @@ using namespace CPyCppyy;
 /// \brief Implements the WriteObject method of TDirectory
 /// This method allows to write objects into TDirectory instances with this
 /// syntax:
-/// ~~~{.py}
+/// ~~~{.python}
 /// myDir.WriteObject(myObj, "myKeyName")
 /// ~~~
 PyObject *TDirectoryWriteObject(CPPInstance *self, PyObject *args)
@@ -94,7 +94,7 @@ PyObject *TDirectoryGetAttr(PyObject *self, PyObject *attr)
 /// \param[in] args Pointer to a Python tuple object containing the arguments
 /// This allows to use TDirectory and daughters (such as TDirectoryFile and TFile)
 /// as follows
-/// ~~~{.py}
+/// ~~~{.python}
 /// myfile.mydir.mysubdir.myHist.Draw()
 /// ~~~
 PyObject *PyROOT::AddDirectoryGetAttrPyz(PyObject * /* self */, PyObject *args)

@@ -8,13 +8,14 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-#ifndef ROOT_RDF_RDEFINE
-#define ROOT_RDF_RDEFINE
+#ifndef ROOT_RCUSTOMCOLUMN
+#define ROOT_RCUSTOMCOLUMN
 
 #include "ROOT/RDF/ColumnReaderUtils.hxx"
 #include "ROOT/RDF/RColumnReaderBase.hxx"
 #include "ROOT/RDF/RDefineBase.hxx"
 #include "ROOT/RDF/Utils.hxx"
+#include "ROOT/RIntegerSequence.hxx"
 #include "ROOT/RStringView.hxx"
 #include "ROOT/TypeTraits.hxx"
 #include "RtypesCore.h"
@@ -22,7 +23,6 @@
 #include <array>
 #include <deque>
 #include <type_traits>
-#include <utility> // std::index_sequence
 #include <vector>
 
 class TTreeReader;
@@ -57,10 +57,10 @@ class R__CLING_PTRCHECK(off) RDefine final : public RDefineBase {
    using ret_type = typename CallableTraits<F>::ret_type;
    // Avoid instantiating vector<bool> as `operator[]` returns temporaries in that case. Use std::deque instead.
    using ValuesPerSlot_t =
-      std::conditional_t<std::is_same<ret_type, bool>::value, std::deque<ret_type>, std::vector<ret_type>>;
+      typename std::conditional<std::is_same<ret_type, bool>::value, std::deque<ret_type>, std::vector<ret_type>>::type;
 
    F fExpression;
-   const ROOT::RDF::ColumnNames_t fColumnNames;
+   const ColumnNames_t fColumnNames;
    ValuesPerSlot_t fLastResults;
 
    /// Column readers per slot and per input column
@@ -101,7 +101,7 @@ class R__CLING_PTRCHECK(off) RDefine final : public RDefineBase {
    }
 
 public:
-   RDefine(std::string_view name, std::string_view type, F expression, const ROOT::RDF::ColumnNames_t &columns,
+   RDefine(std::string_view name, std::string_view type, F expression, const ColumnNames_t &columns,
            unsigned int nSlots, const RDFInternal::RBookedDefines &defines,
            const std::map<std::string, std::vector<void *>> &DSValuePtrs, ROOT::RDF::RDataSource *ds)
       : RDefineBase(name, type, nSlots, defines, DSValuePtrs, ds), fExpression(std::move(expression)),
@@ -119,8 +119,6 @@ public:
    void InitSlot(TTreeReader *r, unsigned int slot) final
    {
       if (!fIsInitialized[slot]) {
-         for (auto &define : fDefines.GetColumns())
-            define.second->InitSlot(r, slot);
          fIsInitialized[slot] = true;
          RDFInternal::RColumnReadersInfo info{fColumnNames, fDefines, fIsDefine.data(), fDSValuePtrs, fDataSource};
          fValues[slot] = RDFInternal::MakeColumnReaders(slot, r, ColumnTypes_t{}, info);
@@ -161,4 +159,4 @@ public:
 } // ns Detail
 } // ns ROOT
 
-#endif // ROOT_RDF_RDEFINE
+#endif // ROOT_RCUSTOMCOLUMN

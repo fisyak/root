@@ -37,12 +37,13 @@
 #include "TAtt3D.h"
 #include "TView.h"
 
+#include <ROOT/RMakeUnique.hxx>
+
 #include <cstdio>
 #include <cstring>
+#include <sstream>
 #include <fstream>
 #include <iostream>
-#include <memory>
-#include <sstream>
 
 /** \class TWebCanvas
 \ingroup webgui6
@@ -62,7 +63,7 @@ TWebCanvas::TWebCanvas(TCanvas *c, const char *name, Int_t x, Int_t y, UInt_t wi
    : TCanvasImp(c, name, x, y, width, height)
 {
    fReadOnly = readonly;
-   fStyleDelivery = gEnv->GetValue("WebGui.StyleDelivery", 1);
+   fStyleDelivery = gEnv->GetValue("WebGui.StyleDelivery", 0);
    fPaletteDelivery = gEnv->GetValue("WebGui.PaletteDelivery", 1);
    fPrimitivesMerge = gEnv->GetValue("WebGui.PrimitivesMerge", 100);
    fJsonComp = gEnv->GetValue("WebGui.JsonComp", TBufferJSON::kSameSuppression + TBufferJSON::kNoSpaces);
@@ -312,7 +313,7 @@ void TWebCanvas::CreatePadSnapshot(TPadWebSnapshot &paddata, TPad *pad, Long64_t
       }
    }
 
-   if (need_frame && !frame && primitives && CanCreateObject("TFrame")) {
+   if (need_frame && !frame && CanCreateObject("TFrame")) {
       frame = pad->GetFrame();
       primitives->AddFirst(frame);
    }
@@ -321,7 +322,7 @@ void TWebCanvas::CreatePadSnapshot(TPadWebSnapshot &paddata, TPad *pad, Long64_t
       if (title) {
          auto line0 = title->GetLine(0);
          if (line0 && !IsReadOnly()) line0->SetTitle(need_title.c_str());
-      } else if (primitives && CanCreateObject("TPaveText")) {
+      } else if (CanCreateObject("TPaveText")) {
          title = new TPaveText(0, 0, 0, 0, "blNDC");
          title->SetFillColor(gStyle->GetTitleFillColor());
          title->SetFillStyle(gStyle->GetTitleStyle());
@@ -361,8 +362,6 @@ void TWebCanvas::CreatePadSnapshot(TPadWebSnapshot &paddata, TPad *pad, Long64_t
          TPaveStats *stats = nullptr;
          TObject *palette = nullptr;
 
-         hist->BufferEmpty();
-
          while ((fobj = fiter()) != nullptr) {
            if (fobj->InheritsFrom(TPaveStats::Class()))
                stats = dynamic_cast<TPaveStats *> (fobj);
@@ -370,7 +369,7 @@ void TWebCanvas::CreatePadSnapshot(TPadWebSnapshot &paddata, TPad *pad, Long64_t
               palette = fobj;
          }
 
-         if (!stats && first_obj && (gStyle->GetOptStat() > 0) && CanCreateObject("TPaveStats")) {
+         if (!stats && first_obj && CanCreateObject("TPaveStats")) {
             stats  = new TPaveStats(
                            gStyle->GetStatX() - gStyle->GetStatW(),
                            gStyle->GetStatY() - gStyle->GetStatH(),
@@ -410,21 +409,16 @@ void TWebCanvas::CreatePadSnapshot(TPadWebSnapshot &paddata, TPad *pad, Long64_t
          }
 
          if (title && first_obj) hopt.Append(";;use_pad_title");
-
-         // if (stats) hopt.Append(";;use_pad_stats");
-
+         if (stats) hopt.Append(";;use_pad_stats");
          if (palette) hopt.Append(";;use_pad_palette");
 
          paddata.NewPrimitive(obj, hopt.Data()).SetSnapshot(TWebSnapshot::kObject, obj);
 
-         // do not extract objects from list of functions - stats and func need to be handled together with hist
-         //
-         // fiter.Reset();
-         // while ((fobj = fiter()) != nullptr)
-         //    CreateObjectSnapshot(paddata, pad, fobj, fiter.GetOption());
+         fiter.Reset();
+         while ((fobj = fiter()) != nullptr)
+            CreateObjectSnapshot(paddata, pad, fobj, fiter.GetOption());
 
-         // fPrimitivesLists.Add(hist->GetListOfFunctions());
-
+         fPrimitivesLists.Add(hist->GetListOfFunctions());
          first_obj = false;
       } else if (obj->InheritsFrom(TGraph::Class())) {
          flush_master();
@@ -1377,15 +1371,9 @@ TObject *TWebCanvas::FindPrimitive(const std::string &sid, TPad *pad, TObjLink *
          if (h1 && (kind == "z"))
             return h1->GetZaxis();
 
-         if ((h1 || gr) && !kind.empty() && (kind.compare(0,5,"func_") == 0)) {
-            auto funcname = kind.substr(5);
-            TCollection *col = h1 ? h1->GetListOfFunctions() : gr->GetListOfFunctions();
-            return col ? col->FindObject(funcname.c_str()) : nullptr;
-         }
-
          if (!kind.empty() && (kind.compare(0,7,"member_") == 0)) {
             auto member = kind.substr(7);
-            auto offset = obj->IsA() ? obj->IsA()->GetDataMemberOffset(member.c_str()) : 0;
+            auto offset = obj->IsA()->GetDataMemberOffset(member.c_str());
             if (offset > 0) {
                TObject **mobj = (TObject **)((char*) obj + offset);
                return *mobj;

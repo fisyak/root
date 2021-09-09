@@ -31,8 +31,10 @@ private :
    TGeoBoolNode         *fNode;             // top boolean node
 
 protected:
-   TGeoCompositeShape(const TGeoCompositeShape &) = delete;
-   TGeoCompositeShape& operator=(const TGeoCompositeShape &) = delete;
+   TGeoCompositeShape(const TGeoCompositeShape& gcs)
+     : TGeoBBox(gcs), fNode(gcs.fNode) { }
+   TGeoCompositeShape& operator=(const TGeoCompositeShape& gcs)
+     {if(this!=&gcs) {TGeoBBox::operator=(gcs); fNode=gcs.fNode;} return *this;}
 
 public:
    // constructors

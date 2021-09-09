@@ -36,7 +36,6 @@ typedef RooLinkedList* pRooLinkedList ;
 
 class RooProdPdf : public RooAbsPdf {
 public:
-
   RooProdPdf() ;
   RooProdPdf(const char *name, const char *title, Double_t cutOff=0);
   RooProdPdf(const char *name, const char *title,
@@ -69,6 +68,7 @@ public:
 
   virtual ExtendMode extendMode() const ;
   virtual Double_t expectedEvents(const RooArgSet* nset) const ; 
+  virtual Double_t expectedEvents(const RooArgSet& nset) const { return expectedEvents(&nset) ; }
 
   const RooArgList& pdfList() const { return _pdfList ; }
 
@@ -99,7 +99,6 @@ public:
 
   RooArgSet* findPdfNSet(RooAbsPdf& pdf) const ; 
   
-  void writeCacheToStream(std::ostream& os, RooArgSet const* nset) const;
 
 private:
 
@@ -117,7 +116,7 @@ private:
                         RooLinkedList& impDepList, RooLinkedList& crossDepList,
                         RooLinkedList& intList) const;
   std::string makeRGPPName(const char* pfx, const RooArgSet& term, const RooArgSet& iset, const RooArgSet& nset, const char* isetRangeName) const ;
-  void groupProductTerms(std::list<std::vector<RooArgSet*>>& groupedTerms, RooArgSet& outerIntDeps,
+  void groupProductTerms(RooLinkedList& groupedTerms, RooArgSet& outerIntDeps,
                          const RooLinkedList& terms, const RooLinkedList& norms, 
                          const RooLinkedList& imps, const RooLinkedList& ints, const RooLinkedList& cross) const ;
   
@@ -134,10 +133,10 @@ private:
   virtual void setCacheAndTrackHints(RooArgSet&) ;
 
   // The cache object
-  class CacheElem final : public RooAbsCacheElement {
+  class CacheElem : public RooAbsCacheElement {
   public:
     CacheElem() : _isRearranged(kFALSE) { } 
-    ~CacheElem() override = default;
+    virtual ~CacheElem() = default;
     // Payload
     RooArgList _partList ;
     RooArgList _numList ;
@@ -148,13 +147,13 @@ private:
     std::unique_ptr<RooAbsReal> _rearrangedNum{};
     std::unique_ptr<RooAbsReal> _rearrangedDen{};
     // Cache management functions
-    RooArgList containedArgs(Action) override ;
-    void printCompactTreeHook(std::ostream&, const char *, Int_t, Int_t) override ;
-    void writeToStream(std::ostream& os) const ;
+    virtual RooArgList containedArgs(Action) ;
+    virtual void printCompactTreeHook(std::ostream&, const char *, Int_t, Int_t) ;
+  private:
+    CacheElem(const CacheElem&) ;
   } ;
-  mutable RooObjCacheManager _cacheMgr ; //! The cache manager
+  mutable RooObjCacheManager _cacheMgr ; // The cache manager
 
-  CacheElem* getCacheElem(RooArgSet const* nset) const ;
   void rearrangeProduct(CacheElem&) const;
   RooAbsReal* specializeIntegral(RooAbsReal& orig, const char* targetRangeName) const ;
   RooAbsReal* specializeRatio(RooFormulaVar& input, const char* targetRangeName) const ;
@@ -183,7 +182,7 @@ private:
   
 private:
 
-  ClassDef(RooProdPdf,5) // PDF representing a product of PDFs
+  ClassDef(RooProdPdf,4) // PDF representing a product of PDFs
 };
 
 

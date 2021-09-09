@@ -160,7 +160,7 @@ PyObject* TemplateProxy::Instantiate(const std::string& fname,
                     } else
                         PyErr_Clear();
                 }
-                Py_XDECREF(pytc); pytc = nullptr;
+                Py_DECREF(pytc); pytc = nullptr;
                 if (pyactname) {
                     PyTuple_SET_ITEM(tpArgs, i, pyactname);
                     bArgSet = true;

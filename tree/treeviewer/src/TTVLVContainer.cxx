@@ -24,7 +24,7 @@
 ClassImp(TGItemContext);
 
 /** \class TGItemContext
-Empty object used as context menu support for TGLVTreeEntries.
+empty object used as context menu support for TGLVTreeEntries.
 */
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,8 +87,9 @@ void TGItemContext::SetExpression(const char *name, const char *alias, Bool_t cu
 ClassImp(TTVLVEntry);
 
 /** \class TTVLVEntry
-This class represent entries that goes into the TreeViewer listview container.
-It subclasses TGLVEntry and adds two data members: the item true name and the alias.
+This class represent entries that goes into the TreeViewer
+listview container. It subclasses TGLVEntry and adds 2
+data members: the item true name and the alias.
 */
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -302,8 +303,9 @@ void TTVLVEntry::SetSmallPic(const TGPicture *spic)
 ClassImp(TTVLVContainer);
 
 /** \class TTVLVContainer
-This class represent the list view container for the TreeView class.
-It is a TGLVContainer with item dragging capabilities for the TTVLVEntry objects inside.
+This class represent the list view container for the.
+TreeView class. It is a TGLVContainer with item dragging
+capabilities for the TTVLVEntry objects inside.
 */
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -647,8 +649,10 @@ void TTVLVContainer::SelectItem(const char* name)
 ClassImp(TGSelectBox);
 
 /** \class TGSelectBox
-This class represent a specialized expression editor for TTVLVEntry 'true name' and 'alias' data members.
-It is a singleton in order to be able to use it for several expressions.
+This class represent a specialized expression editor for
+TTVLVEntry 'true name' and 'alias' data members.
+It is a singleton in order to be able to use it for several
+expressions.
 */
 
 enum ETransientFrameCommands {

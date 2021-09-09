@@ -12,8 +12,6 @@
 #include <ROOT/REveSceneInfo.hxx>
 #include <ROOT/REveScene.hxx>
 
-#include <nlohmann/json.hpp>
-
 using namespace ROOT::Experimental;
 
 /** \class REveSceneInfo

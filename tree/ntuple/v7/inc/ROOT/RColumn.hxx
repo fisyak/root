@@ -36,7 +36,7 @@ namespace Detail {
 \ingroup NTuple
 \brief A column is a storage-backed array of a simple, fixed-size type, from which pages can be mapped into memory.
 
-On the primitives data layer, the RColumn and RColumnElement are the equivalents to RField and RFieldValue on the
+On the primitives data layer, the RColumn and RColumnElement are the equivalents to RField and RTreeValue on the
 logical data layer.
 */
 // clang-format on
@@ -158,40 +158,24 @@ public:
       }
    }
 
-   template <typename CppT>
+   template <typename CppT, EColumnType ColumnT>
    CppT *Map(const NTupleSize_t globalIndex) {
-      NTupleSize_t nItems;
-      return MapV<CppT>(globalIndex, nItems);
-   }
-
-   template <typename CppT>
-   CppT *Map(const RClusterIndex &clusterIndex) {
-      NTupleSize_t nItems;
-      return MapV<CppT>(clusterIndex, nItems);
-   }
-
-   template <typename CppT>
-   CppT *MapV(const NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       if (!fCurrentPage.Contains(globalIndex)) {
          MapPage(globalIndex);
       }
-      // +1 to go from 0-based indexing to 1-based number of items
-      nItems = fCurrentPage.GetGlobalRangeLast() - globalIndex + 1;
       return reinterpret_cast<CppT*>(
          static_cast<unsigned char *>(fCurrentPage.GetBuffer()) +
-         (globalIndex - fCurrentPage.GetGlobalRangeFirst()) * RColumnElement<CppT>::kSize);
+         (globalIndex - fCurrentPage.GetGlobalRangeFirst()) * RColumnElement<CppT, ColumnT>::kSize);
    }
 
-   template <typename CppT>
-   CppT *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   template <typename CppT, EColumnType ColumnT>
+   CppT *Map(const RClusterIndex &clusterIndex) {
       if (!fCurrentPage.Contains(clusterIndex)) {
          MapPage(clusterIndex);
       }
-      // +1 to go from 0-based indexing to 1-based number of items
-      nItems = fCurrentPage.GetClusterRangeLast() - clusterIndex.GetIndex() + 1;
       return reinterpret_cast<CppT*>(
          static_cast<unsigned char *>(fCurrentPage.GetBuffer()) +
-         (clusterIndex.GetIndex() - fCurrentPage.GetClusterRangeFirst()) * RColumnElement<CppT>::kSize);
+         (clusterIndex.GetIndex() - fCurrentPage.GetClusterRangeFirst()) * RColumnElement<CppT, ColumnT>::kSize);
    }
 
    NTupleSize_t GetGlobalIndex(const RClusterIndex &clusterIndex) {
@@ -212,8 +196,8 @@ public:
    /// For offset columns only, look at the two adjacent values that define a collection's coordinates
    void GetCollectionInfo(const NTupleSize_t globalIndex, RClusterIndex *collectionStart, ClusterSize_t *collectionSize)
    {
-      auto idxStart = (globalIndex == 0) ? 0 : *Map<ClusterSize_t>(globalIndex - 1);
-      auto idxEnd = *Map<ClusterSize_t>(globalIndex);
+      auto idxStart = (globalIndex == 0) ? 0 : *Map<ClusterSize_t, EColumnType::kIndex>(globalIndex - 1);
+      auto idxEnd = *Map<ClusterSize_t, EColumnType::kIndex>(globalIndex);
       auto selfOffset = fCurrentPage.GetClusterInfo().GetIndexOffset();
       if (globalIndex == selfOffset) {
          // Passed cluster boundary
@@ -227,15 +211,15 @@ public:
                           RClusterIndex *collectionStart, ClusterSize_t *collectionSize)
    {
       auto index = clusterIndex.GetIndex();
-      auto idxStart = (index == 0) ? 0 : *Map<ClusterSize_t>(clusterIndex - 1);
-      auto idxEnd = *Map<ClusterSize_t>(clusterIndex);
+      auto idxStart = (index == 0) ? 0 : *Map<ClusterSize_t, EColumnType::kIndex>(clusterIndex - 1);
+      auto idxEnd = *Map<ClusterSize_t, EColumnType::kIndex>(clusterIndex);
       *collectionSize = idxEnd - idxStart;
       *collectionStart = RClusterIndex(clusterIndex.GetClusterId(), idxStart);
    }
 
    /// Get the currently active cluster id
    void GetSwitchInfo(NTupleSize_t globalIndex, RClusterIndex *varIndex, std::uint32_t *tag) {
-      auto varSwitch = Map<RColumnSwitch>(globalIndex);
+      auto varSwitch = Map<RColumnSwitch, EColumnType::kSwitch>(globalIndex);
       *varIndex = RClusterIndex(fCurrentPage.GetClusterInfo().GetId(), varSwitch->GetIndex());
       *tag = varSwitch->GetTag();
    }

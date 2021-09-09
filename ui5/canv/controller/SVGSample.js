@@ -87,4 +87,6 @@ sap.ui.define([
 
    });
 
+   return SVGSample;
+
 });

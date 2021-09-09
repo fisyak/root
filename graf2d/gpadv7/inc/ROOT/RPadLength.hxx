@@ -178,7 +178,7 @@ public:
 
    void Clear() { fArr.clear(); }
 
-   bool Empty() const { return fArr.empty(); }
+   bool Empty() const { return fArr.size() == 0; }
 
    /// Add two `RPadLength`s.
    friend RPadLength operator+(RPadLength lhs, const RPadLength &rhs)

@@ -20,15 +20,6 @@ will place all browsable objects in a new list and draws the
 contents of the selected class in the icon-box. And so on....
 
 \image html base_browser.png
-
-\since **ROOT version 6.24/00**
-
-TBrowser invokes by default the Web-based %ROOT file browser [RBrowser](\ref ROOT::Experimental::RBrowser)
-To change this behaviour, and invoke the standard TBrowser, one should put
-the following directive in the `.rootrc` file:
-```
-Browser.Name:      TRootBrowser
-```
 */
 
 #include "TBrowser.h"
@@ -44,7 +35,6 @@ Browser.Name:      TRootBrowser
 #include "TApplication.h"
 
 /** \class TBrowserTimer
-Called whenever timer times out.
 */
 
 class TBrowserTimer : public TTimer {
@@ -60,7 +50,8 @@ public:
 };
 
 /** \class TBrowserObject
-This class is designed to wrap a Foreign object in order to inject it into the Browse sub-system.
+This class is designed to wrap a Foreign object in order to
+inject it into the Browse sub-system.
 */
 
 class TBrowserObject : public TNamed
@@ -76,8 +67,8 @@ public:
    TClass *IsA() const { return fClass; }
 
 private:
-   void     *fObj;   ///<! pointer to the foreign object
-   TClass   *fClass; ///<! pointer to class of the foreign object
+   void     *fObj;   //! pointer to the foreign object
+   TClass   *fClass; //! pointer to class of the foreign object
 
 };
 
@@ -268,9 +259,9 @@ void TBrowser::Destructor()
    if (fImp) fImp->CloseTabs();
    R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfBrowsers()->Remove(this);
-   SafeDelete(fContextMenu);
-   SafeDelete(fTimer);
-   SafeDelete(fImp);
+   delete fContextMenu;
+   delete fTimer;
+   if (fImp) delete fImp;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -409,6 +400,10 @@ void TBrowser::SetSelected(TObject *clickedObject)
    fLastSelectedObject = clickedObject;
 }
 
+/** \class  TBrowserTimer
+Called whenever timer times out.
+*/
+
 Bool_t TBrowserTimer::Notify()
 {
    if (fBrowser) {
@@ -425,6 +420,10 @@ Bool_t TBrowserTimer::Notify()
    return kFALSE;
 }
 
+/** \class TBrowserObject
+This is a wrapper class to emulate the TObject interface
+around an object of a non-TObject class
+*/
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.

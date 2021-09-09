@@ -9,13 +9,18 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TCurlyLineEditor
-    \ingroup ged
-
-Implements GUI for editing CurlyLine attributes: shape, size, angle.
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TCurlyLineEditor                                                    //
+//                                                                      //
+//  Implements GUI for editing CurlyLine attributes: shape, size, angle.//                                             //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+//Begin_Html
+/*
+<img src="gif/TCurlyLineEditor.gif">
 */
+//End_Html
 
 
 #include "TCurlyLineEditor.h"

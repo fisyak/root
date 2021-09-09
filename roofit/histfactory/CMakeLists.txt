@@ -64,8 +64,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(HistFactory
     src/Systematics.cxx
   DICTIONARY_OPTIONS
     "-writeEmptyRootPCM"
-  LIBRARIES
-    RooBatchCompute
   DEPENDENCIES
     RooFit
     RooFitCore

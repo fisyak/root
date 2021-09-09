@@ -1,11 +1,3 @@
-/*************************************************************************
- * Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.               *
- * All rights reserved.                                                  *
- *                                                                       *
- * For the licensing terms see $ROOTSYS/LICENSE.                         *
- * For the list of contributors see $ROOTSYS/README/CREDITS.             *
- *************************************************************************/
-
 #include "ROOT/RDF/RDisplay.hxx"
 #include "TInterpreter.h"
 
@@ -179,7 +171,7 @@ RDisplay::RDisplay(const VecStr_t &columnNames, const VecStr_t &types, int entri
 
    // Add the first row with the names of the columns
    fTable.push_back(std::vector<DElement_t>(columnNames.size()));
-   for (const auto &name : columnNames) {
+   for (auto name : columnNames) {
       AddToRow(name);
    }
 }

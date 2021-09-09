@@ -12,14 +12,22 @@
 #ifndef ROO_PARAMHISTFUNC
 #define ROO_PARAMHISTFUNC
 
+#include <map>
+#include <vector>
+#include <list>
+#include <string>
+
 #include "RooAbsReal.h"
+#include "RooRealProxy.h"
 #include "RooListProxy.h"
 #include "RooObjCacheManager.h"
 #include "RooDataHist.h"
 
 // Forward Declarations
 class RooRealVar;
+class RooArgList ;
 class RooWorkspace;
+class RooBinning;
 
 class ParamHistFunc : public RooAbsReal {
 public:
@@ -30,7 +38,7 @@ public:
   virtual ~ParamHistFunc() ;
 
   ParamHistFunc(const ParamHistFunc& other, const char* name = 0);
-  virtual TObject* clone(const char* newname) const override { return new ParamHistFunc(*this, newname); }
+  virtual TObject* clone(const char* newname) const { return new ParamHistFunc(*this, newname); }
 
   const RooArgList& paramList() const { return _paramSet ; }
 
@@ -49,18 +57,18 @@ public:
 
   double binVolume() const { return _dataSet.binVolume(); }
 
-  virtual Bool_t forceAnalyticalInt(const RooAbsArg&) const override { return kTRUE ; }
+  virtual Bool_t forceAnalyticalInt(const RooAbsArg&) const { return kTRUE ; }
 
-  Int_t getAnalyticalIntegralWN(RooArgSet& allVars, RooArgSet& analVars, const RooArgSet* normSet,const char* rangeName=0) const override;
-  Double_t analyticalIntegralWN(Int_t code, const RooArgSet* normSet, const char* rangeName=0) const override;
+  Int_t getAnalyticalIntegralWN(RooArgSet& allVars, RooArgSet& analVars, const RooArgSet* normSet,const char* rangeName=0) const ;
+  Double_t analyticalIntegralWN(Int_t code, const RooArgSet* normSet, const char* rangeName=0) const ;
 
   static RooArgList createParamSet(RooWorkspace& w, const std::string&, const RooArgList& Vars);
   static RooArgList createParamSet(RooWorkspace& w, const std::string&, const RooArgList& Vars, Double_t, Double_t);
   static RooArgList createParamSet(const std::string&, Int_t, Double_t, Double_t);
 
-  virtual std::list<Double_t>* binBoundaries(RooAbsRealLValue& /*obs*/, Double_t /*xlo*/, Double_t /*xhi*/) const override;
-  virtual std::list<Double_t>* plotSamplingHint(RooAbsRealLValue& obs, Double_t xlo, Double_t xhi) const override;
-  virtual Bool_t isBinnedDistribution(const RooArgSet& /*obs*/) const override { return true; }
+  virtual std::list<Double_t>* binBoundaries(RooAbsRealLValue& /*obs*/, Double_t /*xlo*/, Double_t /*xhi*/) const ;
+  virtual std::list<Double_t>* plotSamplingHint(RooAbsRealLValue& obs, Double_t xlo, Double_t xhi) const ; 
+  virtual Bool_t isBinnedDistribution(const RooArgSet& /*obs*/) const {return kTRUE;}
 
 
 protected:
@@ -80,37 +88,29 @@ protected:
     RooArgList _highIntList ;
     // will want std::vector<RooRealVar*> for low and high also
   } ;
-  mutable RooObjCacheManager _normIntMgr ; //! The integration cache manager
+  mutable RooObjCacheManager _normIntMgr ; // The integration cache manager
 
+  // Turn into a RooListProxy
+  //RooRealProxy _dataVar;       // The RooRealVar
   RooListProxy _dataVars;       // The RooRealVars
   RooListProxy _paramSet ;            // interpolation parameters
+  //RooAbsBinning* _binning;  // Holds the binning of the dataVar (at construction time)
 
   Int_t _numBins;
-  struct NumBins {
-    NumBins() {}
-    NumBins(int nx, int ny, int nz) : x{nx}, y{ny}, z{nz}, xy{x*y}, xz{x*z}, yz{y*z}, xyz{xy*z} {}
-    int x = 0;
-    int y = 0;
-    int z = 0;
-    int xy = 0;
-    int xz = 0;
-    int yz = 0;
-    int xyz = 0;
-  };
-  mutable NumBins _numBinsPerDim; //!
+  mutable std::map<Int_t, Int_t> _binMap;
   mutable RooDataHist _dataSet;
+   //Bool_t _normalized;
 
-  Int_t getCurrentBin() const;
+  // std::vector< Double_t > _nominalVals; // The nominal vals when gamma = 1.0 ( = 1.0 by default)
+  RooArgList   _ownedList ;       // List of owned components
+
+  Int_t getCurrentBin() const ;
   Int_t addVarSet( const RooArgList& vars );
   Int_t addParamSet( const RooArgList& params );
   static Int_t GetNumBins( const RooArgSet& vars );
-  double evaluate() const override;
-  RooSpan<double> evaluateSpan(RooBatchCompute::RunContext& evalData, const RooArgSet* normSet) const override;
+  Double_t evaluate() const;
 
-private:
-  static NumBins getNumBinsPerDim(RooArgSet const& vars);
-
-  ClassDefOverride(ParamHistFunc, 7)
+  ClassDef(ParamHistFunc,5) // Sum of RooAbsReal objects
 };
 
 #endif

@@ -9,21 +9,16 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/**
-\class TGHorizontal3DLine
-\ingroup guiwidgets
-
-A horizontal 3D line is a line that typically separates a toolbar
-from the menubar.
-
-\class TGVertical3DLine
-\ingroup guiwidgets
-
-A vertical 3D line is a line that can be used to separate groups of
-widgets.
-
-*/
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGHorizontal3DLine and TGVertical3DLine                              //
+//                                                                      //
+// A horizontal 3D line is a line that typically separates a toolbar    //
+// from the menubar.                                                    //
+// A vertical 3D line is a line that can be used to separate groups of  //
+// widgets.                                                             //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TG3DLine.h"
 #include "TVirtualX.h"

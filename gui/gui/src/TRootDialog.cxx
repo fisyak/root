@@ -9,16 +9,15 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TRootDialog
-    \ingroup guiwidgets
-
-A TRootDialog is used to prompt for the arguments of an object's
-member function. A TRootDialog is created via the context menu's
-when selecting a member function taking arguments.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TRootDialog                                                          //
+//                                                                      //
+// A TRootDialog is used to prompt for the arguments of an object's     //
+// member function. A TRootDialog is created via the context menu's     //
+// when selecting a member function taking arguments.                   //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TRootDialog.h"
 #include "TRootContextMenu.h"

@@ -484,7 +484,6 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     PATTERN "CMakeFiles" EXCLUDE
     PATTERN "*.inc"
     PATTERN "*.h"
-    PATTERN "*.modulemap"
     )
 endif()
 

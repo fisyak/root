@@ -12,9 +12,6 @@
 
 #include <ROOT/RWebBrowserImp.hxx>
 
-#include "TROOT.h"
-#include "TSeqCollection.h" // needed in gROOT->GetListOfFiles()->FindObject
-
 using namespace ROOT::Experimental;
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -23,7 +20,6 @@ using namespace ROOT::Experimental;
 RWebBrowserImp::RWebBrowserImp(TBrowser *b) : TBrowserImp(b)
 {
    fWebBrowser = std::make_shared<RBrowser>();
-   fWebBrowser->AddTCanvas();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -34,7 +30,6 @@ RWebBrowserImp::RWebBrowserImp(TBrowser *b, const char *title, UInt_t width, UIn
    fWidth = width;
    fHeight = height;
    fWebBrowser = std::make_shared<RBrowser>();
-   fWebBrowser->AddTCanvas();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -47,7 +42,6 @@ RWebBrowserImp::RWebBrowserImp(TBrowser *b, const char *title, Int_t x, Int_t y,
    fWidth = width;
    fHeight = height;
    fWebBrowser = std::make_shared<RBrowser>();
-   fWebBrowser->AddTCanvas();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -77,18 +71,6 @@ void RWebBrowserImp::Refresh(Bool_t)
 void RWebBrowserImp::Show()
 {
    fWebBrowser->Show();
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////
-/// Browse specified object
-
-void RWebBrowserImp::BrowseObj(TObject *obj)
-{
-   if (obj == gROOT) return;
-
-   if (gROOT->GetListOfFiles()->FindObject(obj))
-      fWebBrowser->SetWorkingPath("ROOT Files");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////

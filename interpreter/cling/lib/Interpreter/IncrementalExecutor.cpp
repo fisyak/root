@@ -8,13 +8,11 @@
 //------------------------------------------------------------------------------
 
 #include "IncrementalExecutor.h"
-#include "BackendPasses.h"
 #include "IncrementalJIT.h"
 #include "Threading.h"
 
-#include "cling/Interpreter/DynamicLibraryManager.h"
-#include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
+#include "cling/Interpreter/Transaction.h"
 #include "cling/Utils/AST.h"
 #include "cling/Utils/Output.h"
 #include "cling/Utils/Platform.h"
@@ -27,6 +25,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Host.h"
@@ -74,13 +73,13 @@ CreateHostTargetMachine(const clang::CompilerInstance& CI) {
   JTMB->getOptions().EmulatedTLS = false;
 #endif // _WIN32
 
+  std::unique_ptr<TargetMachine> TM = cantFail(JTMB->createTargetMachine());
+
 #if defined(__powerpc64__) || defined(__PPC64__)
   // We have to use large code model for PowerPC64 because TOC and text sections
   // can be more than 2GB apart.
-  JTMB->setCodeModel(CodeModel::Large);
+  assert(TM->getCodeModel() >= CodeModel::Large);
 #endif
-
-  std::unique_ptr<TargetMachine> TM = cantFail(JTMB->createTargetMachine());
 
   // Forcefully disable GlobalISel, it might be enabled on AArch64 without
   // optimizations. In tests on an Apple M1 after the upgrade to LLVM 9, this
@@ -113,7 +112,6 @@ IncrementalExecutor::IncrementalExecutor(clang::DiagnosticsEngine& /*diags*/,
   : m_Diags(diags)
 #endif
 {
-  m_DyLibManager.initializeDyld([](llvm::StringRef){/*ignore*/ return false;});
 
   // MSVC doesn't support m_AtExitFuncsSpinLock=ATOMIC_FLAG_INIT; in the class definition
   std::atomic_flag_clear( &m_AtExitFuncsSpinLock );
@@ -381,11 +379,6 @@ IncrementalExecutor::executeWrapper(llvm::StringRef function,
   return kExeSuccess;
 }
 
-void IncrementalExecutor::setCallbacks(InterpreterCallbacks* callbacks) {
-  m_Callbacks = callbacks;
-  m_DyLibManager.setCallbacks(callbacks);
-}
-
 void
 IncrementalExecutor::installLazyFunctionCreator(LazyFunctionCreatorFunc_t fp)
 {
@@ -472,22 +465,6 @@ bool IncrementalExecutor::diagnoseUnresolvedSymbols(llvm::StringRef trigger,
           << demangledName << "\n"
           << "Maybe you need to load the corresponding shared library?\n";
     }
-
-#ifdef __APPLE__
-    // The JIT gives us a mangled name which has only one leading underscore on
-    // all platforms, for instance _ZN8TRandom34RndmEv. However, on OSX the
-    // linker stores this symbol as __ZN8TRandom34RndmEv (adding an extra _).
-    assert(!llvm::StringRef(sym).startswith("__") && "Already added!");
-    std::string libName = m_DyLibManager.searchLibrariesForSymbol('_' + sym,
-                                                        /*searchSystem=*/ true);
-#else
-    std::string libName = m_DyLibManager.searchLibrariesForSymbol(sym,
-                                                        /*searchSystem=*/ true);
-#endif //__APPLE__
-    if (!libName.empty())
-      cling::errs() << "Symbol found in '" << libName << "';"
-                    << " did you mean to load it with '.L "
-                    << libName << "'?\n";
 
     //llvm::Function *ff = m_engine->FindFunctionNamed(i->c_str());
     // i could also reference a global variable, in which case ff == 0.

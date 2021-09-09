@@ -85,8 +85,7 @@
 #include "TError.h"
 #include "TClass.h"
 #include "TVirtualMutex.h"
-
-#include <memory>
+#include <ROOT/RMakeUnique.hxx>
 
 ClassImp(TXMLFile);
 
@@ -201,6 +200,7 @@ TXMLFile::TXMLFile(const char *filename, Option_t *option, const char *title, In
    if (recreate) {
       if (!gSystem->AccessPathName(fname, kFileExists))
          gSystem->Unlink(fname);
+      recreate = kFALSE;
       create = kTRUE;
       fOption = "CREATE";
    }

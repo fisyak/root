@@ -30,14 +30,15 @@
 
 **************************************************************************/
 
-
-/** \class TGMdiDecorFrame
-    \ingroup guiwidgets
-
-This file contains all different MDI frame decoration classes.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGMdiDecorFrame, TGMdiTitleBar, TGMdiButtons, TGMdiTitleIcon,        //
+// TGMdiWinResizer, TGMdiVerticalWinResizer, TGMdiHorizontalWinResizer, //
+// and TGMdiCornerWinResizer.                                           //
+//                                                                      //
+// This file contains all different MDI frame decoration classes.       //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include <cstdio>
 #include <cstdlib>

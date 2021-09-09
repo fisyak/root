@@ -252,17 +252,16 @@ TF1 graphics function is via the TH1 and TGraph drawing functions.
 
 The following types of functions can be created:
 
-1.  [Expression using variable x and no parameters](\ref F1)
-2.  [Expression using variable x with parameters](\ref F2)
-3.  [Lambda Expression with variable x and parameters](\ref F3)
-4.  [A general C function with parameters](\ref F4)
-5.  [A general C++ function object (functor) with parameters](\ref F5)
-6.  [A member function with parameters of a general C++ class](\ref F6)
+1.  [Expression using variable x and no parameters]([#F1)
+2.  [Expression using variable x with parameters](#F2)
+3.  [Lambda Expression with variable x and parameters](#F3)
+4.  [A general C function with parameters](#F4)
+5.  [A general C++ function object (functor) with parameters](#F5)
+6.  [A member function with parameters of a general C++ class](#F6)
 
 
 
-\anchor F1
-### 1 - Expression using variable x and no parameters
+### <a name="F1"></a> 1 - Expression using variable x and no parameters
 
 #### Case 1: inline expression using standard C++ functions/operators
 
@@ -292,8 +291,7 @@ TF1 *fa3 = new TF1("fa3","myFunc(x)",-3,5);
 fa3->Draw();
 ~~~~
 
-\anchor F2
-### 2 - Expression using variable x with parameters
+### <a name="F2"></a> 2 - Expression using variable x with parameters
 
 #### Case 1: inline expression using standard C++ functions/operators
 
@@ -346,8 +344,7 @@ Begin_Macro
 }
 End_Macro
 
-\anchor F3
-### 3 - A lambda expression with variables and parameters
+###<a name="F3"></a> 3 - A lambda expression with variables and parameters
 
 \since **6.00/00:**
 TF1 supports using lambda expressions in the formula. This allows, by using a full C++ syntax the full power of lambda
@@ -363,8 +360,7 @@ TF1 f2("f2","cos(x)",0,10);
 TF1 fsum("f1","[&](double *x, double *p){ return p[0]*f1(x) + p[1]*f2(x); }",0,10,2);
 ~~~~
 
-\anchor F4
-### 4 - A general C function with parameters
+###<a name="F4"></a> 4 - A general C function with parameters
 
 Consider the macro myfunc.C below:
 
@@ -426,8 +422,7 @@ Example:
 ~~~~
 
 
-\anchor F5
-### 5 - A general C++ function object (functor) with parameters
+### <a name="F5"></a> 5 - A general C++ function object (functor) with parameters
 
 A TF1 can be created from any C++ class implementing the operator()(double *x, double *p). The advantage of the function object is that he can have a state and reference therefore what-ever other object. In this way the user can customize his function.
 
@@ -463,8 +458,7 @@ TF1 * f = new TF1("f",[&](double*x, double *p){ return p[0]*g->Eval(x[0]); }, xm
 ~~~~
 
 
-\anchor F6
-### 6 - A member function with parameters of a general C++ class
+### <a name="F6"></a> 6 - A member function with parameters of a general C++ class
 
 A TF1 can be created in this case from any member function of a class which has the signature of (double * , double *) and returning a double.
 
@@ -530,13 +524,13 @@ TF1::TF1(const char *name, const char *formula, Double_t xmin, Double_t xmax, EA
       fXmax = xmin;
    }
    // Create rep formula (no need to add to gROOT list since we will add the TF1 object)
-   const auto formulaLength = strlen(formula);
+
    // First check if we are making a convolution
-   if (strncmp(formula, "CONV(", 5) == 0 && formula[formulaLength - 1] == ')') {
+   if (TString(formula, 5) == "CONV(" && formula[strlen(formula) - 1] == ')') {
       // Look for single ',' delimiter
       int delimPosition = -1;
       int parenCount = 0;
-      for (unsigned int i = 5; i < formulaLength - 1; i++) {
+      for (unsigned int i = 5; i < strlen(formula) - 1; i++) {
          if (formula[i] == '(')
             parenCount++;
          else if (formula[i] == ')')
@@ -553,7 +547,7 @@ TF1::TF1(const char *name, const char *formula, Double_t xmin, Double_t xmax, EA
 
       // Having found the delimiter, define the first and second formulas
       TString formula1 = TString(TString(formula)(5, delimPosition - 5));
-      TString formula2 = TString(TString(formula)(delimPosition + 1, formulaLength - 1 - (delimPosition + 1)));
+      TString formula2 = TString(TString(formula)(delimPosition + 1, strlen(formula) - 1 - (delimPosition + 1)));
       // remove spaces from these formulas
       formula1.ReplaceAll(' ', "");
       formula2.ReplaceAll(' ', "");
@@ -567,7 +561,7 @@ TF1::TF1(const char *name, const char *formula, Double_t xmin, Double_t xmax, EA
 
       // std::cout << "functions have been defined" << std::endl;
 
-      TF1Convolution *conv = new TF1Convolution(function1, function2,xmin,xmax);
+      TF1Convolution *conv = new TF1Convolution(function1, function2);
 
       // (note: currently ignoring `useFFT` option)
       fNpar = conv->GetNpar();
@@ -605,11 +599,11 @@ TF1::TF1(const char *name, const char *formula, Double_t xmin, Double_t xmax, EA
       }
 
       // Then check if we need NSUM syntax:
-   } else if (strncmp(formula, "NSUM(", 5) == 0 && formula[formulaLength - 1] == ')') {
+   } else if (TString(formula, 5) == "NSUM(" && formula[strlen(formula) - 1] == ')') {
       // using comma as delimiter
       char delimiter = ',';
       // first, remove "NSUM(" and ")" and spaces
-      TString formDense = TString(formula)(5,formulaLength-5-1);
+      TString formDense = TString(formula)(5,strlen(formula)-5-1);
       formDense.ReplaceAll(' ', "");
 
       // make sure standard functions are defined (e.g. gaus, expo)
@@ -2185,7 +2179,7 @@ Bool_t TF1::ComputeCdfTable(Option_t * option) {
 
 Double_t TF1::GetRandom(TRandom * rng, Option_t * option)
 {
-   //  Check if integral array must be built
+   //  Check if integral array must be build
    if (fIntegral.size() == 0) {
       Bool_t ret = ComputeCdfTable(option);
       if (!ret) return TMath::QuietNaN();
@@ -2238,7 +2232,7 @@ Double_t TF1::GetRandom(TRandom * rng, Option_t * option)
 
 Double_t TF1::GetRandom(Double_t xmin, Double_t xmax, TRandom * rng, Option_t * option)
 {
-   //  Check if integral array must be built
+   //  Check if integral array must be build
    if (fIntegral.size() == 0) {
       Bool_t ret = ComputeCdfTable(option);
       if (!ret) return TMath::QuietNaN();
@@ -2473,10 +2467,10 @@ void TF1::GradientPar(const Double_t *x, Double_t *grad, Double_t eps)
 void TF1::InitArgs(const Double_t *x, const Double_t *params)
 {
    if (fMethodCall) {
-      Longptr_t args[2];
-      args[0] = (Longptr_t)x;
-      if (params) args[1] = (Longptr_t)params;
-      else        args[1] = (Longptr_t)GetParameters();
+      Long_t args[2];
+      args[0] = (Long_t)x;
+      if (params) args[1] = (Long_t)params;
+      else        args[1] = (Long_t)GetParameters();
       fMethodCall->SetParamPtrs(args);
    }
 }
@@ -3068,15 +3062,14 @@ TH1   *TF1::DoCreateHistogram(Double_t xmin, Double_t  xmax, Bool_t recreate)
       // delete previous histograms if were done if done in different mode
       xtitle = fHistogram->GetXaxis()->GetTitle();
       ytitle = fHistogram->GetYaxis()->GetTitle();
-      Bool_t test_logx = fHistogram->TestBit(TH1::kLogX);
-      if (!gPad->GetLogx() && test_logx) {
+      if (!gPad->GetLogx()  &&  fHistogram->TestBit(TH1::kLogX)) {
          delete fHistogram;
-         fHistogram = nullptr;
+         fHistogram = 0;
          recreate = kTRUE;
       }
-      if (gPad->GetLogx() && !test_logx) {
+      if (gPad->GetLogx()  && !fHistogram->TestBit(TH1::kLogX)) {
          delete fHistogram;
-         fHistogram = nullptr;
+         fHistogram = 0;
          recreate = kTRUE;
       }
    }

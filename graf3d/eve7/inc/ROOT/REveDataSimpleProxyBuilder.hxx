@@ -12,7 +12,6 @@
 #ifndef ROOT7_REveDataProxySimpleBuilder
 #define ROOT7_REveDataProxySimpleBuilder
 
-#include<list>
 #include <ROOT/REveDataProxyBuilderBase.hxx>
 
 namespace ROOT {
@@ -21,32 +20,11 @@ namespace Experimental {
 class REveDataCollection;
 class REveElement;
 
-class REveCollectionCompound : public REveCompound // ?? Should this be in as REveDataSimpleProxyBuilder.hxx ?????
-{
-private:
-   REveDataCollection *fCollection{nullptr};   
-public:
-   REveCollectionCompound(REveDataCollection *c);
-   virtual ~REveCollectionCompound();
-   virtual REveElement *GetSelectionMaster() override;
-};
-
-//
-//____________________________________________________________________________________
-//
 class REveDataSimpleProxyBuilder : public REveDataProxyBuilderBase
 {
-
 public:
    REveDataSimpleProxyBuilder();
    virtual ~REveDataSimpleProxyBuilder();
-
-   struct SPBProduct {
-      std::map<int, REveCollectionCompound*> map;
-      int lastChildIdx{0};
-   }; 
-   
-   typedef  std::map<REveElement*, std::unique_ptr<SPBProduct*> > EProductMap_t;
 
 protected:
    void Build(const REveDataCollection* iCollection, REveElement* product, const REveViewContext*) override;
@@ -61,20 +39,32 @@ protected:
    void ModelChanges(const REveDataCollection::Ids_t& iIds, Product* p) override;
    void FillImpliedSelected(REveElement::Set_t& impSet, Product* p) override;
    void Clean() override; // Utility
-   REveCollectionCompound* CreateCompound(bool set_color=true, bool propagate_color_to_all_children=false);
+   REveCompound* CreateCompound(bool set_color=true, bool propagate_color_to_all_children=false);
 
-   //int GetItemIdxForCompound() const;
-   bool VisibilityModelChanges(int idx, REveElement*, const std::string& viewType, const REveViewContext*) override;
-
-   std::map<REveElement*, SPBProduct*> fProductMap;
-   REveCompound* GetHolder(REveElement *product, int idx);
 
 private:
    REveDataSimpleProxyBuilder(const REveDataSimpleProxyBuilder&); // stop default
 
    const REveDataSimpleProxyBuilder& operator=(const REveDataSimpleProxyBuilder&); // stop default
+
+   bool VisibilityModelChanges(int idx, REveElement*, const std::string& viewType, const REveViewContext*) override;
+
 };
 //==============================================================================
+
+class REveCollectionCompound : public REveCompound // ?? Should this be in as REveDataSimpleProxyBuilder.hxx ?????
+{
+private:
+   REveDataCollection* fCollection {nullptr};
+
+public:
+   REveCollectionCompound(REveDataCollection* c);
+   virtual ~REveCollectionCompound();
+   //   Int_t WriteCoreJson(nlohmann::json &cj, Int_t rnr_offset) override;
+
+   // virtual REveElement* GetSelectionMaster(const bool &secondary = false, const std::set<int>& secondary_idcs = {});
+   virtual REveElement* GetSelectionMaster() override;
+};
 
 
 } // namespace Experimental

@@ -13,6 +13,15 @@
 #ifndef ROOT_TGNumberEntry
 #define ROOT_TGNumberEntry
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGNumberEntry, TGNumberEntryField and TGNumberFormat                 //
+//                                                                      //
+// TGNumberEntry is a number entry input widget with up/down buttons.   //
+// TGNumberEntryField is a number entry input widget.                   //
+// TGNumberFormat contains enum types to specify the numeric format .   //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGFrame.h"
 #include "TGTextEntry.h"
@@ -21,40 +30,40 @@
 
 class TGNumberFormat {
 public:
-   enum EStyle {             ///< Style of number entry field
-      kNESInteger = 0,       ///< Integer
-      kNESRealOne = 1,       ///< Fixed fraction real, one digit
-      kNESRealTwo = 2,       ///< Fixed fraction real, two digit
-      kNESRealThree = 3,     ///< Fixed fraction real, three digit
-      kNESRealFour = 4,      ///< Fixed fraction real, four digit
-      kNESReal = 5,          ///< Real number
-      kNESDegree = 6,        ///< Degree
-      kNESMinSec = 7,        ///< Minute:seconds
-      kNESHourMin = 8,       ///< Hour:minutes
-      kNESHourMinSec = 9,    ///< Hour:minute:seconds
-      kNESDayMYear = 10,     ///< Day/month/year
-      kNESMDayYear = 11,     ///< Month/day/year
-      kNESHex = 12           ///< Hex
+   enum EStyle {             // Style of number entry field
+      kNESInteger = 0,       // Integer
+      kNESRealOne = 1,       // Fixed fraction real, one digit
+      kNESRealTwo = 2,       // Fixed fraction real, two digit
+      kNESRealThree = 3,     // Fixed fraction real, three digit
+      kNESRealFour = 4,      // Fixed fraction real, four digit
+      kNESReal = 5,          // Real number
+      kNESDegree = 6,        // Degree
+      kNESMinSec = 7,        // Minute:seconds
+      kNESHourMin = 8,       // Hour:minutes
+      kNESHourMinSec = 9,    // Hour:minute:seconds
+      kNESDayMYear = 10,     // Day/month/year
+      kNESMDayYear = 11,     // Month/day/year
+      kNESHex = 12           // Hex
    };
 
-   enum EAttribute {         ///< Attributes of number entry field
-      kNEAAnyNumber = 0,     ///< Any number
-      kNEANonNegative = 1,   ///< Non-negative number
-      kNEAPositive = 2       ///< Positive number
+   enum EAttribute {         // Attributes of number entry field
+      kNEAAnyNumber = 0,     // Any number
+      kNEANonNegative = 1,   // Non-negative number
+      kNEAPositive = 2       // Positive number
    };
 
-   enum ELimit {             ///< Limit selection of number entry field
-      kNELNoLimits = 0,      ///< No limits
-      kNELLimitMin = 1,      ///< Lower limit only
-      kNELLimitMax = 2,      ///< Upper limit only
-      kNELLimitMinMax = 3    ///< Both lower and upper limits
+   enum ELimit {             // Limit selection of number entry field
+      kNELNoLimits = 0,      // No limits
+      kNELLimitMin = 1,      // Lower limit only
+      kNELLimitMax = 2,      // Upper limit only
+      kNELLimitMinMax = 3    // Both lower and upper limits
    };
 
-   enum EStepSize {          ///< Step for number entry field increase
-      kNSSSmall = 0,         ///< Small step
-      kNSSMedium = 1,        ///< Medium step
-      kNSSLarge = 2,         ///< Large step
-      kNSSHuge = 3           ///< Huge step
+   enum EStepSize {          // Step for number entry field increase
+      kNSSSmall = 0,         // Small step
+      kNSSMedium = 1,        // Medium step
+      kNSSLarge = 2,         // Large step
+      kNSSHuge = 3           // Huge step
    };
 
    virtual ~TGNumberFormat() { }
@@ -65,13 +74,13 @@ public:
 class TGNumberEntryField : public TGTextEntry, public TGNumberFormat {
 
 protected:
-   Bool_t        fNeedsVerification; ///< Needs verification of input
-   EStyle        fNumStyle;          ///< Number style
-   EAttribute    fNumAttr;           ///< Number attribute
-   ELimit        fNumLimits;         ///< Limit attributes
-   Double_t      fNumMin;            ///< Lower limit
-   Double_t      fNumMax;            ///< Upper limit
-   Bool_t        fStepLog;           ///< Logarithmic steps for increase?
+   Bool_t        fNeedsVerification; // Needs verification of input
+   EStyle        fNumStyle;          // Number style
+   EAttribute    fNumAttr;           // Number attribute
+   ELimit        fNumLimits;         // Limit attributes
+   Double_t      fNumMin;            // Lower limit
+   Double_t      fNumMax;            // Upper limit
+   Bool_t        fStepLog;           // Logarithmic steps for increase?
 
 public:
    TGNumberEntryField(const TGWindow *p, Int_t id,
@@ -86,11 +95,11 @@ public:
                       ELimit limits = kNELNoLimits,
                       Double_t min = 0, Double_t max = 1);
 
-   virtual void SetNumber(Double_t val, Bool_t emit = kTRUE);
-   virtual void SetIntNumber(Long_t val, Bool_t emit = kTRUE);
-   virtual void SetTime(Int_t hour, Int_t min, Int_t sec, Bool_t emit = kTRUE);
-   virtual void SetDate(Int_t year, Int_t month, Int_t day, Bool_t emit = kTRUE);
-   virtual void SetHexNumber(ULong_t val, Bool_t emit = kTRUE);
+   virtual void SetNumber(Double_t val);
+   virtual void SetIntNumber(Long_t val);
+   virtual void SetTime(Int_t hour, Int_t min, Int_t sec);
+   virtual void SetDate(Int_t year, Int_t month, Int_t day);
+   virtual void SetHexNumber(ULong_t val);
    virtual void SetText(const char* text, Bool_t emit = kTRUE);
 
    virtual Double_t GetNumber() const;
@@ -118,7 +127,7 @@ public:
       // Get the numerical attribute
       return fNumAttr; }
    virtual ELimit GetNumLimits() const {
-      // Get the numerical limit attribute
+      // Get the numerialc limit attribute
       return fNumLimits; }
    virtual Double_t GetNumMin() const {
       // Get the lower limit
@@ -153,17 +162,17 @@ class TGNumberEntry : public TGCompositeFrame, public TGWidget,
    ELimit fNumLimits; // *OPTION={GetMethod="GetNumLimits";SetMethod="SetNumLimits";Items=(0="&No Limits",1="Limit M&in",2="Limit M&ax",2="Min &and Max")}*
 
 private:
-   const TGPicture  *fPicUp;      ///< Up arrow
-   const TGPicture  *fPicDown;    ///< Down arrow
+   const TGPicture  *fPicUp;      // Up arrow
+   const TGPicture  *fPicDown;    // Down arrow
 
    TGNumberEntry(const TGNumberEntry&) = delete;
    TGNumberEntry& operator=(const TGNumberEntry&) = delete;
 
 protected:
-   TGNumberEntryField *fNumericEntry;  ///< Number text entry field
-   TGButton           *fButtonUp;      ///< Button for increasing value
-   TGButton           *fButtonDown;    ///< Button for decreasing value
-   Bool_t              fButtonToNum;   ///< Send button messages to parent rather than number entry field
+   TGNumberEntryField *fNumericEntry;  // Number text entry field
+   TGButton           *fButtonUp;      // Button for increasing value
+   TGButton           *fButtonDown;    // Button for decreasing value
+   Bool_t              fButtonToNum;   // Send button messages to parent rather than number entry field
 
 public:
    TGNumberEntry(const TGWindow *parent = nullptr, Double_t val = 0,
@@ -174,24 +183,24 @@ public:
                  Double_t min = 0, Double_t max = 1);
    virtual ~TGNumberEntry();
 
-   virtual void SetNumber(Double_t val, Bool_t emit = kTRUE) {
+   virtual void SetNumber(Double_t val) {
       // Set the numeric value (floating point representation)
-      fNumericEntry->SetNumber(val, emit); }
-   virtual void SetIntNumber(Long_t val, Bool_t emit = kTRUE) {
+      fNumericEntry->SetNumber(val); }
+   virtual void SetIntNumber(Long_t val) {
       // Set the numeric value (integer representation)
-      fNumericEntry->SetIntNumber(val, emit); }
-   virtual void SetTime(Int_t hour, Int_t min, Int_t sec, Bool_t emit = kTRUE) {
+      fNumericEntry->SetIntNumber(val); }
+   virtual void SetTime(Int_t hour, Int_t min, Int_t sec) {
       // Set the numeric value (time format)
-      fNumericEntry->SetTime(hour, min, sec, emit); }
-   virtual void SetDate(Int_t year, Int_t month, Int_t day, Bool_t emit = kTRUE) {
+      fNumericEntry->SetTime(hour, min, sec); }
+   virtual void SetDate(Int_t year, Int_t month, Int_t day) {
       // Set the numeric value (date format)
-      fNumericEntry->SetDate(year, month, day, emit); }
-   virtual void SetHexNumber(ULong_t val, Bool_t emit = kTRUE) {
+      fNumericEntry->SetDate(year, month, day); }
+   virtual void SetHexNumber(ULong_t val) {
       // Set the numeric value (hex format)
-      fNumericEntry->SetHexNumber(val, emit); }
-   virtual void SetText(const char* text, Bool_t emit = kTRUE) {
+      fNumericEntry->SetHexNumber(val); }
+   virtual void SetText(const char* text) {
       // Set the value (text format)
-      fNumericEntry->SetText(text, emit); }
+      fNumericEntry->SetText(text); }
    virtual void SetState(Bool_t enable = kTRUE);
 
    virtual Double_t GetNumber() const {

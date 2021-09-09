@@ -42,7 +42,7 @@ to the drawing option.
 THStack::Add() allows to add a new histogram to the list.
 The THStack does not own the objects in the list.
 
-### Stack painting
+### <a name="HS00"></a> Stack painting
 
 By default, histograms are shown stacked.
   - the first histogram is paint
@@ -51,7 +51,7 @@ By default, histograms are shown stacked.
 The axis ranges are computed automatically along the X and Y axis in
 order to show the complete histogram collection.
 
-### Stack's drawing options
+### <a name="HS01"></a> Stack's drawing options
 
 The specific stack's drawing options are:
 
@@ -234,7 +234,7 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
       }
       TAxis* haxis= useX ? hist->GetYaxis() : hist->GetXaxis();
       if (!haxis) {
-         Warning("THStack","Histogram axis is NULL");
+         Warning("HStack","Histogram axis is NULL");
          return;
       }
       Int_t nbins = haxis->GetNbins();
@@ -270,7 +270,7 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
          else if (sAxis.First('z')==kNPOS)
             haxis=hist->GetZaxis();
          if (!haxis) {
-            Warning("THStack","Histogram axis is NULL");
+            Warning("HStack","Histogram axis is NULL");
             return;
          }
 
@@ -304,7 +304,7 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
             haxis2=hist->GetYaxis();
          }
          if (!haxis1 || !haxis2) {
-            Warning("THStack","Histogram axis is NULL");
+            Warning("HStack","Histogram axis is NULL");
             return;
          }
 
@@ -622,14 +622,14 @@ TObjArray *THStack::GetStack()
 
 TAxis *THStack::GetXaxis() const
 {
-   if (!gPad) return nullptr;
+   if (!gPad) return 0;
    TH1 *h = GetHistogram();
-   if (!h) return nullptr;
+   if (!h) return 0;
    return h->GetXaxis();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Get y axis of the histogram used to draw the stack.
+/// Get x axis of the histogram used to draw the stack.
 ///
 /// IMPORTANT NOTE
 ///  You must call Draw before calling this function. The returned histogram
@@ -637,26 +637,10 @@ TAxis *THStack::GetXaxis() const
 
 TAxis *THStack::GetYaxis() const
 {
-   if (!gPad) return nullptr;
+   if (!gPad) return 0;
    TH1 *h = GetHistogram();
-   if (!h) return nullptr;
+   if (!h) return 0;
    return h->GetYaxis();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// Get z axis of the histogram used to draw the stack.
-///
-/// IMPORTANT NOTE
-///  You must call Draw before calling this function. The returned histogram
-///  depends on the selected Draw options.
-
-TAxis *THStack::GetZaxis() const
-{
-   if (!gPad) return nullptr;
-   TH1 *h = GetHistogram();
-   if (!h->IsA()->InheritsFrom(TH2::Class())) Warning("THStack","1D Histograms don't have a Z axis");
-   if (!h) return nullptr;
-   return h->GetZaxis();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

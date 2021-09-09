@@ -1122,19 +1122,12 @@ void print_mask_info(ULong_t mask)
 }
 #endif
 
-@implementation XorDrawingView
-{
-    std::vector<ROOT::MacOSX::X11::Command *> xorOps;
-}
-
-- (void) setXorOperations : (const std::vector<ROOT::MacOSX::X11::Command *> &) primitives
-{
-    xorOps = primitives;
-}
+@implementation CrosshairView
 
 - (void) drawRect : (NSRect) dirtyRect
 {
     [super drawRect:dirtyRect];
+
     NSGraphicsContext *nsContext = [NSGraphicsContext currentContext];
     if (!nsContext)
         return;
@@ -1147,18 +1140,21 @@ void print_mask_info(ULong_t mask)
 
     CGContextSetRGBStrokeColor(cgContext, 0., 0., 0., 1.);
     CGContextSetLineWidth(cgContext, 1.);
-
-    for (auto *command : xorOps) {
-        command->Execute(cgContext);
-        delete command;
-    }
-
-    xorOps.clear();
+    // Horizontal line:
+    CGContextBeginPath(cgContext);
+    CGContextMoveToPoint(cgContext, self.start1.x, self.start1.y);
+    CGContextAddLineToPoint(cgContext, self.end1.x, self.end1.y);
+    CGContextStrokePath(cgContext);
+    // Vertical line:
+    CGContextBeginPath(cgContext);
+    CGContextMoveToPoint(cgContext, self.start2.x, self.start2.y);
+    CGContextAddLineToPoint(cgContext, self.end2.x, self.end2.y);
+    CGContextStrokePath(cgContext);
 }
 
 @end
 
-@implementation XorDrawingWindow
+@implementation CrosshairWindow
 
 - (instancetype) init
 {
@@ -1169,7 +1165,7 @@ void print_mask_info(ULong_t mask)
         self.hasShadow = NO;
         self.backgroundColor = NSColor.clearColor; // No background.
         self.ignoresMouseEvents = YES; // Lets mouse events pass through.
-        self.contentView = [[XorDrawingView alloc] init];
+        self.contentView = [[CrosshairView alloc] init];
     }
     return self;
 }
@@ -1497,29 +1493,29 @@ void print_mask_info(ULong_t mask)
    return [fContentView readColorBits : area];
 }
 
-#pragma mark - XorDrawinWindow/View
+#pragma mark - CrosshairWindow/View
 
 //______________________________________________________________________________
-- (void) addXorWindow
+- (void) addCrosshairWindow
 {
-    if ([self findXorWindow])
+    if ([self findCrosshairWindow])
         return;
 
-    XorDrawingWindow *special = [[XorDrawingWindow alloc] init];
-    [self adjustXorWindowGeometry:special];
+    CrosshairWindow *special = [[CrosshairWindow alloc] init];
+    [self adjustCrosshairWindowGeometry:special];
     [self addChildWindow : special ordered : NSWindowAbove];
     [special release];
 }
 
 //______________________________________________________________________________
-- (void) adjustXorWindowGeometry
+- (void) adjustCrosshairWindowGeometry
 {
-    if (auto win = [self findXorWindow])
-        [self adjustXorWindowGeometry:win];
+    if (auto win = [self findCrosshairWindow])
+        [self adjustCrosshairWindowGeometry:win];
 }
 
 //______________________________________________________________________________
-- (void) adjustXorWindowGeometry : (XorDrawingWindow *) win
+- (void) adjustCrosshairWindowGeometry : (CrosshairWindow *) win
 {
     assert(win && "invalid (nil) parameter 'win'");
     auto frame = self.contentView.frame;
@@ -1528,9 +1524,9 @@ void print_mask_info(ULong_t mask)
 }
 
 //______________________________________________________________________________
-- (void) removeXorWindow
+- (void) removeCrosshairWindow
 {
-    if (auto win = [self findXorWindow]) {
+    if (auto win = [self findCrosshairWindow]) {
         // For some reason, without ordeing out, the crosshair window's content stays
         // in the parent's window. Thus we first have to order out the crosshair window.
         [win orderOut:nil];
@@ -1539,12 +1535,12 @@ void print_mask_info(ULong_t mask)
 }
 
 //______________________________________________________________________________
-- (XorDrawingWindow *) findXorWindow
+- (CrosshairWindow *) findCrosshairWindow
 {
     auto children = [self childWindows];
     for (NSWindow *child in children) {
-        if ([child isKindOfClass : XorDrawingWindow.class])
-            return (XorDrawingWindow *)child;
+        if ([child isKindOfClass : CrosshairWindow.class])
+            return (CrosshairWindow *)child;
     }
     return nil;
 }

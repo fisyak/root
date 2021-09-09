@@ -9,11 +9,11 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TVirtualDragManager
-    \ingroup guiwidgets
-
-*/
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TVirtualDragManager                                                  //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TVirtualDragManager.h"
 #include "TROOT.h"

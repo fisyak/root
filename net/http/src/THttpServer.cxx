@@ -22,6 +22,7 @@
 #include "RConfigure.h"
 #include "TRegexp.h"
 #include "TObjArray.h"
+#include "ROOT/RMakeUnique.hxx"
 
 #include "THttpEngine.h"
 #include "THttpLongPollEngine.h"
@@ -31,12 +32,11 @@
 #include "TCivetweb.h"
 #include "TFastCgi.h"
 
-#include <chrono>
+#include <string>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <memory>
-#include <string>
+#include <chrono>
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -826,6 +826,8 @@ void THttpServer::ProcessRequest(std::shared_ptr<THttpCallArg> arg)
             }
 
             handler->VerifyDefaultPageContent(arg);
+
+            arg->CheckWSPageContent(handler);
          }
       }
 

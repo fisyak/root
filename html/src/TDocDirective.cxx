@@ -697,10 +697,9 @@ void TDocLatexDirective::CreateLatex(const char* filename)
          split = new TObjArray();
          split->SetOwner();
       }
-      if (!fSeparator.Length()) {
-         if (split)
-            split->Add(new TObjString(str));
-      } else {
+      if (!fSeparator.Length())
+         split->Add(new TObjString(str));
+      else {
          if (fSepIsRegexp)
             split = regexp.MatchS(str);
          else {

@@ -13,6 +13,13 @@
 #define ROOT_TGuiBldEditor
 
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGuiBldEditor                                                        //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
+
 #include "TGFrame.h"
 
 #include "TGNumberEntry.h"
@@ -34,7 +41,7 @@ class TGuiBldEditor : public TGVerticalFrame {
 friend class TGuiBldDragManager;
 
 private:
-   TGFrame              *fSelected;       // edited frame
+   TGFrame              *fSelected;       // editted frame
    TGuiBldNameFrame     *fNameFrame;      // frame name
    TGuiBldHintsEditor   *fHintsFrame;     // frame hints
    TGuiBldBorderFrame   *fBorderFrame;    // frame border

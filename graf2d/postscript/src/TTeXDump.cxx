@@ -661,6 +661,7 @@ void TTeXDump::Range(Float_t xsize, Float_t ysize)
 void TTeXDump::SetFillColor( Color_t cindex )
 {
    fFillColor = cindex;
+   if (gStyle->GetFillColor() <= 0) cindex = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -30,8 +30,6 @@
 
 #include "TVirtualRWMutex.h"
 
-#include "ROOT/RRangeCast.hxx"
-
 #include <cassert>
 
 class TClass;
@@ -263,13 +261,6 @@ public:
    Bool_t             operator!=(const TIter &aIter) const {
       return !(*this == aIter);
    }
-   TIter &operator=(TIterator *iter)
-   {
-      if (fIterator)
-         delete fIterator;
-      fIterator = iter;
-      return *this;
-   }
    TObject           *operator*() const { return fIterator ? *(*fIterator): nullptr; }
    TIter             &Begin();
    static TIter       End();
@@ -298,27 +289,80 @@ namespace Internal {
 const TCollection &EmptyCollection();
 bool ContaineeInheritsFrom(TClass *cl, TClass *base);
 
-} // namespace Internal
+/// @brief Internal help class implmenting an iterator for TRangeDynCast.
+template <class Containee> // Containee must derive from TObject.
+class TRangeDynCastIterator : public TIter {
+   static_assert(std::is_base_of<TObject, Containee>::value, "Containee type must inherit from TObject");
 
-/// Special implementation of ROOT::RRangeCast for TCollection, including a
-/// check that the cast target type inherits from TObject and a new constructor
-/// that takes the TCollection by pointer.
-/// \tparam T The new type to convert to.
-/// \tparam isDynamic If `true`, `dynamic_cast` is used, otherwise `static_cast` is used.
-namespace Detail {
+   /// This is a workaround against ClassDefInline not supporting classes
+   /// missing their default constructor or having them private.
+   template <class T>
+   friend class ROOT::Internal::ClassDefGenerateInitInstanceLocalInjector;
 
-template <typename T, bool isDynamic>
-class TRangeCast : public ROOT::RRangeCast<T*, isDynamic, TCollection const&> {
+   TRangeDynCastIterator() = default;
+
 public:
-   TRangeCast(TCollection const& col) : ROOT::RRangeCast<T*, isDynamic, TCollection const&>{col} {
-      static_assert(std::is_base_of<TObject, T>::value, "Containee type must inherit from TObject");
-   }
-   TRangeCast(TCollection const* col) : TRangeCast{col != nullptr ? *col : ROOT::Internal::EmptyCollection()} {}
+   using TIter::TIter;
+   TRangeDynCastIterator(const TIter &iter) : TIter(iter) {}
+
+   Containee *operator()() = delete;
+
+   Containee *Next() { return dynamic_cast<Containee *>(TIter::Next()); }
+   Containee *operator*() const { return dynamic_cast<Containee *>(TIter::operator*()); }
+
+   ClassDefInline(TRangeDynCastIterator, 0);
 };
 
-/// @brief TRangeStaticCast is an adapter class that allows the typed iteration
-/// through a TCollection. This requires the collection to contain elements
-/// of the type requested (or a derived class). Any deviation from this expectation
+} // namespace Internal
+
+namespace Detail {
+
+/// @brief TTypedIter is a typed version of TIter.
+///
+/// This requires the collection to contains elements of the type requested
+/// (or a derived class).  Any deviation from this expectation
+/// will only be caught/reported by an assert in debug builds.
+///
+/// This is best used with a TClonesArray, for other cases prefered TRangeDynCast.
+///
+/// The typical use is:
+/// ```{.cpp}
+///    TTypedIter<TBaseClass> next(tbaseClassClonesArrayPtr);
+///    while(auto bcl = next()) {
+///       ... use bcl as a TBaseClass*
+///    }
+/// ```
+template <class Containee> // Containee must derive from TObject.
+class TTypedIter : public TIter {
+   static_assert(std::is_base_of<TObject, Containee>::value, "Containee type must inherit from TObject");
+
+   /// This is a workaround against ClassDefInline not supporting classes
+   /// missing their default constructor or having them private.
+   template <class T>
+   friend class ROOT::Internal::ClassDefGenerateInitInstanceLocalInjector;
+
+   TTypedIter() = default;
+
+   static Containee *StaticCast(TObject *obj)
+   {
+      assert(!obj || ROOT::Internal::ContaineeInheritsFrom(obj->IsA(), Containee::Class()));
+      return static_cast<Containee *>(obj);
+   }
+
+public:
+   using TIter::TIter;
+   TTypedIter(const TIter &iter) : TIter(iter) {}
+
+   Containee *operator()() { return StaticCast(TIter::Next()); }
+   Containee *Next() { return StaticCast(TIter::Next()); }
+   Containee *operator*() const { return StaticCast(TIter::operator*()); }
+
+   ClassDefInline(TTypedIter, 0);
+};
+
+/// @brief TRangeStaticCast is an adaptater class that allows the typed iteration
+/// through a TCollection.  This requires the collection to contains element
+/// of the type requested (or a derived class).  Any deviation from this expectation
 /// will only be caught/reported by an assert in debug builds.
 ///
 /// This is best used with a TClonesArray, for other cases prefered TRangeDynCast.
@@ -326,20 +370,30 @@ public:
 /// The typical use is:
 /// ```{.cpp}
 ///    for(auto bcl : TRangeStaticCast<TBaseClass>( *tbaseClassClonesArrayPtr )) {
+///        assert(bcl && bcl->IsA()->InheritsFrom(TBaseClass::Class()));
 ///        ... use bcl as a TBaseClass*
 ///    }
 ///    for(auto bcl : TRangeStaticCast<TBaseClass>( tbaseClassClonesArrayPtr )) {
+///        assert(bcl && bcl->IsA()->InheritsFrom(TBaseClass::Class()));
 ///        ... use bcl as a TBaseClass*
 ///    }
 /// ```
-/// \tparam T The new type to convert to.
-template <typename T>
-using TRangeStaticCast = TRangeCast<T, false>;
+template <class T>
+class TRangeStaticCast {
+   const TCollection &fCollection;
+
+public:
+   TRangeStaticCast(const TCollection &col) : fCollection(col) {}
+   TRangeStaticCast(const TCollection *col) : fCollection(col != nullptr ? *col : ROOT::Internal::EmptyCollection()) {}
+
+   TTypedIter<T> begin() const { return fCollection.begin(); }
+   TTypedIter<T> end() const { return fCollection.end(); }
+};
 
 } // namespace Detail
 } // namespace ROOT
 
-/// @brief TRangeDynCast is an adapter class that allows the typed iteration
+/// @brief TRangeDynCast is an adaptater class that allows the typed iteration
 /// through a TCollection.
 ///
 /// The typical use is:
@@ -353,9 +407,17 @@ using TRangeStaticCast = TRangeCast<T, false>;
 ///        ... use bcl as a TBaseClass*
 ///    }
 /// ```
-/// \tparam T The new type to convert to.
-template <typename T>
-using TRangeDynCast = ROOT::Detail::TRangeCast<T, true>;
+template <class T>
+class TRangeDynCast {
+   const TCollection &fCollection;
+
+public:
+   TRangeDynCast(const TCollection &col) : fCollection(col) {}
+   TRangeDynCast(const TCollection *col) : fCollection(col != nullptr ? *col : ROOT::Internal::EmptyCollection()) {}
+
+   ROOT::Internal::TRangeDynCastIterator<T> begin() const { return fCollection.begin(); }
+   ROOT::Internal::TRangeDynCastIterator<T> end() const { return fCollection.end(); }
+};
 
 // Zero overhead macros in case not compiled with thread support
 #if defined (_REENTRANT) || defined (WIN32)

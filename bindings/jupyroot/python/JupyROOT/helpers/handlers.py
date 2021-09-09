@@ -77,7 +77,6 @@ class IOHandler(object):
 class Poller(Thread):
     def __init__(self):
         Thread.__init__(self, group=None, target=None, name="JupyROOT Poller Thread")
-        self.daemon = True
         self.poll = True
         self.is_running = False
         self.queue = queue.Queue()

@@ -312,9 +312,8 @@ void TGeoBoolNode::Paint(Option_t * option)
    // Setup matrix and fetch/add the left component buffer
    glmat->Multiply(fLeftMat);
    //fLeft->Paint(option);
-   if (TGeoCompositeShape *left = dynamic_cast<TGeoCompositeShape *>(fLeft)) {
-      left->PaintComposite(option);
-   } else if (fLeft) {
+   if (TGeoCompositeShape *left = dynamic_cast<TGeoCompositeShape *>(fLeft)) left->PaintComposite(option);
+   else {
       const TBuffer3D & leftBuffer = fLeft->GetBuffer3D(TBuffer3D::kAll, localFrame);
       viewer->AddObject(leftBuffer);
    }
@@ -323,9 +322,8 @@ void TGeoBoolNode::Paint(Option_t * option)
    *glmat = &mat;
    glmat->Multiply(fRightMat);
    //fRight->Paint(option);
-   if (TGeoCompositeShape *right = dynamic_cast<TGeoCompositeShape *>(fRight)) {
-      right->PaintComposite(option);
-   } else if (fRight) {
+   if (TGeoCompositeShape *right = dynamic_cast<TGeoCompositeShape *>(fRight)) right->PaintComposite(option);
+   else {
       const TBuffer3D & rightBuffer = fRight->GetBuffer3D(TBuffer3D::kAll, localFrame);
       viewer->AddObject(rightBuffer);
    }

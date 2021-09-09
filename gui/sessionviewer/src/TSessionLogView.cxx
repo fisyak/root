@@ -14,14 +14,12 @@
 #include "TProof.h"
 #include "KeySymbols.h"
 
-
-/** \class TSessionLogView
-    \ingroup sessionviewer
-
-Dialog used to display session logs from the session viewer
-
-*/
-
+//_____________________________________________________________________________
+//
+// TSessionLogView
+//
+// Dialog used to display session logs from the session viewer
+//_____________________________________________________________________________
 
 ClassImp(TSessionLogView);
 

@@ -16,7 +16,6 @@ from abc import abstractmethod
 
 import ROOT
 from DistRDF.Backends import Utils
-from DistRDF.HeadNode import TreeHeadNode
 
 # Abstract class declaration
 # This ensures compatibility between Python 2 and 3 versions, since in
@@ -63,11 +62,6 @@ class BaseBackend(ABC):
 
     headers = set()
     shared_libraries = set()
-
-    # Define a minimum amount of partitions for any distributed RDataFrame.
-    # This is a safe lower limit, to account for backends that may not support
-    # the case where the distributed RDataFrame processes only one partition.
-    MIN_NPARTITIONS = 2
 
     @classmethod
     def register_initialization(cls, fun, *args, **kwargs):
@@ -119,14 +113,10 @@ class BaseBackend(ABC):
         """
         headnode = generator.headnode
         computation_graph_callable = generator.get_callable()
-
-        if isinstance(headnode, TreeHeadNode):
-            maintreename = headnode.maintreename
-            defaultbranches = headnode.defaultbranches
-        else:
-            # Only other head node type is EmptySourceHeadNode at the moment
-            maintreename = None
-            nentries = headnode.nentries
+        # Arguments needed to create PyROOT RDF object
+        rdf_args = headnode.args
+        treename = headnode.get_treename()
+        selected_branches = headnode.get_branches()
 
         # Avoid having references to the instance inside the mapper
         initialization = self.initialization
@@ -157,80 +147,55 @@ class BaseBackend(ABC):
             # environment
             initialization()
 
-            if maintreename is not None:
-                # Build TEntryList for this range:
-                elists = ROOT.TEntryList()
+            # Build rdf
+            start = int(current_range.start)
+            end = int(current_range.end)
 
+            if treename:
                 # Build TChain of files for this range:
-                chain = ROOT.TChain(maintreename)
-                for start, end, filename, treenentries, subtreename in zip(current_range.localstarts, current_range.localends,
-                                                              current_range.filelist, current_range.treesnentries, current_range.treenames):
-                    # Use default constructor of TEntryList rather than the
-                    # constructor accepting treename and filename, otherwise
-                    # the TEntryList would remove any url or protocol from the
-                    # file name.
-                    elist = ROOT.TEntryList()
-                    elist.SetTreeName(subtreename)
-                    elist.SetFileName(filename)
-                    elist.EnterRange(start, end)
-                    elists.AddSubList(elist)
-                    chain.Add(filename + "?#" + subtreename, treenentries)
+                chain = ROOT.TChain(treename)
+                for f in current_range.filelist:
+                    chain.Add(str(f))
 
                 # We assume 'end' is exclusive
-                chain.SetCacheEntryRange(current_range.globalstart, current_range.globalend)
+                chain.SetCacheEntryRange(start, end)
 
-                # Connect the entry list to the chain
-                chain.SetEntryList(elists, "sync")
-
-                # Gather information about friend trees. Check that we got an
-                # RFriendInfo struct and that it's not empty
-                if (current_range.friendinfo is not None and
-                    not current_range.friendinfo.fFriendNames.empty()):
-                    # Zip together the information about friend trees. Each
-                    # element of the iterator represents a single friend tree.
-                    # If the friend is a TChain, the zipped information looks like:
-                    # (name, alias), (file1.root, file2.root, ...), (subname1, subname2, ...)
-                    # If the friend is a TTree, the file list is made of
-                    # only one filename and the list of names of the sub trees
-                    # is empty, so the zipped information looks like:
-                    # (name, alias), (filename.root, ), ()
-                    zipped_friendinfo = zip(
-                        current_range.friendinfo.fFriendNames,
-                        current_range.friendinfo.fFriendFileNames,
-                        current_range.friendinfo.fFriendChainSubNames
+                # Gather information about friend trees
+                friend_info = current_range.friend_info
+                if friend_info:
+                    # Zip together the treenames of the friend trees and the
+                    # respective file names. Each friend treename can have
+                    # multiple corresponding friend file names.
+                    tree_files_names = zip(
+                        friend_info.friend_names,
+                        friend_info.friend_file_names
                     )
-                    for (friend_name, friend_alias), friend_filenames, friend_chainsubnames in zipped_friendinfo:
+                    for friend_treename, friend_filenames in tree_files_names:
                         # Start a TChain with the current friend treename
-                        friend_chain = ROOT.TChain(str(friend_name))
+                        friend_chain = ROOT.TChain(friend_treename)
                         # Add each corresponding file to the TChain
-                        if friend_chainsubnames.empty():
-                            # This friend is a TTree, friend_filenames is a vector of size 1
-                            friend_chain.Add(str(friend_filenames[0]))
-                        else:
-                            # This friend is a TChain, add all files with their tree names
-                            for filename, chainsubname in zip(friend_filenames, friend_chainsubnames):
-                                fullpath = filename + "/" + chainsubname
-                                friend_chain.Add(str(fullpath))
+                        for filename in friend_filenames:
+                            friend_chain.Add(filename)
 
                         # Set cache on the same range as the parent TChain
-                        friend_chain.SetCacheEntryRange(current_range.globalstart, current_range.globalend)
-                        # Finally add friend TChain to the parent (with alias)
-                        chain.AddFriend(friend_chain, friend_alias)
+                        friend_chain.SetCacheEntryRange(start, end)
+                        # Finally add friend TChain to the parent
+                        chain.AddFriend(friend_chain)
 
-                if defaultbranches is not None:
-                    rdf = ROOT.RDataFrame(chain, defaultbranches)
+                if selected_branches:
+                    rdf = ROOT.ROOT.RDataFrame(chain, selected_branches)
                 else:
-                    rdf = ROOT.RDataFrame(chain)
-
+                    rdf = ROOT.ROOT.RDataFrame(chain)
             else:
-                # Only other head node type is EmptySourceHeadNode at the moment
-                # Initialize an RDataFrame with number of entries requested by
-                # user, then limit processing to the entries in this range.
-                rdf = ROOT.RDataFrame(nentries).Range(current_range.start, current_range.end)
+                rdf = ROOT.ROOT.RDataFrame(*rdf_args)  # PyROOT RDF object
 
+            # # TODO : If we want to run multi-threaded in a Spark node in
+            # # the future, use `TEntryList` instead of `Range`
+            # rdf_range = rdf.Range(current_range.start, current_range.end)
 
             # Output of the callable
-            resultptr_list = computation_graph_callable(rdf, current_range.id)
+            resultptr_list = computation_graph_callable(
+                rdf, rdf_range=current_range)
 
             mergeables = [
                 resultptr  # Here resultptr is already the result value
@@ -329,12 +294,12 @@ class BaseBackend(ABC):
         """
         pass
 
-    def optimize_npartitions(self):
+    def optimize_npartitions(self, npartitions):
         """
         Distributed backends may optimize the number of partitions of the
         current dataset or leave it as it is.
         """
-        return self.MIN_NPARTITIONS
+        return npartitions
 
     def distribute_files(self, files_paths):
         """

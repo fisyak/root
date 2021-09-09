@@ -329,7 +329,7 @@ namespace {
       return RegSrcs[Idx].SubReg;
     }
 
-    bool operator==(const ValueTrackerResult &Other) const {
+    bool operator==(const ValueTrackerResult &Other) {
       if (Other.getInst() != getInst())
         return false;
 

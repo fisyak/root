@@ -12,6 +12,7 @@
 
 #include <ROOT/RFitPanel.hxx>
 
+#include <ROOT/RMakeUnique.hxx>
 #include <ROOT/RLogger.hxx>
 
 #include "Fit/BinData.h"
@@ -40,15 +41,14 @@
 #include "HFitInterface.h"
 #include "TColor.h"
 
+#include <sstream>
 #include <iostream>
 #include <iomanip>
-#include <memory>
-#include <sstream>
 
 using namespace std::string_literals;
 
 /** \class ROOT::Experimental::RFitPanel
-\ingroup webwidgets
+\ingroup webdisplay
 
 web-based FitPanel prototype.
 */

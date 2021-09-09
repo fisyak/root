@@ -1,7 +1,5 @@
 sap.ui.define([
    'sap/ui/core/mvc/Controller',
-   'sap/ui/core/Component',
-   'sap/ui/core/UIComponent',
    'sap/ui/model/json/JSONModel',
    'sap/ui/model/Sorter',
    'sap/m/Column',
@@ -14,7 +12,7 @@ sap.ui.define([
    "sap/ui/layout/HorizontalLayout",
    "sap/ui/table/Column",
    "sap/m/MessageBox"
-], function (Controller,Component, UIComponent, JSONModel, Sorter,
+], function (Controller, JSONModel, Sorter,
    mColumn, mColumnListItem, mInput, mLabel, mButton,
    FormattedText, VerticalLayout, HorizontalLayout, tableColumn, MessageBox) {
 
@@ -23,28 +21,18 @@ sap.ui.define([
    return Controller.extend("rootui5.eve7.controller.EveTable", {
 
       onInit: function () {
-         var viewData = this.getView().getViewData();
-         if (viewData) {
-            this.setupManagerAndViewType(viewData.eveViewerId, viewData.mgr);
-         }
-         else {
-             UIComponent.getRouterFor(this).getRoute("Table").attachPatternMatched(this.onTableObjectMatched, this);
-         }
-      },
-      onTableObjectMatched: function (oEvent) {
-         let args = oEvent.getParameter("arguments");
-         this.setupManagerAndViewType(JSROOT.$eve7tmp.eveViewerId, JSROOT.$eve7tmp.mgr );
-         delete JSROOT.$eve7tmp;
+         var data = this.getView().getViewData();
+         // console.log("VIEW DATA", data);
 
-         this.checkViewReady();
-      },
-      setupManagerAndViewType: function(eveViewerId, mgr)
-      {
+         var id = this.getView().getId();
+         console.log("eve.GL.onInit id = ", id);
+
          this._load_scripts = true;
          this._render_html = false;
 
-         this.mgr = mgr;
-         this.eveViewerId = eveViewerId;
+         this.mgr = data.mgr;
+         this.eveViewerId = data.eveViewerId;
+         this.kind = data.kind;
 
          var rh = this.mgr.handle.getUserArgs("TableRowHeight");
          if (rh && (rh > 0))
@@ -93,7 +81,9 @@ sap.ui.define([
       },
 
       sortTable: function (e) {
-         // var colId = col.getId();
+         var col = e.mParameters.column;
+         var colId = col.getId();
+
          var col = e.mParameters.column;
          var bDescending = (e.mParameters.sortOrder == sap.ui.core.SortOrder.Descending);
          var sv = bDescending;
@@ -204,7 +194,7 @@ sap.ui.define([
             var xr = rowData[r];
             for (var xri = 0; xri < xr.length; xri++) {
                var nv = parseFloat(xr[i]);
-               if (!isNaN(nv)) {
+               if (nv != NaN) {
                   rowData[r][ri] = nv;
                }
             }

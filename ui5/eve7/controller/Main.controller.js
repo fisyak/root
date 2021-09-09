@@ -62,15 +62,13 @@ sap.ui.define(['sap/ui/core/Component',
          console.log('item pressed', item.getText(), elem);
 
          var name = item.getText();
-         if (name.indexOf(" ") > 0) name = name.substr(0, name.indexOf(" "));
+         if (name.indexOf(" ")>0) name = name.substr(0, name.indexOf(" "));
+
          // FIXME: one need better way to deliver parameters to the selected view
-         JSROOT.$eve7tmp = { mgr: this.mgr, eveViewerId: elem.fElementId};
+         JSROOT.$eve7tmp = { mgr: this.mgr, eveViewerId: elem.fElementId, kind: elem.view_kind };
 
          var oRouter = UIComponent.getRouterFor(this);
-         if (name == "Table")
-            oRouter.navTo("Table", { viewName: name });
-         else
-            oRouter.navTo("View", { viewName: name });
+         oRouter.navTo("View", { viewName: name });
       },
 
       updateViewers: function(loading_done) {
@@ -111,15 +109,16 @@ sap.ui.define(['sap/ui/core/Component',
             var vtype = "rootui5.eve7.view.GL";
             if (elem.fName === "Table")
                vtype = "rootui5.eve7.view.EveTable"; // AMT temporary solution
-            else if (elem.fName === "Lego")
-               vtype = "rootui5.eve7.view.Lego"; // AMT temporary solution
+            else
+               elem.view_kind = (n==0) ? "3D" : "2D"; // FIXME: should be property of GL view
+
 
             var oOwnerComponent = Component.getOwnerComponentFor(this.getView());
             var view = oOwnerComponent.runAsOwner(function() {
                return new sap.ui.xmlview({
                   id: viewid,
                   viewName: vtype,
-                  viewData: { mgr: main.mgr, eveViewerId: elem.fElementId },
+                  viewData: { mgr: main.mgr, eveViewerId: elem.fElementId, kind: elem.view_kind },
                   layoutData: oLd
                });
             });
@@ -234,7 +233,7 @@ sap.ui.define(['sap/ui/core/Component',
 
       loadLog: function () {
          let oFT = sap.ui.getCore().byId("EveConsoleText");
-         oFT.setHtmlText(JSROOT.EVE.console.txt.replace(/\n/g, "<p>"));
+         oFT.setHtmlText(JSROOT.EVE.console.txt);
       },
 
       showUserURL : function(oEvent) {

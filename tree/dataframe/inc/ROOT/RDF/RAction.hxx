@@ -74,8 +74,8 @@ public:
 
    RAction(const RAction &) = delete;
    RAction &operator=(const RAction &) = delete;
-   // must call Deregister here (and not e.g. in ~RActionBase), because we need fPrevDataFrame to be alive:
-   // otherwise, if fPrevDataFrame is fLoopManager, we get a use after delete
+   // must call Deregister here, before fPrevDataFrame is destroyed,
+   // otherwise if fPrevDataFrame is fLoopManager we get a use after delete
    ~RAction() { fLoopManager->Deregister(this); }
 
    /**
@@ -153,6 +153,8 @@ public:
    /// user-defined callback registered via RResultPtr::RegisterCallback
    void *PartialUpdate(unsigned int slot) final { return PartialUpdateImpl(slot); }
 
+   std::function<void(unsigned int)> GetDataBlockCallback() final { return fHelper.GetDataBlockCallback(); }
+
 private:
    // this overload is SFINAE'd out if Helper does not implement `PartialUpdate`
    // the template parameter is required to defer instantiation of the method to SFINAE time
@@ -164,8 +166,6 @@ private:
 
    // this one is always available but has lower precedence thanks to `...`
    void *PartialUpdateImpl(...) { throw std::runtime_error("This action does not support callbacks!"); }
-
-   std::function<void(unsigned int)> GetDataBlockCallback() final { return fHelper.GetDataBlockCallback(); }
 };
 
 } // namespace RDF

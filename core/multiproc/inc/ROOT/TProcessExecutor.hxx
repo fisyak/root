@@ -16,6 +16,7 @@
 #include "MPCode.h"
 #include "MPSendRecv.h"
 #include "PoolUtils.h"
+#include "ROOT/RConfig.hxx" //R__DEPRECATED
 #include "ROOT/TExecutorCRTP.hxx"
 #include "ROOT/TSeq.hxx"
 #include "TError.h"
@@ -63,6 +64,9 @@ public:
    using TExecutorCRTP<TProcessExecutor>::Reduce;
 
    void SetNWorkers(unsigned n) { TMPClient::SetNWorkers(n); }
+
+   /// \deprecated Use GetPoolSize()
+   unsigned GetNWorkers() const _R__DEPRECATED_626("Please use GetPoolSize instead") { return TMPClient::GetNWorkers(); }
 
    //////////////////////////////////////////////////////////////////////////
    /// \brief Return the number of pooled parallel workers.

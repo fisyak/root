@@ -51,9 +51,10 @@ where
 #include "RooHelpers.h"
 #include "TError.h"
 
+#include "ROOT/RMakeUnique.hxx"
+
 #include <cmath>
 #include <limits>
-#include <memory>
 #include <utility>
 
 ClassImp(RooCrystalBall);

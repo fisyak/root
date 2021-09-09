@@ -67,28 +67,24 @@ TCreatePrimitives::~TCreatePrimitives()
 
 void TCreatePrimitives::Ellipse(Int_t event, Int_t px, Int_t py, Int_t mode)
 {
-   static Double_t x0, y0;
-   Double_t x1,y1,xc,yc,r1,r2,xold,yold;
+   static Double_t x0, y0, x1, y1;
+   Double_t xc,yc,r1,r2,xold,yold;
 
    switch (event) {
 
    case kButton1Down:
-      x0 = gPad->AbsPixeltoX(px);
-      if (gPad->GetLogx())
-         x0 = TMath::Power(10,x0);
-      y0 = gPad->AbsPixeltoY(py);
-      if (gPad->GetLogy())
-         y0 = TMath::Power(10,y0);
+      x0   = gPad->AbsPixeltoX(px);
+      y0   = gPad->AbsPixeltoY(py);
+      xold = gPad->AbsPixeltoX(px);
+      yold = gPad->AbsPixeltoY(py);
       break;
 
    case kButton1Motion:
       xold = gPad->AbsPixeltoX(px);
       yold = gPad->AbsPixeltoY(py);
 
-      if (gPad->GetLogx())
-         xold = TMath::Power(10,xold);
-      if (gPad->GetLogy())
-         yold = TMath::Power(10,yold);
+      if (gPad->GetLogx()) xold = TMath::Power(10,xold);
+      if (gPad->GetLogy()) yold = TMath::Power(10,yold);
 
       xc = 0.5*(x0+xold);
       yc = 0.5*(y0+yold);
@@ -126,18 +122,24 @@ void TCreatePrimitives::Ellipse(Int_t event, Int_t px, Int_t py, Int_t mode)
    case kButton1Up:
       x1 = gPad->AbsPixeltoX(px);
       y1 = gPad->AbsPixeltoY(py);
-      if (gPad->GetLogx())
+      if (gPad->GetLogx()) {
+         x0 = TMath::Power(10,x0);
          x1 = TMath::Power(10,x1);
-      if (gPad->GetLogy())
+      }
+      if (gPad->GetLogy()) {
+         y0 = TMath::Power(10,y0);
          y1 = TMath::Power(10,y1);
+      }
+      xc = 0.5*(x0+x1);
+      yc = 0.5*(y0+y1);
 
       if (mode == kArc) {
          gPad->GetCanvas()->Selected(gPad, fgArc, kButton1Down);
-         fgArc = nullptr;
+         fgArc = 0;
       }
       if (mode == kEllipse) {
          gPad->GetCanvas()->Selected(gPad, fgEllipse, kButton1Down);
-         fgEllipse = nullptr;
+         fgEllipse = 0;
       }
 
       gROOT->SetEditorMode();
@@ -271,7 +273,7 @@ void TCreatePrimitives::Pad(Int_t event, Int_t px, Int_t py, Int_t)
 {
    static Int_t px1old, py1old, px2old, py2old;
    static Int_t px1, py1, px2, py2, pxl, pyl, pxt, pyt;
-   static TPad *padsav = nullptr;
+   static TPad *padsav;
    Double_t xlow, ylow, xup, yup;
    TPad * newpad;
 
@@ -338,10 +340,7 @@ void TCreatePrimitives::Pad(Int_t event, Int_t px, Int_t py, Int_t)
       newpad->Draw();
       TCanvas *canvas = gPad->GetCanvas();
       if (canvas) canvas->Selected((TPad*)gPad, newpad, kButton1Down);
-      if (padsav) {
-         padsav->cd();
-         padsav = nullptr;
-      }
+      padsav->cd();
       break;
    }
 }

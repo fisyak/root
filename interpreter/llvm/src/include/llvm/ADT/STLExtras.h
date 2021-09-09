@@ -494,12 +494,12 @@ public:
     return *this;
   }
 
-  friend bool operator==(const early_inc_iterator_impl &LHS,
-                         const early_inc_iterator_impl &RHS) {
+  using BaseT::operator==;
+  bool operator==(const early_inc_iterator_impl &RHS) const {
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
-    assert(!LHS.IsEarlyIncremented && "Cannot compare after dereferencing!");
+    assert(!IsEarlyIncremented && "Cannot compare after dereferencing!");
 #endif
-    return (const BaseT &)LHS == (const BaseT &)RHS;
+    return BaseT::operator==(RHS);
   }
 };
 

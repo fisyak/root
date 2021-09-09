@@ -85,9 +85,9 @@ Bool_t TEnum::IsValid()
       DeclId_t newId = gInterpreter->GetEnum(fClass, fName);
       if (newId)
          Update(newId);
-      return newId != nullptr;
+      return newId != 0;
    }
-   return fInfo != nullptr;
+   return fInfo != 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

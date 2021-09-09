@@ -480,9 +480,7 @@ TH2* TMVA::DataSetInfo::CreateCorrelationMatrixHist( const TMatrixD* m,
 TMVA::DataSet* TMVA::DataSetInfo::GetDataSet() const
 {
    if (fDataSet==0 || fNeedsRebuilding) {
-      if (fNeedsRebuilding) Log() << kINFO << "Rebuilding Dataset " << fName << Endl;
-      if (fDataSet != 0)
-         ClearDataSet();
+      if(fDataSet!=0) ClearDataSet();
       //      fDataSet = DataSetManager::Instance().CreateDataSet(GetName()); //DSMTEST replaced by following lines
       if( !fDataSetManager )
          Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << "DataSetManager has not been set in DataSetInfo (GetDataSet() )." << Endl;

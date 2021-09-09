@@ -43,8 +43,7 @@ struct Parameter {
 
 // extra call information
 struct CallContext {
-    CallContext() : fFlags(0), fCurScope(0), fPyContext(nullptr),
-        fArgsVec(nullptr), fNArgs(0), fTemps(nullptr) {}
+    CallContext() : fFlags(0), fCurScope(0), fArgsVec(nullptr), fNArgs(0), fTemps(nullptr) {}
     CallContext(const CallContext&) = delete;
     CallContext& operator=(const CallContext&) = delete;
     ~CallContext() { if (fTemps) Cleanup(); delete fArgsVec; }
@@ -60,7 +59,7 @@ struct CallContext {
         kUseHeuristics  = 0x0040, // if method applies heuristics memory policy
         kUseStrict      = 0x0080, // if method applies strict memory policy
         kReleaseGIL     = 0x0100, // if method should release the GIL
-        kSetLifeLine    = 0x0200, // if return value is part of 'this'
+        kSetLifeline    = 0x0200, // if return value is part of 'this'
         kNeverLifeLine  = 0x0400, // if the return value is never part of 'this'
         kProtected      = 0x0800, // if method should return on signals
         kUseFFI         = 0x1000, // not implemented
@@ -97,7 +96,6 @@ public:
 // info/status
     uint64_t fFlags;
     Cppyy::TCppScope_t fCurScope;
-    PyObject* fPyContext; // used to set lifelines
 
 private:
 // payload

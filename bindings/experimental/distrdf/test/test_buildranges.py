@@ -1,23 +1,12 @@
-import unittest
+from DistRDF.Node import HeadNode
+from DistRDF.Node import RangesBuilder
 import warnings
-
-from DistRDF.HeadNode import get_headnode
-from DistRDF import Ranges
+import unittest
 
 
-def emptysourceranges_to_tuples(ranges):
-    """Convert EmptySourceRange objects to tuples with the shape (start, end)"""
-    return [(r.start, r.end) for r in ranges]
-
-def treeranges_to_tuples(ranges):
-    """Convert TreeRange objects to tuples with the shape (start, end, filelist)"""
-    return [(r.globalstart, r.globalend, r.localstarts, r.localends, r.filelist) for r in ranges]
-
-def create_dummy_headnode(*args):
-    """Create dummy head node instance needed in the test"""
-    # Pass None as `npartitions`. The tests will modify this member
-    # according to needs
-    return get_headnode(None, *args)
+def rangesToTuples(ranges):
+    """Convert range objects to tuples with the shape (start, end)"""
+    return list(map(lambda r: (r.start, r.end), ranges))
 
 
 class BuildRangesTest(unittest.TestCase):
@@ -32,19 +21,21 @@ class BuildRangesTest(unittest.TestCase):
         number of partitions.
 
         """
+        headnode = HeadNode(1)
+        builder = RangesBuilder(headnode)
 
         nentries_small = 10
-        npartitions_small = 5
         nentries_large = 100
-        npartitions_large = 10
 
         # First case
-        rng = Ranges.get_balanced_ranges(nentries_small, npartitions_small)
-        ranges_small = emptysourceranges_to_tuples(rng)
+        headnode.npartitions = 5
+        rng = builder._get_balanced_ranges(nentries_small)
+        ranges_small = rangesToTuples(rng)
 
         # Second case
-        rng = Ranges.get_balanced_ranges(nentries_large, npartitions_large)
-        ranges_large = emptysourceranges_to_tuples(rng)
+        headnode.npartitions = 10
+        rng = builder._get_balanced_ranges(nentries_large)
+        ranges_large = rangesToTuples(rng)
 
         ranges_small_reqd = [(0, 2), (2, 4), (4, 6), (6, 8), (8, 10)]
         ranges_large_reqd = [
@@ -69,20 +60,22 @@ class BuildRangesTest(unittest.TestCase):
         the number of partitions.
 
         """
+        headnode = HeadNode(1)
+        builder = RangesBuilder(headnode)
 
         nentries_1 = 10
+        headnode.npartitions = 4
         nentries_2 = 9
-        npartitions = 4
 
         # Example in which fractional part of
         # (nentries/npartitions) >= 0.5
-        rng = Ranges.get_balanced_ranges(nentries_1, npartitions)
-        ranges_1 = emptysourceranges_to_tuples(rng)
+        rng = builder._get_balanced_ranges(nentries_1)
+        ranges_1 = rangesToTuples(rng)
 
         # Example in which fractional part of
         # (nentries/npartitions) < 0.5
-        rng = Ranges.get_balanced_ranges(nentries_2, npartitions)
-        ranges_2 = emptysourceranges_to_tuples(rng)
+        rng = builder._get_balanced_ranges(nentries_2)
+        ranges_2 = rangesToTuples(rng)
 
         # Required output pairs
         ranges_1_reqd = [(0, 3), (3, 6), (6, 8), (8, 10)]
@@ -95,13 +88,16 @@ class BuildRangesTest(unittest.TestCase):
         """
         `BuildRanges` method when the number of entries is smaller than the
         number of partitions.
+
         """
+        headnode = HeadNode(1)
+        builder = RangesBuilder(headnode)
 
         nentries = 5
-        npartitions = 7  # > nentries
+        headnode.npartitions = 7  # > nentries
 
-        rng = Ranges.get_balanced_ranges(nentries, npartitions)
-        ranges = emptysourceranges_to_tuples(rng)
+        rng = builder._get_balanced_ranges(nentries)
+        ranges = rangesToTuples(rng)
 
         ranges_reqd = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
 
@@ -113,17 +109,17 @@ class BuildRangesTest(unittest.TestCase):
         contains a single cluster and the number of partitions is 1
 
         """
+        headnode = HeadNode(1)
+        builder = RangesBuilder(headnode)
 
-        treenames = ["TotemNtuple"]
-        filenames = ["backend/Slimmed_ntuple.root"]
-        npartitions = 1
-        clustersinfiles = Ranges.get_clusters(treenames, filenames)
-        friendinfo = None
+        treename = "TotemNtuple"
+        filelist = ["backend/Slimmed_ntuple.root"]
+        headnode.npartitions = 1
 
-        crs = Ranges.get_clustered_ranges(clustersinfiles, npartitions, friendinfo)
-        ranges = treeranges_to_tuples(crs)
+        crs = builder._get_clustered_ranges(treename, filelist)
+        ranges = rangesToTuples(crs)
 
-        ranges_reqd = [(0, 10, [0], [10], ["backend/Slimmed_ntuple.root"])]
+        ranges_reqd = [(0, 10)]
 
         self.assertListEqual(ranges, ranges_reqd)
 
@@ -134,17 +130,19 @@ class BuildRangesTest(unittest.TestCase):
 
         """
 
+        headnode = HeadNode(1)
+        builder = RangesBuilder(headnode)
+
         treename = "TotemNtuple"
         filelist = ["backend/Slimmed_ntuple.root"]
-        headnode = create_dummy_headnode(treename, filelist)
         headnode.npartitions = 2
 
-        ranges_reqd = [(0, 10, [0], [10], ["backend/Slimmed_ntuple.root"])]
+        ranges_reqd = [(0, 10)]
 
         with warnings.catch_warnings(record=True) as w:
             # Trigger warning
-            crs = headnode.build_ranges()
-            ranges = treeranges_to_tuples(crs)
+            crs = builder._get_clustered_ranges(treename, filelist)
+            ranges = rangesToTuples(crs)
 
             # Verify ranges
             self.assertListEqual(ranges, ranges_reqd)
@@ -159,18 +157,19 @@ class BuildRangesTest(unittest.TestCase):
         different numbers of entries.
 
         """
+        headnode = HeadNode(1)
+        builder = RangesBuilder(headnode)
 
         treename = "myTree"
         filelist = ["backend/2clusters.root"]
-        headnode = create_dummy_headnode(treename, filelist)
         headnode.npartitions = 2
 
-        crs = headnode.build_ranges()
-        ranges = treeranges_to_tuples(crs)
+        crs = builder._get_clustered_ranges(treename, filelist)
+        ranges = rangesToTuples(crs)
 
         ranges_reqd = [
-            (0, 777, [0], [777], ["backend/2clusters.root"]),
-            (777, 1000, [777], [1000], ["backend/2clusters.root"])
+            (0, 777),
+            (777, 1000)
         ]
 
         self.assertListEqual(ranges, ranges_reqd)
@@ -181,20 +180,21 @@ class BuildRangesTest(unittest.TestCase):
         possible for four partitions
 
         """
+        headnode = HeadNode(1)
+        builder = RangesBuilder(headnode)
 
         treename = "myTree"
         filelist = ["backend/4clusters.root"]
-        headnode = create_dummy_headnode(treename, filelist)
         headnode.npartitions = 4
 
-        crs = headnode.build_ranges()
-        ranges = treeranges_to_tuples(crs)
+        crs = builder._get_clustered_ranges(treename, filelist)
+        ranges = rangesToTuples(crs)
 
         ranges_reqd = [
-            (0, 250, [0], [250],["backend/4clusters.root"]),
-            (250, 500, [250], [500],["backend/4clusters.root"]),
-            (500, 750, [500], [750],["backend/4clusters.root"]),
-            (750, 1000, [750], [1000],["backend/4clusters.root"])
+            (0, 250),
+            (250, 500),
+            (500, 750),
+            (750, 1000)
         ]
 
         self.assertListEqual(ranges, ranges_reqd)
@@ -205,20 +205,21 @@ class BuildRangesTest(unittest.TestCase):
         possible for four partitions
 
         """
+        headnode = HeadNode(1)
+        builder = RangesBuilder(headnode)
 
         treename = "myTree"
         filelist = ["backend/1000clusters.root"]
-        headnode = create_dummy_headnode(treename, filelist)
         headnode.npartitions = 4
 
-        crs = headnode.build_ranges()
-        ranges = treeranges_to_tuples(crs)
+        crs = builder._get_clustered_ranges(treename, filelist)
+        ranges = rangesToTuples(crs)
 
         ranges_reqd = [
-            (0, 250, [0], [250],["backend/1000clusters.root"]),
-            (250, 500, [250], [500],["backend/1000clusters.root"]),
-            (500, 750, [500], [750],["backend/1000clusters.root"]),
-            (750, 1000, [750], [1000],["backend/1000clusters.root"])
+            (0, 250),
+            (250, 500),
+            (500, 750),
+            (750, 1000)
         ]
 
         self.assertListEqual(ranges, ranges_reqd)
@@ -230,20 +231,21 @@ class BuildRangesTest(unittest.TestCase):
         clusters)
 
         """
+        headnode = HeadNode(1)
+        builder = RangesBuilder(headnode)
 
         treename = "myTree"
         filelist = ["backend/1000clusters.root"]
-        headnode = create_dummy_headnode(treename, filelist)
         headnode.npartitions = 1000
 
-        crs = headnode.build_ranges()
-        ranges = treeranges_to_tuples(crs)
+        crs = builder._get_clustered_ranges(treename, filelist)
+        ranges = rangesToTuples(crs)
 
         start = 0
         end = 1000
         step = 1
 
-        ranges_reqd = [(a, b, [a], [b], filelist) for a, b in zip(range(start, end, step),
+        ranges_reqd = [(a, b) for a, b in zip(range(start, end, step),
                                               range(step, end + 1, step))]
 
         self.assertListEqual(ranges, ranges_reqd)
@@ -254,18 +256,20 @@ class BuildRangesTest(unittest.TestCase):
         contains clusters.
 
         """
-        headnode = create_dummy_headnode("myTree", "backend/1000clusters.root")
+        headnode = HeadNode("myTree", "backend/1000clusters.root")
+        builder = RangesBuilder(headnode)
+
         headnode.npartitions = 1000
 
-        crs = headnode.build_ranges()
-        ranges = treeranges_to_tuples(crs)
+        crs = builder.build_ranges()
+        ranges = rangesToTuples(crs)
 
         start = 0
         end = 1000
         step = 1
 
-        ranges_reqd = [(a, b, [a], [b], ["backend/1000clusters.root"])
-                        for a, b in zip(range(start, end, step), range(step, end + 1, step))]
+        ranges_reqd = [(a, b) for a, b in zip(range(start, end, step),
+                                              range(step, end + 1, step))]
 
         self.assertListEqual(ranges, ranges_reqd)
 
@@ -275,36 +279,18 @@ class BuildRangesTest(unittest.TestCase):
         clusters involved.
 
         """
-        headnode = create_dummy_headnode(50)
+        headnode = HeadNode(50)
+        builder = RangesBuilder(headnode)
+
         headnode.npartitions = 16
 
-        crs = headnode.build_ranges()
-        ranges = emptysourceranges_to_tuples(crs)
+        crs = builder.build_ranges()
+        ranges = rangesToTuples(crs)
 
         ranges_reqd = [
             (0, 4), (4, 8), (8, 11), (11, 14), (14, 17), (17, 20),
             (20, 23), (23, 26), (26, 29), (29, 32), (32, 35), (35, 38),
             (38, 41), (41, 44), (44, 47), (47, 50)
-        ]
-
-        self.assertListEqual(ranges, ranges_reqd)
-
-    def test_clustered_ranges_with_two_files(self):
-        """
-        Create two ranges from two files with a different number of clusters.
-        """
-
-        treename = "myTree"
-        filelist = ["backend/2clusters.root", "backend/4clusters.root"]
-        headnode = create_dummy_headnode(treename, filelist)
-        headnode.npartitions = 2
-
-        crs = headnode.build_ranges()
-        ranges = treeranges_to_tuples(crs)
-
-        ranges_reqd = [
-            (0, 1250, [0, 0], [1000, 250], ["backend/2clusters.root", "backend/4clusters.root"]),
-            (250, 1000, [250], [1000], ["backend/4clusters.root"]),
         ]
 
         self.assertListEqual(ranges, ranges_reqd)

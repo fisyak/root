@@ -16,9 +16,6 @@
 
 class TGeoEltu : public TGeoTube
 {
-   TGeoEltu(const TGeoEltu&) = delete;
-   TGeoEltu& operator=(const TGeoEltu&) = delete;
-
 public:
    // constructors
    TGeoEltu();

@@ -10,7 +10,9 @@
 #ifndef ROOT_Minuit2_MinimumParameters
 #define ROOT_Minuit2_MinimumParameters
 
-#include "Minuit2/MnMatrix.h"
+#include "Minuit2/BasicMinimumParameters.h"
+
+#include <memory>
 
 namespace ROOT {
 
@@ -19,39 +21,28 @@ namespace Minuit2 {
 class MinimumParameters {
 
 public:
-   MinimumParameters(unsigned int n, double fval = 0)
-      : fPtr{new Data{MnAlgebraicVector(n), MnAlgebraicVector(n), fval, false, false}}
-   {
-   }
+   MinimumParameters(unsigned int n, double fval = 0) : fData(std::make_shared<BasicMinimumParameters>(n, fval)) {}
 
    /** takes the Parameter vector */
    MinimumParameters(const MnAlgebraicVector &avec, double fval)
-      : fPtr{new Data{avec, MnAlgebraicVector(avec.size()), fval, true, false}}
+      : fData(std::make_shared<BasicMinimumParameters>(avec, fval))
    {
    }
 
    /** takes the Parameter vector plus step size x1 - x0 = dirin */
    MinimumParameters(const MnAlgebraicVector &avec, const MnAlgebraicVector &dirin, double fval)
-      : fPtr{new Data{avec, dirin, fval, true, true}}
+      : fData(std::make_shared<BasicMinimumParameters>(avec, dirin, fval))
    {
    }
 
-   const MnAlgebraicVector &Vec() const { return fPtr->fParameters; }
-   const MnAlgebraicVector &Dirin() const { return fPtr->fStepSize; }
-   double Fval() const { return fPtr->fFVal; }
-   bool IsValid() const { return fPtr->fValid; }
-   bool HasStepSize() const { return fPtr->fHasStep; }
+   const MnAlgebraicVector &Vec() const { return fData->Vec(); }
+   const MnAlgebraicVector &Dirin() const { return fData->Dirin(); }
+   double Fval() const { return fData->Fval(); }
+   bool IsValid() const { return fData->IsValid(); }
+   bool HasStepSize() const { return fData->HasStepSize(); }
 
 private:
-   struct Data {
-      MnAlgebraicVector fParameters;
-      MnAlgebraicVector fStepSize;
-      double fFVal;
-      bool fValid;
-      bool fHasStep;
-   };
-
-   std::shared_ptr<Data> fPtr;
+   std::shared_ptr<BasicMinimumParameters> fData;
 };
 
 } // namespace Minuit2

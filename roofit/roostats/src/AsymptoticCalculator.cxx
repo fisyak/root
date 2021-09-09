@@ -887,16 +887,10 @@ void AsymptoticCalculator::FillBins(const RooAbsPdf & pdf, const RooArgList &obs
          //if (debug) std::cout << "pdf value in the bin " << fval << " bin volume = " << totBinVolume << "   " << fval*expectedEvents << std::endl;
          if (fval*expectedEvents <= 0)
          {
-            if (fval*expectedEvents < 0) {
-               oocoutW(static_cast<TObject*>(nullptr),InputArguments)
-                   << "AsymptoticCalculator::" << __func__
-                   << "(): Detected a bin with negative expected events! Please check your inputs." << endl;
-            }
-            else {
-               oocoutW(static_cast<TObject*>(nullptr),InputArguments)
-                   << "AsymptoticCalculator::" << __func__
-                   << "(): Detected a bin with zero expected events- skip it" << endl;
-            }
+            if (fval*expectedEvents < 0)
+               cout << "WARNING::Detected a bin with negative expected events! Please check your inputs." << endl;
+            else
+               cout << "WARNING::Detected a bin with zero expected events- skip it" << endl;
          }
          // have a cut off for overflows ??
          else
@@ -1046,8 +1040,7 @@ RooAbsData * AsymptoticCalculator::GenerateCountingAsimovData(RooAbsPdf & pdf, c
        icat = channelCat->getCurrentIndex();
     }
 
-    RooDataSet *ret = new RooDataSet(std::string("CountingAsimovData") + std::to_string(icat),
-                                     std::string("CountingAsimovData") + std::to_string(icat), obs);
+    RooDataSet *ret = new RooDataSet(TString::Format("CountingAsimovData%d",icat),TString::Format("CountingAsimovData%d",icat), obs);
     ret->add(obs);
     return ret;
 }
@@ -1075,8 +1068,7 @@ RooAbsData * AsymptoticCalculator::GenerateAsimovDataSinglePdf(const RooAbsPdf &
    RooDataSet* asimovData = 0;
    if (channelCat) {
       int icat = channelCat->getCurrentIndex();
-      asimovData = new RooDataSet(std::string("AsimovData") + std::to_string(icat),
-                                  std::string("combAsimovData") + std::to_string(icat),
+      asimovData = new RooDataSet(TString::Format("AsimovData%d",icat),TString::Format("combAsimovData%d",icat),
                                   RooArgSet(obsAndWeight,*channelCat),RooFit::WeightVar(weightVar));
    }
    else
@@ -1202,7 +1194,7 @@ RooAbsData * AsymptoticCalculator::GenerateAsimovData(const RooAbsPdf & pdf, con
   RooDataSet* asimovData = new RooDataSet("asimovDataFullModel","asimovDataFullModel",RooArgSet(obsAndWeight,channelCat),
                                           RooFit::Index(channelCat),RooFit::Import(asimovDataMap),RooFit::WeightVar(*weightVar));
 
-  for (auto &element : asimovDataMap) {
+  for (auto element : asimovDataMap) {
     delete element.second;
   }
 

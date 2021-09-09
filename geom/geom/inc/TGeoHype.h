@@ -31,9 +31,6 @@ private :
    Double_t              fTinsq;  // Squared tangent of stereo angle for inner surface
    Double_t              fToutsq; // Squared tangent of stereo angle for outer surface
 
-   TGeoHype(const TGeoHype&) = delete;
-   TGeoHype& operator=(const TGeoHype&) = delete;
-
 public:
    // constructors
    TGeoHype();

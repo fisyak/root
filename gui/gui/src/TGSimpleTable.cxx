@@ -17,22 +17,22 @@
 
 ClassImp(TGSimpleTable);
 
+////////////////////////////////////////////////////////////////////////////////
 
-/** \class TGSimpleTable
-    \ingroup guiwidgets
-
+/* Begin_Html
+<center><h2>TGSimpleTable</h2></center>
+<br><br>
 To provide a simple class to visualize an array of doubles, the class
 TGSimpleTable is provided. TGSimpleTable creates it's own
 TGSimpleTableInterface. For more information, see the documentation of
 TGTable
-
+<br><br>
 The interface is accesible through the GetInterface() method.
-
+End_Html
 */
 
-
 ////////////////////////////////////////////////////////////////////////////////
-/// TGSimpleTable constructor.
+/// TGSimpleTable constuctor.
 
 TGSimpleTable::TGSimpleTable(TGWindow *p, Int_t id, Double_t **data,
                              UInt_t nrows, UInt_t ncolumns)

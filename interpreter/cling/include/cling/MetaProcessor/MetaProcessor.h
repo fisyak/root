@@ -24,7 +24,7 @@ namespace cling {
 
   class Interpreter;
   class InputValidator;
-  class MetaSema;
+  class MetaParser;
   class Value;
 
   ///\brief Class that helps processing meta commands, which add extra
@@ -43,7 +43,7 @@ namespace cling {
 
     ///\brief The parser used to parse our tiny "meta" language
     ///
-    std::unique_ptr<MetaSema> m_MetaSema;
+    std::unique_ptr<MetaParser> m_MetaParser;
 
     ///\brief Currently executing file as passed into executeFile
     ///

@@ -57,14 +57,12 @@
 
 #undef DEBUG_LOCAL
 
-
-/** \class TGuiBldDragManager
-    \ingroup guibuilder
-
-Drag and drop manager used by the ROOT GUI Builder.
-
-*/
-
+//_____________________________________________________________________________
+//
+// TGuiBldDragManager
+//
+// Drag and drop manager used by the ROOT GUI Builder.
+//_____________________________________________________________________________
 
 ClassImp(TGuiBldDragManager);
 
@@ -94,7 +92,7 @@ static const char *gImageTypes[] = {
    "PNM",     "*.pnm",
    "XBM",     "*.xbm",
    "TIFF",    "*.tiff",
-   "Encapsulated PostScript", "*.eps",
+   "Enacapsulated PostScript", "*.eps",
    "PostScript", "*.ps",
    "PDF",        "*.pdf",
    "ASImage XML","*.xml",
@@ -187,7 +185,7 @@ void TGuiBldMenuDialog::ConnectButtonSignals()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// execute method for object with input args
+/// execute method for obejct with input args
 
 void TGuiBldMenuDialog::ApplyMethod()
 {
@@ -370,8 +368,11 @@ void TGuiBldMenuDialog::Build()
 
             // Find out whether we have options ...
 
-            if (m->GetOptions()) {
+            TList *opt;
+            // coverity[returned_pointer]: keep for later use
+            if ((opt = m->GetOptions())) {
                Warning("Dialog", "option menu not yet implemented");
+
             } else {
                // we haven't got options - textfield ...
                Add(argname, val, type);
@@ -397,6 +398,7 @@ void TGuiBldMenuDialog::Build()
    fOK = new TGTextButton(hf, "&OK", 1);
    hf->AddFrame(fOK, l1);
    fWidgets->Add(fOK);
+   height = fOK->GetDefaultHeight();
    width  = TMath::Max(width, fOK->GetDefaultWidth());
 
 /*
@@ -461,7 +463,7 @@ void TGuiBldMenuDialog::Popup()
 }
 
 
-///////////////////////// auxiliary static functions ///////////////////////////
+///////////////////////// auxilary static functions ///////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 /// Helper. Return a window located at point x,y (in screen coordinates)
 
@@ -637,7 +639,7 @@ void TGuiBldDragManagerGrid::InitPixmap()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Draw grid over edited frame.
+/// Draw grid over editted frame.
 
 void TGuiBldDragManagerGrid::Draw()
 {
@@ -806,13 +808,13 @@ private:
    ECursor            fResizeType;     // defines resize type
    Int_t              fX0, fY0;        // initial drag position in pixels
    Int_t              fX, fY;          // current drag position in pixels
-   Int_t              fXf, fYf;        // offset of initial position inside frame
+   Int_t              fXf, fYf;        // offset of inititial position inside frame
    Int_t              fGrabX, fGrabY;  //
-   const TGWindow    *fGrabParent;     // parent of the grabbed/selected frame
+   const TGWindow    *fGrabParent;     // parent of the grabbed/seleceted frame
    Int_t              fLastPopupAction;//
    Bool_t             fReplaceOn;
    TGGrabRect        *fGrabRect[8];    // small rectangles drawn over grabbed/selected frame
-   TGFrame           *fAroundFrame[4]; // red lines drawn over laid out frame
+   TGFrame           *fAroundFrame[4]; // red lines drawn over layouted frame
    Bool_t             fGrabRectHidden;
    TGFrameElement    *fGrabListPosition;
    Bool_t             fButtonPressed;  //
@@ -997,7 +999,7 @@ void TGuiBldDragManager::CreateListOfDialogs()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Draw grid on editable frame and restore background on previously edited one
+/// Draw grid on editable frame and restore background on previuosly editted one
 
 void TGuiBldDragManager::Snap2Grid()
 {
@@ -1050,7 +1052,7 @@ Bool_t TGuiBldDragManager::IgnoreEvent(Event_t *event)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return a pointer to the parent window (which is being edited)
+/// Return a pointer to the parent window (which is being editted)
 
 TGFrame* TGuiBldDragManager::InEditable(Window_t id)
 {
@@ -1096,7 +1098,7 @@ TGCompositeFrame *TGuiBldDragManager::FindCompositeFrame(Window_t id)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Set cursor for selected/grabbed frame.
+/// Set cursor for selcted/grabbed frame.
 
 void TGuiBldDragManager::SetCursorType(Int_t cur)
 {
@@ -1148,7 +1150,7 @@ Bool_t TGuiBldDragManager::CheckDragResize(Event_t *event)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Redraw the edited window
+/// Redraw the editted window
 
 void TGuiBldDragManager::DoRedraw()
 {
@@ -1192,7 +1194,7 @@ void TGuiBldDragManager::SwitchEditable(TGFrame *frame)
 
    if (IsEditDisabled(comp)) {
       if (fBuilder) {
-         str += " cannot be edited.";
+         str += " cannot be editted.";
          fBuilder->UpdateStatusBar(str.Data());
       }
       return;
@@ -1257,7 +1259,7 @@ void TGuiBldDragManager::SelectFrame(TGFrame *frame, Bool_t add)
 
       if (fBuilder) {
          str += " selected";
-         str += (IsEditDisabled(frame) || IsFixedLayout(frame)  ? ". This frame cannot be edited." :
+         str += (IsEditDisabled(frame) || IsFixedLayout(frame)  ? ". This frame cannot be editted." :
                  " ");
          str += " Press SpaceBar to unselect the frame.";
          if (IsFixedSize(frame)) str += " This frame cannot be resized.";
@@ -1620,7 +1622,7 @@ void TGuiBldDragManager::HighlightCompositeFrame(Window_t win)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// The main event loop is  originated here
-/// It repeatedly queries pointer state and position on the screen.
+/// It repeadeatly queries pointer state and position on the screen.
 /// From this info an Event_t structure is built.
 
 Bool_t TGuiBldDragManager::HandleTimer(TTimer *t)
@@ -1640,7 +1642,7 @@ Bool_t TGuiBldDragManager::HandleTimerEvent(Event_t *e, TTimer *t)
 
    Bool_t ret = kTRUE;
 
-   // if nothing is edited stop timer and reset everything
+   // if nothing is editted stop timer and reset everything
    if (!fClient || !fClient->IsEditable()) {
       SetEditable(kFALSE);
       return kFALSE;
@@ -1911,7 +1913,7 @@ void TGuiBldDragManager::HandleButon3Pressed(Event_t *event, TGFrame *frame)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Handle button event occurred in some ROOT frame
+/// Handle button event occured in some ROOT frame
 
 Bool_t TGuiBldDragManager::HandleButton(Event_t *event)
 {
@@ -2126,7 +2128,7 @@ Bool_t TGuiBldDragManager::HandleDoubleClick(Event_t *)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return a parent which can handle button events.
+/// Return a parent which can handle button evevents.
 
 TGFrame *TGuiBldDragManager::GetBtnEnableParent(TGFrame *fr)
 {
@@ -2477,7 +2479,7 @@ Bool_t TGuiBldDragManager::HandleKey(Event_t *event)
                TGFrame *p = (TGFrame*)GetEditableParent(fPimpl->fGrab);
 
                if (p) {
-                  if (fBuilder && p == fBuilder->GetMdiMain()->GetCurrent()) {
+                  if (p == fBuilder->GetMdiMain()->GetCurrent()) {
                      UngrabFrame();
                   } else {
                      SelectFrame(p);
@@ -2661,7 +2663,7 @@ void TGuiBldDragManager::PutToCanvas(TGCompositeFrame *cont)
    SelectFrame(canvas);
 
    if (fBuilder) {
-      fBuilder->UpdateStatusBar("Grab action performed. Press Cntrl-Return to Drop grabbed frame.");
+      fBuilder->UpdateStatusBar("Grab action performed. Presss Cntrl-Return to Drop grabbed frame.");
    }
 }
 
@@ -2671,9 +2673,9 @@ void TGuiBldDragManager::PutToCanvas(TGCompositeFrame *cont)
 /// If on is kFALSE:
 ///    If Return or Enter key was pressed - Grab Act
 ///    If lasso is  drawn - new composite frame is created and
-///                         all frames inside lasso adopted as children.
+///                         all frames inside lasso adopted as childrens.
 ///    If lasso is not drawn and selected frame is composite one,
-///                       - new TGCanvas widget is created and selected frame became
+///                       - new TGCanvas widget is created and selcted frmae became
 ///                         container for this canvas.
 ///
 /// If on is kTRUE:
@@ -2758,7 +2760,7 @@ void TGuiBldDragManager::HandleReturn(Bool_t on)
          if (fBuilder) {
             TString str = "Grab action performed.";
             str += " Press Cntrl-Return to Drop grabbed frames.";
-            str += " Press Return for TCanvas Grab";
+            str += " Presss Return for TCanvas Grab";
             fBuilder->UpdateStatusBar(str.Data());
          }
       }
@@ -2889,7 +2891,7 @@ void TGuiBldDragManager::HandleAlignment(Int_t to, Bool_t lineup)
 /// crop is kTRUE - crop action
 ///   - if lasso is drawn -> all frames outside of lasso area are deleted
 ///   - if frame is grabbed/selected -> all frames except the grabbed frame are deleted
-///     In both cases the main frame is shrunk to the size of crop area.
+///     In both cases the main frame is shrinked to the size of crop area.
 
 void TGuiBldDragManager::HandleDelete(Bool_t crop)
 {
@@ -3260,7 +3262,7 @@ void TGuiBldDragManager::HandleReplace()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Create a frame which is the same as currently edited frame
+/// Create a frame which is the same as currently editted frame
 
 void TGuiBldDragManager::CloneEditable()
 {
@@ -3283,7 +3285,7 @@ void TGuiBldDragManager::CloneEditable()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Save an edited frame to the file
+/// Save an editted frame to the file
 
 Bool_t TGuiBldDragManager::Save(const char *file)
 {
@@ -3331,8 +3333,7 @@ Bool_t TGuiBldDragManager::Save(const char *file)
       if (gVirtualX->InheritsFrom("TGX11")) main->SetIconPixmap("bld_rgb.xpm");
       main->SaveSource(fname.Data(), file ? "keep_names quiet" : "keep_names");
 
-      if (fBuilder)
-         fBuilder->AddMacro(fname.Data(), img);
+      fBuilder->AddMacro(fname.Data(), img);
 
    } else {
       Int_t retval;
@@ -3800,7 +3801,7 @@ void TGuiBldDragManager::CheckTargetUnderGrab()
    }
 
    if (!ok) {
-      CheckTargetAtPoint(x - 1, y + h + 1);
+      ok = CheckTargetAtPoint(x - 1, y + h + 1);
    }
 }
 
@@ -4111,7 +4112,7 @@ void TGuiBldDragManager::DrawLasso()
    root->RequestFocus();
 
    if (fBuilder) {
-      TString str = "Lasso drawn. Align frames inside or press Return key to grab frames.";
+      TString str = "Lasso drawn. Align frames inside or presss Return key to grab frames.";
       fBuilder->UpdateStatusBar(str.Data());
    }
 }
@@ -4476,7 +4477,7 @@ Bool_t TGuiBldDragManager::Drop()
          li->AddAfter(fPimpl->fGrabListPosition, frame->GetFrameElement());
       }
    } else { // grab frame cannot be dropped
-//      if (fDragType == kDragCopy) { // doesn't work (point is not reached ???)
+//      if (fDragType == kDragCopy) { // dosn't work (point is not reached ???)
 //         HandleDelete(kFALSE);
 //      }
 
@@ -4842,7 +4843,7 @@ Bool_t TGuiBldDragManager::CanChangeLayoutOrder(TGWindow *w) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// kTRUE is frame could be compacted/"laid out"
+/// kTRUE is frame could be compacted/"layouted"
 
 Bool_t TGuiBldDragManager::CanCompact(TGWindow *w) const
 {
@@ -4999,7 +5000,7 @@ void TGuiBldDragManager::HandleGrid()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Helper to find a frame which can be laid out
+/// Helper to find a frame which can be layouted
 
 TGCompositeFrame *TGuiBldDragManager::FindLayoutFrame(TGFrame *f)
 {
@@ -5019,7 +5020,7 @@ TGCompositeFrame *TGuiBldDragManager::FindLayoutFrame(TGFrame *f)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// When selected frame was changed by guibuilder editor -> update its appearance
+/// When selected frame was changed by guibuilder editor -> update its appearence
 
 void TGuiBldDragManager::HandleUpdateSelected(TGFrame *f)
 {
@@ -5246,7 +5247,7 @@ void TGuiBldDragManager::CloseMenus()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return the parent frame which can be edited.
+/// Return the parent frame which can be editted.
 
 TGFrame *TGuiBldDragManager::GetEditableParent(TGFrame *fr)
 {

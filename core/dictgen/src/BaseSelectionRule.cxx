@@ -60,7 +60,7 @@ static const char *R__GetDeclSourceFileName(const clang::Decl* D)
 
 static bool R__match_filename(const char *srcname,const char *filename)
 {
-   if (srcname==nullptr) {
+   if (srcname==0) {
       return false;
    }
    if((strcmp(srcname,filename)==0)) {
@@ -90,7 +90,7 @@ static bool R__match_filename(const char *srcname,const char *filename)
 }
 
 BaseSelectionRule::BaseSelectionRule(long index, BaseSelectionRule::ESelect sel, const std::string& attributeName, const std::string& attributeValue, cling::Interpreter &interp, const char* selFileName, long lineno)
-   : fIndex(index),fLineNumber(lineno),fSelFileName(selFileName),fIsSelected(sel),fMatchFound(false),fCXXRecordDecl(nullptr),fRequestedType(nullptr),fInterp(&interp)
+   : fIndex(index),fLineNumber(lineno),fSelFileName(selFileName),fIsSelected(sel),fMatchFound(false),fCXXRecordDecl(0),fRequestedType(0),fInterp(&interp)
 {
    fAttributes.insert(AttributesMap_t::value_type(attributeName, attributeValue));
 }
@@ -217,7 +217,7 @@ BaseSelectionRule::EMatchType BaseSelectionRule::Match(const clang::NamedDecl *d
                                   ROOT::TMetaUtils::GetUnderlyingRecordDecl(typedefNameDecl->getUnderlyingType());
       }
 
-   if (! isTypedefNametoRecordDecl && fCXXRecordDecl !=nullptr && fCXXRecordDecl != (void*)-1) {
+   if (! isTypedefNametoRecordDecl && fCXXRecordDecl !=0 && fCXXRecordDecl != (void*)-1) {
       const clang::CXXRecordDecl *target = fCXXRecordDecl;
       if ( target && D && target == D ) {
          //               fprintf(stderr,"DECL MATCH: %s %s\n",name_value.c_str(),name.c_str());
@@ -234,7 +234,7 @@ BaseSelectionRule::EMatchType BaseSelectionRule::Match(const clang::NamedDecl *d
          // set or we already took the expensive path and found nothing (-1).
          const clang::CXXRecordDecl *target
             = fHasFromTypedefAttribute ? nullptr : ROOT::TMetaUtils::ScopeSearch(name_value.c_str(), *fInterp,
-                                                   true /*diagnose*/, nullptr);
+                                                   true /*diagnose*/, 0);
 
          if ( target ) {
             const_cast<BaseSelectionRule*>(this)->fCXXRecordDecl = target;
@@ -450,6 +450,8 @@ bool BaseSelectionRule::CheckPattern(const std::string& test, const std::string&
    }
 
    std::list<std::string>::const_iterator it = patterns_list.begin();
+   size_t pos1, pos2, pos3;
+   pos1= pos2= pos3= std::string::npos;
    bool end = pattern.back() == '*';
 
    // we first check if the last sub-pattern is contained in the test string
@@ -469,7 +471,7 @@ bool BaseSelectionRule::CheckPattern(const std::string& test, const std::string&
    }
 
    // position of the first sub-pattern
-   size_t pos1 = test.find(*it);
+   pos1 = test.find(*it);
 
 
    if (pos1 == std::string::npos || (!begin && pos1 != 0)) { // if the first sub-pattern isn't found in test or if it is found but the
@@ -501,7 +503,7 @@ bool BaseSelectionRule::CheckPattern(const std::string& test, const std::string&
 
    for (; it != patterns_list.end(); ++it) {
       // std::cout<<"sub-pattern = "<<*it<<std::endl;
-      size_t pos2 = test.find(*it);
+      pos2 = test.find(*it);
       if (pos2 <= pos1) {
          return false;
       }

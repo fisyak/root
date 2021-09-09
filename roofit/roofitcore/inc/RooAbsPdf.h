@@ -17,6 +17,8 @@
 #define ROO_ABS_PDF
 
 #include "RooAbsReal.h"
+//#include "RooRealIntegral.h"
+#include "RooNameSet.h"
 #include "RooObjCacheManager.h"
 #include "RooCmdArg.h"
 
@@ -32,7 +34,6 @@ class TH1F;
 class TH2F;
 class TList ;
 class RooLinkedList ;
-class RooMinimizer ;
 class RooNumGenConfig ;
 class RooRealIntegral ;
 namespace RooBatchCompute {
@@ -136,8 +137,8 @@ public:
                            const RooCmdArg& arg7=RooCmdArg::none(), const RooCmdArg& arg8=RooCmdArg::none()) ;
 
   virtual RooPlot* paramOn(RooPlot* frame, const RooAbsData* data, const char *label= "", Int_t sigDigits = 2,
-			   Option_t *options = "NELU", Double_t xmin=0.65,
-			   Double_t xmax = 0.9, Double_t ymax = 0.9) ;
+			   Option_t *options = "NELU", Double_t xmin=0.50,
+			   Double_t xmax= 0.99,Double_t ymax=0.95) ;
 
   // Built-in generator support
   virtual Int_t getGenerator(const RooArgSet& directVars, RooArgSet &generateVars, Bool_t staticInitOK=kTRUE) const;
@@ -241,14 +242,9 @@ public:
   inline Bool_t mustBeExtended() const {
     return (extendMode() == MustBeExtended) ; 
   }
-  /// Return expected number of events to be used in calculation of extended
-  /// likelihood.
   virtual Double_t expectedEvents(const RooArgSet* nset) const ; 
-  /// Return expected number of events to be used in calculation of extended
-  /// likelihood. This function should not be overridden, as it just redirects
-  /// to the actual virtual function but takes a RooArgSet reference instead of
-  /// pointer (\see expectedEvents(const RooArgSet*) const).
-  double expectedEvents(const RooArgSet& nset) const {
+  /// Return expected number of events to be used in calculation of extended likelihood.
+  virtual Double_t expectedEvents(const RooArgSet& nset) const {
     return expectedEvents(&nset) ; 
   }
 
@@ -328,11 +324,12 @@ protected:
   class CacheElem : public RooAbsCacheElement {
   public:
     CacheElem(RooAbsReal& norm) : _norm(&norm) {} ;
+    void operModeHook(RooAbsArg::OperMode) ;
     virtual ~CacheElem() ; 
     virtual RooArgList containedArgs(Action) { return RooArgList(*_norm) ; }
     RooAbsReal* _norm ;
   } ;
-  mutable RooObjCacheManager _normMgr ; //! The cache manager
+  mutable RooObjCacheManager _normMgr ; // The cache manager
 
   friend class CacheElem ; // Cache needs to be able to clear _norm pointer
   
@@ -359,10 +356,13 @@ protected:
   static TString _normRangeOverride ; 
 
 private:
-  int calculateAsymptoticCorrectedCovMatrix(RooMinimizer& minimizer, RooAbsData const& data);
-  int calculateSumW2CorrectedCovMatrix(RooMinimizer& minimizer, RooAbsReal const& nll) const;
+  template<class Minimizer>
+  int calculateAsymptoticCorrectedCovMatrix(Minimizer& minimizer, RooAbsData const& data);
+
+  template<class Minimizer>
+  int calculateSumW2CorrectedCovMatrix(Minimizer& minimizer, RooAbsReal const& nll) const;
   
-  ClassDef(RooAbsPdf,5) // Abstract PDF with normalization support
+  ClassDef(RooAbsPdf,4) // Abstract PDF with normalization support
 };
 
 

@@ -24,8 +24,6 @@ protected :
    Double_t              fPhi1; // starting phi
    Double_t              fDphi; // phi extent
 // methods
-   TGeoTorus(const TGeoTorus&) = delete;
-   TGeoTorus& operator=(const TGeoTorus&) = delete;
 
 public:
    virtual Double_t      Capacity() const;

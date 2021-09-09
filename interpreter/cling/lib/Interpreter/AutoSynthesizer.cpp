@@ -25,9 +25,9 @@ namespace cling {
   public:
     AutoFixer(Sema* S) : m_Sema(S), m_FoundDRE(0) {}
 
-    CompoundStmt* Fix(CompoundStmt* CS) {
+    void Fix(CompoundStmt* CS) {
       if (!CS->size())
-        return nullptr;
+        return;
       typedef llvm::SmallVector<Stmt*, 32> Statements;
       Statements Stmts;
       Stmts.append(CS->body_begin(), CS->body_end());
@@ -44,30 +44,18 @@ namespace cling {
         }
       }
       if (CS->size() != Stmts.size())
-        return CompoundStmt::Create(m_Sema->getASTContext(), Stmts,
-                                    CS->getLBracLoc(), CS->getRBracLoc());
-      return nullptr;
+        CS->replaceStmts(m_Sema->getASTContext(), Stmts);
     }
 
-    CXXTryStmt* Fix(CXXTryStmt* TS) {
-      CompoundStmt *TryBlock = TS->getTryBlock();
-      if (CompoundStmt *NewTryBlock = Fix(TryBlock))
-        TryBlock = NewTryBlock;
-
-      llvm::SmallVector<Stmt*, 4> Handlers(TS->getNumHandlers());
-      for (unsigned int h = 0; h < TS->getNumHandlers(); ++h) {
-        Stmt *HandlerBlock = TS->getHandler(h)->getHandlerBlock();
-        if (CompoundStmt *HandlerCS = dyn_cast_or_null<CompoundStmt>(HandlerBlock)) {
-          if (CompoundStmt *NewHandlerCS = Fix(HandlerCS))
-            HandlerBlock = NewHandlerCS;
-        } else if (CXXTryStmt *HandlerTS = dyn_cast_or_null<CXXTryStmt>(HandlerBlock)) {
-          if (CXXTryStmt *NewHandlerTS = Fix(HandlerTS))
-            HandlerBlock = NewHandlerTS;
-        }
+    void Fix(CXXTryStmt* TS) {
+      Fix(TS->getTryBlock());
+      for(unsigned int h = 0; h < TS->getNumHandlers(); ++h) {
+        Stmt *s = TS->getHandler(h)->getHandlerBlock();
+        if (CompoundStmt* CS = dyn_cast_or_null<CompoundStmt>(s))
+          Fix(CS);
+        else if (CXXTryStmt *HandlerTS = dyn_cast_or_null<CXXTryStmt>(s))
+          Fix(HandlerTS);
       }
-
-      return CXXTryStmt::Create(m_Sema->getASTContext(), TS->getTryLoc(),
-                                TryBlock, Handlers);
     }
 
     bool VisitDeclRefExpr(DeclRefExpr* DRE) {
@@ -104,12 +92,9 @@ namespace cling {
       // those.
       Stmt *Body = FD->getBody();
       if (CompoundStmt* CS = dyn_cast_or_null<CompoundStmt>(Body))
-        Body = m_AutoFixer->Fix(CS);
+        m_AutoFixer->Fix(CS);
       else if (CXXTryStmt *TS = dyn_cast_or_null<CXXTryStmt>(Body))
-        Body = m_AutoFixer->Fix(TS);
-
-      if (Body != nullptr)
-        FD->setBody(Body);
+        m_AutoFixer->Fix(TS);
     }
     return Result(D, true);
   }

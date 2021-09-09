@@ -11,6 +11,7 @@
 #define CLING_META_SEMA_H
 
 #include "cling/MetaProcessor/MetaProcessor.h"
+
 #include "cling/Interpreter/Transaction.h"
 
 #include "clang/Basic/FileManager.h" // for DenseMap<FileEntry*>
@@ -35,27 +36,30 @@ namespace cling {
     Interpreter& m_Interpreter;
     MetaProcessor& m_MetaProcessor;
     bool m_IsQuitRequested;
+    typedef llvm::DenseMap<const clang::FileEntry*, const Transaction*> Watermarks;
+    typedef llvm::DenseMap<const Transaction*, const clang::FileEntry*> ReverseWatermarks;
+    Watermarks m_Watermarks;
+    ReverseWatermarks m_ReverseWatermarks;
 
-    llvm::DenseMap<const clang::FileEntry*, const Transaction*> m_FEToTransaction;
-    llvm::DenseMap<const Transaction*, const clang::FileEntry*> m_TransactionToFE;
   public:
     enum SwitchMode {
       kOff = 0,
       kOn = 1,
       kToggle = 2
     };
+
     enum ActionResult {
       AR_Failure = 0,
       AR_Success = 1
     };
 
+  public:
     MetaSema(Interpreter& interp, MetaProcessor& meta);
 
     const Interpreter& getInterpreter() const { return m_Interpreter; }
     bool isQuitRequested() const { return m_IsQuitRequested; }
 
-    ///\brief L command includes the given file or loads the given library. If
-    /// \c file is empty print the list of library paths.
+    ///\brief L command includes the given file or loads the given library.
     ///
     ///\param[in] file - The file/library to be loaded.
     ///\param[out] transaction - Transaction containing the loaded file.
@@ -135,8 +139,7 @@ namespace cling {
     ActionResult actOnUCommand(llvm::StringRef file);
 
     ///\brief Actions to be performed on add include path. It registers new
-    /// folder where header files can be searched. If \c path is empty print the
-    /// list of include paths.
+    /// folder where header files can be searched.
     ///
     ///\param[in] path - The path to add to header search.
     ///

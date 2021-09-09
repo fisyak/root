@@ -37,7 +37,7 @@ struct PCREPriv_t {
    pcre       *fPCRE;
    pcre_extra *fPCREExtra;
 
-   PCREPriv_t() { fPCRE = nullptr; fPCREExtra = nullptr; }
+   PCREPriv_t() { fPCRE = 0; fPCREExtra = 0; }
 };
 
 
@@ -95,10 +95,10 @@ TPRegexp &TPRegexp::operator=(const TPRegexp &p)
       fPattern = p.fPattern;
       if (fPriv->fPCRE)
          pcre_free(fPriv->fPCRE);
-      fPriv->fPCRE = nullptr;
+      fPriv->fPCRE = 0;
       if (fPriv->fPCREExtra)
          pcre_free(fPriv->fPCREExtra);
-      fPriv->fPCREExtra = nullptr;
+      fPriv->fPCREExtra = 0;
       fPCREOpts  = p.fPCREOpts;
    }
    return *this;
@@ -206,7 +206,7 @@ void TPRegexp::Compile()
    const char *errstr;
    Int_t patIndex;
    fPriv->fPCRE = pcre_compile(fPattern.Data(), fPCREOpts & kPCRE_INTMASK,
-                               &errstr, &patIndex, nullptr);
+                               &errstr, &patIndex, 0);
 
    if (!fPriv->fPCRE) {
       if (fgThrowAtCompileError) {
@@ -399,7 +399,7 @@ Int_t TPRegexp::SubstituteInternal(TString &s, const TString &replacePattern,
 {
    Int_t *offVec = new Int_t[3*nMaxMatch];
 
-   TString fin;
+   TString final;
    Int_t nrSubs = 0;
    Int_t offset = start;
    Int_t last = 0;
@@ -413,6 +413,7 @@ Int_t TPRegexp::SubstituteInternal(TString &s, const TString &replacePattern,
                                 offVec, 3*nMaxMatch);
 
       if (nrMatch == PCRE_ERROR_NOMATCH) {
+         nrMatch = 0;
          break;
       } else if (nrMatch <= 0) {
          Error("Substitute", "pcre_exec error = %d", nrMatch);
@@ -421,15 +422,15 @@ Int_t TPRegexp::SubstituteInternal(TString &s, const TString &replacePattern,
 
       // append anything previously unmatched, but not substituted
       if (last <= offVec[0]) {
-         fin += s(last,offVec[0]-last);
+         final += s(last,offVec[0]-last);
          last = offVec[1];
       }
 
       // replace stuff in s
       if (doDollarSubst) {
-         ReplaceSubs(s, fin, replacePattern, offVec, nrMatch);
+         ReplaceSubs(s, final, replacePattern, offVec, nrMatch);
       } else {
-         fin += replacePattern;
+         final += replacePattern;
       }
       ++nrSubs;
 
@@ -437,19 +438,20 @@ Int_t TPRegexp::SubstituteInternal(TString &s, const TString &replacePattern,
       if (!(fPCREOpts & kPCRE_GLOBAL))
          break;
 
-      if (offVec[0] != offVec[1]) {
+      if (offVec[0] != offVec[1])
          offset = offVec[1];
-      } else {
+      else {
          // matched empty string
-         if (offVec[1] == s.Length()) break;
+         if (offVec[1] == s.Length())
+         break;
          offset = offVec[1]+1;
       }
    }
 
    delete [] offVec;
 
-   fin += s(last,s.Length()-last);
-   s = fin;
+   final += s(last,s.Length()-last);
+   s = final;
 
    return nrSubs;
 }
@@ -487,7 +489,7 @@ Int_t TPRegexp::Substitute(TString &s, const TString &replacePattern,
 
 Bool_t TPRegexp::IsValid() const
 {
-   return fPriv->fPCRE != nullptr;
+   return fPriv->fPCRE != 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -587,7 +589,7 @@ TPMERegexp::TPMERegexp() :
    TPRegexp(),
    fNMaxMatches(10),
    fNMatches(0),
-   fAddressOfLastString(nullptr),
+   fAddressOfLastString(0),
    fLastGlobalPosition(0)
 {
    Compile();
@@ -604,7 +606,7 @@ TPMERegexp::TPMERegexp(const TString& s, const TString& opts, Int_t nMatchMax) :
    TPRegexp(s),
    fNMaxMatches(nMatchMax),
    fNMatches(0),
-   fAddressOfLastString(nullptr),
+   fAddressOfLastString(0),
    fLastGlobalPosition(0)
 {
    fPCREOpts = ParseMods(opts);
@@ -622,7 +624,7 @@ TPMERegexp::TPMERegexp(const TString& s, UInt_t opts, Int_t nMatchMax) :
    TPRegexp(s),
    fNMaxMatches(nMatchMax),
    fNMatches(0),
-   fAddressOfLastString(nullptr),
+   fAddressOfLastString(0),
    fLastGlobalPosition(0)
 {
    fPCREOpts = opts;
@@ -638,7 +640,7 @@ TPMERegexp::TPMERegexp(const TPMERegexp& r) :
    TPRegexp(r),
    fNMaxMatches(r.fNMaxMatches),
    fNMatches(0),
-   fAddressOfLastString(nullptr),
+   fAddressOfLastString(0),
    fLastGlobalPosition(0)
 {
    Compile();

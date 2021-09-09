@@ -40,7 +40,7 @@ E.g.:
   Unix.Rint.Root.DynamicPath: .:$(ROOTSYS)/lib:~/lib
   myapp.Root.Debug:  FALSE
   TH.Root.Debug: YES
-  *.Root.ObjStat: 1
+  *.Root.MemStat: 1
 ~~~
 `<SystemName>` and `<ProgName>` or `<RootName>` may be the wildcard "*".
 A # in the first column starts comment line.
@@ -95,7 +95,7 @@ static struct BoolNameTable_t {
    { "NO",    0 },
    { "OK",    1 },
    { "NOT",   0 },
-   { nullptr, 0 }
+   { 0, 0 }
 };
 
 
@@ -403,7 +403,7 @@ TEnv::TEnv(const char *name)
    fIgnoreDup = kFALSE;
 
    if (!name || !name[0] || !gSystem)
-      fTable = nullptr;
+      fTable = 0;
    else {
       fTable  = new THashList(1000);
       fRcName = name;
@@ -445,42 +445,42 @@ const char *TEnv::Getvalue(const char *name) const
       haveProgName = kTRUE;
 
    TString aname;
-   TEnvRec *er = nullptr;
+   TEnvRec *er = 0;
    if (haveProgName && gSystem && gProgName) {
       aname = gSystem->GetName(); aname += "."; aname += gProgName;
       aname += "."; aname += name;
       er = Lookup(aname);
    }
-   if (er == nullptr && gSystem && gROOT) {
+   if (er == 0 && gSystem && gROOT) {
       aname = gSystem->GetName(); aname += "."; aname += gROOT->GetName();
       aname += "."; aname += name;
       er = Lookup(aname);
    }
-   if (er == nullptr && gSystem) {
+   if (er == 0 && gSystem) {
       aname = gSystem->GetName(); aname += ".*."; aname += name;
       er = Lookup(aname);
    }
-   if (er == nullptr && haveProgName && gProgName) {
+   if (er == 0 && haveProgName && gProgName) {
       aname = gProgName; aname += "."; aname += name;
       er = Lookup(aname);
    }
-   if (er == nullptr && gROOT) {
+   if (er == 0 && gROOT) {
       aname = gROOT->GetName(); aname += "."; aname += name;
       er = Lookup(aname);
    }
-   if (er == nullptr) {
+   if (er == 0) {
       aname = "*.*."; aname += name;
       er = Lookup(aname);
    }
-   if (er == nullptr) {
+   if (er == 0) {
       aname = "*."; aname += name;
       er = Lookup(aname);
    }
-   if (er == nullptr) {
+   if (er == 0) {
       er = Lookup(name);
    }
-   if (er == nullptr)
-      return nullptr;
+   if (er == 0)
+      return 0;
    return er->fValue;
 }
 
@@ -546,7 +546,7 @@ const char *TEnv::GetValue(const char *name, const char *dflt) const
 
 TEnvRec *TEnv::Lookup(const char *name) const
 {
-   if (!fTable) return nullptr;
+   if (!fTable) return 0;
    return (TEnvRec*) fTable->FindObject(name);
 }
 
@@ -694,11 +694,11 @@ void TEnv::SaveLevel(EEnvLevel level)
 
    if ((ofp = fopen(Form("%s.new", rootrcdir.Data()), "w"))) {
       ifp = fopen(rootrcdir.Data(), "r");
-      if (ifp == nullptr) {     // try to create file
+      if (ifp == 0) {     // try to create file
          ifp = fopen(rootrcdir.Data(), "w");
          if (ifp) {
             fclose(ifp);
-            ifp = nullptr;
+            ifp = 0;
          }
       }
       if (ifp || (ifp = fopen(rootrcdir.Data(), "r"))) {

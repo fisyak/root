@@ -9,7 +9,7 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/** \class TBranchProxyDirector
+/** TBranchProxyDirector
 This class is used to 'drive' and hold a serie of TBranchProxy objects
 which represent and give access to the content of TTree object.
 This is intended to be used as part of a generate Selector class
@@ -45,49 +45,41 @@ namespace Internal {
       void operator()(TFriendProxy *x) { x->Update(fNewTree); }
    };
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Simple constructor
 
    TBranchProxyDirector::TBranchProxyDirector(TTree* tree, Long64_t i) :
       fTree(tree),
       fEntry(i)
    {
+      // Simple constructor
    }
-
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Simple constructor
 
    TBranchProxyDirector::TBranchProxyDirector(TTree* tree, Int_t i) :
       // cint has a problem casting int to long long
       fTree(tree),
       fEntry(i)
    {
+      // Simple constructor
    }
-
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Attach a TBranchProxy object to this director.  The director just
-   /// 'remembers' this BranchProxy and does not own it.  It will be use
-   /// to apply Tree wide operation (like reseting).
 
    void TBranchProxyDirector::Attach(Detail::TBranchProxy* p) {
 
+      // Attach a TBranchProxy object to this director.  The director just
+      // 'remembers' this BranchProxy and does not own it.  It will be use
+      // to apply Tree wide operation (like reseting).
       fDirected.push_back(p);
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Attach a TFriendProxy object to this director.  The director just
-   /// 'remembers' this BranchProxy and does not own it.  It will be use
-   /// to apply Tree wide operation (like reseting).
-
    void TBranchProxyDirector::Attach(TFriendProxy* p) {
 
+      // Attach a TFriendProxy object to this director.  The director just
+      // 'remembers' this BranchProxy and does not own it.  It will be use
+      // to apply Tree wide operation (like reseting).
       fFriends.push_back(p);
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Create a temporary 1D histogram.
-
    TH1F* TBranchProxyDirector::CreateHistogram(const char *options) {
+      // Create a temporary 1D histogram.
+
       Int_t nbins = gEnv->GetValue("Hist.Binning.1D.x",100);
       Double_t vmin=0, vmax=0;
       Double_t xmin=0, xmax=0;
@@ -134,20 +126,17 @@ namespace Internal {
       return hist;
    }
 
-   ////////////////////////////////////////////////////////////////////////////////
-   /// Set the BranchProxy to be looking at a new tree.
-   /// Reset all.
-   /// Return the old tree.
-
    TTree* TBranchProxyDirector::SetTree(TTree *newtree) {
+
+      // Set the BranchProxy to be looking at a new tree.
+      // Reset all.
+      // Return the old tree.
 
       TTree* oldtree = fTree;
       fTree = newtree;
       if(!Notify()) return nullptr;
       return oldtree;
    }
-
-   ////////////////////////////////////////////////////////////////////////////////
 
    Bool_t TBranchProxyDirector::Notify() {
       fEntry = -1;

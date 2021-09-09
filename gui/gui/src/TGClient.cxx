@@ -20,15 +20,14 @@
 
 **************************************************************************/
 
-
-/** \class TGClient
-    \ingroup guiwidgets
-
-Window client. In client server windowing systems, like X11 this
-class is used to make the initial connection to the window server.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGClient                                                             //
+//                                                                      //
+// Window client. In client server windowing systems, like X11 this     //
+// class is used to make the initial connection to the window server.   //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "RConfigure.h"
 
@@ -74,7 +73,7 @@ public:
    TGClientInit() {
       TROOT *rootlocal = ROOT::Internal::gROOTLocal;
       if (rootlocal && rootlocal->IsBatch()) {
-         // For now check if the header files (or the module containing them)
+         // For now check if the heaeder files (or the module containing them)
          // has been loaded in Cling.
          // This is required because the dictionaries must be initialized
          // __before__ the TGClient creation which will induce the creation
@@ -407,7 +406,7 @@ Bool_t TGClient::GetColorByName(const char *name, Pixel_t &pixel) const
       status = kFALSE;
    } else if (!gVirtualX->AllocColor(attributes.fColormap, color)) {
       Warning("GetColorByName", "couldn't retrieve color %s.\n"
-              "Please close any other application, like web browsers, "
+              "Please close any other application, like netscape, "
               "that might exhaust\nthe colormap and start ROOT again", name);
       status = kFALSE;
    }

@@ -16,14 +16,11 @@
 #ifndef ROO_ABS_DATA
 #define ROO_ABS_DATA
 
+#include "TNamed.h"
 #include "RooPrintable.h"
 #include "RooArgSet.h"
 #include "RooArgList.h"
 #include "RooSpan.h"
-
-#include "ROOT/RStringView.hxx"
-#include "TNamed.h"
-
 #include <map>
 #include <string>
 
@@ -49,37 +46,13 @@ struct RunContext;
 }
 
 
-// Writes a templated constructor for compatibility with ROOT builds using the
-// C++14 standard or earlier, taking `ROOT::Internal::TStringView` instead of
-// `std::string_view`. This means one can still use a `TString` for the name or
-// title parameter. The condition in the following `#if` should be kept in
-// sync with the one in TString.h.
-#if (__cplusplus >= 201700L) && !defined(_MSC_VER) && (!defined(__clang_major__) || __clang_major__ > 5)
-#define WRITE_TSTRING_COMPATIBLE_CONSTRUCTOR(Class_t) // does nothing
-#else
-#define WRITE_TSTRING_COMPATIBLE_CONSTRUCTOR(Class_t)                                             \
-  template<typename ...Args_t>                                                                    \
-  Class_t(ROOT::Internal::TStringView name, ROOT::Internal::TStringView title, Args_t &&... args) \
-    : Class_t(std::string_view(name), std::string_view(title), std::forward<Args_t>(args)...) {}  \
-  template<typename ...Args_t>                                                                    \
-  Class_t(ROOT::Internal::TStringView name, std::string_view title, Args_t &&... args)            \
-    : Class_t(std::string_view(name), title, std::forward<Args_t>(args)...) {}                    \
-  template<typename ...Args_t>                                                                    \
-  Class_t(std::string_view name, ROOT::Internal::TStringView title, Args_t &&... args)            \
-    : Class_t(name, std::string_view(title), std::forward<Args_t>(args)...) {}
-#endif
-
-
 class RooAbsData : public TNamed, public RooPrintable {
 public:
 
   // Constructors, factory methods etc.
   RooAbsData() ; 
-  RooAbsData(std::string_view name, std::string_view title, const RooArgSet& vars, RooAbsDataStore* store=0) ;
+  RooAbsData(const char *name, const char *title, const RooArgSet& vars, RooAbsDataStore* store=0) ;
   RooAbsData(const RooAbsData& other, const char* newname = 0) ;
-
-  WRITE_TSTRING_COMPATIBLE_CONSTRUCTOR(RooAbsData)
-
   RooAbsData& operator=(const RooAbsData& other);
   virtual ~RooAbsData() ;
   virtual RooAbsData* emptyClone(const char* newName=0, const char* newTitle=0, const RooArgSet* vars=0, const char* wgtVarName=0) const = 0 ;
@@ -123,28 +96,9 @@ public:
   virtual Double_t weight() const = 0 ; // DERIVED
   virtual Double_t weightSquared() const = 0 ; // DERIVED
   virtual Bool_t valid() const { return kTRUE ; }
-
   enum ErrorType { Poisson, SumW2, None, Auto, Expected } ;
-  /// Return the symmetric error on the current weight.
-  /// See also weightError(double&,double&,ErrorType) const for asymmetric errors.
-  /// \param[in] etype Type of error to compute. May throw if not supported.
-  virtual double weightError(ErrorType /*etype*/=Poisson) const {
-    // Dummy implementation returning zero, because not all deriving classes
-    // need to implement a non-zero weight error.
-    return 0.0;
-  }
-  /// Return the asymmetric errors on the current weight.
-  /// See also weightError(ErrorType) const for symmetric error.
-  /// \param[out] lo Low error.
-  /// \param[out] hi High error.
-  /// \param[in] etype Type of error to compute. May throw if not supported.
-  virtual void weightError(double& lo, double& hi, ErrorType /*etype*/=Poisson) const {
-    // Dummy implementation returning zero, because not all deriving classes
-    // need to implement a non-zero weight error.
-    lo=0;
-    hi=0;
-  }
-
+  virtual Double_t weightError(ErrorType etype=Poisson) const ;
+  virtual void weightError(Double_t& lo, Double_t& hi, ErrorType etype=Poisson) const ; 
   virtual const RooArgSet* get(Int_t index) const ;
 
   /// Retrieve batches of data for each real-valued variable in this dataset.

@@ -11,8 +11,6 @@
 
 #include <ROOT/REveShape.hxx>
 
-#include <nlohmann/json.hpp>
-
 using namespace ROOT::Experimental;
 
 /** \class REveShape

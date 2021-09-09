@@ -142,7 +142,7 @@ static void SetRootSys()
             int l2 = strlen(ep) + 10;
             char *env = new char[l2];
             snprintf(env, l2, "ROOTSYS=%s", ep);
-            putenv(env); // NOLINT: allocated memory now used by environment variable
+            putenv(env);
          }
       }
       delete [] ep;
@@ -351,8 +351,6 @@ int main(int argc, char **argv)
       fprintf(stderr, "%s: can't start ROOT notebook -- this option is only available when building with CMake, please check that %s exists\n",
               argv[0], arg0);
 
-      delete [] argvv;
-
       return 1;
    }
 
@@ -469,8 +467,6 @@ int main(int argc, char **argv)
    // Exec failed
    fprintf(stderr, "%s: can't start ROOT -- check that %s exists!\n",
            argv[0], arg0);
-
-   delete [] argvv;
 
    return 1;
 }

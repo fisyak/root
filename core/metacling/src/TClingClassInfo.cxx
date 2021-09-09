@@ -162,8 +162,6 @@ long TClingClassInfo::ClassProperty() const
    // We now have a class or a struct.
    const CXXRecordDecl *CRD =
       llvm::dyn_cast<CXXRecordDecl>(GetDecl());
-   if (!CRD)
-      return property;
    property |= kClassIsValid;
    if (CRD->isAbstract()) {
       property |= kClassIsAbstract;
@@ -331,7 +329,7 @@ TClingMethodInfo TClingClassInfo::GetMethod(const char *fname) const
 }
 
 TClingMethodInfo TClingClassInfo::GetMethod(const char *fname,
-      const char *proto, Longptr_t *poffset, EFunctionMatchMode mode /*= kConversionMatch*/,
+      const char *proto, long *poffset, EFunctionMatchMode mode /*= kConversionMatch*/,
       EInheritanceMode imode /*= kWithInheritance*/) const
 {
    return GetMethod(fname,proto,false,poffset,mode,imode);
@@ -339,7 +337,7 @@ TClingMethodInfo TClingClassInfo::GetMethod(const char *fname,
 
 TClingMethodInfo TClingClassInfo::GetMethod(const char *fname,
       const char *proto, bool objectIsConst,
-      Longptr_t *poffset, EFunctionMatchMode mode /*= kConversionMatch*/,
+      long *poffset, EFunctionMatchMode mode /*= kConversionMatch*/,
       EInheritanceMode imode /*= kWithInheritance*/) const
 {
    if (poffset) {
@@ -425,7 +423,7 @@ TClingMethodInfo TClingClassInfo::GetMethod(const char *fname,
 
 TClingMethodInfo TClingClassInfo::GetMethod(const char *fname,
                                             const llvm::SmallVectorImpl<clang::QualType> &proto,
-                                            Longptr_t *poffset, EFunctionMatchMode mode /*= kConversionMatch*/,
+                                            long *poffset, EFunctionMatchMode mode /*= kConversionMatch*/,
                                             EInheritanceMode imode /*= kWithInheritance*/) const
 {
    return GetMethod(fname,proto,false,poffset,mode,imode);
@@ -433,7 +431,7 @@ TClingMethodInfo TClingClassInfo::GetMethod(const char *fname,
 
 TClingMethodInfo TClingClassInfo::GetMethod(const char *fname,
                                             const llvm::SmallVectorImpl<clang::QualType> &proto, bool objectIsConst,
-                                            Longptr_t *poffset, EFunctionMatchMode mode /*= kConversionMatch*/,
+                                            long *poffset, EFunctionMatchMode mode /*= kConversionMatch*/,
                                             EInheritanceMode imode /*= kWithInheritance*/) const
 {
    if (poffset) {
@@ -498,7 +496,7 @@ TClingMethodInfo TClingClassInfo::GetMethod(const char *fname,
 }
 
 TClingMethodInfo TClingClassInfo::GetMethodWithArgs(const char *fname,
-      const char *arglist, Longptr_t *poffset, EFunctionMatchMode mode /* = kConversionMatch*/,
+      const char *arglist, long *poffset, EFunctionMatchMode mode /* = kConversionMatch*/,
       EInheritanceMode imode /* = kWithInheritance*/) const
 {
    return GetMethodWithArgs(fname,arglist,false,poffset,mode,imode);
@@ -506,7 +504,7 @@ TClingMethodInfo TClingClassInfo::GetMethodWithArgs(const char *fname,
 
 TClingMethodInfo TClingClassInfo::GetMethodWithArgs(const char *fname,
       const char *arglist, bool objectIsConst,
-      Longptr_t *poffset, EFunctionMatchMode /*mode = kConversionMatch*/,
+      long *poffset, EFunctionMatchMode /*mode = kConversionMatch*/,
       EInheritanceMode /* imode = kWithInheritance*/) const
 {
 
@@ -583,12 +581,12 @@ int TClingClassInfo::GetMethodNArg(const char *method, const char *proto,
    return clang_val;
 }
 
-Longptr_t TClingClassInfo::GetOffset(const CXXMethodDecl* md) const
+long TClingClassInfo::GetOffset(const CXXMethodDecl* md) const
 {
 
    R__LOCKGUARD(gInterpreterMutex);
 
-   Longptr_t offset = 0L;
+   long offset = 0L;
    const CXXRecordDecl* definer = md->getParent();
    const CXXRecordDecl* accessor =
       llvm::cast<CXXRecordDecl>(GetDecl());
@@ -910,7 +908,7 @@ bool TClingClassInfo::IsLoaded() const
 
 bool TClingClassInfo::IsValidMethod(const char *method, const char *proto,
                                     Bool_t objectIsConst,
-                                    Longptr_t *offset,
+                                    long *offset,
                                     EFunctionMatchMode mode /*= kConversionMatch*/) const
 {
    // Check if the method with the given prototype exist.
@@ -1286,14 +1284,13 @@ long TClingClassInfo::Property() const
    // Note: Now we have class, struct, union only.
    const CXXRecordDecl *CRD =
       llvm::dyn_cast<CXXRecordDecl>(GetDecl());
-   if (!CRD)
-      return property;
-
    if (CRD->isClass()) {
       property |= kIsClass;
-   } else if (CRD->isStruct()) {
+   }
+   else if (CRD->isStruct()) {
       property |= kIsStruct;
-   } else if (CRD->isUnion()) {
+   }
+   else if (CRD->isUnion()) {
       property |= kIsUnion;
    }
    if (CRD->hasDefinition() && CRD->isAbstract()) {
@@ -1349,12 +1346,12 @@ int TClingClassInfo::Size() const
    return clang_size;
 }
 
-Longptr_t TClingClassInfo::Tagnum() const
+long TClingClassInfo::Tagnum() const
 {
    if (!IsValid()) {
       return -1L;
    }
-   return reinterpret_cast<Longptr_t>(GetDecl());
+   return reinterpret_cast<long>(GetDecl());
 }
 
 const char *TClingClassInfo::FileName()
@@ -1444,6 +1441,6 @@ const char *TClingClassInfo::TmpltName() const
       // Note: This does *not* include the template arguments!
       buf = ND->getNameAsString();
    }
-   return buf.c_str();  // NOLINT
+   return buf.c_str();
 }
 

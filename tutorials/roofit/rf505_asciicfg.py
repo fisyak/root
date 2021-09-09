@@ -22,12 +22,13 @@ s = ROOT.RooRealVar("s", "s", 1, -10, 10)
 gauss = ROOT.RooGaussian("g", "g", x, m, s)
 
 # Construct poly(x,p0)
-p0 = ROOT.RooRealVar("p0", "p0", 0.01, 0.0, 1.0)
-poly = ROOT.RooPolynomial("p", "p", x, [p0])
+p0 = ROOT.RooRealVar("p0", "p0", 0.01, 0., 1.)
+poly = ROOT.RooPolynomial("p", "p", x, ROOT.RooArgList(p0))
 
 # model = f*gauss(x) + (1-f)*poly(x)
-f = ROOT.RooRealVar("f", "f", 0.5, 0.0, 1.0)
-model = ROOT.RooAddPdf("model", "model", [gauss, poly], [f])
+f = ROOT.RooRealVar("f", "f", 0.5, 0., 1.)
+model = ROOT.RooAddPdf("model", "model", ROOT.RooArgList(
+    gauss, poly), ROOT.RooArgList(f))
 
 # Fit model to toy data
 # -----------------------------------------
@@ -62,7 +63,8 @@ params.Print("v")
 params.readFromFile(configFile, "READ", "Section3")
 
 # Print the list of parameters that were not read from Section3
-print("The following parameters of the were _not_ read from Section3: ", params.selectByAttrib("READ", False))
+print("The following parameters of the were _not_ read from Section3: ",
+      params.selectByAttrib("READ", ROOT.kFALSE))
 
 # Read parameters from section 'Section4' of file, contains
 # 'include file' statement of rf505_asciicfg_example.txt

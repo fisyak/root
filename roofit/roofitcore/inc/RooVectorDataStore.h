@@ -22,8 +22,6 @@
 #include "RooChangeTracker.h"
 #include "RooRealVar.h"
 
-#include "ROOT/RStringView.hxx"
-
 #include <list>
 #include <vector>
 #include <algorithm>
@@ -42,10 +40,7 @@ public:
   RooVectorDataStore() ; 
 
   // Empty ctor
-  RooVectorDataStore(std::string_view name, std::string_view title, const RooArgSet& vars, const char* wgtVarName=0) ;
-
-  WRITE_TSTRING_COMPATIBLE_CONSTRUCTOR(RooVectorDataStore)
-
+  RooVectorDataStore(const char* name, const char* title, const RooArgSet& vars, const char* wgtVarName=0) ;
   virtual RooAbsDataStore* clone(const char* newname=0) const override { return new RooVectorDataStore(*this,newname) ; }
   virtual RooAbsDataStore* clone(const RooArgSet& vars, const char* newname=0) const override { return new RooVectorDataStore(*this,vars,newname) ; }
 
@@ -54,7 +49,7 @@ public:
   RooVectorDataStore(const RooVectorDataStore& other, const RooArgSet& vars, const char* newname=0) ;
 
 
-  RooVectorDataStore(std::string_view name, std::string_view title, RooAbsDataStore& tds, 
+  RooVectorDataStore(const char *name, const char *title, RooAbsDataStore& tds, 
 		     const RooArgSet& vars, const RooFormulaVar* cutVar, const char* cutRange,
 		     std::size_t nStart, std::size_t nStop, Bool_t /*copyCache*/, const char* wgtVarName=0) ;
 
@@ -77,7 +72,6 @@ public:
 
   virtual const RooArgSet* getNative(Int_t index) const;
 
-  using RooAbsDataStore::weight ;
   /// Return the weight of the last-retrieved data point.
   Double_t weight() const override
   {
@@ -90,6 +84,7 @@ public:
   }
   virtual Double_t weightError(RooAbsData::ErrorType etype=RooAbsData::Poisson) const override;
   virtual void weightError(Double_t& lo, Double_t& hi, RooAbsData::ErrorType etype=RooAbsData::Poisson) const override;
+  virtual Double_t weight(Int_t index) const override;
   virtual Bool_t isWeighted() const override { return _wgtVar || _extWgtArray; }
 
   RooBatchCompute::RunContext getBatches(std::size_t first, std::size_t len) const override;
@@ -109,6 +104,7 @@ public:
   virtual void append(RooAbsDataStore& other) override;
 
   // General & bookkeeping methods
+  virtual Bool_t valid() const override;
   virtual Int_t numEntries() const override { return static_cast<int>(size()); }
   virtual Double_t sumEntries() const override { return _sumWeight ; }
   /// Get size of stored dataset.

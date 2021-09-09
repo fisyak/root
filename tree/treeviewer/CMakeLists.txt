@@ -13,6 +13,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(TreeViewer
   HEADERS
     HelpTextTV.h
     TGTreeTable.h
+    TMemStatShow.h
     TParallelCoordEditor.h
     TParallelCoord.h
     TParallelCoordRange.h
@@ -25,6 +26,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(TreeViewer
   SOURCES
     src/HelpTextTV.cxx
     src/TGTreeTable.cxx
+    src/TMemStatShow.cxx
     src/TParallelCoord.cxx
     src/TParallelCoordEditor.cxx
     src/TParallelCoordRange.cxx

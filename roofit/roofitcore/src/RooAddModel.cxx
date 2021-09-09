@@ -66,8 +66,6 @@ RooAddModel::RooAddModel() :
   _refCoefNorm("!refCoefNorm","Reference coefficient normalization set",this,kFALSE,kFALSE),
   _refCoefRangeName(0),
   _projectCoefs(false),
-  _projCacheMgr(this,10),
-  _intCacheMgr(this,10),
   _codeReg(10),
   _snormList(0),
   _haveLastCoef(false),
@@ -88,7 +86,7 @@ RooAddModel::RooAddModel() :
 /// All PDFs must inherit from RooAbsPdf. All coefficients must inherit from RooAbsReal.
 
 RooAddModel::RooAddModel(const char *name, const char *title, const RooArgList& inPdfList, const RooArgList& inCoefList, Bool_t ownPdfList) :
-  RooResolutionModel(name,title,(static_cast<RooResolutionModel*>(inPdfList.at(0)))->convVar()),
+  RooResolutionModel(name,title,((RooResolutionModel*)inPdfList.at(0))->convVar()),
   _refCoefNorm("!refCoefNorm","Reference coefficient normalization set",this,kFALSE,kFALSE),
   _refCoefRangeName(0),
   _projectCoefs(kFALSE),
@@ -101,32 +99,29 @@ RooAddModel::RooAddModel(const char *name, const char *title, const RooArgList& 
   _allExtendable(kFALSE)
 { 
   if (inPdfList.getSize()>inCoefList.getSize()+1) {
-    std::stringstream msgSs;
-    msgSs << "RooAddModel::RooAddModel(" << GetName()
-          << ") number of pdfs and coefficients inconsistent, must have Npdf=Ncoef or Npdf=Ncoef+1";
-    const std::string msgStr = msgSs.str();
-    coutE(InputArguments) << msgStr << endl;
-    throw std::runtime_error(msgStr);
+    coutE(InputArguments) << "RooAddModel::RooAddModel(" << GetName() 
+			  << ") number of pdfs and coefficients inconsistent, must have Npdf=Ncoef or Npdf=Ncoef+1" << endl ;
+    assert(0) ;
   }
  
   // Constructor with N PDFs and N or N-1 coefs
-  auto pdfIter = inPdfList.fwdIterator() ;
+  TIterator* pdfIter = inPdfList.createIterator() ;
+  TIterator* coefIter = inCoefList.createIterator() ;
+  RooAbsPdf* pdf ;
+  RooAbsReal* coef ;
 
-  for(auto const& coef : inCoefList) {
-    auto pdf = pdfIter.next() ;
+  while((coef = (RooAbsPdf*)coefIter->Next())) {
+    pdf = (RooAbsPdf*) pdfIter->Next() ;
     if (!pdf) {
-      std::stringstream msgSs;
-      msgSs << "RooAddModel::RooAddModel(" << GetName() 
-            << ") number of pdfs and coefficients inconsistent, must have Npdf=Ncoef or Npdf=Ncoef+1";
-      const std::string msgStr = msgSs.str();
-      coutE(InputArguments) << msgStr << endl;
-      throw std::runtime_error(msgStr);
+      coutE(InputArguments) << "RooAddModel::RooAddModel(" << GetName() 
+			    << ") number of pdfs and coefficients inconsistent, must have Npdf=Ncoef or Npdf=Ncoef+1" << endl ;
+      assert(0) ;
     }
     if (!dynamic_cast<RooAbsReal*>(coef)) {
       coutE(InputArguments) << "RooAddModel::RooAddModel(" << GetName() << ") coefficient " << coef->GetName() << " is not of type RooAbsReal, ignored" << endl ;
       continue ;
     }
-    if (!dynamic_cast<RooAbsPdf*>(pdf)) {
+    if (!dynamic_cast<RooAbsReal*>(pdf)) {
       coutE(InputArguments) << "RooAddModel::RooAddModel(" << GetName() << ") pdf " << pdf->GetName() << " is not of type RooAbsPdf, ignored" << endl ;
       continue ;
     }
@@ -134,18 +129,19 @@ RooAddModel::RooAddModel(const char *name, const char *title, const RooArgList& 
     _coefList.add(*coef) ;    
   }
 
-  if (auto pdf = pdfIter.next()) {
-    if (!dynamic_cast<RooAbsPdf*>(pdf)) {
-      std::stringstream msgSs;
-      msgSs << "RooAddModel::RooAddModel(" << GetName() << ") last pdf " << pdf->GetName() << " is not of type RooAbsPdf, fatal error";
-      const std::string msgStr = msgSs.str();
-      coutE(InputArguments) << msgStr << endl;
-      throw std::runtime_error(msgStr);
+  pdf = (RooAbsPdf*) pdfIter->Next() ;
+  if (pdf) {
+    if (!dynamic_cast<RooAbsReal*>(pdf)) {
+      coutE(InputArguments) << "RooAddModel::RooAddModel(" << GetName() << ") last pdf " << coef->GetName() << " is not of type RooAbsPdf, fatal error" << endl ;
+      assert(0) ;
     }
     _pdfList.add(*pdf) ;  
   } else {
     _haveLastCoef=kTRUE ;
   }
+
+  delete pdfIter ;
+  delete coefIter  ;
 
   _coefCache = new Double_t[_pdfList.getSize()] ;
   _coefErrCount = _errorCount ;
@@ -745,12 +741,16 @@ Double_t RooAddModel::analyticalIntegralWN(Int_t code, const RooArgSet* normSet,
 
   // If cache has been sterilized, revive this slot
   if (cache==0) {
-    std::unique_ptr<RooArgSet> vars{getParameters(RooArgSet())} ;
-    RooArgSet nset = _intCacheMgr.selectFromSet1(*vars, code-1) ;
-    RooArgSet iset = _intCacheMgr.selectFromSet2(*vars, code-1) ;
+    RooArgSet* vars = getParameters(RooArgSet()) ;
+    RooArgSet* nset = _intCacheMgr.nameSet1ByIndex(code-1)->select(*vars) ;
+    RooArgSet* iset = _intCacheMgr.nameSet2ByIndex(code-1)->select(*vars) ;
 
-    int code2 = -1 ;
-    getCompIntList(&nset,&iset,compIntList,code2,rangeName) ;
+    Int_t code2(-1) ;
+    getCompIntList(nset,iset,compIntList,code2,rangeName) ;
+
+    delete vars ;
+    delete nset ;
+    delete iset ;
   } else {
 
     compIntList = &cache->_intList ;

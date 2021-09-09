@@ -10,25 +10,18 @@
 #define ROOT7_TObjectDrawable
 
 #include <ROOT/RDrawable.hxx>
-#include <ROOT/RAttrValue.hxx>
-#include <ROOT/RAttrLine.hxx>
-#include <ROOT/RAttrText.hxx>
-#include <ROOT/RAttrMarker.hxx>
-#include <ROOT/RAttrFill.hxx>
 
 class TObject;
 class TColor;
-class TClass;
 
 namespace ROOT {
 namespace Experimental {
 
 class RPadBase;
-class TObjectDisplayItem;
 
 /** \class TObjectDrawable
 \ingroup GpadROOT7
-\brief Provides v7 drawing facilities for TObject types (TGraph, TH1, TH2, etc).
+\brief Provides v7 drawing facilities for TObject types (TGraph etc).
 \author Sergey Linev
 \date 2017-05-31
 \warning This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback is welcome!
@@ -42,11 +35,11 @@ private:
       kObject = 1,   ///< plain object
    };
 
-   int fKind{kNone};                           ///< object kind
-   Internal::RIOShared<TObject> fObj;          ///< The object to be painted, owned by the drawable
-   const TObject *fExtObj{nullptr};            ///<! external object, managed outside of the drawable, not persistent
+   int fKind{kNone};                   ///< object kind
+   Internal::RIOShared<TObject> fObj;  ///< The object to be painted
+   std::string fOpts;                  ///< drawing options
 
-   static std::string GetColorCode(TColor *col);
+   const char *GetColorCode(TColor *col);
 
    std::unique_ptr<TObject> CreateSpecials(int kind);
 
@@ -60,12 +53,6 @@ protected:
 
    void Execute(const std::string &) final;
 
-   static void ExtractObjectColors(std::unique_ptr<TObjectDisplayItem> &item, const TObject *obj);
-
-   static void CheckOwnership(TObject *obj);
-
-   static const char *DetectCssType(const TObject *obj);
-
 public:
    // special kinds, see TWebSnapshot enums
    enum EKind {
@@ -74,26 +61,13 @@ public:
       kPalette = 6   ///< list of colors from palette
    };
 
-   RAttrLine line{this, "line"};          ///<! object line attributes
-   RAttrFill fill{this, "fill"};          ///<! object fill attributes
-   RAttrMarker marker{this, "marker"};    ///<! object marker attributes
-   RAttrText text{this, "text"};          ///<! object text attributes
-   RAttrValue<std::string> options{this, "options"};  ///<! object draw options
+   TObjectDrawable() : RDrawable("tobject") {}
 
-   TObjectDrawable();
-   TObjectDrawable(TObject *obj, bool isowner = false);
-   TObjectDrawable(TObject *obj, const std::string &opt, bool isowner = false);
-   TObjectDrawable(const std::shared_ptr<TObject> &obj);
-   TObjectDrawable(const std::shared_ptr<TObject> &obj, const std::string &opt);
+   TObjectDrawable(const std::shared_ptr<TObject> &obj, const std::string &opt = "") : RDrawable("tobject"), fKind(kObject), fObj(obj), fOpts(opt) {}
+
    TObjectDrawable(EKind kind, bool persistent = false);
-   virtual ~TObjectDrawable();
 
-   void Reset();
-
-   void Set(TObject *obj, bool isowner = false);
-   void Set(TObject *obj, const std::string &opt, bool isowner = false);
-
-   const TObject *Get();
+   virtual ~TObjectDrawable() = default;
 };
 
 } // namespace Experimental

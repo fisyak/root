@@ -74,6 +74,7 @@ for single nodes.
 #include "strlcpy.h"
 
 #include "RooSecondMoment.h"
+#include "RooNameSet.h"
 #include "RooWorkspace.h"
 
 #include "RooMsgService.h"
@@ -93,14 +94,14 @@ for single nodes.
 #include "RooResolutionModel.h"
 #include "RooVectorDataStore.h"
 #include "RooTreeDataStore.h"
+#include "ROOT/RMakeUnique.hxx"
 #include "RooHelpers.h"
 
-#include <algorithm>
-#include <cstring>
-#include <fstream>
 #include <iostream>
-#include <memory>
+#include <fstream>
 #include <sstream>
+#include <cstring>
+#include <algorithm>
 
 using namespace std;
 
@@ -640,12 +641,11 @@ RooArgSet* RooAbsArg::getParameters(const RooArgSet* observables, bool stripDisc
 
 bool RooAbsArg::getParameters(const RooArgSet* observables, RooArgSet& outputSet, bool stripDisconnected) const
 {
-   using RooHelpers::getColonSeparatedNameString;
 
    // Check for cached parameter set
    if (_myws) {
-      auto nsetObs = getColonSeparatedNameString(observables ? *observables : RooArgSet());
-      const RooArgSet *paramSet = _myws->set(Form("CACHE_PARAMS_OF_PDF_%s_FOR_OBS_%s", GetName(), nsetObs.c_str()));
+      RooNameSet nsetObs(observables ? *observables : RooArgSet());
+      const RooArgSet *paramSet = _myws->set(Form("CACHE_PARAMS_OF_PDF_%s_FOR_OBS_%s", GetName(), nsetObs.content()));
       if (paramSet) {
          outputSet.add(*paramSet);
          return false;
@@ -660,9 +660,9 @@ bool RooAbsArg::getParameters(const RooArgSet* observables, RooArgSet& outputSet
    outputSet.sort();
 
    // Cache parameter set
-   if (_myws && outputSet.size() > 10) {
-      auto nsetObs = getColonSeparatedNameString(observables ? *observables : RooArgSet());
-      _myws->defineSetInternal(Form("CACHE_PARAMS_OF_PDF_%s_FOR_OBS_%s", GetName(), nsetObs.c_str()), outputSet);
+   if (_myws && outputSet.getSize() > 10) {
+      RooNameSet nsetObs(observables ? *observables : RooArgSet());
+      _myws->defineSetInternal(Form("CACHE_PARAMS_OF_PDF_%s_FOR_OBS_%s", GetName(), nsetObs.content()), outputSet);
       // cout << " caching parameters in workspace for pdf " << IsA()->GetName() << "::" << GetName() << endl ;
    }
 
@@ -711,7 +711,7 @@ RooArgSet* RooAbsArg::getObservables(const RooArgSet* dataList, bool valueOnly) 
 /// \param[in] valueOnly If this parameter is true, we only match leafs that
 ///                      depend on the value of any arg in `dataList`.
 
-bool RooAbsArg::getObservables(const RooAbsCollection* dataList, RooArgSet& outputSet, bool valueOnly) const
+bool RooAbsArg::getObservables(const RooArgSet* dataList, RooArgSet& outputSet, bool valueOnly) const
 {
   outputSet.clear();
   outputSet.setName("dependents");
@@ -985,12 +985,11 @@ void RooAbsArg::setShapeDirty(const RooAbsArg* source)
 /// \param[in] newSetOrig Set of new servers that should be used instead of the current servers.
 /// \param[in] mustReplaceAll A warning is printed and error status is returned if not all servers could be
 /// substituted successfully.
-/// \param[in] nameChange If false, an object named "x" is only replaced with an object also named "x" in `newSetOrig`.
-/// If the object in `newSet` is called differently, set `nameChange` to true and use setAttribute() on the x object:
+/// \param[in] nameChange If false, an object named "x" is replaced with an object named "x" in `newSetOrig`.
+/// If the object in `newSet` is called differently, set `nameChange` to true and use setStringAttribute on the x object:
 /// ```
-/// objectToReplaceX.setAttribute("ORIGNAME:x")
+/// objectToReplaceX.setStringAttribute("ORIGNAME", "x")
 /// ```
-/// Now, the renamed object will be selected based on the attribute "ORIGNAME:<name>".
 /// \param[in] isRecursionStep Internal switch used when called from recursiveRedirectServers().
 Bool_t RooAbsArg::redirectServers(const RooAbsCollection& newSetOrig, Bool_t mustReplaceAll, Bool_t nameChange, Bool_t isRecursionStep)
 {
@@ -1106,11 +1105,10 @@ Bool_t RooAbsArg::redirectServers(const RooAbsCollection& newSetOrig, Bool_t mus
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Find the new server in the specified set that matches the old server.
-///
-/// \param[in] newSet Search this set by name for a new server.
-/// \param[in] If true, search for an item with the bool attribute "ORIGNAME:<oldName>" set.
-/// Use `<object>.setAttribute("ORIGNAME:<oldName>")` to set this attribute.
-/// \return Pointer to the new server or `nullptr` if there's no unique match.
+/// Allow a name change if nameChange is kTRUE, in which case the new
+/// server is selected by searching for a new server with an attribute
+/// of "ORIGNAME:<oldName>". Return zero if there is not a unique match.
+
 RooAbsArg *RooAbsArg::findNewServer(const RooAbsCollection &newSet, Bool_t nameChange) const
 {
   RooAbsArg *newServer = 0;
@@ -1516,7 +1514,7 @@ void RooAbsArg::printTree(ostream& os, TString /*indent*/) const
 ////////////////////////////////////////////////////////////////////////////////
 /// Ostream operator
 
-ostream& operator<<(ostream& os, RooAbsArg const& arg)
+ostream& operator<<(ostream& os, RooAbsArg &arg)
 {
   arg.writeToStream(os,kTRUE) ;
   return os ;
@@ -1546,34 +1544,23 @@ void RooAbsArg::printAttribList(ostream& os) const
   if (!first) os << "] " ;
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
-/// Bind this node to objects in `set`.
-/// Search the set for objects that have the same name as our servers, and
-/// attach ourselves to those. After this operation, this node is computing its
-/// values based on the new servers. This can be used to e.g. read values from
-// a dataset.
-
-
-void RooAbsArg::attachArgs(const RooAbsCollection &set)
-{
-  RooArgSet branches;
-  branchNodeServerList(&branches,0,true);
-
-  for(auto const& branch : branches) {
-    branch->redirectServers(set,false,false);
-  }
-}
-
-
 ////////////////////////////////////////////////////////////////////////////////
 /// Replace server nodes with names matching the dataset variable names
 /// with those data set variables, making this PDF directly dependent on the dataset.
 
 void RooAbsArg::attachDataSet(const RooAbsData &data)
 {
-  attachArgs(*data.get());
+  const RooArgSet* set = data.get() ;
+  RooArgSet branches ;
+  branchNodeServerList(&branches,0,kTRUE) ;
+
+  RooFIter iter = branches.fwdIterator() ;
+  RooAbsArg* branch ;
+  while((branch=iter.next())) {
+    branch->redirectServers(*set,kFALSE,kFALSE) ;
+  }
 }
+
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1582,8 +1569,17 @@ void RooAbsArg::attachDataSet(const RooAbsData &data)
 
 void RooAbsArg::attachDataStore(const RooAbsDataStore &dstore)
 {
-  attachArgs(*dstore.get());
+  const RooArgSet* set = dstore.get() ;
+  RooArgSet branches ;
+  branchNodeServerList(&branches,0,kTRUE) ;
+
+  RooFIter iter = branches.fwdIterator() ;
+  RooAbsArg* branch ;
+  while((branch=iter.next())) {
+    branch->redirectServers(*set,kFALSE,kFALSE) ;
+  }
 }
+
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2040,11 +2036,9 @@ RooLinkedList RooAbsArg::getCloningAncestors() const
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a GraphViz .dot file visualizing the expression tree headed by
 /// this RooAbsArg object. Use the GraphViz tool suite to make e.g. a gif
-/// or ps file from the .dot file.
-/// If a node derives from RooAbsReal, its current (unnormalised) value is
-/// printed as well.
+/// or ps file from the .dot file
 ///
-/// Based on concept developed by Kyle Cranmer.
+/// Based on concept developed by Kyle Cranmer
 
 void RooAbsArg::graphVizTree(const char* fileName, const char* delimiter, bool useTitle, bool useLatex)
 {
@@ -2059,10 +2053,8 @@ void RooAbsArg::graphVizTree(const char* fileName, const char* delimiter, bool u
 ////////////////////////////////////////////////////////////////////////////////
 /// Write the GraphViz representation of the expression tree headed by
 /// this RooAbsArg object to the given ostream.
-/// If a node derives from RooAbsReal, its current (unnormalised) value is
-/// printed as well.
 ///
-/// Based on concept developed by Kyle Cranmer.
+/// Based on concept developed by Kyle Cranmer
 
 void RooAbsArg::graphVizTree(ostream& os, const char* delimiter, bool useTitle, bool useLatex)
 {
@@ -2096,10 +2088,6 @@ void RooAbsArg::graphVizTree(ostream& os, const char* delimiter, bool useTitle, 
 
     string typeFormat = "\\texttt{";
     string nodeType = (useLatex) ? typeFormat+node->IsA()->GetName()+"}" : node->IsA()->GetName();
-
-    if (auto realNode = dynamic_cast<RooAbsReal*>(node)) {
-      nodeLabel += delimiter + std::to_string(realNode->getVal());
-    }
 
     os << "\"" << nodeName << "\" [ color=" << (node->isFundamental()?"blue":"red")
        << ", label=\"" << nodeType << delimiter << nodeLabel << "\"];" << endl ;
@@ -2310,9 +2298,12 @@ void RooAbsArg::wireAllCaches()
 {
   RooArgSet branches ;
   branchNodeServerList(&branches) ;
-  for(auto const& arg : branches) {
-    for (auto const& arg2 : arg->_cacheList) {
-      arg2->wireCache() ;
+  RooFIter iter = branches.fwdIterator() ;
+  RooAbsArg* arg ;
+  while((arg=iter.next())) {
+//     cout << "wiring caches on node " << arg->GetName() << endl ;
+    for (deque<RooAbsCache*>::iterator iter2 = arg->_cacheList.begin() ; iter2 != arg->_cacheList.end() ; ++iter2) {
+      (*iter2)->wireCache() ;
     }
   }
 }

@@ -24,7 +24,7 @@ class RooArgSet ;
 class RooAbsCachedReal : public RooAbsReal {
 public:
 
-  RooAbsCachedReal() : _cacheMgr(this,10) {}
+  RooAbsCachedReal() {} ;
   RooAbsCachedReal(const char *name, const char *title, Int_t ipOrder=0);
   RooAbsCachedReal(const RooAbsCachedReal& other, const char* name=0) ;
   virtual ~RooAbsCachedReal() ;

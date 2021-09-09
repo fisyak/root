@@ -12,15 +12,6 @@
 #include "TGNumberEntry.h"
 #include "TGLabel.h"
 
-
-/** \class TPieSliceEditor
-\ingroup ged
-
-Editor for changing pie-chart's slice attributes.
-
-*/
-
-
 ClassImp(TPieSliceEditor);
 
 

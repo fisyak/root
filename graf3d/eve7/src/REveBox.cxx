@@ -9,13 +9,11 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-#include <ROOT/REveBox.hxx>
-#include <ROOT/REveProjectionManager.hxx>
-#include <ROOT/REveRenderData.hxx>
-
 #include "TClass.h"
 
-#include <nlohmann/json.hpp>
+#include "ROOT/REveBox.hxx"
+#include "ROOT/REveProjectionManager.hxx"
+#include <ROOT/REveRenderData.hxx>
 
 using namespace ROOT::Experimental;
 

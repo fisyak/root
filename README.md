@@ -28,7 +28,6 @@ libraries. This makes ROOT a premier platform on which to build data
 acquisition, simulation and data analysis systems.
 
 [![License: LGPL v2.1+](https://img.shields.io/badge/License-LGPL%20v2.1+-blue.svg)](https://www.gnu.org/licenses/lgpl.html)
-[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/5060/badge)](https://bestpractices.coreinfrastructure.org/projects/5060)
 
 ## Cite
 
@@ -52,11 +51,32 @@ These screenshots shows some of the plots (produced using ROOT) presented when t
 
 See more screenshots on our [gallery](https://root.cern/gallery).
 
-## Installation and Getting Started
-See https://root.cern/install for installation instructions.
-For instructions on how to build ROOT from these source files, see https://root.cern/install/build_from_source.
+## Download and Getting Started
+See [root.cern download page](https://root.cern/downloading-root) for the latest binary releases.
 
-Our ["Getting started with ROOT"](https://root.cern/get_started) page is then the perfect place to get familiar with ROOT.
+[Getting started with ROOT.](https://root.cern/get_started)
+
+## Building
+Clone the repo
+
+    $ git clone https://github.com/root-project/root.git
+
+Make a directory for building
+
+    $ mkdir build
+    $ cd build
+
+Run cmake and make
+
+    $ cmake ../root
+    $ make -j8
+
+Setup and run ROOT
+
+    $ source bin/thisroot.sh
+    $ root
+
+[More information](https://root.cern/building-root) regarding building.
 
 ## Help and Support
 - [Forum](https://root.cern/forum/)

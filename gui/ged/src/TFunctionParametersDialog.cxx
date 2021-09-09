@@ -9,12 +9,13 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/** \class TFunctionParametersDialog
-    \ingroup ged
-
-This class is used for function parameter settings.
-
-*/
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TFunctionParametersDialog                                           //
+//                                                                      //
+//  This class is used for function parameter settings.                 //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TFunctionParametersDialog.h"
 #include "TTimer.h"

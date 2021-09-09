@@ -883,7 +883,7 @@ void TApplicationRemote::SetPortParam(Int_t lower, Int_t upper, Int_t attempts)
 /// interpreter command starting with a ".".
 /// Return the return value of the command casted to a long.
 
-Longptr_t TApplicationRemote::ProcessLine(const char *line, Bool_t, Int_t *)
+Long_t TApplicationRemote::ProcessLine(const char *line, Bool_t, Int_t *)
 {
    if (!line || !*line) return 0;
 
@@ -910,7 +910,7 @@ Longptr_t TApplicationRemote::ProcessLine(const char *line, Bool_t, Int_t *)
    Collect();
 
    // Done
-   return (Longptr_t)fReceivedObject;
+   return (Long_t)fReceivedObject;
    return 1;
 }
 

@@ -5,10 +5,10 @@
         <content>
           <Panel>
             <content>
-              <f:Form editable="true">
+              <f:Form>
                 <f:layout>
                   <f:ResponsiveGridLayout
-                          labelSpanS="3"
+                          labelSpanS="2"
                           emptySpanS="0"
                           singleContainerFullSize="false" />
                 </f:layout>
@@ -59,9 +59,9 @@
       <ViewSettingsCustomTab icon="sap-icon://action-settings" >
         <content>
           <VBox>
-            <HBox alignItems="Center">
-               <Label text="Sorting" wrapping="true" labelFor="sortMethodsCombo"/>
-               <ComboBox id="sortMethodsCombo" items="{ path: '/SortMethods' }" selectedKey="{/SortMethod}">
+            <HBox>
+               <Label text="Sorting" wrapping="true" />
+               <ComboBox items="{ path: '/SortMethods' }" selectedKey="{/SortMethod}">
                    <core:Item text="{name}" key="{value}"/>
                </ComboBox>
             </HBox>

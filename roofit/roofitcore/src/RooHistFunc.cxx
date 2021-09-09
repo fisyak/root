@@ -24,6 +24,10 @@ multidimensional histogram. The histogram can have an arbitrary number of real o
 discrete dimensions and may have negative values.
 **/
 
+#include "RooFit.h"
+#include "Riostream.h"
+#include "TBuffer.h"
+
 #include "RooHistFunc.h"
 #include "RooDataHist.h"
 #include "RooMsgService.h"
@@ -31,13 +35,8 @@ discrete dimensions and may have negative values.
 #include "RooCategory.h"
 #include "RooWorkspace.h"
 #include "RooHistPdf.h"
-#include "RooHelpers.h"
-#include "RunContext.h"
 
 #include "TError.h"
-#include "TBuffer.h"
-
-#include <stdexcept>
 
 using namespace std;
 
@@ -86,14 +85,14 @@ RooHistFunc::RooHistFunc(const char *name, const char *title, const RooArgSet& v
   if (vars.getSize()!=dvars->getSize()) {
     coutE(InputArguments) << "RooHistFunc::ctor(" << GetName() 
 			  << ") ERROR variable list and RooDataHist must contain the same variables." << endl ;
-    throw std::invalid_argument("RooHistFunc: ERROR variable list and RooDataHist must contain the same variables.");
+    assert(0) ;
   }
 
   for (const auto arg : vars) {
     if (!dvars->find(arg->GetName())) {
       coutE(InputArguments) << "RooHistFunc::ctor(" << GetName() 
 			    << ") ERROR variable list and RooDataHist must contain the same variables." << endl ;
-      throw std::invalid_argument("RooHistFunc: ERROR variable list and RooDataHist must contain the same variables.");
+      assert(0) ;
     }
   }
 
@@ -128,14 +127,14 @@ RooHistFunc::RooHistFunc(const char *name, const char *title, const RooArgList& 
   if (histObs.getSize()!=dvars->getSize()) {
     coutE(InputArguments) << "RooHistFunc::ctor(" << GetName() 
 			  << ") ERROR variable list and RooDataHist must contain the same variables." << endl ;
-    throw std::invalid_argument("RooHistFunc: ERROR variable list and RooDataHist must contain the same variables.");
+    assert(0) ;
   }
 
   for (const auto arg : histObs) {
     if (!dvars->find(arg->GetName())) {
       coutE(InputArguments) << "RooHistFunc::ctor(" << GetName() 
 			    << ") ERROR variable list and RooDataHist must contain the same variables." << endl ;
-      throw std::invalid_argument("RooHistFunc: ERROR variable list and RooDataHist must contain the same variables.");
+      assert(0) ;
     }
   }
 
@@ -197,52 +196,9 @@ Double_t RooHistFunc::evaluate() const
     }
   }
 
-  Double_t ret =  _dataHist->weightFast(_histObsList,_intOrder,kFALSE,_cdfBoundaries) ;  
+  Double_t ret =  _dataHist->weight(_histObsList,_intOrder,kFALSE,_cdfBoundaries) ;  
   return ret ;
 }
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Compute value of the HistFunc for every entry in `evalData`.
-/// \param[in/out] evalData Struct with input data. The computation results will be stored here.
-/// \param[in] normSet Set of observables to normalise over (ignored).
-RooSpan<double> RooHistFunc::evaluateSpan(RooBatchCompute::RunContext& evalData, const RooArgSet* /*normSet*/) const {
-  std::vector<RooSpan<const double>> inputValues;
-  std::size_t batchSize = 0;
-  for (const auto& obs : _depList) {
-    auto realObs = dynamic_cast<const RooAbsReal*>(obs);
-    if (realObs) {
-      auto inputs = realObs->getValues(evalData, nullptr);
-      batchSize = std::max(batchSize, inputs.size());
-      inputValues.push_back(std::move(inputs));
-    } else {
-      inputValues.emplace_back();
-    }
-  }
-
-  auto results = evalData.makeBatch(this, batchSize);
-
-  for (std::size_t i = 0; i < batchSize; ++i) {
-    bool skip = false;
-
-    for (auto j = 0u; j < _histObsList.size(); ++j) {
-      const auto histObs = _histObsList[j];
-
-      if (i < inputValues[j].size()) {
-        histObs->setCachedValue(inputValues[j][i], false);
-        if (!histObs->inRange(nullptr)) {
-          skip = true;
-          break;
-        }
-      }
-    }
-
-    results[i] = skip ? 0. : _dataHist->weightFast(_histObsList, _intOrder, false, _cdfBoundaries);
-  }
-
-  return results;
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Only handle case of maximum in all variables
@@ -545,8 +501,7 @@ Bool_t RooHistFunc::areIdentical(const RooDataHist& dh1, const RooDataHist& dh2)
     dh2.get(i) ;
     if (fabs(dh1.weight()-dh2.weight())>1e-8) return kFALSE ;
   }
-  using RooHelpers::getColonSeparatedNameString;
-  if (getColonSeparatedNameString(*dh1.get()) != getColonSeparatedNameString(*dh2.get())) return kFALSE ;
+  if (!(RooNameSet(*dh1.get())==RooNameSet(*dh2.get()))) return kFALSE ;
   return kTRUE ;
 }
 
@@ -580,65 +535,3 @@ void RooHistFunc::ioStreamerPass2()
   }
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
-/// Compute bin number corresponding to current coordinates.
-/// \return If a bin is not in the current range of the observables, return -1.
-Int_t RooHistFunc::getBin() const {
-  if (!_depList.empty()) {
-    for (auto i = 0u; i < _histObsList.size(); ++i) {
-      const auto harg = _histObsList[i];
-      const auto parg = _depList[i];
-
-      if (harg != parg) {
-        parg->syncCache() ;
-        harg->copyCache(parg,kTRUE) ;
-        if (!harg->inRange(nullptr)) {
-          return -1;
-        }
-      }
-    }
-  }
-
-  return _dataHist->getIndex(_histObsList, true);
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Compute bin numbers corresponding to all coordinates in `evalData`.
-/// \return Vector of bin numbers. If a bin is not in the current range of the observables, return -1.
-std::vector<Int_t> RooHistFunc::getBins(RooBatchCompute::RunContext& evalData) const {
-  std::vector<RooSpan<const double>> depData;
-  for (const auto dep : _depList) {
-    auto real = dynamic_cast<const RooAbsReal*>(dep);
-    if (real) {
-      depData.push_back(real->getValues(evalData, nullptr));
-    } else {
-      depData.emplace_back(nullptr, 0);
-    }
-  }
-
-  const auto batchSize = std::max_element(depData.begin(), depData.end(),
-      [](const RooSpan<const double>& a, const RooSpan<const double>& b){ return a.size() < b.size(); })->size();
-  std::vector<Int_t> results;
-
-  for (std::size_t evt = 0; evt < batchSize; ++evt) {
-    if (!_depList.empty()) {
-      for (auto i = 0u; i < _histObsList.size(); ++i) {
-        const auto harg = _histObsList[i];
-
-        if (evt < depData[i].size())
-          harg->setCachedValue(depData[i][evt], false);
-
-        if (!harg->inRange(nullptr)) {
-          results.push_back(-1);
-          continue;
-        }
-      }
-    }
-
-    results.push_back(_dataHist->getIndex(_histObsList, true));
-  }
-
-  return results;
-}

@@ -1231,17 +1231,19 @@ public:
     return Ptr;
   }
 
-  friend bool operator==(const DenseMapIterator &LHS,
-                         const DenseMapIterator &RHS) {
-    assert((!LHS.Ptr || LHS.isHandleInSync()) && "handle not in sync!");
+  bool operator==(const ConstIterator &RHS) const {
+    assert((!Ptr || isHandleInSync()) && "handle not in sync!");
     assert((!RHS.Ptr || RHS.isHandleInSync()) && "handle not in sync!");
-    assert(LHS.getEpochAddress() == RHS.getEpochAddress() &&
+    assert(getEpochAddress() == RHS.getEpochAddress() &&
            "comparing incomparable iterators!");
-    return LHS.Ptr == RHS.Ptr;
+    return Ptr == RHS.Ptr;
   }
-  friend bool operator!=(const DenseMapIterator &LHS,
-                         const DenseMapIterator &RHS) {
-    return !(LHS == RHS);
+  bool operator!=(const ConstIterator &RHS) const {
+    assert((!Ptr || isHandleInSync()) && "handle not in sync!");
+    assert((!RHS.Ptr || RHS.isHandleInSync()) && "handle not in sync!");
+    assert(getEpochAddress() == RHS.getEpochAddress() &&
+           "comparing incomparable iterators!");
+    return Ptr != RHS.Ptr;
   }
 
   inline DenseMapIterator& operator++() {  // Preincrement

@@ -9,14 +9,19 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class  TAttFillEditor
-    \ingroup ged
-
-Implements GUI for editing fill attributes.
-         color and fill style
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TAttFillEditor                                                      //
+//                                                                      //
+//  Implements GUI for editing fill attributes.                         //                                             //
+//             color and fill style                                     //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+//Begin_Html
+/*
+<img src="gif/TAttFillEditor.gif">
 */
+//End_Html
 
 #include "TAttFillEditor.h"
 #include "TGedPatternSelect.h"

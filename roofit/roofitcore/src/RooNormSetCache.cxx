@@ -35,7 +35,6 @@ during their lifetime.
 
 #include "RooNormSetCache.h"
 #include "RooArgSet.h"
-#include "RooHelpers.h"
 
 ClassImp(RooNormSetCache);
 ;
@@ -123,6 +122,7 @@ Bool_t RooNormSetCache::autoCache(const RooAbsArg* self, const RooArgSet* set1,
   }
 
   // B - Check if dependents(set1/set2) are compatible with current cache
+  RooNameSet nset1d, nset2d;
 
 //   cout << "RooNormSetCache::autoCache set1 = " << (set1?*set1:RooArgSet()) << " set2 = " << (set2?*set2:RooArgSet()) << endl;
 //   if (set1) set1->Print("v");
@@ -140,11 +140,10 @@ Bool_t RooNormSetCache::autoCache(const RooAbsArg* self, const RooArgSet* set1,
 
 //   cout << "RooNormSetCache::autoCache set1d = " << *set1d << " set2 = " << *set2d << endl;
 
-  using RooHelpers::getColonSeparatedNameString;
+  nset1d.refill(*set1d);
+  nset2d.refill(*set2d);
 
-  if (   getColonSeparatedNameString(*set1d) == _name1
-      && getColonSeparatedNameString(*set2d) == _name2
-      && _set2RangeName == set2RangeName) {
+  if (nset1d == _name1 && nset2d == _name2 && _set2RangeName == set2RangeName) {
     // Compatible - Add current set1/2 to cache
     add(set1,set2);
 
@@ -157,8 +156,8 @@ Bool_t RooNormSetCache::autoCache(const RooAbsArg* self, const RooArgSet* set1,
   if (doRefill) {
     clear();
     add(set1,set2);
-    _name1 = getColonSeparatedNameString(*set1d);
-    _name2 = getColonSeparatedNameString(*set2d);
+    _name1.refill(*set1d);
+    _name2.refill(*set2d);
 //     cout << "RooNormSetCache::autoCache() _name1 refilled from " << *set1d << " to " ; _name1.printValue(cout) ; cout << endl;
 //     cout << "RooNormSetCache::autoCache() _name2 refilled from " << *set2d << " to " ; _name2.printValue(cout) ; cout << endl;
     _set2RangeName = (TNamed*) set2RangeName;

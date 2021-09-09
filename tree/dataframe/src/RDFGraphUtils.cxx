@@ -140,7 +140,8 @@ std::shared_ptr<GraphNode> CreateRangeNode(const ROOT::Detail::RDF::RRangeBase *
    return node;
 }
 
-std::shared_ptr<GraphNode> AddDefinesToGraph(std::shared_ptr<GraphNode> node, const RBookedDefines &defines,
+std::shared_ptr<GraphNode> AddDefinesToGraph(std::shared_ptr<GraphNode> node,
+                                             const RDFInternal::RBookedDefines &defines,
                                              const std::vector<std::string> &prevNodeDefines)
 {
    auto upmostNode = node;
@@ -149,7 +150,7 @@ std::shared_ptr<GraphNode> AddDefinesToGraph(std::shared_ptr<GraphNode> node, co
    for (auto i = int(defineNames.size()) - 1; i >= 0; --i) { // walk backwards through the names of defined columns
       const auto colName = defineNames[i];
       const bool isAlias = defineMap.find(colName) == defineMap.end();
-      if (isAlias || IsInternalColumn(colName))
+      if (isAlias || RDFInternal::IsInternalColumn(colName))
          continue; // aliases appear in the list of defineNames but we don't support them yet
       const bool isANewDefine =
          std::find(prevNodeDefines.begin(), prevNodeDefines.end(), colName) == prevNodeDefines.end();

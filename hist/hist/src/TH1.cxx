@@ -145,18 +145,12 @@ Histograms are created by invoking one of the constructors, e.g.
 ~~~
 Histograms may also be created by:
 
-  -  calling the Clone() function, see below
+  -  calling the Clone function, see below
   -  making a projection from a 2-D or 3-D histogram, see below
   -  reading an histogram from a file
 
  When a histogram is created, a reference to it is automatically added
  to the list of in-memory objects for the current file or directory.
- Then the pointer to this histogram in the current directory can be found
- by its name, doing:
-~~~ {.cpp}
-       TH1F *h1 = (TH1F*)gDirectory->FindObject(name);
-~~~
-
  This default behaviour can be changed by:
 ~~~ {.cpp}
        h->SetDirectory(0);          // for the current histogram h
@@ -667,7 +661,7 @@ TH1::~TH1()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Constructor for fix bin size histograms.
+/// Normal constructor for fix bin size histograms.
 /// Creates the main histogram structure.
 ///
 /// \param[in] name name of histogram (avoid blanks)
@@ -678,7 +672,14 @@ TH1::~TH1()
 /// \param[in] nbins number of bins
 /// \param[in] xlow low edge of first bin
 /// \param[in] xup upper edge of last bin (not included in last bin)
-
+///
+/// When an histogram is created, it is automatically added to the list
+/// of special objects in the current directory.
+/// To find the pointer to this histogram in the current directory
+/// by its name, do:
+/// ~~~ {.cpp}
+///  TH1F *h1 = (TH1F*)gDirectory->FindObject(name);
+/// ~~~
 
 TH1::TH1(const char *name,const char *title,Int_t nbins,Double_t xlow,Double_t xup)
     :TNamed(name,title), TAttLine(), TAttFill(), TAttMarker()
@@ -690,7 +691,7 @@ TH1::TH1(const char *name,const char *title,Int_t nbins,Double_t xlow,Double_t x
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Constructor for variable bin size histograms using an input array of type float.
+/// Normal constructor for variable bin size histograms.
 /// Creates the main histogram structure.
 ///
 /// \param[in] name name of histogram (avoid blanks)
@@ -700,7 +701,7 @@ TH1::TH1(const char *name,const char *title,Int_t nbins,Double_t xlow,Double_t x
 ///            the x axis title to `stringx`, the y axis title to `stringy`, etc.
 /// \param[in] nbins number of bins
 /// \param[in] xbins array of low-edges for each bin.
-///            This is an array of type float and size nbins+1
+///            This is an array of size nbins+1
 
 TH1::TH1(const char *name,const char *title,Int_t nbins,const Float_t *xbins)
     :TNamed(name,title), TAttLine(), TAttFill(), TAttMarker()
@@ -713,7 +714,7 @@ TH1::TH1(const char *name,const char *title,Int_t nbins,const Float_t *xbins)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Constructor for variable bin size histograms using an input array of type double.
+/// Normal constructor for variable bin size histograms.
 ///
 /// \param[in] name name of histogram (avoid blanks)
 /// \param[in] title histogram title.
@@ -722,7 +723,7 @@ TH1::TH1(const char *name,const char *title,Int_t nbins,const Float_t *xbins)
 ///        the x axis title to `stringx`, the y axis title to `stringy`, etc.
 /// \param[in] nbins number of bins
 /// \param[in] xbins array of low-edges for each bin.
-///            This is an array of type double and size nbins+1
+///        This is an array of size nbins+1
 
 TH1::TH1(const char *name,const char *title,Int_t nbins,const Double_t *xbins)
     :TNamed(name,title), TAttLine(), TAttFill(), TAttMarker()
@@ -735,9 +736,8 @@ TH1::TH1(const char *name,const char *title,Int_t nbins,const Double_t *xbins)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Private copy constructor.
-/// One should use the copy constructor of the derived classes (e.g. TH1D, TH1F ...).
-/// The list of functions is not copied. (Use Clone() if needed)
+/// Copy constructor.
+/// The list of functions is not copied. (Use Clone if needed)
 
 TH1::TH1(const TH1 &h) : TNamed(), TAttLine(), TAttFill(), TAttMarker()
 {
@@ -5243,7 +5243,7 @@ void TH1::LabelsDeflate(Option_t *ax)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Double the number of bins for axis.
-/// Refill histogram.
+/// Refill histogram
 /// This function is called by TAxis::FindBin(const char *label)
 
 void TH1::LabelsInflate(Option_t *ax)
@@ -5255,10 +5255,9 @@ void TH1::LabelsInflate(Option_t *ax)
    if (iaxis == 3) axis = GetZaxis();
    if (!axis) return;
 
-   TH1 *hold = (TH1*)IsA()->New();
+   TH1 *hold = (TH1*)IsA()->New();;
    hold->SetDirectory(0);
    Copy(*hold);
-   hold->ResetBit(kMustCleanup);
 
    Bool_t timedisp = axis->GetTimeDisplay();
    Int_t nbins   = axis->GetNbins();
@@ -7420,6 +7419,13 @@ void TH1::UseCurrentStyle()
 /// See TH1::GetStats.
 ///
 /// Return mean value of this histogram along the X axis.
+///
+/// Note that the mean value/StdDev is computed using the bins in the currently
+/// defined range (see TAxis::SetRange). By default the range includes
+/// all bins from 1 to nbins included, excluding underflows and overflows.
+/// To force the underflows and overflows in the computation, one must
+/// call the static function TH1::StatOverflows(kTRUE) before filling
+/// the histogram.
 
 Double_t TH1::GetMean(Int_t axis) const
 {
@@ -8373,18 +8379,15 @@ void TH1::SetContourLevel(Int_t level, Double_t value)
 ////////////////////////////////////////////////////////////////////////////////
 /// Return maximum value smaller than maxval of bins in the range,
 /// unless the value has been overridden by TH1::SetMaximum,
-/// in which case it returns that value. This happens, for example,
+/// in which case it returns that value. (This happens, for example,
 /// when the histogram is drawn and the y or z axis limits are changed
 ///
 /// To get the maximum value of bins in the histogram regardless of
-/// whether the value has been overridden (using TH1::SetMaximum), use
+/// whether the value has been overridden, use
 ///
 /// ~~~ {.cpp}
 ///  h->GetBinContent(h->GetMaximumBin())
 /// ~~~
-/// 
-/// TH1::GetMaximumBin can be used to get the location of the maximum 
-/// value.
 
 Double_t TH1::GetMaximum(Double_t maxval) const
 {
@@ -8415,8 +8418,6 @@ Double_t TH1::GetMaximum(Double_t maxval) const
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return location of bin with maximum value in the range.
-///
-/// TH1::GetMaximum can be used to get the maximum value.
 
 Int_t TH1::GetMaximumBin() const
 {
@@ -8463,18 +8464,15 @@ Int_t TH1::GetMaximumBin(Int_t &locmax, Int_t &locmay, Int_t &locmaz) const
 ////////////////////////////////////////////////////////////////////////////////
 /// Return minimum value larger than minval of bins in the range,
 /// unless the value has been overridden by TH1::SetMinimum,
-/// in which case it returns that value. This happens, for example,
+/// in which case it returns that value. (This happens, for example,
 /// when the histogram is drawn and the y or z axis limits are changed
 ///
 /// To get the minimum value of bins in the histogram regardless of
-/// whether the value has been overridden (using TH1::SetMinimum), use
+/// whether the value has been overridden, use
 ///
 /// ~~~ {.cpp}
 /// h->GetBinContent(h->GetMinimumBin())
 /// ~~~
-///
-/// TH1::GetMinimumBin can be used to get the location of the 
-/// minimum value.
 
 Double_t TH1::GetMinimum(Double_t minval) const
 {
@@ -9131,8 +9129,8 @@ void TH1::SetBinError(Int_t binx, Int_t biny, Int_t binz, Double_t error)
 TH1 *TH1::ShowBackground(Int_t niter, Option_t *option)
 {
 
-   return (TH1*)gROOT->ProcessLineFast(Form("TSpectrum::StaticBackground((TH1*)0x%zx,%d,\"%s\")",
-                                            (size_t)this, niter, option));
+   return (TH1*)gROOT->ProcessLineFast(Form("TSpectrum::StaticBackground((TH1*)0x%lx,%d,\"%s\")",
+                                            (ULong_t)this, niter, option));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -9145,8 +9143,8 @@ TH1 *TH1::ShowBackground(Int_t niter, Option_t *option)
 
 Int_t TH1::ShowPeaks(Double_t sigma, Option_t *option, Double_t threshold)
 {
-   return (Int_t)gROOT->ProcessLineFast(Form("TSpectrum::StaticSearch((TH1*)0x%zx,%g,\"%s\",%g)",
-                                             (size_t)this, sigma, option, threshold));
+   return (Int_t)gROOT->ProcessLineFast(Form("TSpectrum::StaticSearch((TH1*)0x%lx,%g,\"%s\",%g)",
+                                             (ULong_t)this, sigma, option, threshold));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -9369,7 +9367,6 @@ TH1C::~TH1C()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy constructor.
-/// The list of functions is not copied. (Use Clone() if needed)
 
 TH1C::TH1C(const TH1C &h1c) : TH1(), TArrayC()
 {
@@ -9551,7 +9548,6 @@ TH1S::~TH1S()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy constructor.
-/// The list of functions is not copied. (Use Clone() if needed)
 
 TH1S::TH1S(const TH1S &h1s) : TH1(), TArrayS()
 {
@@ -9734,7 +9730,6 @@ TH1I::~TH1I()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy constructor.
-/// The list of functions is not copied. (Use Clone() if needed)
 
 TH1I::TH1I(const TH1I &h1i) : TH1(), TArrayI()
 {
@@ -9927,7 +9922,6 @@ TH1F::TH1F(const TVectorF &v)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy Constructor.
-/// The list of functions is not copied. (Use Clone() if needed)
 
 TH1F::TH1F(const TH1F &h) : TH1(), TArrayF()
 {

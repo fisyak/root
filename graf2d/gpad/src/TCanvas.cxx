@@ -52,7 +52,9 @@
 class TCanvasInit {
 public:
    TCanvasInit() { TApplication::NeedGraphicsLibs(); }
-} gCanvasInit;
+};
+static TCanvasInit gCanvasInit;
+
 
 //*-*x16 macros/layout_canvas
 
@@ -689,13 +691,13 @@ void TCanvas::Destructor()
 
    if (!TestBit(kNotDeleted)) return;
 
-   SafeDelete(fContextMenu);
+   if (fContextMenu) { delete fContextMenu; fContextMenu = 0; }
    if (!gPad) return;
 
    Close();
 
    //If not yet (batch mode?).
-   SafeDelete(fPainter);
+   delete fPainter;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -757,7 +759,7 @@ void TCanvas::Clear(Option_t *option)
 
 void TCanvas::Cleared(TVirtualPad *pad)
 {
-   Emit("Cleared(TVirtualPad*)", (Longptr_t)pad);
+   Emit("Cleared(TVirtualPad*)", (Long_t)pad);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1136,7 +1138,7 @@ void TCanvas::Flush()
    TPad *padsav = (TPad*)gPad;
    cd();
    if (!IsBatch()) {
-      if (!UseGL() || fGLDevice == -1) {
+      if (!UseGL()) {
          gVirtualX->SelectWindow(fCanvasID);
          gPad = padsav; //don't do cd() because than also the pixmap is changed
          CopyPixmaps();
@@ -1592,10 +1594,10 @@ TPad *TCanvas::Pick(Int_t px, Int_t py, TObject *prevSelObj)
 
 void TCanvas::Picked(TPad *pad, TObject *obj, Int_t event)
 {
-   Longptr_t args[3];
+   Long_t args[3];
 
-   args[0] = (Longptr_t) pad;
-   args[1] = (Longptr_t) obj;
+   args[0] = (Long_t) pad;
+   args[1] = (Long_t) obj;
    args[2] = event;
 
    Emit("Picked(TPad*,TObject*,Int_t)", args);
@@ -1611,10 +1613,10 @@ void TCanvas::Picked(TPad *pad, TObject *obj, Int_t event)
 
 void TCanvas::Highlighted(TVirtualPad *pad, TObject *obj, Int_t x, Int_t y)
 {
-   Longptr_t args[4];
+   Long_t args[4];
 
-   args[0] = (Longptr_t) pad;
-   args[1] = (Longptr_t) obj;
+   args[0] = (Long_t) pad;
+   args[1] = (Long_t) obj;
    args[2] = x;
    args[3] = y;
 
@@ -1638,10 +1640,10 @@ void TCanvas::HighlightConnect(const char *slot)
 
 void TCanvas::Selected(TVirtualPad *pad, TObject *obj, Int_t event)
 {
-   Longptr_t args[3];
+   Long_t args[3];
 
-   args[0] = (Longptr_t) pad;
-   args[1] = (Longptr_t) obj;
+   args[0] = (Long_t) pad;
+   args[1] = (Long_t) obj;
    args[2] = event;
 
    Emit("Selected(TVirtualPad*,TObject*,Int_t)", args);
@@ -1652,12 +1654,12 @@ void TCanvas::Selected(TVirtualPad *pad, TObject *obj, Int_t event)
 
 void TCanvas::ProcessedEvent(Int_t event, Int_t x, Int_t y, TObject *obj)
 {
-   Longptr_t args[4];
+   Long_t args[4];
 
    args[0] = event;
    args[1] = x;
    args[2] = y;
-   args[3] = (Longptr_t) obj;
+   args[3] = (Long_t) obj;
 
    Emit("ProcessedEvent(Int_t,Int_t,Int_t,TObject*)", args);
 }
@@ -2536,7 +2538,7 @@ void TCanvas::Update()
 
       if (!IsBatch()) FeedbackMode(kFALSE); // Goto double buffer mode
 
-      if (!UseGL() || fGLDevice == -1) PaintModified(); // Repaint all modified pad's
+      if (!UseGL()) PaintModified(); // Repaint all modified pad's
 
       Flush(); // Copy all pad pixmaps to the screen
 
@@ -2622,7 +2624,8 @@ void TCanvas::DeleteCanvasPainter()
       gGLManager->MakeCurrent(fGLDevice);
    }
 
-   SafeDelete(fPainter);
+   delete fPainter;
+   fPainter = 0;
 
    if (fGLDevice != -1) {
       gGLManager->DeleteGLContext(fGLDevice);//?

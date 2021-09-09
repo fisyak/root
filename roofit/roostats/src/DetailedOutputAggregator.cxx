@@ -52,8 +52,8 @@ namespace RooStats {
       RooArgSet *detailedOutput = new RooArgSet;
       const RooArgList &detOut = result->floatParsFinal();
       const RooArgList &truthSet = result->floatParsInit();
-
-      for (RooAbsArg* v : detOut) {
+      TIterator *it = detOut.createIterator();
+      while(RooAbsArg* v = dynamic_cast<RooAbsArg*>(it->Next())) {
          RooAbsArg* clone = v->cloneTree(TString().Append(prefix).Append(v->GetName()));
          clone->SetTitle( TString().Append(prefix).Append(v->GetTitle()) );
          RooRealVar* var = dynamic_cast<RooRealVar*>(v);
@@ -71,6 +71,7 @@ namespace RooStats {
             detailedOutput->add(*pull);
          }
       }
+      delete it;
 
       // monitor a few more variables
       detailedOutput->add( *new RooRealVar(TString().Append(prefix).Append("minNLL"), TString().Append(prefix).Append("minNLL"), result->minNll() ) );
@@ -95,7 +96,8 @@ namespace RooStats {
       if (fBuiltSet == NULL) {
          fBuiltSet = new RooArgList();
       }
-      for (const RooAbsArg* v : *aset) {
+      TIterator* iter = aset->createIterator();
+      while(RooAbsArg* v = dynamic_cast<RooAbsArg*>( iter->Next() ) ) {
          TString renamed(TString::Format("%s%s", prefix.Data(), v->GetName()));
          if (fResult == NULL) {
             // we never committed, so by default all columns are expected to not exist
@@ -118,7 +120,7 @@ namespace RooStats {
             var->SetName(renamed);
          }
       }
-
+      delete iter;
    }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -131,8 +133,8 @@ namespace RooStats {
          fResult = new RooDataSet("", "", RooArgSet(*fBuiltSet,wgt), RooFit::WeightVar(wgt));
       }
       fResult->add(RooArgSet(*fBuiltSet), weight);
-
-      for (RooAbsArg* v : *fBuiltSet) {
+      TIterator* iter = fBuiltSet->createIterator();
+      while(RooAbsArg* v = dynamic_cast<RooAbsArg*>( iter->Next() ) ) {
          if (RooRealVar* var= dynamic_cast<RooRealVar*>(v)) {
             // Invalidate values in case we don't set some of them next time round (eg. if fit not done)
             var->setVal(std::numeric_limits<Double_t>::quiet_NaN());
@@ -140,6 +142,7 @@ namespace RooStats {
             var->removeAsymError();
          }
       }
+      delete iter;
    }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -164,3 +167,4 @@ namespace RooStats {
 
 
 }  // end namespace RooStats
+

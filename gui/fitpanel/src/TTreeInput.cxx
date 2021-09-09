@@ -9,17 +9,14 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TTreeInput
-    \ingroup fitpanel
-
-Tree Input Dialog Widget
-
-An dialog box that asks the user for the variables and cuts
-of the selected tree in the fitpanel.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// Tree Input Widget                                                    //
+//                                                                      //
+// An dialog box that asks the user for the variables and cuts          //
+// of the selected tree in the fitpanel.                                //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TTreeInput.h"
 #include "TGButton.h"
@@ -74,6 +71,7 @@ ClassImp(TTreeInput);
    fOk = new TGTextButton(hf, "&Ok", 1);
    fOk->Associate(this);
    hf->AddFrame(fOk, new TGLayoutHints(kLHintsCenterY | kLHintsExpandX, 5, 5, 0, 0));
+   height = fOk->GetDefaultHeight();
    width  = TMath::Max(width, fOk->GetDefaultWidth());
 
    fCancel = new TGTextButton(hf, "&Cancel", 2);

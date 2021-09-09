@@ -3214,8 +3214,7 @@ CXXConstructorDecl *Sema::LookupMovingConstructor(CXXRecordDecl *Class,
 }
 
 /// Look up the constructors for the given class.
-void Sema::LookupConstructors(CXXRecordDecl *Class,
-                              llvm::SmallVectorImpl<NamedDecl*> &Constructors) {
+DeclContext::lookup_result Sema::LookupConstructors(CXXRecordDecl *Class) {
   // If the implicit constructors have not yet been declared, do so now.
   if (CanDeclareSpecialMemberFunction(Class)) {
     if (Class->needsImplicitDefaultConstructor())
@@ -3228,10 +3227,7 @@ void Sema::LookupConstructors(CXXRecordDecl *Class,
 
   CanQualType T = Context.getCanonicalType(Context.getTypeDeclType(Class));
   DeclarationName Name = Context.DeclarationNames.getCXXConstructorName(T);
-  // Working directly on R might trigger a deserialization, invalidating R if
-  // the underlying data structure needs to reallocate the storage.
-  DeclContext::lookup_result R = Class->lookup(Name);
-  Constructors.append(R.begin(), R.end());
+  return Class->lookup(Name);
 }
 
 /// Look up the copying assignment operator for the given class.
@@ -3466,10 +3462,7 @@ void Sema::ArgumentDependentLookup(DeclarationName Name, SourceLocation Loc,
     //        namespaces even if they are not visible during an ordinary
     //        lookup (11.4).
     DeclContext::lookup_result R = NS->lookup(Name);
-    // The loop might trigger a deserialization, invalidating R if the
-    // underlying data structure needs to reallocate the storage.
-    llvm::SmallVector<NamedDecl*, 8> RCopy(R.begin(), R.end());
-    for (auto *D : RCopy) {
+    for (auto *D : R) {
       auto *Underlying = D;
       if (auto *USD = dyn_cast<UsingShadowDecl>(D))
         Underlying = USD->getTargetDecl();

@@ -51,7 +51,7 @@ class hierarchies (watch out for overlaps).
 #include "TRefTable.h"
 #include "TProcessID.h"
 
-Longptr_t TObject::fgDtorOnly = 0;
+Long_t TObject::fgDtorOnly = 0;
 Bool_t TObject::fgObjectStat = kTRUE;
 
 ClassImp(TObject);
@@ -225,7 +225,7 @@ TObject *TObject::DrawClone(Option_t *option) const
    if (pad) pad->cd();
 
    TObject *newobj = Clone();
-   if (!newobj) return nullptr;
+   if (!newobj) return 0;
    if (pad) {
       if (strlen(option)) pad->GetListOfPrimitives()->Add(newobj,option);
       else                pad->GetListOfPrimitives()->Add(newobj,GetDrawOption());
@@ -322,7 +322,7 @@ void TObject::ExecuteEvent(Int_t, Int_t, Int_t)
 
 TObject *TObject::FindObject(const char *) const
 {
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -332,7 +332,7 @@ TObject *TObject::FindObject(const char *) const
 
 TObject *TObject::FindObject(const TObject *) const
 {
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -368,7 +368,7 @@ const char *TObject::GetName() const
 
 const char *TObject::GetIconName() const
 {
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -496,7 +496,7 @@ void TObject::ls(Option_t *option) const
    TROOT::IndentLevel();
    std::cout <<"OBJ: " << IsA()->GetName() << "\t" << GetName() << "\t" << GetTitle() << " : ";
    std::cout << Int_t(TestBit(kCanDelete));
-   if (option && strstr(option,"noaddr")==nullptr) {
+   if (option && strstr(option,"noaddr")==0) {
       std::cout <<" at: "<< this ;
    }
    std::cout << std::endl;
@@ -979,7 +979,7 @@ void TObject::SetObjectStat(Bool_t stat)
 ////////////////////////////////////////////////////////////////////////////////
 /// Return destructor only flag
 
-Longptr_t TObject::GetDtorOnly()
+Long_t TObject::GetDtorOnly()
 {
    return fgDtorOnly;
 }
@@ -989,7 +989,7 @@ Longptr_t TObject::GetDtorOnly()
 
 void TObject::SetDtorOnly(void *obj)
 {
-   fgDtorOnly = (Longptr_t) obj;
+   fgDtorOnly = (Long_t) obj;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -997,7 +997,7 @@ void TObject::SetDtorOnly(void *obj)
 
 void TObject::operator delete(void *ptr)
 {
-   if ((Longptr_t) ptr != fgDtorOnly)
+   if ((Long_t) ptr != fgDtorOnly)
       TStorage::ObjectDealloc(ptr);
    else
       fgDtorOnly = 0;
@@ -1008,7 +1008,7 @@ void TObject::operator delete(void *ptr)
 
 void TObject::operator delete[](void *ptr)
 {
-   if ((Longptr_t) ptr != fgDtorOnly)
+   if ((Long_t) ptr != fgDtorOnly)
       TStorage::ObjectDealloc(ptr);
    else
       fgDtorOnly = 0;
@@ -1020,7 +1020,7 @@ void TObject::operator delete[](void *ptr)
 
 void TObject::operator delete(void *ptr, size_t size)
 {
-   if ((Longptr_t) ptr != fgDtorOnly)
+   if ((Long_t) ptr != fgDtorOnly)
       TStorage::ObjectDealloc(ptr, size);
    else
       fgDtorOnly = 0;
@@ -1031,7 +1031,7 @@ void TObject::operator delete(void *ptr, size_t size)
 
 void TObject::operator delete[](void *ptr, size_t size)
 {
-   if ((Longptr_t) ptr != fgDtorOnly)
+   if ((Long_t) ptr != fgDtorOnly)
       TStorage::ObjectDealloc(ptr, size);
    else
       fgDtorOnly = 0;

@@ -472,7 +472,7 @@ const char *TUrl::GetHostFQDN() const
 {
    if (fHostFQ == "") {
       // Check if we already resolved it
-      TNamed *fqdn = fgHostFQDNs ? (TNamed *) fgHostFQDNs->FindObject(fHost) : nullptr;
+      TNamed *fqdn = fgHostFQDNs ? (TNamed *) fgHostFQDNs->FindObject(fHost) : 0;
       if (!fqdn) {
          TInetAddress adr(gSystem->GetHostByName(fHost));
          if (adr.IsValid()) {
@@ -604,7 +604,7 @@ TObjArray *TUrl::GetSpecialProtocols()
       Int_t cnt = 0;
       char *p = StrDup(protos);
       while (1) {
-         TObjString *proto = new TObjString(strtok(!cnt ? p : nullptr, " "));
+         TObjString *proto = new TObjString(strtok(!cnt ? p : 0, " "));
          if (proto->String().IsNull()) {
             delete proto;
             break;

@@ -12,6 +12,13 @@
 #ifndef ROOT_TCurlyLineEditor
 #define ROOT_TCurlyLineEditor
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TCurlyLineEditor                                                    //
+//                                                                      //
+//  Implements GUI for editing CurlyLine attributes: wavelength ampl.   //                                             //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGedFrame.h"
 
@@ -22,14 +29,14 @@ class TCurlyLine;
 class TCurlyLineEditor : public TGedFrame {
 
 protected:
-   TCurlyLine           *fCurlyLine;            ///< CurlyLineobject
-   TGNumberEntry        *fStartXEntry;          ///< start  x entry
-   TGNumberEntry        *fEndXEntry;            ///< end  x entry
-   TGNumberEntry        *fStartYEntry;          ///< start  y entry
-   TGNumberEntry        *fEndYEntry;            ///< end  y entry
-   TGNumberEntry        *fAmplitudeEntry;       ///< ampl entry
-   TGNumberEntry        *fWaveLengthEntry;      ///< wavelength entry
-   TGCheckButton        *fIsWavy;               ///< toggle wavy / curly
+   TCurlyLine           *fCurlyLine;            // CurlyLineobject
+   TGNumberEntry        *fStartXEntry;          // start  x entry
+   TGNumberEntry        *fEndXEntry;            // end  x entry
+   TGNumberEntry        *fStartYEntry;          // start  y entry
+   TGNumberEntry        *fEndYEntry;            // end  y entry
+   TGNumberEntry        *fAmplitudeEntry;       // ampl entry
+   TGNumberEntry        *fWaveLengthEntry;      // wavelength entry
+   TGCheckButton        *fIsWavy;               // toggle wavy / curly
    TGCompositeFrame     *fStartXFrame;
 
    virtual void   ConnectSignals2Slots();

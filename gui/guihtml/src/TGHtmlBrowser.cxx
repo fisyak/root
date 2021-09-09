@@ -38,13 +38,12 @@
 
 #include <cstdlib>
 
-/** \class TGHtmlBrowser
-    \ingroup guihtml
-
-A very simple HTML browser.
-
-*/
-
+//_____________________________________________________________________________
+//
+// TGHtmlBrowser
+//
+// A very simple HTML browser.
+//_____________________________________________________________________________
 
 ClassImp(TGHtmlBrowser);
 

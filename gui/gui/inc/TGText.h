@@ -13,6 +13,16 @@
 #define ROOT_TGText
 
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGText                                                               //
+//                                                                      //
+// A TGText is a multi line text buffer. It allows the text to be       //
+// loaded from file, saved to file and edited. It is used in the        //
+// TGTextEdit widget. Single line text is handled by TGTextBuffer.      //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
 #include "TString.h"
 
 #include "TGDimension.h"
@@ -23,10 +33,10 @@ class TGTextLine {
 friend class TGText;
 
 protected:
-   char         *fString;   ///< line of text
-   ULong_t       fLength;   ///< length of line
-   TGTextLine   *fPrev;     ///< previous line
-   TGTextLine   *fNext;     ///< next line
+   char         *fString;   // line of text
+   ULong_t       fLength;   // length of line
+   TGTextLine   *fPrev;     // previous line
+   TGTextLine   *fNext;     // next line
 
    TGTextLine(const TGTextLine&);
    TGTextLine& operator=(const TGTextLine&);
@@ -57,14 +67,14 @@ public:
 class TGText {
 
 protected:
-   TString      fFilename;       ///< name of opened file ("" if open buffer)
-   Bool_t       fIsSaved;        ///< false if text needs to be saved
-   TGTextLine  *fFirst;          ///< first line of text
-   TGTextLine  *fCurrent;        ///< current line
-   Long_t       fCurrentRow;     ///< current row number
-   Long_t       fRowCount;       ///< number of rows
-   Long_t       fColCount;       ///< number of columns in current line
-   Long_t       fLongestLine;    ///< length of longest line
+   TString      fFilename;       // name of opened file ("" if open buffer)
+   Bool_t       fIsSaved;        // false if text needs to be saved
+   TGTextLine  *fFirst;          // first line of text
+   TGTextLine  *fCurrent;        // current line
+   Long_t       fCurrentRow;     // current row number
+   Long_t       fRowCount;       // number of rows
+   Long_t       fColCount;       // number of columns in current line
+   Long_t       fLongestLine;    // length of longest line
 
    TGText(const TGText&);
    TGText& operator=(const TGText&);

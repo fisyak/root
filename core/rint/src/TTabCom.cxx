@@ -1292,7 +1292,7 @@ Int_t TTabCom::Complete(const TRegexp & re,
          }
       }
 
-      CopyMatch(match, sizeof(match), short_name, appendage, full_name);
+      CopyMatch(match, short_name, appendage, full_name);
    } else {
       // multiple matches ==> complete as far as possible
       Char_t ch;
@@ -1319,14 +1319,14 @@ Int_t TTabCom::Complete(const TRegexp & re,
          while (ExcludedByFignore(s));
 
          // and use it.
-         CopyMatch(match, sizeof(match), s, appendage, s0);
+         CopyMatch(match, s, appendage, s0);
       } else {
          IfDebug(std::cerr << "more than 1 GoodString" << std::endl);
 
          if (partialMatch.Length() > s3.Length())
             // this partial match is our (partial) completion.
          {
-            CopyMatch(match, sizeof(match), partialMatch.Data());
+            CopyMatch(match, partialMatch.Data());
          } else
             // couldn't do any completing at all,
             // print a list of all the ambiguous matches
@@ -1354,7 +1354,7 @@ Int_t TTabCom::Complete(const TRegexp & re,
             // update the matching part, will have changed
             // capitalization because only cmp == TString::kIgnoreCase
             // matches.
-            CopyMatch(match, sizeof(match), partialMatch.Data());
+            CopyMatch(match, partialMatch.Data());
          }
       }
    }
@@ -1411,10 +1411,9 @@ done:                         // <----- goto label
 ////////////////////////////////////////////////////////////////////////////////
 /// [private]
 
-void TTabCom::CopyMatch(char *dest, int dest_len,
-                        const char *localName,
-                        const char *appendage,
-                        const char *fullName) const
+void TTabCom::CopyMatch(char dest[], const char localName[],
+                        const char appendage[],
+                        const char fullName[]) const
 {
    // if "appendage" is 0, no appendage is applied.
    //
@@ -1429,7 +1428,7 @@ void TTabCom::CopyMatch(char *dest, int dest_len,
    assert(localName != 0);
 
    // potential buffer overflow.
-   strlcpy(dest, localName, dest_len);
+   strcpy(dest, localName);
 
    const char *key = "filename";
    const int key_len = strlen(key);
@@ -1450,14 +1449,14 @@ void TTabCom::CopyMatch(char *dest, int dest_len,
       IfDebug(std::cerr << "new appendage: " << appendage << std::endl);
       if (IsDirectory(fullName)) {
          if (fullName)
-            strlcat(dest, "/", dest_len);
+            strcpy(dest + strlen(localName), "/");
       } else {
          if (appendage)
-            strlcat(dest, appendage, dest_len);
+            strcpy(dest + strlen(localName), appendage);
       }
    } else {
       if (appendage)
-         strlcat(dest, appendage, dest_len);
+         strcpy(dest + strlen(localName), appendage);
    }
 }
 

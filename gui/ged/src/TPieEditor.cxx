@@ -10,15 +10,20 @@
  *************************************************************************/
 
 
-/** \class TPieEditor
-    \ingroup ged
-
-Implements GUI for pie-chart attributes.
-
-'Title': set the title of the graph
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TPieEditor                                                          //
+//                                                                      //
+//  Implements GUI for pie-chart attributes.                            //
+//                                                                      //
+//  Title': set the title of the graph                                  //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+//Begin_Html
+/*
+<img src="gif/TPieEditor.gif">
 */
-
+//End_Html
 
 #include "TGedEditor.h"
 #include "TGComboBox.h"

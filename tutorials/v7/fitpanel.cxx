@@ -35,7 +35,7 @@ void fitpanel() {
    pHist->Fill(2);
    pHist->Fill(3);
 
-   auto canvas = RCanvas::Create("RCanvas with histogram");
+   auto canvas = RCanvas::Create("Canvas Title");
    canvas->Draw(pHist); //->SetLineColor(RColor::kRed);
 
    canvas->Show();

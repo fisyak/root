@@ -351,6 +351,7 @@ namespace RooStats {
       }
       
       std::cout << std::endl;
+
     }
 
 
@@ -369,9 +370,9 @@ namespace RooStats {
 		<< std::endl;
       
       // Loop over the parameters and print their values, etc
-      TIter paramItr = params->createIterator();
+      TIterator* paramItr = params->createIterator();
       RooRealVar* param = NULL;
-      while( (param=(RooRealVar*)paramItr.Next()) ) {
+      while( (param=(RooRealVar*)paramItr->Next()) ) {
 
 	if( !IncludeConstantParams && param->isConstant() ) continue;
 
@@ -384,6 +385,8 @@ namespace RooStats {
       }
       
       std::cout << std::endl;
+
+      return;
     }
 
     void HistFactoryNavigation::PrintChannelParameters(const std::string& channel,
@@ -405,9 +408,9 @@ namespace RooStats {
 		<< std::endl;
       
       // Loop over the parameters and print their values, etc
-      TIter paramItr = params->createIterator();
+      TIterator* paramItr = params->createIterator();
       RooRealVar* param = NULL;
-      while( (param=(RooRealVar*)paramItr.Next()) ) {
+      while( (param=(RooRealVar*)paramItr->Next()) ) {
 
 	if( !IncludeConstantParams && param->isConstant() ) continue;
 
@@ -422,6 +425,8 @@ namespace RooStats {
       }
       
       std::cout << std::endl;
+
+      return;
     }
 
 
@@ -445,9 +450,9 @@ namespace RooStats {
 		<< std::endl;
       
       // Loop over the parameters and print their values, etc
-      TIter paramItr = params->createIterator();
+      TIterator* paramItr = params->createIterator();
       RooRealVar* param = NULL;
-      while( (param=(RooRealVar*)paramItr.Next()) ) {
+      while( (param=(RooRealVar*)paramItr->Next()) ) {
 
 	if( !IncludeConstantParams && param->isConstant() ) continue;
 
@@ -462,6 +467,8 @@ namespace RooStats {
       }
       
       std::cout << std::endl;
+
+      return;
     }
 
 
@@ -495,7 +502,7 @@ namespace RooStats {
 
     std::map< std::string, RooAbsReal*> HistFactoryNavigation::GetSampleFunctionMap(const std::string& channel) {
       // Get a map of strings to function pointers, 
-      // which each function corresponds to a sample
+      // which each function cooresponds to a sample
 
       std::map< std::string, std::map< std::string, RooAbsReal*> >::iterator channel_itr;
       channel_itr = fChannelSampleFunctionMap.find(channel);
@@ -575,7 +582,7 @@ namespace RooStats {
       std::map< std::string, RooAbsReal*> SampleFunctionMap = GetSampleFunctionMap(channel);
 
       // Okay, 'loop' once 
-      TH1* total_hist = nullptr;
+      TH1* total_hist=NULL;
       std::map< std::string, RooAbsReal*>::iterator itr = SampleFunctionMap.begin();
       for( ; itr != SampleFunctionMap.end(); ++itr) {
 	std::string sample_name = itr->first;
@@ -587,9 +594,6 @@ namespace RooStats {
 	delete sample_hist;
 	break;
       }
-      if (!total_hist)
-         return nullptr;
-
       total_hist->Reset();
 
       // Loop over the SampleFunctionMap and add up all the histograms
@@ -657,8 +661,6 @@ namespace RooStats {
       // MAKE IT WORK FOR MULTI-DIMENSIONAL
       // 
 
-      TList *dataset_list = nullptr;
-
       // If the dataset covers multiple categories,
       // Split the dataset based on the categories
       if(strcmp(fModel->ClassName(),"RooSimultaneous")==0){
@@ -667,7 +669,7 @@ namespace RooStats {
 	RooSimultaneous* simPdf = (RooSimultaneous*) fModel;
 	RooCategory* channelCat = (RooCategory*) (&simPdf->indexCat());
 
-	dataset_list = data->split(*channelCat);
+	TList* dataset_list = data->split(*channelCat);
 
 	data = dynamic_cast<RooDataSet*>( dataset_list->FindObject(channel.c_str()) );
 	
@@ -679,15 +681,7 @@ namespace RooStats {
 
       TH1* hist = NULL;
 
-      if (!data) {
-	std::cout << "Error: To Create Histogram from RooDataSet" << std::endl;
-	if (dataset_list) {
-	   dataset_list->Delete();
-	   delete dataset_list;
-	   dataset_list = nullptr;
-	}
-        throw hf_exc();
-      } else if( dim==1 ) {
+      if( dim==1 ) {
 	RooRealVar* varX = (RooRealVar*) vars.at(0);
 	hist = data->createHistogram( name.c_str(),*varX, RooFit::Binning(varX->getBinning()) );
       }
@@ -709,19 +703,8 @@ namespace RooStats {
 	std::cout << "Error: To Create Histogram from RooDataSet, Dimension must be 1, 2, or 3" << std::endl;
 	std::cout << "Observables: " << std::endl;
 	vars.Print("V");
-	if (dataset_list) {
-	   dataset_list->Delete();
-	   delete dataset_list;
-	   dataset_list = nullptr;
-	}
 	throw hf_exc();
       }
-
-	if (dataset_list) {
-	   dataset_list->Delete();
-	   delete dataset_list;
-	   dataset_list = nullptr;
-	}
 
       return hist;
 
@@ -839,9 +822,9 @@ namespace RooStats {
 	// Based on the mode, we assume that node is 
 	// the "unconstrained" pdf node for that channel
 	RooArgSet* components = pdf->getComponents();
-	TIter argItr = components->createIterator();
+	TIterator* argItr = components->createIterator();
 	RooAbsArg* arg = NULL;
-	while( (arg=(RooAbsArg*)argItr.Next()) ) {
+	while( (arg=(RooAbsArg*)argItr->Next()) ) {
 	  std::string ClassName = arg->ClassName();
 	  if( ClassName == "RooRealSumPdf" ) {
 	    fChannelSumNodeMap[ChannelName] = (RooRealSumPdf*) arg;
@@ -871,9 +854,9 @@ namespace RooStats {
 	// Loop over the sample nodes in this
 	// channel's RooRealSumPdf
 	RooArgList nodes = sumPdf->funcList();
-	TIter sampleItr = nodes.createIterator();
+	TIterator* sampleItr = nodes.createIterator();
 	RooAbsArg* sample;
-	while( (sample=(RooAbsArg*)sampleItr.Next()) ) {
+	while( (sample=(RooAbsArg*)sampleItr->Next()) ) {
 
 	  // Cast this node as a function
 	  RooAbsReal* func = (RooAbsReal*) sample;
@@ -1127,9 +1110,9 @@ namespace RooStats {
       
       /////// NODE SIZE
       {
-	TIter itr = components.createIterator();
+	TIterator* itr = components.createIterator();
 	RooAbsArg* arg = NULL;
-	while( (arg=(RooAbsArg*)itr.Next()) ) {
+	while( (arg=(RooAbsArg*)itr->Next()) ) {
 	  RooAbsReal* component = dynamic_cast<RooAbsReal*>(arg);
 	  std::string NodeName = component->GetName();
 	  label_print_width = TMath::Max(label_print_width, (int)NodeName.size()+2);
@@ -1150,9 +1133,9 @@ namespace RooStats {
       }
       std::cout << std::endl;
 
-      TIter itr = components.createIterator();
+      TIterator* itr = components.createIterator();
       RooAbsArg* arg = NULL;
-      while( (arg=(RooAbsArg*)itr.Next()) ) {
+      while( (arg=(RooAbsArg*)itr->Next()) ) {
 	RooAbsReal* component = dynamic_cast<RooAbsReal*>(arg);
 	std::string NodeName = component->GetName();
 
@@ -1282,9 +1265,9 @@ namespace RooStats {
 		<< std::endl;
       
       // Loop over the parameters and print their values, etc
-      TIter paramItr = params->createIterator();
+      TIterator* paramItr = params->createIterator();
       RooRealVar* param = NULL;
-      while( (param=(RooRealVar*)paramItr.Next()) ) {
+      while( (param=(RooRealVar*)paramItr->Next()) ) {
 
 	std::string ParamName = param->GetName();
 	TString ParamNameTString(ParamName);

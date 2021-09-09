@@ -182,10 +182,10 @@ void StandardBayesianMCMCDemo(const char *infile = "", const char *workspaceName
    }
 
    // draw a scatter plot of chain results for poi vs each nuisance parameters
-   TIter it = mc->GetNuisanceParameters()->createIterator();
+   TIterator *it = mc->GetNuisanceParameters()->createIterator();
    RooRealVar *nuis = NULL;
    int iPad = 1; // iPad, that's funny
-   while ((nuis = (RooRealVar *)it.Next())) {
+   while ((nuis = (RooRealVar *)it->Next())) {
       c2->cd(iPad++);
       plot.DrawChainScatter(*firstPOI, *nuis);
    }

@@ -12,7 +12,7 @@ import ROOT
 
 
 # Activate ROOT.RooFit memory tracing
-ROOT.RooTrace.active(True)
+ROOT.RooTrace.active(ROOT.kTRUE)
 
 # Construct gauss(x,m,s)
 x = ROOT.RooRealVar("x", "x", -10, 10)
@@ -24,18 +24,19 @@ gauss = ROOT.RooGaussian("g", "g", x, m, s)
 ROOT.RooTrace.dump()
 
 # Activate verbose mode
-ROOT.RooTrace.verbose(True)
+ROOT.RooTrace.verbose(ROOT.kTRUE)
 
 # Construct poly(x,p0)
-p0 = ROOT.RooRealVar("p0", "p0", 0.01, 0.0, 1.0)
-poly = ROOT.RooPolynomial("p", "p", x, [p0])
+p0 = ROOT.RooRealVar("p0", "p0", 0.01, 0., 1.)
+poly = ROOT.RooPolynomial("p", "p", x, ROOT.RooArgList(p0))
 
 # Put marker in trace list for future reference
 ROOT.RooTrace.mark()
 
 # model = f*gauss(x) + (1-f)*poly(x)
-f = ROOT.RooRealVar("f", "f", 0.5, 0.0, 1.0)
-model = ROOT.RooAddPdf("model", "model", [gauss, poly], [f])
+f = ROOT.RooRealVar("f", "f", 0.5, 0., 1.)
+model = ROOT.RooAddPdf("model", "model", ROOT.RooArgList(
+    gauss, poly), ROOT.RooArgList(f))
 
 # Show object added to memory since marker
 ROOT.RooTrace.printObjectCounts()

@@ -9,15 +9,14 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TSessionDialogs
-    \ingroup sessionviewer
-
-This file defines several dialogs that are used by TSessionViewer.
-The following dialogs are available: TNewChainDlg and TNewQueryDlg.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TSessionDialogs                                                      //
+//                                                                      //
+// This file defines several dialogs that are used by TSessionViewer.   //
+// The following dialogs are available: TNewChainDlg and TNewQueryDlg.  //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TSessionDialogs.h"
 #include "TSessionViewer.h"

@@ -449,7 +449,7 @@ void TBranchElement::Init(TTree *tree, TBranch *parent,const char* bname, TStrea
                // which happens when we are a child branch of a top-level
                // branch whose name does not end in a dot and also has no
                // internal dots, elide the branch name, and keep the branch
-               // hierarchy rooted at the ultimate parent, this keeps the base
+               // heirarchy rooted at the ultimate parent, this keeps the base
                // class part of the branch name from propagating downwards.
                // FIXME: We are eliding the base class here, creating a break in the branch hierarchy.
                // Note: We can use parent class (cltop) != branch class (elemClass) to detection elision.
@@ -460,7 +460,7 @@ void TBranchElement::Init(TTree *tree, TBranch *parent,const char* bname, TStrea
             }
             // If the branch's name is not the same as the base class name,
             // keep the branch name as a prefix (i.e., continue the branch
-            // hierarchy), but start a new class hierarchy at the base class.
+            // heirarchy), but start a new class heirarchy at the base class.
             //
             // Note: If the parent branch was created by the branch constructor
             //       which takes a folder as a parameter, then this case will
@@ -1102,7 +1102,7 @@ void TBranchElement::Browse(TBrowser* b)
                // We do not know for sure whether the mother's name is
                // already preprended.  So we need to check:
                //    a) it is prepended
-               //    b) it is NOT the name of a daughter (i.e. mothername.mothername exist)
+               //    b) it is NOT the name of a daugher (i.e. mothername.mothername exist)
                TString doublename = mothername;
                doublename.Append(".");
                Int_t isthere = (name.Index(doublename) == 0);
@@ -1241,7 +1241,7 @@ Int_t TBranchElement::FillImpl(ROOT::Internal::TBranchIMTHelper *imtHelper)
 
    if (fID < 0) {
       if (!fObject) {
-         Error("Fill", "attempt to fill branch %s while address is not set", GetName());
+         Error("Fill", "attempt to fill branch %s while addresss is not set", GetName());
          return 0;
       }
    }
@@ -2060,7 +2060,7 @@ static void GatherArtificialElements(const TObjArray &branches, TStreamerInfoAct
          TVirtualArray *onfileObject = nullptr;
          for(auto subbe : TRangeDynCast<TBranchElement>( *search )) {
 
-            if (elementClass == subbe->GetInfo()->GetClass() && subbe->GetOnfileObject()) { // Use GetInfo to provoke its creation.
+            if (elementClass == subbe->GetInfo()->GetClass()) { // Use GetInfo to provoke its creation.
                nextinfo = subbe->GetInfo();
                onfileObject = subbe->GetOnfileObject();
                break;
@@ -2138,7 +2138,7 @@ void TBranchElement::SetupInfo()
             TBranchElement *parent = (TBranchElement*)GetMother()->GetSubBranch(this);
             if (parent && parent != this && !parent->GetClass()->IsLoaded() ) {
                // Our parent's class is emulated and we represent an abstract class.
-               // and the target class has not been set explicitly.
+               // and the target class has not been set explicilty.
                TString target = cl->GetName();
                target += "@@emulated";
                fTargetClass.SetName(target);
@@ -2230,11 +2230,6 @@ void TBranchElement::InitInfo()
             Bool_t seenExisting = kFALSE;
 
             fOnfileObject = new TVirtualArray( info->GetElement(0)->GetClassPointer(), arrlen );
-            if (fType == 31 || fType == 41) {
-               TBranchElement *parent = (TBranchElement*)GetMother()->GetSubBranch(this);
-               if (parent && parent->fOnfileObject == nullptr)
-                  parent->fOnfileObject = fOnfileObject;
-            }
             // Propage this to all the other branch of this type.
             TObjArray *branches = toplevel ? GetListOfBranches() : GetMother()->GetSubBranch(this)->GetListOfBranches();
             Int_t nbranches = branches->GetEntriesFast();
@@ -2357,7 +2352,7 @@ void TBranchElement::InitInfo()
                      break;
                   }
                   // Add all (and only) the Artificial Elements that follows this StreamerInfo.
-                  // fprintf(stderr,"%s/%d[%zu] passing through %zu %s\n",GetName(),fID,fIDs.size(),i,nextel->GetName());
+                  // fprintf(stderr,"%s/%d[%zu] passing trhough %zu %s\n",GetName(),fID,fIDs.size(),i,nextel->GetName());
                   if (fType==31||fType==41) {
                      // The nested objects are unfolded and their branch can not be used to
                      // execute StreamerElements of this StreamerInfo.
@@ -2370,7 +2365,7 @@ void TBranchElement::InitInfo()
                   }
                   if (nextel->GetOffset() ==  TStreamerInfo::kMissing) {
                      // This element will be 'skipped', it's TBranchElement's fObject will null
-                     // and thus can not be used to execute the artificial StreamerElements
+                     // and thus can not be used to execute the artifical StreamerElements
                      continue;
                   }
                   if (nextel->IsA() != TStreamerArtificial::Class()
@@ -2407,7 +2402,7 @@ void TBranchElement::InitInfo()
             }
          }
          if (fType == 3 || fType == 4 || (fType == 0 && fID == -2)) {
-            // Need to add the rule targeting transient members.
+            // Need to add the rule targetting transient members.
             TStreamerInfo *localInfo = fInfo;
             if (fType == 3 || fType == 4) {
                // Don't we have real version information?
@@ -2742,7 +2737,7 @@ Int_t TBranchElement::GetExpectedType(TClass *&expectedClass,EDataType &expected
       expectedClass = fBranchClass;
    } else {
       // Case of an object data member.  Here we allow for the
-      // variable name to be omitted.  Eg, for Event.root with split
+      // variable name to be ommitted.  Eg, for Event.root with split
       // level 1 or above  Draw("GetXaxis") is the same as Draw("fH.GetXaxis()")
       TStreamerElement* element = GetInfoImp()->GetElement(fID);
       if (element) {
@@ -3057,7 +3052,7 @@ void* TBranchElement::GetValuePointer() const
 /// Note: The offsets are zero for data members so that when
 ///       SetAddress recursively sets their address, they will get the
 ///       same address as their containing class because i/o is based
-///       on streamer info offsets from the address of the containing
+///       on streamer info offsets from the addresss of the containing
 ///       class.
 ///
 ///       Offsets are non-zero for base-class sub-branches that are
@@ -3079,7 +3074,7 @@ void TBranchElement::InitializeOffsets()
    // As of commit 4f8b237849, removing this lock does not lead to
    // a visible failure in test.  This might be due to the underlying
    // problem (missing lock or ?) being solved somewhere else or some
-   // other perturbation reducing the failure rate.
+   // other pertubation reducing the failure rate.
    // Having the lock here is not too costly as InitializeOffsets is
    // one called once in the lifetime of the TBranch.
    R__LOCKGUARD(gInterpreterMutex);
@@ -3335,7 +3330,7 @@ void TBranchElement::InitializeOffsets()
             // Note: We are in the case where our mother was created
             //       by the branch constructor which takes a folder
             //       as an argument.  The mother branch has internal
-            //       dots in its name to represent the folder hierarchy.
+            //       dots in its name to represent the folder heirarchy.
             //       The TTree::Bronch() routine has handled us as a
             //       special case, we must compensate.
             if ((fID < 0) && (subBranchElement->IsA() == TStreamerBase::Class())) {
@@ -3394,7 +3389,7 @@ void TBranchElement::InitializeOffsets()
             // Note: We are in the case where our mother was created
             //       by the branch constructor which takes a folder
             //       as an argument.  The mother branch has internal
-            //       dots in its name to represent the folder hierarchy.
+            //       dots in its name to represent the folder heirarchy.
             //       The TTree::Bronch() routine has handled us as a
             //       special case, we must compensate.
             if ((fID > -1) && (mother == mother->GetSubBranch(this)) && (branchElem->IsA() == TStreamerBase::Class())) {
@@ -3490,7 +3485,7 @@ void TBranchElement::InitializeOffsets()
                      TBranchElement *parent = (TBranchElement*)GetMother()->GetSubBranch(this);
                      if (parent && parent != this && !parent->GetClass()->IsLoaded() ) {
                         // Our parent's class is emulated and we represent an abstract class.
-                        // and the target class has not been set explicitly.
+                        // and the target class has not been set explicilty.
                         TString target = pClass->GetName();
                         target += "@@emulated";
 
@@ -3518,7 +3513,7 @@ void TBranchElement::InitializeOffsets()
                }
                if (fBranchCount && fBranchCount->fCollProxy && fBranchCount->fCollProxy->GetValueClass()) {
                   pClass = fBranchCount->fCollProxy->GetValueClass();
-                  Warning("InitializeOffsets", "subBranch: '%s' has no parent class!  Assuming parent class is: '%s'.", subBranch->GetName(), pClass ? pClass->GetName() : "unknown class");
+                  Warning("InitializeOffsets", "subBranch: '%s' has no parent class!  Assuming parent class is: '%s'.", subBranch->GetName(), pClass ? pClass->GetName() : "unknowned class");
                }
                if (!pClass) {
                   // -- Still no parent class, assume our parent class is our parent branch's class.
@@ -3782,7 +3777,7 @@ void TBranchElement::Print(Option_t* option) const
       TVirtualStreamerInfo *info = ((TBranchElement*)this)->GetInfoImp();
 
       Printf("%-16s %2d %4d %-16s %-16s %8x %8x %p\n",
-             info ? info->GetName() : "StreamerInfo unavailable", GetID(), GetType(),
+             info ? info->GetName() : "StreamerInfo unvailable", GetID(), GetType(),
              GetClassName(), GetParentName(),
              (fBranchOffset&&parent && ind>=0) ? parent->fBranchOffset[ind] : 0,
              GetOffset(), GetObject());
@@ -4757,7 +4752,7 @@ void TBranchElement::ResetDeleteObject()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// \brief Reset offset and StreamerInfo information from this branch.
+/// \brief Reset offset and StremerInfo information from this branch.
 /// \param[in] recurse When true call ResetInitInfo on all subbranches.
 ///
 
@@ -6123,7 +6118,7 @@ void TBranchElement::Unroll(const char *name, TClass *cl, TStreamerInfo *sinfo, 
 /// Note: We do *not* create sub-branches for data members which
 ///       have a class type and which we are splitting.
 ///
-/// Note: The above rules imply that the branch hierarchy increases
+/// Note: The above rules imply that the branch heirarchy increases
 ///       in depth only for base classes of cl (unless we are inside
 ///       of a TClonesArray or STL container, in which case the depth
 ///       does *not* increase, the base class is elided) and for
@@ -6205,11 +6200,11 @@ Int_t TBranchElement::Unroll(const char* name, TClass* clParent, TClass* cl, cha
             // -- Elide the base-class sub-branches of a split TClonesArray or STL container.
             //
             // Note: We are eliding the base class here, that is, we never
-            //       create a branch for it, so the branch hierarchy is not
+            //       create a branch for it, so the branch heirarchy is not
             //       complete.
             // Note: The clParent parameter is the value class of the
             //       container which we are splitting.  It does not
-            //       appear in the branch hierarchy either.
+            //       appear in the branch heirarchy either.
             // Note: We can use parent class (clParent) != branch class (elemClass) to detection elision.
             Int_t unroll = -1;
             if (!elem->CannotSplit() || clOfBase == TObject::Class()) {
@@ -6232,7 +6227,7 @@ Int_t TBranchElement::Unroll(const char* name, TClass* clParent, TClass* cl, cha
                branchname.Form("%s%s%s", name, dotlast ? "" : ".", elem->GetFullName());
                // Elide the base class name when creating the sub-branches.
                // Note: The branch names for sub-branches of a base class branch
-               //       do not represent the full class hierarchy because we do
+               //       do not represent the full class heirarchy because we do
                //       this, however it does keep the branch names for the
                //       inherited data members simple.
                TBranchElement* branch = new TBranchElement(this, name, sinfo, elemID, ptr + offset, basketsize, splitlevel+splitSTLP, btype);
@@ -6284,7 +6279,7 @@ Int_t TBranchElement::Unroll(const char* name, TClass* clParent, TClass* cl, cha
                // Splitting a normal class.
                // FIXME: We are eliding the class we are splitting here,
                //        i.e., we do not create a branch for it, so the
-               //        branch hierarchy does not match the class hierarchy.
+               //        branch heirarchy does not match the class heirarchy.
                // Note: clParent is the class which contains a data member of
                //       the class type which we are splitting.
                // Note: We can use parent class (clParent) != branch class (elemClass) to detection elision.

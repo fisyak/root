@@ -9,12 +9,13 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/** \class TGedFrame
-    \ingroup ged
-
-Base frame for implementing GUI - a service class.
-
-*/
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TGedFrame                                                           //
+//                                                                      //
+//  Base frame for implementing GUI - a service class.                  //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGedFrame.h"
 #include "TGedEditor.h"

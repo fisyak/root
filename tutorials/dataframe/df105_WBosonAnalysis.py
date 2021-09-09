@@ -152,11 +152,14 @@ singletop = merge_histos("singletop")
 # Set styles
 ROOT.gROOT.SetStyle("ATLAS")
 
-# Create canvas
+# Create canvas with pad
 c = ROOT.TCanvas("c", "", 600, 600)
-c.SetTickx(0)
-c.SetTicky(0)
-c.SetLogy()
+pad = ROOT.TPad("upper_pad", "", 0, 0, 1, 1)
+pad.SetTickx(False)
+pad.SetTicky(False)
+pad.SetLogy()
+pad.Draw()
+pad.cd()
 
 # Draw stack with MC contributions
 stack = ROOT.THStack()
@@ -198,7 +201,7 @@ legend.AddEntry(zjets, "Z+jets", "f")
 legend.AddEntry(ttbar, "t#bar{t}", "f")
 legend.AddEntry(diboson, "Diboson", "f")
 legend.AddEntry(singletop, "Single top", "f")
-legend.Draw()
+legend.Draw("SAME")
 
 # Add ATLAS label
 text = ROOT.TLatex()

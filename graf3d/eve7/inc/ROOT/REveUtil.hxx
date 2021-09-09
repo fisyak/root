@@ -25,6 +25,10 @@ class TGeoManager;
 namespace ROOT {
 namespace Experimental {
 
+class RLogChannel;
+/// Log channel for Eve diagnostics.
+RLogChannel &EveLog();
+
 class REveElement;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -101,15 +105,15 @@ public:
 
 class REveRefCnt
 {
-   REveRefCnt(const REveRefCnt &) = delete;
-   REveRefCnt &operator=(const REveRefCnt &) = delete;
-
 protected:
    Int_t fRefCount{0};
 
 public:
    REveRefCnt() = default;
    virtual ~REveRefCnt() {}
+
+   REveRefCnt(const REveRefCnt &) : fRefCount(0) {}
+   REveRefCnt &operator=(const REveRefCnt &) { return *this; }
 
    void IncRefCount() { ++fRefCount; }
    void DecRefCount()
@@ -118,7 +122,7 @@ public:
          OnZeroRefCount();
    }
 
-   virtual void OnZeroRefCount() = 0;
+   virtual void OnZeroRefCount() { delete this; }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -128,17 +132,17 @@ public:
 
 class REveRefBackPtr : public REveRefCnt
 {
-   REveRefBackPtr(const REveRefBackPtr &) = delete;
-   REveRefBackPtr &operator=(const REveRefBackPtr &) = delete;
-
 protected:
    typedef std::map<REveElement *, Int_t> RefMap_t;
 
    RefMap_t fBackRefs;
 
 public:
-   REveRefBackPtr() = default;
+   REveRefBackPtr();
    virtual ~REveRefBackPtr();
+
+   REveRefBackPtr(const REveRefBackPtr &);
+   REveRefBackPtr &operator=(const REveRefBackPtr &);
 
    using REveRefCnt::DecRefCount;
    using REveRefCnt::IncRefCount;

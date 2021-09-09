@@ -11,12 +11,9 @@
 
 #include <ROOT/REveDataTable.hxx>
 #include <ROOT/REveDataCollection.hxx>
-#include "TClass.h"
-#include "TROOT.h"
-
+#include <TClass.h>
 #include <sstream>
-
-#include <nlohmann/json.hpp>
+#include <TROOT.h>
 
 using namespace ROOT::Experimental;
 
@@ -73,17 +70,15 @@ Int_t REveDataTable::WriteCoreJson(nlohmann::json &j, Int_t rnr_offset)
    return ret;
 }
 
-void REveDataTable::AddNewColumn(const std::string &expr, const std::string &title, int prec)
+void REveDataTable::AddNewColumn(const std::string& expr, const std::string& title, int prec)
 {
    auto c = new REveDataColumn(title);
+   AddElement(c);
+
    c->SetExpressionAndType(expr, REveDataColumn::FT_Double);
    c->SetPrecision(prec);
-   gROOT->ProcessLine(c->GetFunctionExpressionString().c_str());
 
-   if (c->hasValidExpression()) {
-      AddElement(c);
-      StampObjProps();
-   }
+   StampObjProps();
 }
 
 //==============================================================================
@@ -101,27 +96,7 @@ void REveDataColumn::SetExpressionAndType(const std::string& expr, FieldType_e t
 {
    fExpression = expr;
    fType       = type;
-   fClassType  = icls;
-}
 
-//______________________________________________________________________________
-void REveDataColumn::SetExpressionAndType(const std::string& expr, FieldType_e type)
-{
-   auto table = dynamic_cast<REveDataTable*>(fMother);
-   auto coll = table->GetCollection();
-   auto icls = coll->GetItemClass();
-   SetExpressionAndType(expr, type, icls);
-}
-
-//______________________________________________________________________________
-void REveDataColumn::SetPrecision(Int_t prec)
-{
-   fPrecision = prec;
-}
-
-//______________________________________________________________________________
-std::string REveDataColumn::GetFunctionExpressionString() const
-{
    const char *rtyp   = nullptr;
    const void *fooptr = nullptr;
 
@@ -133,27 +108,36 @@ std::string REveDataColumn::GetFunctionExpressionString() const
    }
 
    std::stringstream s;
-   s  << " *((std::function<" << rtyp << "(" << fClassType->GetName() << "*)>*)" 
-     << std::hex << std::showbase << (size_t)fooptr
-     << ") = [](" << fClassType->GetName() << "* p){" << fClassType->GetName() << " &i=*p; return (" << fExpression.Data()
-     << "); };";
+   s << "*((std::function<" << rtyp << "(" << icls->GetName() << "*)>*)" << std::hex << std::showbase << (size_t)fooptr
+     << ") = [](" << icls->GetName() << "* p){" << icls->GetName() << " &i=*p; return (" << fExpression.Data()
+     << "); }";
 
-
-  return s.str();
+   // printf("%s\n", s.str().c_str());
+   try {
+      gROOT->ProcessLine(s.str().c_str());
+   }
+   catch (const std::exception &exc)
+   {
+      std::cerr << "REveDataColumn::SetExpressionAndType" << exc.what();
+   }
 }
-
 //______________________________________________________________________________
-bool REveDataColumn::hasValidExpression() const
+
+void REveDataColumn::SetExpressionAndType(const std::string& expr, FieldType_e type)
 {
-   return (fDoubleFoo || fBoolFoo || fStringFoo);
+   auto table = dynamic_cast<REveDataTable*>(fMother);
+   auto coll = table->GetCollection();
+   auto icls = coll->GetItemClass();
+   SetExpressionAndType(expr, type, icls);
 }
 
-//______________________________________________________________________________
+void REveDataColumn::SetPrecision(Int_t prec)
+{
+   fPrecision = prec;
+}
+
 std::string REveDataColumn::EvalExpr(void *iptr) const
 {
-   if (!hasValidExpression())
-      return "ErrFunc";
-
    switch (fType)
    {
       case FT_Double:
@@ -171,5 +155,5 @@ std::string REveDataColumn::EvalExpr(void *iptr) const
          return fStringFoo(iptr);
       }
    }
-   return "Nn";
+   return "XYZ";
 }

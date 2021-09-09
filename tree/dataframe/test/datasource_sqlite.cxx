@@ -1,6 +1,7 @@
 #include <ROOTUnitTestSupport.h>
 #include <ROOT/RConfig.hxx>
 #include <ROOT/RDataFrame.hxx>
+#include <ROOT/RMakeUnique.hxx>
 #include <ROOT/RSqliteDS.hxx>
 #include <ROOT/TSeq.hxx>
 
@@ -10,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <memory>
 
 using namespace ROOT::RDF;
 

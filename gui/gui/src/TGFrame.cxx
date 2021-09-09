@@ -20,62 +20,47 @@
 
 **************************************************************************/
 
-
-/** \class TGFrame
-    \ingroup guiwidgets
-
-A subclasses of TGWindow, and is used as base
-class for some simple widgets (buttons, labels, etc.).
-It provides:
- - position & dimension fields
- - an 'options' attribute (see constant above)
- - a generic event handler
- - a generic layout mechanism
- - a generic border
-
-
-\class TGCompositeFrame
-\ingroup guiwidgets
-
-The base class for composite widgets
-(menu bars, list boxes, etc.).
-It provides:
- - a layout manager
- - a frame container (TList *)
-
-
-\class TGVerticalFrame
-\ingroup guiwidgets
-A composite frame that layout their children in vertical  way.
-
-
-\class TGHorizontalFrame
-\ingroup guiwidgets
-A composite frame that layout their children in  horizontal way.
-
-
-\class TGMainFrame
-\ingroup guiwidgets
-Defines top level windows that interact with the system Window Manager.
-
-
-\class TGTransientFrame
-\ingroup guiwidgets
-Defines transient windows that typically are used for dialogs windows.
-
-
-\class TGGroupFrame
-\ingroup guiwidgets
-A composite frame with a border and a title.
-It is typically used to group a number of logically related widgets visually together.
-
-\class TGHeaderFrame
-\ingroup guiwidgets
-Horizontal Frame used to contain header buttons and splitters
-in a list view. Used to have resizable column headers.
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGFrame, TGCompositeFrame, TGVerticalFrame, TGHorizontalFrame,       //
+// TGMainFrame, TGTransientFrame and TGGroupFrame                       //
+//                                                                      //
+// The frame classes describe the different "dressed" GUI windows.      //
+//                                                                      //
+// The TGFrame class is a subclasses of TGWindow, and is used as base   //
+// class for some simple widgets (buttons, labels, etc.).               //
+// It provides:                                                         //
+//  - position & dimension fields                                       //
+//  - an 'options' attribute (see constant above)                       //
+//  - a generic event handler                                           //
+//  - a generic layout mechanism                                        //
+//  - a generic border                                                  //
+//                                                                      //
+// The TGCompositeFrame class is the base class for composite widgets   //
+// (menu bars, list boxes, etc.).                                       //
+// It provides:                                                         //
+//  - a layout manager                                                  //
+//  - a frame container (TList *)                                       //
+//                                                                      //
+// The TGVerticalFrame and TGHorizontalFrame are composite frame that   //
+// layout their children in vertical or horizontal way.                 //
+//                                                                      //
+// The TGMainFrame class defines top level windows that interact with   //
+// the system Window Manager.                                           //
+//                                                                      //
+// The TGTransientFrame class defines transient windows that typically  //
+// are used for dialogs windows.                                        //
+//                                                                      //
+// The TGGroupFrame is a composite frame with a border and a title.     //
+// It is typically used to group a number of logically related widgets  //
+// visually together.                                                   //
+//                                                                      //
+//Begin_Html
+/*
+<img src="gif/tgcompositeframe_classtree.gif">
 */
-
+//End_Html
+//////////////////////////////////////////////////////////////////////////
 
 #include "TError.h"
 #include "TGFrame.h"
@@ -1064,10 +1049,10 @@ void TGCompositeFrame::ChangeOptions(UInt_t options)
 ///    use Clean method in destructor ("custom deallocation").
 ///    Adding such component to GUI container which is using hierarchical
 ///    cleaning will produce seg. violation when container is deleted.
-///    The reason is double deletion: first when Clean method is invoked,
+///    The reason is double deletion: first whem Clean method is invoked,
 ///    then at "custom deallocation".
 ///    We are going to correct all ROOT code to make it to be
-///    consistent with hierarchical cleaning scheme.
+///    consitent with hierarchical cleaning scheeme.
 
 void TGCompositeFrame::SetCleanup(Int_t mode)
 {
@@ -1119,7 +1104,7 @@ void TGCompositeFrame::AddFrame(TGFrame *f, TGLayoutHints *l)
    TGFrameElement *nw = new TGFrameElement(f, l ? l : fgDefaultHints);
    fList->Add(nw);
 
-   // in case of recursive cleanup, propagate cleanup setting to all
+   // in case of recusive cleanup, propagate cleanup setting to all
    // child composite frames
    if (fMustCleanup == kDeepCleanup)
       f->SetCleanup(kDeepCleanup);
@@ -1367,7 +1352,7 @@ Bool_t TGCompositeFrame::HandleDragEnter(TGFrame *)
    if (fClient && fClient->IsEditable() &&
        (fId != fClient->GetRoot()->GetId())) {
 
-      // the dragged frame cannot be dropped
+      // the dragged frame cannot be droppped
       if (fEditDisabled & (kEditDisable | kEditDisableLayout)) return kFALSE;
 
       //
@@ -1468,16 +1453,14 @@ TGMainFrame::TGMainFrame(const TGWindow *p, UInt_t w, UInt_t h,
    fWMInitState = (EInitialState) 0;
 
    gVirtualX->GrabKey(fId, gVirtualX->KeysymToKeycode(kKey_s),
-                      kKeyControlMask, kTRUE);//grab CTRL+s
-   gVirtualX->GrabKey(fId, gVirtualX->KeysymToKeycode(kKey_s),
-                      kKeyControlMask | kKeyMod2Mask, kTRUE);//grab CTRL+s also if NumLock is active
+                      kKeyControlMask, kTRUE);
    if (p == fClient->GetDefaultRoot()) {
       fMWMValue    = kMWMDecorAll;
       fMWMFuncs    = kMWMFuncAll;
       fMWMInput    = kMWMInputModeless;
       gVirtualX->SetMWMHints(fId, fMWMValue, fMWMFuncs, fMWMInput);
    }
-   // if parent is editing/embeddable add this frame to the parent
+   // if parent is editing/embedable add this frame to the parent
    if (fClient->IsEditable() && (p == fClient->GetRoot())) {
       TGCompositeFrame *frame;
       if (p && p->InheritsFrom(TGCompositeFrame::Class())) {
@@ -1511,10 +1494,6 @@ TGMainFrame::~TGMainFrame()
       fBindList->Delete();
       delete fBindList;
    }
-   gVirtualX->GrabKey(fId, gVirtualX->KeysymToKeycode(kKey_s),
-                      kKeyControlMask, kFALSE);
-   gVirtualX->GrabKey(fId, gVirtualX->KeysymToKeycode(kKey_s),
-                      kKeyControlMask | kKeyMod2Mask, kFALSE);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1534,6 +1513,7 @@ Bool_t TGMainFrame::SaveFrameAsCodeOrImage()
       repeat_save = kFALSE;
 
       TGFileInfo fi;
+      TGMainFrame *main = (TGMainFrame*)GetMainFrame();
       fi.fFileTypes = gSaveMacroTypes;
       fi.SetIniDir(dir);
       fi.fOverwrite = overwr;
@@ -1541,61 +1521,42 @@ Bool_t TGMainFrame::SaveFrameAsCodeOrImage()
       if (!fi.fFilename) return kFALSE;
       dir = fi.fIniDir;
       overwr = fi.fOverwrite;
-      const Bool_t res = SaveFrameAsCodeOrImage(fi.fFilename);
-      if (!res) {
-         Int_t retval;
-         new TGMsgBox(fClient->GetDefaultRoot(), this, "Error...",
-                      TString::Format("file (%s) cannot be saved with this extension",
-                                      fi.fFilename),
-                      kMBIconExclamation, kMBRetry | kMBCancel, &retval);
-         repeat_save = (retval == kMBRetry);
+      TString fname = gSystem->UnixPathName(fi.fFilename);
+      if (fname.EndsWith(".C"))
+         main->SaveSource(fname.Data(), "");
+      else {
+         TImage::EImageFileTypes gtype = TImage::kUnknown;
+         if (fname.EndsWith("gif")) {
+            gtype = TImage::kGif;
+         } else if (fname.EndsWith(".png")) {
+            gtype = TImage::kPng;
+         } else if (fname.EndsWith(".jpg")) {
+            gtype = TImage::kJpeg;
+         } else if (fname.EndsWith(".tiff")) {
+            gtype = TImage::kTiff;
+         } else if (fname.EndsWith(".xpm")) {
+            gtype = TImage::kXpm;
+         }
+         if (gtype != TImage::kUnknown) {
+            Int_t saver = gErrorIgnoreLevel;
+            gErrorIgnoreLevel = kFatal;
+            TImage *img = TImage::Create();
+            RaiseWindow();
+            img->FromWindow(GetId());
+            img->WriteImage(fname, gtype);
+            gErrorIgnoreLevel = saver;
+            delete img;
+         }
+         else {
+            Int_t retval;
+            new TGMsgBox(fClient->GetDefaultRoot(), this, "Error...",
+                         TString::Format("file (%s) cannot be saved with this extension",
+                                         fname.Data()), kMBIconExclamation,
+                         kMBRetry | kMBCancel, &retval);
+            repeat_save = (retval == kMBRetry);
+         }
       }
    } while (repeat_save);
-
-   return kTRUE;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// Saves the frame contents as a ROOT macro or as an image,
-/// depending on the extension of the fileName argument.
-/// If preexisting, the file is overwritten.
-/// Returns kTRUE if something was saved.
-
-Bool_t TGMainFrame::SaveFrameAsCodeOrImage(const TString &fileName)
-{
-   static TString dir(".");
-
-   const TString fname = gSystem->UnixPathName(fileName);
-   if (fname.EndsWith(".C")) {
-      TGMainFrame *main = (TGMainFrame*)GetMainFrame();
-      main->SaveSource(fname.Data(), "");
-   } else {
-      TImage::EImageFileTypes gtype = TImage::kUnknown;
-      if (fname.EndsWith("gif")) {
-         gtype = TImage::kGif;
-      } else if (fname.EndsWith(".png")) {
-         gtype = TImage::kPng;
-      } else if (fname.EndsWith(".jpg")) {
-         gtype = TImage::kJpeg;
-      } else if (fname.EndsWith(".tiff")) {
-         gtype = TImage::kTiff;
-      } else if (fname.EndsWith(".xpm")) {
-         gtype = TImage::kXpm;
-      }
-      if (gtype != TImage::kUnknown) {
-         Int_t saver = gErrorIgnoreLevel;
-         gErrorIgnoreLevel = kFatal;
-         TImage *img = TImage::Create();
-         RaiseWindow();
-         img->FromWindow(GetId());
-         img->WriteImage(fname, gtype);
-         gErrorIgnoreLevel = saver;
-         delete img;
-      } else {
-         Error("SaveFrameAsCodeOrImage", "File cannot be saved with this extension");
-         return kFALSE;
-      }
-   }
 
    return kTRUE;
 }
@@ -2300,7 +2261,7 @@ void TGGroupFrame::DrawBorder()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Set or change title of the group frame. Title TGString is adopted
+/// Set or change title of the group frame. Titlte TGString is adopted
 /// by the TGGroupFrame.
 
 void TGGroupFrame::SetTitle(TGString *title)
@@ -2660,7 +2621,7 @@ TString TGMainFrame::GetMWMinpString() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Auxiliary protected method  used to save subframes.
+/// Auxilary protected method  used to save subframes.
 
 void TGCompositeFrame::SavePrimitiveSubframes(std::ostream &out, Option_t *option /*= ""*/)
 {
@@ -2952,7 +2913,7 @@ void TGMainFrame::SaveSource(const char *filename, Option_t *option)
 
    gListOfHiddenFrames->Clear();
 
-   // saving slots
+   // saivng slots
    TList *lSlots = new TList;
    lSlots->SetName("ListOfSlots");
    gROOT->GetListOfSpecials()->Add(lSlots);
@@ -3024,7 +2985,7 @@ void TGMainFrame::SaveSource(const char *filename, Option_t *option)
    }
 
    // needed in case the frame was resized
-   // otherwise the frame became bigger showing all hidden widgets (layout algorithm)
+   // otherwhice the frame became bigger showing all hidden widgets (layout algorithm)
    if (!usexy) out << "   " <<GetName()<< "->Resize("<< GetWidth()<<","<<GetHeight()<<");"<<std::endl;
    out << "}  " << std::endl;
 
@@ -3329,7 +3290,7 @@ void TGGroupFrame::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Save the GUI transient frame widget in a C++ macro file.
+/// Save the GUI tranzient frame widget in a C++ macro file.
 
 void TGTransientFrame::SaveSource(const char *filename, Option_t *option)
 {
@@ -3468,7 +3429,7 @@ void TGTransientFrame::SaveSource(const char *filename, Option_t *option)
 
    gListOfHiddenFrames->Clear();
 
-   // saving slots
+   // saivng slots
    TList *lSlots = new TList;
    lSlots->SetName("ListOfSlots");
    gROOT->GetListOfSpecials()->Add(lSlots);

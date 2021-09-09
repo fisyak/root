@@ -59,6 +59,19 @@ using namespace std;
 
 ClassImp(RooAbsTestStatistic);
 
+////////////////////////////////////////////////////////////////////////////////
+/// Default constructor
+
+RooAbsTestStatistic::RooAbsTestStatistic() :
+  _func(0), _data(0), _projDeps(0), _splitRange(0), _simCount(0),
+  _verbose(kFALSE), _init(kFALSE), _gofOpMode(Slave), _nEvents(0), _setNum(0),
+  _numSets(0), _extSet(0), _nGof(0), _gofArray(0), _nCPU(1), _mpfeArray(0),
+  _mpinterl(RooFit::BulkPartition), _doOffset(kFALSE), _offset(0),
+  _offsetCarry(0), _evalCarry(0)
+{
+}
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a test statistic from the given function and the data.
@@ -86,34 +99,58 @@ ClassImp(RooAbsTestStatistic);
 /// if the categories are called "pi0" and "gamma".
 
 RooAbsTestStatistic::RooAbsTestStatistic(const char *name, const char *title, RooAbsReal& real, RooAbsData& data,
-                                         const RooArgSet& projDeps, RooAbsTestStatistic::Configuration const& cfg) :
+					 const RooArgSet& projDeps, const char* rangeName, const char* addCoefRangeName,
+					 Int_t nCPU, RooFit::MPSplit interleave, Bool_t verbose, Bool_t splitCutRange) :
   RooAbsReal(name,title),
   _paramSet("paramSet","Set of parameters",this),
   _func(&real),
   _data(&data),
   _projDeps((RooArgSet*)projDeps.Clone()),
-  _rangeName(cfg.rangeName),
-  _addCoefRangeName(cfg.addCoefRangeName),
-  _splitRange(cfg.splitCutRange),
-  _verbose(cfg.verbose),
-  // Determine if RooAbsReal is a RooSimultaneous
-  _gofOpMode{(cfg.nCPU>1 || cfg.nCPU==-1) ? MPMaster : (dynamic_cast<RooSimultaneous*>(_func) ? SimMaster : Slave)},
-  _nEvents{data.numEntries()},
-  _nCPU(cfg.nCPU != -1 ? cfg.nCPU : 1),
-  _mpinterl(cfg.interleave)
+  _rangeName(rangeName?rangeName:""),
+  _addCoefRangeName(addCoefRangeName?addCoefRangeName:""),
+  _splitRange(splitCutRange),
+  _simCount(1),
+  _verbose(verbose),
+  _nGof(0),
+  _gofArray(0),
+  _nCPU(nCPU),
+  _mpfeArray(0),
+  _mpinterl(interleave),
+  _doOffset(kFALSE),
+  _offset(0),
+  _offsetCarry(0),
+  _evalCarry(0)
 {
   // Register all parameters as servers
-  _paramSet.add(*std::unique_ptr<RooArgSet>{real.getParameters(&data)});
+  RooArgSet* params = real.getParameters(&data) ;
+  _paramSet.add(*params) ;
+  delete params ;
 
-  if (cfg.rangeName.find(',') != std::string::npos) {
-    auto errorMsg = std::string("Ranges ") + cfg.rangeName
-            + " were passed to the RooAbsTestStatistic with name \"" + name + "\", "
-            + "but it doesn't support multiple comma-separated fit ranges!\n" +
-            + "Instead, one should combine multiple RooAbsTestStatistic objects "
-            + "(see RooAbsPdf::createNLL for an example with RooNLLVar).";
-    coutE(InputArguments) <<  errorMsg << std::endl;
-    throw std::invalid_argument(errorMsg);
+  if (_nCPU>1 || _nCPU==-1) {
+
+    if (_nCPU==-1) {
+      _nCPU=1 ;
+    }
+
+    _gofOpMode = MPMaster ;
+
+  } else {
+
+    // Determine if RooAbsReal is a RooSimultaneous
+    Bool_t simMode = dynamic_cast<RooSimultaneous*>(&real)?kTRUE:kFALSE ;
+
+    if (simMode) {
+      _gofOpMode = SimMaster ;
+    } else {
+      _gofOpMode = Slave ;
+    }
   }
+
+  _setNum = 0 ;
+  _extSet = 0 ;
+  _numSets = 1 ;
+  _init = kFALSE ;
+  _nEvents = data.numEntries() ;
 }
 
 
@@ -130,19 +167,49 @@ RooAbsTestStatistic::RooAbsTestStatistic(const RooAbsTestStatistic& other, const
   _rangeName(other._rangeName),
   _addCoefRangeName(other._addCoefRangeName),
   _splitRange(other._splitRange),
+  _simCount(1),
   _verbose(other._verbose),
-  // Determine if RooAbsReal is a RooSimultaneous
-  _gofOpMode{(other._nCPU>1 || other._nCPU==-1) ? MPMaster : (dynamic_cast<RooSimultaneous*>(_func) ? SimMaster : Slave)},
-  _nEvents{_data->numEntries()},
+  _nGof(0),
+  _gofArray(0),
   _gofSplitMode(other._gofSplitMode),
-  _nCPU(other._nCPU != -1 ? other._nCPU : 1),
+  _nCPU(other._nCPU),
+  _mpfeArray(0),
   _mpinterl(other._mpinterl),
   _doOffset(other._doOffset),
   _offset(other._offset),
+  _offsetCarry(other._offsetCarry),
   _evalCarry(other._evalCarry)
 {
   // Our parameters are those of original
   _paramSet.add(other._paramSet) ;
+
+  if (_nCPU>1 || _nCPU==-1) {
+
+    if (_nCPU==-1) {
+      _nCPU=1 ;
+    }
+      
+    _gofOpMode = MPMaster ;
+
+  } else {
+
+    // Determine if RooAbsReal is a RooSimultaneous
+    Bool_t simMode = dynamic_cast<RooSimultaneous*>(_func)?kTRUE:kFALSE ;
+
+    if (simMode) {
+      _gofOpMode = SimMaster ;
+    } else {
+      _gofOpMode = Slave ;
+    }
+  }
+
+  _setNum = 0 ;
+  _extSet = 0 ;
+  _numSets = 1 ;
+  _init = kFALSE ;
+  _nEvents = _data->numEntries() ;
+
+
 }
 
 
@@ -231,11 +298,6 @@ Double_t RooAbsTestStatistic::evaluate() const
 
     Double_t ret = sum ;
     _evalCarry = carry;
-
-    const Double_t norm = globalNormalization();
-    ret /= norm;
-    _evalCarry /= norm;
-
     return ret ;
 
   } else {
@@ -292,9 +354,9 @@ Bool_t RooAbsTestStatistic::initialize()
   if (_init) return kFALSE;
   
   if (MPMaster == _gofOpMode) {
-    initMPMode(_func,_data,_projDeps,_rangeName,_addCoefRangeName) ;
+    initMPMode(_func,_data,_projDeps,_rangeName.size()?_rangeName.c_str():0,_addCoefRangeName.size()?_addCoefRangeName.c_str():0) ;
   } else if (SimMaster == _gofOpMode) {
-    initSimMode((RooSimultaneous*)_func,_data,_projDeps,_rangeName,_addCoefRangeName) ;
+    initSimMode((RooSimultaneous*)_func,_data,_projDeps,_rangeName.size()?_rangeName.c_str():0,_addCoefRangeName.size()?_addCoefRangeName.c_str():0) ;
   }
   _init = kTRUE;
   return kFALSE;
@@ -400,25 +462,12 @@ void RooAbsTestStatistic::setMPSet(Int_t inSetNum, Int_t inNumSets)
 /// Initialize multi-processor calculation mode. Create component test statistics in separate
 /// processed that are connected to this process through a RooAbsRealMPFE front-end class.
 
-void RooAbsTestStatistic::initMPMode(RooAbsReal* real, RooAbsData* data, const RooArgSet* projDeps, std::string const& rangeName, std::string const& addCoefRangeName)
+void RooAbsTestStatistic::initMPMode(RooAbsReal* real, RooAbsData* data, const RooArgSet* projDeps, const char* rangeName, const char* addCoefRangeName)
 {
   _mpfeArray = new pRooRealMPFE[_nCPU];
 
   // Create proto-goodness-of-fit
-  Configuration cfg;
-  cfg.rangeName = rangeName;
-  cfg.addCoefRangeName = addCoefRangeName;
-  cfg.nCPU = 1;
-  cfg.interleave = _mpinterl;
-  cfg.verbose = _verbose;
-  cfg.splitCutRange = _splitRange;
-  // This configuration parameter is stored in the RooAbsOptTestStatistic.
-  // It would have been cleaner to move the member variable into RooAbsTestStatistic,
-  // but to avoid incrementing the class version we do the dynamic_cast trick.
-  if(auto thisAsRooAbsOptTestStatistic = dynamic_cast<RooAbsOptTestStatistic const*>(this)) {
-    cfg.integrateOverBinsPrecision = thisAsRooAbsOptTestStatistic->_integrateBinsPrecision;
-  }
-  RooAbsTestStatistic* gof = create(GetName(),GetTitle(),*real,*data,*projDeps,cfg);
+  RooAbsTestStatistic* gof = create(GetName(),GetTitle(),*real,*data,*projDeps,rangeName,addCoefRangeName,1,_mpinterl,_verbose,_splitRange);
   gof->recursiveRedirectServers(_paramSet);
 
   for (Int_t i = 0; i < _nCPU; ++i) {
@@ -449,8 +498,7 @@ void RooAbsTestStatistic::initMPMode(RooAbsReal* real, RooAbsData* data, const R
 /// each of them.
 
 void RooAbsTestStatistic::initSimMode(RooSimultaneous* simpdf, RooAbsData* data,
-                                      const RooArgSet* projDeps,
-                                      std::string const& rangeName, std::string const& addCoefRangeName)
+				      const RooArgSet* projDeps, const char* rangeName, const char* addCoefRangeName)
 {
 
   RooAbsCategoryLValue& simCat = const_cast<RooAbsCategoryLValue&>(simpdf->indexCat());
@@ -518,26 +566,13 @@ void RooAbsTestStatistic::initSimMode(RooSimultaneous* simpdf, RooAbsData* data,
       // WVE END HACK
       // Below here directly pass binnedPdf instead of PROD(binnedPdf,constraints) as constraints are evaluated elsewhere anyway
       // and omitting them reduces model complexity and associated handling/cloning times
-      Configuration cfg;
-      cfg.addCoefRangeName = addCoefRangeName;
-      cfg.interleave = _mpinterl;
-      cfg.verbose = _verbose;
-      cfg.splitCutRange = _splitRange;
-      cfg.binnedL = binnedL;
-      // This configuration parameter is stored in the RooAbsOptTestStatistic.
-      // It would have been cleaner to move the member variable into RooAbsTestStatistic,
-      // but to avoid incrementing the class version we do the dynamic_cast trick.
-      if(auto thisAsRooAbsOptTestStatistic = dynamic_cast<RooAbsOptTestStatistic const*>(this)) {
-        cfg.integrateOverBinsPrecision = thisAsRooAbsOptTestStatistic->_integrateBinsPrecision;
-      }
-      if (_splitRange && !rangeName.empty()) {
-        cfg.rangeName = rangeName + "_" + catName;
-        cfg.nCPU = _nCPU*(_mpinterl?-1:1);
+      if (_splitRange && rangeName) {
+        _gofArray[n] = create(catName.c_str(), catName.c_str(),(binnedPdf?*binnedPdf:*pdf),*dset,*projDeps,
+            Form("%s_%s",rangeName,catName.c_str()),addCoefRangeName,_nCPU*(_mpinterl?-1:1),_mpinterl,_verbose,_splitRange,binnedL);
       } else {
-        cfg.rangeName = rangeName;
-        cfg.nCPU = _nCPU;
+        _gofArray[n] = create(catName.c_str(),catName.c_str(),(binnedPdf?*binnedPdf:*pdf),*dset,*projDeps,
+            rangeName,addCoefRangeName,_nCPU,_mpinterl,_verbose,_splitRange,binnedL);
       }
-      _gofArray[n] = create(catName.c_str(),catName.c_str(),(binnedPdf?*binnedPdf:*pdf),*dset,*projDeps,cfg);
       _gofArray[n]->setSimCount(_nGof);
       // *** END HERE
 
@@ -631,7 +666,6 @@ Bool_t RooAbsTestStatistic::setData(RooAbsData& indata, Bool_t cloneData)
           coutE(DataHandling) << "RooAbsTestStatistic::setData(" << GetName() << ") ERROR: Cannot find component data for state " << _gofArray[i]->GetName() << endl;
         }
       }
-      delete dlist; // delete only list, data will be used
     }
     break;
   case MPMaster:
@@ -659,6 +693,7 @@ void RooAbsTestStatistic::enableOffsetting(Bool_t flag)
     // Clear offset if feature is disabled to that it is recalculated next time it is enabled
     if (!_doOffset) {
       _offset = 0 ;
+      _offsetCarry = 0;
     }
     setValueDirty() ;
     break ;

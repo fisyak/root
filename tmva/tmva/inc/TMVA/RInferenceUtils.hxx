@@ -1,7 +1,8 @@
 #ifndef TMVA_RINFERENCEUTILS
 #define TMVA_RINFERENCEUTILS
 
-#include <utility> // std::forward, std::index_sequence
+#include "ROOT/RIntegerSequence.hxx" // std::index_sequence
+#include <utility> // std::forward
 
 namespace TMVA {
 namespace Experimental {

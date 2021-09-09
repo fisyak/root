@@ -44,9 +44,6 @@ void MinimizerOptions::SetDefaultMinimizer(const char * type, const char * algo)
    // set the default minimizer type and algorithm
    if (type) Minim::gDefaultMinimizer = std::string(type);
    if (algo) Minim::gDefaultMinimAlgo = std::string(algo);
-   if (Minim::gDefaultMinimAlgo == "" && ( Minim::gDefaultMinimizer == "Minuit" ||
-       Minim::gDefaultMinimizer == "Minuit2") )
-      Minim::gDefaultMinimAlgo = "Migrad";
 }
 void MinimizerOptions::SetDefaultErrorDef(double up) {
    // set the default error definition
@@ -82,12 +79,7 @@ void MinimizerOptions::SetDefaultExtraOptions(const IOptions * extraoptions) {
    Minim::gDefaultExtraOptions = (extraoptions) ? extraoptions->Clone() : 0;
 }
 
-const std::string & MinimizerOptions::DefaultMinimizerAlgo() { 
-   if (Minim::gDefaultMinimAlgo == "Migrad" && Minim::gDefaultMinimizer != "Minuit" && 
-      Minim::gDefaultMinimizer != "Minuit2" )
-      Minim::gDefaultMinimAlgo = "";
-   return Minim::gDefaultMinimAlgo;
-}
+const std::string & MinimizerOptions::DefaultMinimizerAlgo() { return Minim::gDefaultMinimAlgo; }
 double MinimizerOptions::DefaultErrorDef()         { return Minim::gDefaultErrorDef; }
 double MinimizerOptions::DefaultTolerance()        { return Minim::gDefaultTolerance; }
 double MinimizerOptions::DefaultPrecision()        { return Minim::gDefaultPrecision; }
@@ -181,16 +173,13 @@ void MinimizerOptions::ResetToDefaultOptions() {
    fAlgoType =  Minim::gDefaultMinimAlgo;
 
    // case of Fumili2 and TMinuit
-   if (fMinimType == "TMinuit") 
-      fMinimType = "Minuit";
+   if (fMinimType == "TMinuit") fMinimType = "Minuit";
    else if (fMinimType == "Fumili2") {
       fMinimType = "Minuit2";
       fAlgoType = "Fumili";
    }
    else if (fMinimType == "GSLMultiMin" && fAlgoType == "Migrad")
       fAlgoType = "BFGS2";
-   else if (fMinimType != "Minuit" && fMinimType != "Minuit2" && fAlgoType == "Migrad")
-      fAlgoType = "";
 
    delete fExtraOptions;
    fExtraOptions = 0;
@@ -254,3 +243,4 @@ void MinimizerOptions::PrintDefault(const char * name, std::ostream & os) {
 } // end namespace Math
 
 } // end namespace ROOT
+

@@ -48,7 +48,7 @@ std::shared_ptr<GraphNode> CreateRangeNode(const ROOT::Detail::RDF::RRangeBase *
 /// Add the Defines that have been added between this node and the previous to the graph.
 /// Return the new "upmost" node, i.e. the last of the Defines added if any, otherwise the node itself
 std::shared_ptr<GraphNode> AddDefinesToGraph(std::shared_ptr<GraphNode> node,
-                                             const RBookedDefines &defines,
+                                             const RDFInternal::RBookedDefines &defines,
                                              const std::vector<std::string> &prevNodeDefines);
 
 // clang-format off
@@ -138,6 +138,12 @@ private:
    std::string RepresentGraph(const RResultPtr<T> &resultPtr)
    {
       auto loopManager = resultPtr.fLoopManager;
+      if (!loopManager)
+         throw std::runtime_error("Something went wrong");
+
+      if (std::is_same<T, RInterface<RLoopManager, void>>::value) {
+         return RepresentGraph(loopManager);
+      }
 
       loopManager->Jit();
 

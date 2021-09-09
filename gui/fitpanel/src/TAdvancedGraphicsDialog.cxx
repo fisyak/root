@@ -9,16 +9,14 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TAdvancedGraphicsDialog
-    \ingroup fitpanel
-
-Allows to create advanced graphics from the last fit made in the
-fitpanel. This includes the scan graphics, the contour and the
-confidence levels.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TAdvancedGraphicsDialog                                              //
+//                                                                      //
+// Allows to create advanced graphics from the last fit made in the     //
+// fitpanel. This includes the scan graphics, the contour and the       //
+// confidence levels.                                                   //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TAdvancedGraphicsDialog.h"
 #include "TGraph.h"
@@ -332,7 +330,7 @@ void TAdvancedGraphicsDialog::DoChangedScanPar(Int_t selected)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Calls the corresponding method, depending on the selected tab.
+/// Calls the correspoding method, depending on the selected tab.
 
 void TAdvancedGraphicsDialog::DoDraw()
 {

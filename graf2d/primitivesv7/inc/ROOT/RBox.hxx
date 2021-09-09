@@ -1,5 +1,5 @@
 /*************************************************************************
- * Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2017, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -9,12 +9,12 @@
 #ifndef ROOT7_RBox
 #define ROOT7_RBox
 
-#include <ROOT/ROnFrameDrawable.hxx>
-#include <ROOT/RAttrFill.hxx>
-#include <ROOT/RAttrBorder.hxx>
+#include <ROOT/RDrawable.hxx>
+#include <ROOT/RAttrBox.hxx>
 #include <ROOT/RPadPos.hxx>
 
 #include <initializer_list>
+
 
 namespace ROOT {
 namespace Experimental {
@@ -27,20 +27,17 @@ namespace Experimental {
 \warning This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback is welcome!
 */
 
-class RBox : public ROnFrameDrawable {
+class RBox : public RDrawable {
 
-   RPadPos fP1, fP2;                                   ///< box corners coordinates
+   RPadPos fP1, fP2;               ///< box corners coordinates
+   RAttrBox fAttrBox{this, "box"}; ///<! box attributes
 
 protected:
    // constructor for derived classes
-   RBox(const char *csstype) : ROnFrameDrawable(csstype) {}
+   RBox(const std::string &subtype) : RDrawable(subtype) {}
 
 public:
-
-   RAttrBorder border{this, "border"};            ///<! box border attributes
-   RAttrFill fill{this, "fill"};                  ///<! box fill attributes
-
-   RBox() : RBox("box") {}
+   RBox() : RDrawable("box") {}
 
    RBox(const RPadPos &p1, const RPadPos &p2) : RBox()
    {
@@ -48,11 +45,28 @@ public:
       fP2 = p2;
    }
 
-   RBox &SetP1(const RPadPos &p1) { fP1 = p1; return *this; }
-   RBox &SetP2(const RPadPos &p2) { fP2 = p2; return *this; }
+   RBox &SetP1(const RPadPos &p1)
+   {
+      fP1 = p1;
+      return *this;
+   }
+
+   RBox &SetP2(const RPadPos &p2)
+   {
+      fP2 = p2;
+      return *this;
+   }
 
    const RPadPos &GetP1() const { return fP1; }
    const RPadPos &GetP2() const { return fP2; }
+
+   const RAttrBox &GetAttrBox() const { return fAttrBox; }
+   RBox &SetAttrBox(RAttrBox &box)
+   {
+      fAttrBox = box;
+      return *this;
+   }
+   RAttrBox &AttrBox() { return fAttrBox; }
 };
 
 } // namespace Experimental

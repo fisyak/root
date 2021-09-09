@@ -83,8 +83,7 @@ ClassImp(RooAbsAnaConvPdf);
 /// Default constructor, required for persistence
 
 RooAbsAnaConvPdf::RooAbsAnaConvPdf() :
-  _isCopy(false),
-  _coefNormMgr(this,10)
+  _isCopy(kFALSE)
 {
 }
 
@@ -678,9 +677,9 @@ void RooAbsAnaConvPdf::printMultiline(ostream& os, Int_t contents, Bool_t verbos
   RooAbsPdf::printMultiline(os,contents,verbose,indent);
 
   os << indent << "--- RooAbsAnaConvPdf ---" << endl;
-  TIter iter = _convSet.createIterator() ;
+  TIterator* iter = _convSet.createIterator() ;
   RooResolutionModel* conv ;
-  while (((conv=(RooResolutionModel*)iter.Next()))) {
+  while (((conv=(RooResolutionModel*)iter->Next()))) {
     conv->printMultiline(os,contents,verbose,indent) ;
   }
 }

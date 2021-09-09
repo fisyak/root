@@ -1,15 +1,17 @@
-# Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.
+# Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.
 # All rights reserved.
 #
 # For the licensing terms see $ROOTSYS/LICENSE.
 # For the list of contributors see $ROOTSYS/README/CREDITS.
 
-cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
-
-if(WIN32)
-  # Set CMP0091 (MSVC runtime library flags are selected by an abstraction) to OLD
-  # to keep the old way of selecting the runtime library with the -MD/-MDd compiler flag
-  cmake_policy(SET CMP0091 OLD)
+if(MSVC)
+  # required for the following feature & bug fix:
+  # 3.15: Added $<REMOVE_DUPLICATES:list> generator expression
+  # 3.16: Bug fix with CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS: the auto-generated exports
+  #       are now updated only when the object files providing the symbols are updated
+  cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
+else()
+  cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
@@ -116,34 +118,6 @@ else()
   message(STATUS "Detected ROOT_VERSION ${ROOT_VERSION}")
 endif()
 
-#---Try to download a file to check internet connection-----------------------------------------
-message(STATUS "Checking internet connectivity...")
-file(DOWNLOAD https://root.cern/files/test.txt ${CMAKE_CURRENT_BINARY_DIR}/test.txt
-  TIMEOUT 5 STATUS DOWNLOAD_STATUS
-)
-# Get the status code from the download status
-list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
-# Check if download was successful.
-if(${STATUS_CODE} EQUAL 0)
-  # Succcess
-  message(STATUS "Yes")
-  # Now let's delete the file
-  file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/test.txt)
-  set(NO_CONNECTION FALSE)
-else()
-  # Error
-  message(STATUS "No: will not automatically download external dependencies")
-  set(NO_CONNECTION TRUE)
-endif()
-
-if(NO_CONNECTION)
-  if(clad AND fail-on-missing)
-    message(FATAL_ERROR "No internet connection. Please check your connection, or either disable the 'clad' option or the 'fail-on-missing' to automatically disable options requiring internet access")
-  elseif(clad)
-    message(STATUS "No internet connection, disabling the 'clad' option")
-  endif()
-  set(clad OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
-endif()
 
 #---Where to look first for cmake modules, before ${CMAKE_ROOT}/Modules/ is checked-------------
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
@@ -160,9 +134,9 @@ include(CheckAssembler)
 include(CheckIntrinsics)
 
 #---Enable asserts------------------------------------------------------------------------------
-if(asserts)
-  string(REGEX REPLACE "-[UD]NDEBUG(=.*)?" "" "CMAKE_CXX_FLAGS_${_BUILD_TYPE_UPPER}" "${CMAKE_CXX_FLAGS_${_BUILD_TYPE_UPPER}}")
-  string(REGEX REPLACE "-[UD]NDEBUG(=.*)?" "" "CMAKE_C_FLAGS_${_BUILD_TYPE_UPPER}" "${CMAKE_C_FLAGS_${_BUILD_TYPE_UPPER}}")
+if(NOT asserts)
+  set(CMAKE_CXX_FLAGS_${BUILD_TYPE} "${CMAKE_CXX_FLAGS_${BUILD_TYPE}} -DNDEBUG")
+  set(CMAKE_C_FLAGS_${BUILD_TYPE} "${CMAKE_C_FLAGS_${BUILD_TYPE}} -DNDEBUG")
 endif()
 
 #---Enable CCache ------------------------------------------------------------------------------
@@ -675,7 +649,11 @@ if(testing)
   endif()
 endif()
 
-cmake_host_system_information(RESULT PROCESSOR QUERY PROCESSOR_DESCRIPTION)
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.10.0")
+  cmake_host_system_information(RESULT PROCESSOR QUERY PROCESSOR_DESCRIPTION)
+else()
+  set(PROCESSOR ${CMAKE_HOST_SYSTEM_PROCESSOR})
+endif()
 
 message(STATUS "ROOT Configuration \n
 System          ${CMAKE_SYSTEM}
@@ -684,8 +662,8 @@ Build type      ${CMAKE_BUILD_TYPE}
 Install path    ${CMAKE_INSTALL_PREFIX}
 Compiler        ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}
 Compiler flags:
-C               ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${_BUILD_TYPE_UPPER}}
-C++             ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_BUILD_TYPE_UPPER}}
+C               ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${BUILD_TYPE}}
+C++             ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${BUILD_TYPE}}
 Linker flags:
 Executable      ${CMAKE_EXE_LINKER_FLAGS}
 Module          ${CMAKE_MODULE_LINKER_FLAGS}

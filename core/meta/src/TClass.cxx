@@ -129,7 +129,7 @@ using namespace std;
 // Mutex to protect CINT and META operations
 // (exported to be used for similar cases in related classes)
 
-TVirtualMutex* gInterpreterMutex = nullptr;
+TVirtualMutex* gInterpreterMutex = 0;
 
 namespace {
 
@@ -139,7 +139,7 @@ namespace {
    private:
       void *fSave;
    public:
-      TMmallocDescTemp(void *value = nullptr) :
+      TMmallocDescTemp(void *value = 0) :
          fSave(ROOT::Internal::gMmallocDesc) { ROOT::Internal::gMmallocDesc = value; }
       ~TMmallocDescTemp() { ROOT::Internal::gMmallocDesc = fSave; }
    };
@@ -391,7 +391,7 @@ namespace ROOT {
       {
          // Find the type corresponding to the key.
          IdMap_t::const_iterator iter = fMap.find(key);
-         mapped_type cl = nullptr;
+         mapped_type cl = 0;
          if (iter != fMap.end()) cl = iter->second;
          return cl;
       }
@@ -582,7 +582,7 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
    const Int_t kline  = 1024;
    Int_t cdate = 0;
    Int_t ctime = 0;
-   UInt_t *cdatime = nullptr;
+   UInt_t *cdatime = 0;
    char line[kline];
 
    TDataType *membertype;
@@ -628,7 +628,7 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
       isapointer = element->IsaPointer() || element->GetType() == TVirtualStreamerInfo::kCharStar;
       membertype = gROOT->GetType(memberFullTypeName);
 
-      isbasic = membertype !=nullptr;
+      isbasic = membertype !=0;
       isarray = element->GetArrayDim();
    } else {
       return;
@@ -664,7 +664,7 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
          snprintf(&line[kvalue],kline-kvalue,"->0");
       else if (!isbasic) {
          if (!fNoAddr) {
-            snprintf(&line[kvalue],kline-kvalue,"->%zx ", (size_t)p3pointer);
+            snprintf(&line[kvalue],kline-kvalue,"->%lx ", (Long_t)p3pointer);
          }
       } else if (membertype) {
          if (!strcmp(membertype->GetTypeName(), "char")) {
@@ -705,7 +705,7 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
          }
       } else {
          if (!fNoAddr) {
-            snprintf(&line[kvalue],kline-kvalue,"->%zx ", (size_t)p3pointer);
+            snprintf(&line[kvalue],kline-kvalue,"->%lx ", (Long_t)p3pointer);
          }
       }
    } else if (membertype) {
@@ -727,7 +727,7 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
          snprintf(&line[kvalue],kline-kvalue,"%s",str->Data());
       } else {
          if (!fNoAddr) {
-            snprintf(&line[kvalue],kline-kvalue,"->%zx ", (size_t)pointer);
+            snprintf(&line[kvalue],kline-kvalue,"->%lx ", (Long_t)pointer);
          }
       }
    }
@@ -744,7 +744,7 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
    Printf("%s", line);
 }
 
-THashTable* TClass::fgClassTypedefHash = nullptr;
+THashTable* TClass::fgClassTypedefHash = 0;
 
 //______________________________________________________________________________
 
@@ -817,7 +817,7 @@ void TBuildRealData::Inspect(TClass* cl, const char* pname, const char* mname, c
       }
    }
 
-   Longptr_t offset = Longptr_t(((Longptr_t) add) - ((Longptr_t) fRealDataObject));
+   Long_t offset = Long_t(((Long_t) add) - ((Long_t) fRealDataObject));
 
    if (TClassEdit::IsStdArray(dm->GetTypeName())){ // We tackle the std array case
       TString rdName;
@@ -876,10 +876,10 @@ void TBuildRealData::Inspect(TClass* cl, const char* pname, const char* mname, c
                         wantBuild = kFALSE;
                      }
 
-                     if (wantBuild) valcl->BuildRealData(nullptr, isTransient);
+                     if (wantBuild) valcl->BuildRealData(0, isTransient);
                   }
                } else {
-                  void* addrForRecursion = nullptr;
+                  void* addrForRecursion = 0;
                   if (GetObjectValidity() == kValidObjectGiven)
                      addrForRecursion = const_cast<void*>(add);
 
@@ -1009,20 +1009,20 @@ void TAutoInspector::Inspect(TClass *cl, const char *tit, const char *name,
          }
       }
 
-      if (proxy==nullptr) {
+      if (proxy==0) {
 
          fBrowser->Add(obj,clm,bwname);
 
       } else {
          TClass *valueCl = proxy->GetValueClass();
 
-         if (valueCl==nullptr) {
+         if (valueCl==0) {
 
             fBrowser->Add( obj, clm, bwname );
 
          } else {
             TVirtualCollectionProxy::TPushPop env(proxy, obj);
-            TClass *actualCl = nullptr;
+            TClass *actualCl = 0;
 
             int sz = proxy->Size();
 
@@ -1056,28 +1056,25 @@ void TAutoInspector::Inspect(TClass *cl, const char *tit, const char *name,
 ClassImp(TClass);
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Internal, default constructor.
-///
-/// \note Use `TClass::GetClass("ClassName")` to get access to a TClass object for a certain class!
 
 TClass::TClass() :
    TDictionary(),
-   fPersistentRef(nullptr),
-   fStreamerInfo(nullptr), fConversionStreamerInfo(nullptr), fRealData(nullptr),
-   fBase(nullptr), fData(nullptr), fUsingData(nullptr), fEnums(nullptr), fFuncTemplate(nullptr), fMethod(nullptr), fAllPubData(nullptr),
-   fAllPubMethod(nullptr), fClassMenuList(nullptr),
+   fPersistentRef(0),
+   fStreamerInfo(0), fConversionStreamerInfo(0), fRealData(0),
+   fBase(0), fData(0), fUsingData(0), fEnums(0), fFuncTemplate(0), fMethod(0), fAllPubData(0),
+   fAllPubMethod(0), fClassMenuList(0),
    fDeclFileName(""), fImplFileName(""), fDeclFileLine(0), fImplFileLine(0),
    fInstanceCount(0), fOnHeap(0),
-   fCheckSum(0), fCollectionProxy(nullptr), fClassVersion(0), fClassInfo(nullptr),
-   fTypeInfo(nullptr), fShowMembers(nullptr),
-   fStreamer(nullptr), fIsA(nullptr), fGlobalIsA(nullptr), fIsAMethod(nullptr),
-   fMerge(nullptr), fResetAfterMerge(nullptr), fNew(nullptr), fNewArray(nullptr), fDelete(nullptr), fDeleteArray(nullptr),
-   fDestructor(nullptr), fDirAutoAdd(nullptr), fStreamerFunc(nullptr), fConvStreamerFunc(nullptr), fSizeof(-1),
+   fCheckSum(0), fCollectionProxy(0), fClassVersion(0), fClassInfo(0),
+   fTypeInfo(0), fShowMembers(0),
+   fStreamer(0), fIsA(0), fGlobalIsA(0), fIsAMethod(0),
+   fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
+   fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fIsSyntheticPair(kFALSE), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
    fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
-   fCurrentInfo(nullptr), fLastReadInfo(nullptr), fRefProxy(nullptr),
-   fSchemaRules(nullptr), fStreamerImpl(&TClass::StreamerDefault)
+   fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
+   fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 
 {
    // Default ctor.
@@ -1093,29 +1090,29 @@ TClass::TClass() :
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a TClass object. This object contains the full dictionary
 /// of a class. It has list to baseclasses, datamembers and methods.
-/// Use this ctor to create a standalone TClass object. Only useful
-/// to get a temporary TClass interface to an interpreted class. Used by TTabCom.
-///
-/// \note Use `TClass::GetClass("ClassName")` to get access to a TClass object for a certain class!
+/// Use this ctor to create a standalone TClass object. Most useful
+/// to get a TClass interface to an interpreted class. Used by TTabCom.
+/// Normally you would use TClass::GetClass("class") to get access to a
+/// TClass object for a certain class.
 
 TClass::TClass(const char *name, Bool_t silent) :
    TDictionary(name),
-   fPersistentRef(nullptr),
-   fStreamerInfo(nullptr), fConversionStreamerInfo(nullptr), fRealData(nullptr),
-   fBase(nullptr), fData(nullptr), fUsingData(nullptr), fEnums(nullptr), fFuncTemplate(nullptr), fMethod(nullptr), fAllPubData(nullptr),
-   fAllPubMethod(nullptr), fClassMenuList(nullptr),
+   fPersistentRef(0),
+   fStreamerInfo(0), fConversionStreamerInfo(0), fRealData(0),
+   fBase(0), fData(0), fUsingData(0), fEnums(0), fFuncTemplate(0), fMethod(0), fAllPubData(0),
+   fAllPubMethod(0), fClassMenuList(0),
    fDeclFileName(""), fImplFileName(""), fDeclFileLine(0), fImplFileLine(0),
    fInstanceCount(0), fOnHeap(0),
-   fCheckSum(0), fCollectionProxy(nullptr), fClassVersion(0), fClassInfo(nullptr),
-   fTypeInfo(nullptr), fShowMembers(nullptr),
-   fStreamer(nullptr), fIsA(nullptr), fGlobalIsA(nullptr), fIsAMethod(nullptr),
-   fMerge(nullptr), fResetAfterMerge(nullptr), fNew(nullptr), fNewArray(nullptr), fDelete(nullptr), fDeleteArray(nullptr),
-   fDestructor(nullptr), fDirAutoAdd(nullptr), fStreamerFunc(nullptr), fConvStreamerFunc(nullptr), fSizeof(-1),
+   fCheckSum(0), fCollectionProxy(0), fClassVersion(0), fClassInfo(0),
+   fTypeInfo(0), fShowMembers(0),
+   fStreamer(0), fIsA(0), fGlobalIsA(0), fIsAMethod(0),
+   fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
+   fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fIsSyntheticPair(kFALSE), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
    fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
-   fCurrentInfo(nullptr), fLastReadInfo(nullptr), fRefProxy(nullptr),
-   fSchemaRules(nullptr), fStreamerImpl(&TClass::StreamerDefault)
+   fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
+   fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
    R__LOCKGUARD(gInterpreterMutex);
 
@@ -1138,60 +1135,58 @@ TClass::TClass(const char *name, Bool_t silent) :
    ResetBit(kLoading);
 
    if (fClassInfo) SetTitle(gCling->ClassInfo_Title(fClassInfo));
-   fConversionStreamerInfo = nullptr;
+   fConversionStreamerInfo = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Internal constructor.
-///
-/// \note Use `TClass::GetClass("ClassName")` to get access to a TClass object for a certain class!
+/// Create a TClass object. This object contains the full dictionary
+/// of a class. It has list to baseclasses, datamembers and methods.
 
 TClass::TClass(const char *name, Version_t cversion, Bool_t silent) :
    TDictionary(name),
-   fPersistentRef(nullptr),
-   fStreamerInfo(nullptr), fConversionStreamerInfo(nullptr), fRealData(nullptr),
-   fBase(nullptr), fData(nullptr), fUsingData(nullptr), fEnums(nullptr), fFuncTemplate(nullptr), fMethod(nullptr), fAllPubData(nullptr),
-   fAllPubMethod(nullptr), fClassMenuList(nullptr),
+   fPersistentRef(0),
+   fStreamerInfo(0), fConversionStreamerInfo(0), fRealData(0),
+   fBase(0), fData(0), fUsingData(0), fEnums(0), fFuncTemplate(0), fMethod(0), fAllPubData(0),
+   fAllPubMethod(0), fClassMenuList(0),
    fDeclFileName(""), fImplFileName(""), fDeclFileLine(0), fImplFileLine(0),
    fInstanceCount(0), fOnHeap(0),
-   fCheckSum(0), fCollectionProxy(nullptr), fClassVersion(0), fClassInfo(nullptr),
-   fTypeInfo(nullptr), fShowMembers(nullptr),
-   fStreamer(nullptr), fIsA(nullptr), fGlobalIsA(nullptr), fIsAMethod(nullptr),
-   fMerge(nullptr), fResetAfterMerge(nullptr), fNew(nullptr), fNewArray(nullptr), fDelete(nullptr), fDeleteArray(nullptr),
-   fDestructor(nullptr), fDirAutoAdd(nullptr), fStreamerFunc(nullptr), fConvStreamerFunc(nullptr), fSizeof(-1),
+   fCheckSum(0), fCollectionProxy(0), fClassVersion(0), fClassInfo(0),
+   fTypeInfo(0), fShowMembers(0),
+   fStreamer(0), fIsA(0), fGlobalIsA(0), fIsAMethod(0),
+   fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
+   fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fIsSyntheticPair(kFALSE), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
    fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
-   fCurrentInfo(nullptr), fLastReadInfo(nullptr), fRefProxy(nullptr),
-   fSchemaRules(nullptr), fStreamerImpl(&TClass::StreamerDefault)
+   fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
+   fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
    R__LOCKGUARD(gInterpreterMutex);
-   Init(name, cversion, nullptr, nullptr, nullptr, nullptr, -1, -1, nullptr, silent);
+   Init(name, cversion, 0, 0, 0, 0, -1, -1, 0, silent);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Internal constructor, mimicing the case of a class fwd declared in the interpreter.
-///
-/// \note Use `TClass::GetClass("ClassName")` to get access to a TClass object for a certain class!
+/// Create a TClass object. This object does not contain anything. We mimic
+/// the case of a class fwd declared in the interpreter.
 
 TClass::TClass(const char *name, Version_t cversion, EState theState, Bool_t silent) :
    TDictionary(name),
-   fPersistentRef(nullptr),
-   fStreamerInfo(nullptr), fConversionStreamerInfo(nullptr), fRealData(nullptr),
-   fBase(nullptr), fData(nullptr), fUsingData(nullptr), fEnums(nullptr), fFuncTemplate(nullptr), fMethod(nullptr), fAllPubData(nullptr),
-   fAllPubMethod(nullptr), fClassMenuList(nullptr),
+   fPersistentRef(0),
+   fStreamerInfo(0), fConversionStreamerInfo(0), fRealData(0),
+   fBase(0), fData(0), fUsingData(0), fEnums(0), fFuncTemplate(0), fMethod(0), fAllPubData(0),
+   fAllPubMethod(0), fClassMenuList(0),
    fDeclFileName(""), fImplFileName(""), fDeclFileLine(0), fImplFileLine(0),
    fInstanceCount(0), fOnHeap(0),
-   fCheckSum(0), fCollectionProxy(nullptr), fClassVersion(0), fClassInfo(nullptr),
-   fTypeInfo(nullptr), fShowMembers(nullptr),
-   fStreamer(nullptr), fIsA(nullptr), fGlobalIsA(nullptr), fIsAMethod(nullptr),
-   fMerge(nullptr), fResetAfterMerge(nullptr), fNew(nullptr), fNewArray(nullptr), fDelete(nullptr), fDeleteArray(nullptr),
-   fDestructor(nullptr), fDirAutoAdd(nullptr), fStreamerFunc(nullptr), fConvStreamerFunc(nullptr), fSizeof(-1),
+   fCheckSum(0), fCollectionProxy(0), fClassVersion(0), fClassInfo(0),
+   fTypeInfo(0), fShowMembers(0),
+   fStreamer(0), fIsA(0), fGlobalIsA(0), fIsAMethod(0),
+   fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
+   fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fIsSyntheticPair(kFALSE), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
    fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(theState),
-   fCurrentInfo(nullptr), fLastReadInfo(nullptr), fRefProxy(nullptr),
-   fSchemaRules(nullptr), fStreamerImpl(&TClass::StreamerDefault)
+   fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
+   fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
    R__LOCKGUARD(gInterpreterMutex);
 
@@ -1204,40 +1199,38 @@ TClass::TClass(const char *name, Version_t cversion, EState theState, Bool_t sil
    if (theState != kForwardDeclared && theState != kEmulated)
       ::Fatal("TClass::TClass",
               "A TClass entry cannot be initialized in a state different from kForwardDeclared or kEmulated.");
-   Init(name, cversion, nullptr, nullptr, nullptr, nullptr, -1, -1, nullptr, silent);
+   Init(name, cversion, 0, 0, 0, 0, -1, -1, 0, silent);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Internal constructor.
-///
 /// Create a TClass object. This object contains the full dictionary
 /// of a class. It has list to baseclasses, datamembers and methods.
 /// Use this ctor to create a standalone TClass object. Most useful
 /// to get a TClass interface to an interpreted class. Used by TTabCom.
+/// Normally you would use TClass::GetClass("class") to get access to a
+/// TClass object for a certain class.
 ///
 /// This copies the ClassInfo (i.e. does *not* take ownership of it).
-///
-/// \note Use `TClass::GetClass("class")` to get access to a TClass object for a certain class!
 
 TClass::TClass(ClassInfo_t *classInfo, Version_t cversion,
                const char *dfil, const char *ifil, Int_t dl, Int_t il, Bool_t silent) :
    TDictionary(""),
-   fPersistentRef(nullptr),
-   fStreamerInfo(nullptr), fConversionStreamerInfo(nullptr), fRealData(nullptr),
-   fBase(nullptr), fData(nullptr), fUsingData(nullptr), fEnums(nullptr), fFuncTemplate(nullptr), fMethod(nullptr), fAllPubData(nullptr),
-   fAllPubMethod(nullptr), fClassMenuList(nullptr),
+   fPersistentRef(0),
+   fStreamerInfo(0), fConversionStreamerInfo(0), fRealData(0),
+   fBase(0), fData(0), fUsingData(0), fEnums(0), fFuncTemplate(0), fMethod(0), fAllPubData(0),
+   fAllPubMethod(0), fClassMenuList(0),
    fDeclFileName(""), fImplFileName(""), fDeclFileLine(0), fImplFileLine(0),
    fInstanceCount(0), fOnHeap(0),
-   fCheckSum(0), fCollectionProxy(nullptr), fClassVersion(0), fClassInfo(nullptr),
-   fTypeInfo(nullptr), fShowMembers(nullptr),
-   fStreamer(nullptr), fIsA(nullptr), fGlobalIsA(nullptr), fIsAMethod(nullptr),
-   fMerge(nullptr), fResetAfterMerge(nullptr), fNew(nullptr), fNewArray(nullptr), fDelete(nullptr), fDeleteArray(nullptr),
-   fDestructor(nullptr), fDirAutoAdd(nullptr), fStreamerFunc(nullptr), fConvStreamerFunc(nullptr), fSizeof(-1),
+   fCheckSum(0), fCollectionProxy(0), fClassVersion(0), fClassInfo(0),
+   fTypeInfo(0), fShowMembers(0),
+   fStreamer(0), fIsA(0), fGlobalIsA(0), fIsAMethod(0),
+   fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
+   fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fIsSyntheticPair(kFALSE), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
    fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
-   fCurrentInfo(nullptr), fLastReadInfo(nullptr), fRefProxy(nullptr),
-   fSchemaRules(nullptr), fStreamerImpl(&TClass::StreamerDefault)
+   fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
+   fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
    R__LOCKGUARD(gInterpreterMutex);
 
@@ -1257,74 +1250,72 @@ TClass::TClass(ClassInfo_t *classInfo, Version_t cversion,
       fName = gInterpreter->ClassInfo_FullName(classInfo);
 
       R__LOCKGUARD(gInterpreterMutex);
-      Init(fName, cversion, nullptr, nullptr, dfil, ifil, dl, il, classInfo, silent);
+      Init(fName, cversion, 0, 0, dfil, ifil, dl, il, classInfo, silent);
    }
    ResetBit(kLoading);
 
-   fConversionStreamerInfo = nullptr;
+   fConversionStreamerInfo = 0;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Internal constructor.
-///
-/// \note Use `TClass::GetClass("class")` to get access to a TClass object for a certain class!
+/// Create a TClass object. This object contains the full dictionary
+/// of a class. It has list to baseclasses, datamembers and methods.
 
 TClass::TClass(const char *name, Version_t cversion,
                const char *dfil, const char *ifil, Int_t dl, Int_t il, Bool_t silent) :
    TDictionary(name),
-   fPersistentRef(nullptr),
-   fStreamerInfo(nullptr), fConversionStreamerInfo(nullptr), fRealData(nullptr),
-   fBase(nullptr), fData(nullptr), fUsingData(nullptr), fEnums(nullptr), fFuncTemplate(nullptr), fMethod(nullptr), fAllPubData(nullptr),
-   fAllPubMethod(nullptr), fClassMenuList(nullptr),
+   fPersistentRef(0),
+   fStreamerInfo(0), fConversionStreamerInfo(0), fRealData(0),
+   fBase(0), fData(0), fUsingData(0), fEnums(0), fFuncTemplate(0), fMethod(0), fAllPubData(0),
+   fAllPubMethod(0), fClassMenuList(0),
    fDeclFileName(""), fImplFileName(""), fDeclFileLine(0), fImplFileLine(0),
    fInstanceCount(0), fOnHeap(0),
-   fCheckSum(0), fCollectionProxy(nullptr), fClassVersion(0), fClassInfo(nullptr),
-   fTypeInfo(nullptr), fShowMembers(nullptr),
-   fStreamer(nullptr), fIsA(nullptr), fGlobalIsA(nullptr), fIsAMethod(nullptr),
-   fMerge(nullptr), fResetAfterMerge(nullptr), fNew(nullptr), fNewArray(nullptr), fDelete(nullptr), fDeleteArray(nullptr),
-   fDestructor(nullptr), fDirAutoAdd(nullptr), fStreamerFunc(nullptr), fConvStreamerFunc(nullptr), fSizeof(-1),
+   fCheckSum(0), fCollectionProxy(0), fClassVersion(0), fClassInfo(0),
+   fTypeInfo(0), fShowMembers(0),
+   fStreamer(0), fIsA(0), fGlobalIsA(0), fIsAMethod(0),
+   fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
+   fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fIsSyntheticPair(kFALSE), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
    fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
-   fCurrentInfo(nullptr), fLastReadInfo(nullptr), fRefProxy(nullptr),
-   fSchemaRules(nullptr), fStreamerImpl(&TClass::StreamerDefault)
+   fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
+   fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
    R__LOCKGUARD(gInterpreterMutex);
-   Init(name,cversion, nullptr, nullptr, dfil, ifil, dl, il, nullptr, silent);
+   Init(name,cversion, 0, 0, dfil, ifil, dl, il, 0, silent);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Internal constructor.
-///
-/// \note Use `TClass::GetClass("class")` to get access to a TClass object for a certain class!
+/// Create a TClass object. This object contains the full dictionary
+/// of a class. It has list to baseclasses, datamembers and methods.
 
 TClass::TClass(const char *name, Version_t cversion,
                const std::type_info &info, TVirtualIsAProxy *isa,
                const char *dfil, const char *ifil, Int_t dl, Int_t il,
                Bool_t silent) :
    TDictionary(name),
-   fPersistentRef(nullptr),
-   fStreamerInfo(nullptr), fConversionStreamerInfo(nullptr), fRealData(nullptr),
-   fBase(nullptr), fData(nullptr), fUsingData(nullptr), fEnums(nullptr), fFuncTemplate(nullptr), fMethod(nullptr), fAllPubData(nullptr),
-   fAllPubMethod(nullptr),
-   fClassMenuList(nullptr),
+   fPersistentRef(0),
+   fStreamerInfo(0), fConversionStreamerInfo(0), fRealData(0),
+   fBase(0), fData(0), fUsingData(0), fEnums(0), fFuncTemplate(0), fMethod(0), fAllPubData(0),
+   fAllPubMethod(0),
+   fClassMenuList(0),
    fDeclFileName(""), fImplFileName(""), fDeclFileLine(0), fImplFileLine(0),
    fInstanceCount(0), fOnHeap(0),
-   fCheckSum(0), fCollectionProxy(nullptr), fClassVersion(0), fClassInfo(nullptr),
-   fTypeInfo(nullptr), fShowMembers(nullptr),
-   fStreamer(nullptr), fIsA(nullptr), fGlobalIsA(nullptr), fIsAMethod(nullptr),
-   fMerge(nullptr), fResetAfterMerge(nullptr), fNew(nullptr), fNewArray(nullptr), fDelete(nullptr), fDeleteArray(nullptr),
-   fDestructor(nullptr), fDirAutoAdd(nullptr), fStreamerFunc(nullptr), fConvStreamerFunc(nullptr), fSizeof(-1),
+   fCheckSum(0), fCollectionProxy(0), fClassVersion(0), fClassInfo(0),
+   fTypeInfo(0), fShowMembers(0),
+   fStreamer(0), fIsA(0), fGlobalIsA(0), fIsAMethod(0),
+   fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
+   fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fIsSyntheticPair(kFALSE), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
    fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kHasTClassInit),
-   fCurrentInfo(nullptr), fLastReadInfo(nullptr), fRefProxy(nullptr),
-   fSchemaRules(nullptr), fStreamerImpl(&TClass::StreamerDefault)
+   fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
+   fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
    R__LOCKGUARD(gInterpreterMutex);
    // use info
-   Init(name, cversion, &info, isa, dfil, ifil, dl, il, nullptr, silent);
+   Init(name, cversion, &info, isa, dfil, ifil, dl, il, 0, silent);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1403,10 +1394,10 @@ void TClass::Init(const char *name, Version_t cversion,
       return;
    }
 
-   TClass **persistentRef = nullptr;
+   TClass **persistentRef = 0;
    if (oldcl) {
 
-      persistentRef = oldcl->fPersistentRef.exchange(nullptr);
+      persistentRef = oldcl->fPersistentRef.exchange(0);
 
       // The code from here is also in ForceReload.
       TClass::RemoveClass(oldcl);
@@ -1430,7 +1421,7 @@ void TClass::Init(const char *name, Version_t cversion,
 
       // Move the Schema Rules too.
       fSchemaRules = oldcl->fSchemaRules;
-      oldcl->fSchemaRules = nullptr;
+      oldcl->fSchemaRules = 0;
 
       // Move the TFunctions.
       fFuncTemplate = oldcl->fFuncTemplate;
@@ -1582,7 +1573,7 @@ void TClass::Init(const char *name, Version_t cversion,
       if (resolvedThis != fName) {
          oldcl = (TClass*)gROOT->GetListOfClasses()->FindObject(resolvedThis);
          if (oldcl && oldcl != this) {
-            persistentRef = oldcl->fPersistentRef.exchange(nullptr);
+            persistentRef = oldcl->fPersistentRef.exchange(0);
             ForceReload (oldcl);
          }
       }
@@ -1591,14 +1582,14 @@ void TClass::Init(const char *name, Version_t cversion,
          if (resolvedThis != htmp->String()) continue;
          oldcl = (TClass*)gROOT->GetListOfClasses()->FindObject(htmp->fOrigName); // gROOT->GetClass (htmp->fOrigName, kFALSE);
          if (oldcl && oldcl != this) {
-            persistentRef = oldcl->fPersistentRef.exchange(nullptr);
+            persistentRef = oldcl->fPersistentRef.exchange(0);
             ForceReload (oldcl);
          }
       }
    }
    if (fClassInfo) {
       SetTitle(gCling->ClassInfo_Title(fClassInfo));
-      if ( fDeclFileName == nullptr || fDeclFileName[0] == '\0' ) {
+      if ( fDeclFileName == 0 || fDeclFileName[0] == '\0' ) {
          fDeclFileName = kUndeterminedClassInfoName;
          // Missing interface:
          // fDeclFileLine = gInterpreter->ClassInfo_FileLine( fClassInfo );
@@ -1629,7 +1620,7 @@ void TClass::Init(const char *name, Version_t cversion,
          } else if (!silent) {
             Warning("Init","Collection proxy for %s was not properly initialized!",GetName());
          }
-         if (fStreamer==nullptr) {
+         if (fStreamer==0) {
             fStreamer =  TVirtualStreamerInfo::Factory()->GenEmulatedClassStreamer( GetName(), silent );
          }
       }
@@ -1664,39 +1655,39 @@ TClass::~TClass()
    // Not owning lists, don't call Delete()
    // But this still need to be done first because the TList destructor
    // does access the object contained (via GetObject()->TestBit(kCanDelete))
-   delete fStreamer;       fStreamer    =nullptr;
-   delete fAllPubData;     fAllPubData  =nullptr;
-   delete fAllPubMethod;   fAllPubMethod=nullptr;
+   delete fStreamer;       fStreamer    =0;
+   delete fAllPubData;     fAllPubData  =0;
+   delete fAllPubMethod;   fAllPubMethod=0;
 
    delete fPersistentRef.load();
 
    if (fBase.load())
       (*fBase).Delete();
-   delete fBase.load(); fBase = nullptr;
+   delete fBase.load(); fBase = 0;
 
    if (fData.load())
       (*fData).Delete();
-   delete fData.load();   fData = nullptr;
+   delete fData.load();   fData = 0;
 
    if (fUsingData.load())
       (*fUsingData).Delete();
-   delete fUsingData.load();   fUsingData = nullptr;
+   delete fUsingData.load();   fUsingData = 0;
 
    if (fEnums.load())
       (*fEnums).Delete();
-   delete fEnums.load(); fEnums = nullptr;
+   delete fEnums.load(); fEnums = 0;
 
    if (fFuncTemplate)
       fFuncTemplate->Delete();
-   delete fFuncTemplate; fFuncTemplate = nullptr;
+   delete fFuncTemplate; fFuncTemplate = 0;
 
    if (fMethod.load())
       (*fMethod).Delete();
-   delete fMethod.load();   fMethod=nullptr;
+   delete fMethod.load();   fMethod=0;
 
    if (fRealData)
       fRealData->Delete();
-   delete fRealData;  fRealData=nullptr;
+   delete fRealData;  fRealData=0;
 
    if (fStreamerInfo)
       fStreamerInfo->Delete();
@@ -1706,18 +1697,18 @@ TClass::~TClass()
       TClass::RemoveClass(this);
 
    gCling->ClassInfo_Delete(fClassInfo);
-   fClassInfo=nullptr;
+   fClassInfo=0;
 
    if (fClassMenuList)
       fClassMenuList->Delete();
-   delete fClassMenuList; fClassMenuList=nullptr;
+   delete fClassMenuList; fClassMenuList=0;
 
    fIsOffsetStreamerSet=kFALSE;
 
    if ( fIsA ) delete fIsA;
 
    if ( fRefProxy ) fRefProxy->Release();
-   fRefProxy = nullptr;
+   fRefProxy = 0;
 
    delete fStreamer;
    delete fCollectionProxy;
@@ -1743,7 +1734,7 @@ namespace {
       // Returns the number of rules loaded.
       // Returns -1 in case of error.
 
-      R__ASSERT(f!=nullptr);
+      R__ASSERT(f!=0);
       TString rule(1024);
       int c, state = 0;
       Int_t count = 0;
@@ -1813,7 +1804,7 @@ Int_t TClass::ReadRules()
    Int_t res = -1;
 
    FILE * f = fopen(sname,"r");
-   if (f != nullptr) {
+   if (f != 0) {
       res = ReadRulesContent(f);
       fclose(f);
    } else {
@@ -1836,7 +1827,7 @@ Int_t TClass::ReadRules( const char *filename )
    }
 
    FILE * f = fopen(filename,"r");
-   if (f == nullptr) {
+   if (f == 0) {
       ::Error("TClass::ReadRules","Failed to open %s\n",filename);
       return -1;
    }
@@ -1927,7 +1918,7 @@ const ROOT::Detail::TSchemaRuleSet* TClass::GetSchemaRules() const
 
 ROOT::Detail::TSchemaRuleSet* TClass::GetSchemaRules(Bool_t create)
 {
-   if (create && fSchemaRules == nullptr) {
+   if (create && fSchemaRules == 0) {
       fSchemaRules = new ROOT::Detail::TSchemaRuleSet();
       fSchemaRules->SetClass( this );
    }
@@ -2071,7 +2062,7 @@ void TClass::BuildRealData(void* pointer, Bool_t isTransient)
          // since another class might use this class for a persistent data member and
          // in this case we really want the error message.
          delete fRealData;
-         fRealData = nullptr;
+         fRealData = 0;
       } else {
          Error("BuildRealData", "Cannot find any ShowMembers function for %s!", GetName());
       }
@@ -2080,7 +2071,7 @@ void TClass::BuildRealData(void* pointer, Bool_t isTransient)
    // Take this opportunity to build the real data for base classes.
    // In case one base class is abstract, it would not be possible later
    // to create the list of real data for this abstract class.
-   TBaseClass* base = nullptr;
+   TBaseClass* base = 0;
    TIter next(GetListOfBases());
    while ((base = (TBaseClass*) next())) {
       if (base->IsSTLContainer()) {
@@ -2088,7 +2079,7 @@ void TClass::BuildRealData(void* pointer, Bool_t isTransient)
       }
       TClass* c = base->GetClassPointer();
       if (c) {
-         c->BuildRealData(nullptr, isTransient);
+         c->BuildRealData(0, isTransient);
       }
    }
 }
@@ -2096,7 +2087,7 @@ void TClass::BuildRealData(void* pointer, Bool_t isTransient)
 ////////////////////////////////////////////////////////////////////////////////
 /// Build the list of real data for an emulated class
 
-void TClass::BuildEmulatedRealData(const char *name, Longptr_t offset, TClass *cl, Bool_t isTransient)
+void TClass::BuildEmulatedRealData(const char *name, Long_t offset, TClass *cl, Bool_t isTransient)
 {
    R__LOCKGUARD(gInterpreterMutex);
 
@@ -2117,7 +2108,7 @@ void TClass::BuildEmulatedRealData(const char *name, Longptr_t offset, TClass *c
    TStreamerElement *element;
    while ((element = (TStreamerElement*)next())) {
       Int_t etype    = element->GetType();
-      Longptr_t eoffset = element->GetOffset();
+      Long_t eoffset = element->GetOffset();
       TClass *cle    = element->GetClassPointer();
       if (element->IsBase() || etype == TVirtualStreamerInfo::kBase) {
          //base class are skipped in this loop, they will be added at the end.
@@ -2128,7 +2119,7 @@ void TClass::BuildEmulatedRealData(const char *name, Longptr_t offset, TClass *c
                  etype == TVirtualStreamerInfo::kAny) {
          //member class
          TString rdname; rdname.Form("%s%s",name,element->GetFullName());
-         TRealData *rd = new TRealData(rdname,offset+eoffset,nullptr);
+         TRealData *rd = new TRealData(rdname,offset+eoffset,0);
          if (gDebug > 0) printf(" Class: %s, adding TRealData=%s, offset=%ld\n",cl->GetName(),rd->GetName(),rd->GetThisOffset());
          cl->GetListOfRealData()->Add(rd);
          // Now we a dot
@@ -2137,7 +2128,7 @@ void TClass::BuildEmulatedRealData(const char *name, Longptr_t offset, TClass *c
       } else {
          //others
          TString rdname; rdname.Form("%s%s",name,element->GetFullName());
-         TRealData *rd = new TRealData(rdname,offset+eoffset,nullptr);
+         TRealData *rd = new TRealData(rdname,offset+eoffset,0);
          if (gDebug > 0) printf(" Class: %s, adding TRealData=%s, offset=%ld\n",cl->GetName(),rd->GetName(),rd->GetThisOffset());
          cl->GetListOfRealData()->Add(rd);
       }
@@ -2153,7 +2144,7 @@ void TClass::BuildEmulatedRealData(const char *name, Longptr_t offset, TClass *c
       Int_t etype    = element->GetType();
       if (element->IsBase() || etype == TVirtualStreamerInfo::kBase) {
          //base class
-         Longptr_t eoffset = element->GetOffset();
+         Long_t eoffset = element->GetOffset();
          TClass *cle    = element->GetClassPointer();
          if (cle) cle->BuildEmulatedRealData(name,offset+eoffset,cl, isTransient);
       }
@@ -2257,7 +2248,7 @@ Bool_t TClass::CanSplitBaseAllow()
 
    if (!HasDataMemberInfo()) {
       TVirtualStreamerInfo *sinfo = ((TClass *)this)->GetCurrentStreamerInfo();
-      if (sinfo==nullptr) sinfo = GetStreamerInfo();
+      if (sinfo==0) sinfo = GetStreamerInfo();
       TIter next(sinfo->GetElements());
       TStreamerElement *element;
       while ((element = (TStreamerElement*)next())) {
@@ -2280,7 +2271,7 @@ Bool_t TClass::CanSplitBaseAllow()
    // we can find out.
    if (!HasDataMemberInfo()) return kTRUE;
 
-   TObjLink *lnk = GetListOfBases() ? fBase.load()->FirstLink() : nullptr;
+   TObjLink *lnk = GetListOfBases() ? fBase.load()->FirstLink() : 0;
 
    // Look at inheritance tree
    while (lnk) {
@@ -2325,7 +2316,7 @@ Bool_t TClass::CanSplit() const
    if (fName == "string")         { This->fCanSplit = 0; return kFALSE; }
    if (fName == "std::string")    { This->fCanSplit = 0; return kFALSE; }
 
-   if (GetCollectionProxy()!=nullptr) {
+   if (GetCollectionProxy()!=0) {
       // For STL collection we need to look inside.
 
       // However we do not split collections of collections
@@ -2335,12 +2326,12 @@ Bool_t TClass::CanSplit() const
       if (GetCollectionProxy()->HasPointers()) { This->fCanSplit = 0; return kFALSE; }
 
       TClass *valueClass = GetCollectionProxy()->GetValueClass();
-      if (valueClass == nullptr) { This->fCanSplit = 0; return kFALSE; }
+      if (valueClass == 0) { This->fCanSplit = 0; return kFALSE; }
       static TClassRef stdStringClass("std::string");
       if (valueClass==TString::Class() || valueClass==stdStringClass)
          { This->fCanSplit = 0; return kFALSE; }
       if (!valueClass->CanSplit()) { This->fCanSplit = 0; return kFALSE; }
-      if (valueClass->GetCollectionProxy() != nullptr) { This->fCanSplit = 0; return kFALSE; }
+      if (valueClass->GetCollectionProxy() != 0) { This->fCanSplit = 0; return kFALSE; }
 
       This->fCanSplit = 1;
       return kTRUE;
@@ -2393,9 +2384,9 @@ Long_t TClass::ClassProperty() const
 
 TObject *TClass::Clone(const char *new_name) const
 {
-   if (new_name == nullptr || new_name[0]=='\0' || fName == new_name) {
+   if (new_name == 0 || new_name[0]=='\0' || fName == new_name) {
       Error("Clone","The name of the class must be changed when cloning a TClass object.");
-      return nullptr;
+      return 0;
    }
 
    // Need to lock access to TROOT::GetListOfClasses so the cloning happens atomically
@@ -2523,12 +2514,12 @@ void TClass::Draw(Option_t *option)
 void TClass::Dump(const void *obj, Bool_t noAddr /*=kFALSE*/) const
 {
 
-   Longptr_t prObj = noAddr ? 0 : (Longptr_t)obj;
+   Long_t prObj = noAddr ? 0 : (Long_t)obj;
    if (IsTObject()) {
       if (!fIsOffsetStreamerSet) {
          CalculateStreamerOffset();
       }
-      TObject *tobj = (TObject*)((Longptr_t)obj + fOffsetStreamer);
+      TObject *tobj = (TObject*)((Long_t)obj + fOffsetStreamer);
 
 
       if (sizeof(this) == 4)
@@ -2594,7 +2585,7 @@ char *TClass::EscapeChars(const char *text) const
 
 TClass *TClass::GetActualClass(const void *object) const
 {
-   if (object==nullptr) return (TClass*)this;
+   if (object==0) return (TClass*)this;
    if (fIsA) {
       return (*fIsA)(object); // ROOT::IsA((ThisClass*)object);
    } else if (fGlobalIsA) {
@@ -2612,7 +2603,7 @@ TClass *TClass::GetActualClass(const void *object) const
 
       if (HasInterpreterInfo()) {
 
-         TVirtualIsAProxy *isa = nullptr;
+         TVirtualIsAProxy *isa = 0;
          if (GetClassInfo() && gCling->ClassInfo_HasMethod(fClassInfo,"IsA")) {
             isa = (TVirtualIsAProxy*)gROOT->ProcessLineFast(TString::Format("new ::TInstrumentedIsAProxy<%s>(0);",GetName()));
          }
@@ -2644,14 +2635,14 @@ TClass *TClass::GetBaseClass(const char *classname)
    // check if class name itself is equal to classname
    if (strcmp(GetName(), classname) == 0) return this;
 
-   if (!HasDataMemberInfo()) return nullptr;
+   if (!HasDataMemberInfo()) return 0;
 
    // Make sure we deal with possible aliases, we could also have normalized
    // the name.
    TClass *search = TClass::GetClass(classname,kTRUE,kTRUE);
 
    if (search) return GetBaseClass(search);
-   else return nullptr;
+   else return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2663,9 +2654,9 @@ TClass *TClass::GetBaseClass(const TClass *cl)
    // check if class name itself is equal to classname
    if (cl == this) return this;
 
-   if (!HasDataMemberInfo()) return nullptr;
+   if (!HasDataMemberInfo()) return 0;
 
-   TObjLink *lnk = GetListOfBases() ? fBase.load()->FirstLink() : nullptr;
+   TObjLink *lnk = GetListOfBases() ? fBase.load()->FirstLink() : 0;
 
    // otherwise look at inheritance tree
    while (lnk) {
@@ -2679,7 +2670,7 @@ TClass *TClass::GetBaseClass(const TClass *cl)
       }
       lnk = lnk->Next();
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2739,8 +2730,8 @@ Int_t TClass::GetBaseClassOffsetRecurse(const TClass *cl)
    TClass     *c;
    Int_t      off;
    TBaseClass *inh;
-   TObjLink *lnk = nullptr;
-   if (fBase.load() == nullptr)
+   TObjLink *lnk = 0;
+   if (fBase.load() == 0)
       lnk = GetListOfBases()->FirstLink();
    else
       lnk = fBase.load()->FirstLink();
@@ -2813,7 +2804,7 @@ Int_t TClass::GetBaseClassOffset(const TClass *toBase, void *address, bool isDer
 
 TClass *TClass::GetBaseDataMember(const char *datamember)
 {
-   if (!HasDataMemberInfo()) return nullptr;
+   if (!HasDataMemberInfo()) return 0;
 
    // Check if data member exists in class itself
    TDataMember *dm = GetDataMember(datamember);
@@ -2830,7 +2821,7 @@ TClass *TClass::GetBaseDataMember(const char *datamember)
       }
    }
 
-   return nullptr;
+   return 0;
 }
 
 namespace {
@@ -2838,7 +2829,7 @@ namespace {
    // and the class streamer) in the thread local storage.
 
    struct TClassLocalStorage {
-      TClassLocalStorage() : fCollectionProxy(nullptr), fStreamer(nullptr) {};
+      TClassLocalStorage() : fCollectionProxy(0), fStreamer(0) {};
 
       TVirtualCollectionProxy *fCollectionProxy;
       TClassStreamer          *fStreamer;
@@ -2847,21 +2838,21 @@ namespace {
       {
          // Return the thread storage for the TClass.
 
-         void **thread_ptr = (*gThreadTsd)(nullptr,ROOT::kClassThreadSlot);
+         void **thread_ptr = (*gThreadTsd)(0,ROOT::kClassThreadSlot);
          if (thread_ptr) {
-            if (*thread_ptr==nullptr) *thread_ptr = new TExMap();
+            if (*thread_ptr==0) *thread_ptr = new TExMap();
             TExMap *lmap = (TExMap*)(*thread_ptr);
             ULong_t hash = TString::Hash(&cl, sizeof(void*));
-            ULongptr_t local = 0;
+            ULong_t local = 0;
             UInt_t slot;
-            if ((local = (ULongptr_t)lmap->GetValue(hash, (Longptr_t)cl, slot)) != 0) {
+            if ((local = (ULong_t)lmap->GetValue(hash, (Long_t)cl, slot)) != 0) {
             } else {
-               local = (ULongptr_t) new TClassLocalStorage();
-               lmap->AddAt(slot, hash, (Longptr_t)cl, local);
+               local = (ULong_t) new TClassLocalStorage();
+               lmap->AddAt(slot, hash, (Long_t)cl, local);
             }
             return (TClassLocalStorage*)local;
          }
-         return nullptr;
+         return 0;
       }
    };
 }
@@ -2888,8 +2879,8 @@ TVirtualCollectionProxy *TClass::GetCollectionProxy() const
    //assert(TestBit(kLoading) || !TClassEdit::IsSTLCont(fName) || fCollectionProxy || 0 == "The TClass for the STL collection has no collection proxy!");
    if (gThreadTsd && fCollectionProxy) {
       TClassLocalStorage *local = TClassLocalStorage::GetStorage(this);
-      if (local == nullptr) return fCollectionProxy;
-      if (local->fCollectionProxy==nullptr) local->fCollectionProxy = fCollectionProxy->Generate();
+      if (local == 0) return fCollectionProxy;
+      if (local->fCollectionProxy==0) local->fCollectionProxy = fCollectionProxy->Generate();
       return local->fCollectionProxy;
    }
    return fCollectionProxy;
@@ -2902,8 +2893,8 @@ TClassStreamer *TClass::GetStreamer() const
 {
    if (gThreadTsd && fStreamer) {
       TClassLocalStorage *local = TClassLocalStorage::GetStorage(this);
-      if (local==nullptr) return fStreamer;
-      if (local->fStreamer==nullptr) {
+      if (local==0) return fStreamer;
+      if (local->fStreamer==0) {
          local->fStreamer = fStreamer->Generate();
          const std::type_info &orig = ( typeid(*fStreamer) );
          if (!local->fStreamer) {
@@ -2959,13 +2950,13 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent)
 
 TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hint_pair_offset, size_t hint_pair_size)
 {
-   if (!name || !name[0]) return nullptr;
+   if (!name || !name[0]) return 0;
 
-   if (strstr(name, "(anonymous)")) return nullptr;
+   if (strstr(name, "(anonymous)")) return 0;
    if (strncmp(name,"class ",6)==0) name += 6;
    if (strncmp(name,"struct ",7)==0) name += 7;
 
-   if (!gROOT->GetListOfClasses())  return nullptr;
+   if (!gROOT->GetListOfClasses())  return 0;
 
    // FindObject will take the read lock before actually getting the
    // TClass pointer so we will need not get a partially initialized
@@ -3020,7 +3011,7 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
    if (dict) {
       // The name is normalized, so the result of the first search is
       // authoritative.
-      if (!cl && !load) return nullptr;
+      if (!cl && !load) return 0;
 
       TClass *loadedcl = (dict)();
       if (loadedcl) {
@@ -3057,7 +3048,7 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
       checkTable = load && (normalizedName != name);
    }
 
-   if (!load) return nullptr;
+   if (!load) return 0;
 
 // This assertion currently fails because of
 //   TClass *c1 = TClass::GetClass("basic_iostream<char,char_traits<char> >");
@@ -3083,7 +3074,7 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
    const bool ispair = TClassEdit::IsStdPair(normalizedName) && !IsFromRootCling();
    const bool ispairbase = TClassEdit::IsStdPairBase(normalizedName) && !IsFromRootCling();
 
-   TClass *loadedcl = nullptr;
+   TClass *loadedcl = 0;
    if (checkTable) {
       loadedcl = LoadClassDefault(normalizedName.c_str(),silent);
    } else {
@@ -3157,7 +3148,7 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
 
          TClass *res = nullptr;
          if (funcPtr)
-            funcPtr(nullptr, 0, nullptr, &res);
+            funcPtr(0, 0, nullptr, &res);
          // else
          //   We could fallback to the interpreted case ...
          //   For now just 'fail' (return nullptr)
@@ -3207,7 +3198,7 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
 TClass *TClass::GetClass(const std::type_info& typeinfo, Bool_t load, Bool_t /* silent */, size_t hint_pair_offset, size_t hint_pair_size)
 {
    if (!gROOT->GetListOfClasses())
-      return nullptr;
+      return 0;
 
    //protect access to TROOT::GetIdMap
    R__READ_LOCKGUARD(ROOT::gCoreMutex);
@@ -3240,7 +3231,7 @@ TClass *TClass::GetClass(const std::type_info& typeinfo, Bool_t load, Bool_t /* 
      // }
    }
 
-   if (!load) return nullptr;
+   if (!load) return 0;
 
    DictFuncPtr_t dict = TClassTable::GetDict(typeinfo);
    if (dict) {
@@ -3303,8 +3294,8 @@ TClass *TClass::GetClass(const std::type_info& typeinfo, Bool_t load, Bool_t /* 
 
 TClass *TClass::GetClass(ClassInfo_t *info, Bool_t load, Bool_t silent)
 {
-   if (!info || !gCling->ClassInfo_IsValid(info)) return nullptr;
-   if (!gROOT->GetListOfClasses())    return nullptr;
+   if (!info || !gCling->ClassInfo_IsValid(info)) return 0;
+   if (!gROOT->GetListOfClasses())    return 0;
 
    // Technically we need the write lock only for the call to ClassInfo_FullName
    // and GenerateTClass but FindObject will take the read lock (and LoadClass will
@@ -3325,9 +3316,9 @@ TClass *TClass::GetClass(ClassInfo_t *info, Bool_t load, Bool_t silent)
 
    }
 
-   if (!load) return nullptr;
+   if (!load) return 0;
 
-   TClass *loadedcl = nullptr;
+   TClass *loadedcl = 0;
    if (cl) loadedcl = gROOT->LoadClass(cl->GetName(),silent);
    else    loadedcl = gROOT->LoadClass(name,silent);
 
@@ -3342,7 +3333,7 @@ TClass *TClass::GetClass(ClassInfo_t *info, Bool_t load, Bool_t silent)
       return ncl;
    } else {
       delete ncl;
-      return nullptr;
+      return 0;
    }
 }
 
@@ -3392,7 +3383,7 @@ DictFuncPtr_t  TClass::GetDict (const std::type_info& info)
 TDataMember *TClass::GetDataMember(const char *datamember) const
 {
    if ((!(fData.load() && (*fData).IsLoaded()) && !HasInterpreterInfo())
-       || datamember == nullptr) return nullptr;
+       || datamember == 0) return 0;
 
    // Strip off leading *'s and trailing [
    const char *start_name = datamember;
@@ -3427,11 +3418,11 @@ const char *TClass::GetDeclFileName() const
 ///
 /// In case of an emulated class, the list of emulated TRealData is built
 
-Longptr_t TClass::GetDataMemberOffset(const char *name) const
+Long_t TClass::GetDataMemberOffset(const char *name) const
 {
    TRealData *rd = GetRealData(name);
    if (rd) return rd->GetThisOffset();
-   if (strchr(name,'[')==nullptr) {
+   if (strchr(name,'[')==0) {
       // If this is a simple name there is a chance to find it in the
       // StreamerInfo even if we did not find it in the RealData.
       // For example an array name would be fArray[3] in RealData but
@@ -3460,11 +3451,11 @@ TRealData* TClass::GetRealData(const char* name) const
    }
 
    if (!fRealData) {
-      return nullptr;
+      return 0;
    }
 
    if (!name) {
-      return nullptr;
+      return 0;
    }
 
    // First try just the whole name.
@@ -3508,7 +3499,7 @@ TRealData* TClass::GetRealData(const char* name) const
    std::string::size_type firstDot = givenName.find_first_of(".");
    if (firstDot == std::string::npos) {
       // -- Not found, a simple name, all done.
-      return nullptr;
+      return 0;
    }
 
    //
@@ -3584,7 +3575,7 @@ TRealData* TClass::GetRealData(const char* name) const
    //
    std::string::size_type bracket = starname.str().find_first_of("[");
    if (bracket == std::string::npos) {
-      return nullptr;
+      return 0;
    }
    rd = (TRealData*) fRealData->FindObject(starname.str().substr(0, bracket).c_str());
    if (rd) {
@@ -3592,14 +3583,14 @@ TRealData* TClass::GetRealData(const char* name) const
    }
 
    // Not found;
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TFunctionTemplate *TClass::GetFunctionTemplate(const char *name)
 {
-   if (!gInterpreter || !HasInterpreterInfo()) return nullptr;
+   if (!gInterpreter || !HasInterpreterInfo()) return 0;
 
    // The following
    if (!fFuncTemplate) fFuncTemplate = new TListOfFunctionTemplates(this);
@@ -3615,12 +3606,12 @@ TFunctionTemplate *TClass::GetFunctionTemplate(const char *name)
 
 const char *TClass::GetSharedLibs()
 {
-   if (!gInterpreter) return nullptr;
+   if (!gInterpreter) return 0;
 
    if (fSharedLibs.IsNull())
       fSharedLibs = gInterpreter->GetClassSharedLibs(fName);
 
-   return !fSharedLibs.IsNull() ? fSharedLibs.Data() : nullptr;
+   return !fSharedLibs.IsNull() ? fSharedLibs.Data() : 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3922,7 +3913,7 @@ void TClass::GetMissingDictionariesForBaseClasses(TCollection& result, TCollecti
    TList* lb = GetListOfBases();
    if (!lb) return;
    TIter nextBase(lb);
-   TBaseClass* base = nullptr;
+   TBaseClass* base = 0;
    while ((base = (TBaseClass*)nextBase())) {
       TClass* baseCl = base->GetClassPointer();
       if (baseCl) {
@@ -3939,7 +3930,7 @@ void TClass::GetMissingDictionariesForMembers(TCollection& result, TCollection& 
    TListOfDataMembers* ldm = (TListOfDataMembers*)GetListOfDataMembers();
    if (!ldm) return ;
    TIter nextMemb(ldm);
-   TDataMember * dm = nullptr;
+   TDataMember * dm = 0;
    while ((dm = (TDataMember*)nextMemb())) {
       // If it is a transient
       if(!dm->IsPersistent()) {
@@ -3949,7 +3940,7 @@ void TClass::GetMissingDictionariesForMembers(TCollection& result, TCollection& 
          continue;
       }
       // If it is a built-in data type.
-      TClass* dmTClass = nullptr;
+      TClass* dmTClass = 0;
       if (dm->GetDataType()) {
          // We have a basic datatype.
          dmTClass = nullptr;
@@ -4051,7 +4042,7 @@ void TClass::GetMissingDictionariesWithRecursionCheck(TCollection& result, TColl
       if (GetCollectionProxy()) {
          // We need to look at the collection's content
          // The collection has different kind of elements the check would be required.
-         TClass* t = nullptr;
+         TClass* t = 0;
          if ((t = GetCollectionProxy()->GetValueClass())) {
             if (!t->HasDictionary()) {
                t->GetMissingDictionariesWithRecursionCheck(result, visited, recurse);
@@ -4109,7 +4100,7 @@ void TClass::GetMissingDictionaries(THashTable& result, bool recurse)
       if (GetCollectionProxy()) {
          // We need to look at the collection's content
          // The collection has different kind of elements the check would be required.
-         TClass* t = nullptr;
+         TClass* t = 0;
          if ((t = GetCollectionProxy()->GetValueClass())) {
             if (!t->HasDictionary()) {
                t->GetMissingDictionariesWithRecursionCheck(result, visited, recurse);
@@ -4127,7 +4118,7 @@ void TClass::GetMissingDictionaries(THashTable& result, bool recurse)
 
 Bool_t TClass::IsFolder(void *obj) const
 {
-   return Browse(obj,(TBrowser*)nullptr);
+   return Browse(obj,(TBrowser*)0);
 }
 
 //______________________________________________________________________________
@@ -4179,7 +4170,7 @@ void TClass::ResetClassInfo()
    if (fClassInfo) {
       TClass::RemoveClassDeclId(gInterpreter->GetDeclId(fClassInfo));
       gInterpreter->ClassInfo_Delete(fClassInfo);
-      fClassInfo = nullptr;
+      fClassInfo = 0;
    }
    // We can not check at this point whether after the unload there will
    // still be interpreter information about this class (as v5 was doing),
@@ -4219,15 +4210,15 @@ void TClass::ResetCaches()
    if (fMethod.load())
       (*fMethod).Unload();
 
-   delete fAllPubData; fAllPubData = nullptr;
+   delete fAllPubData; fAllPubData = 0;
 
    if (fBase.load())
       (*fBase).Delete();
-   delete fBase.load(); fBase = nullptr;
+   delete fBase.load(); fBase = 0;
 
    if (fRealData)
       fRealData->Delete();
-   delete fRealData;  fRealData=nullptr;
+   delete fRealData;  fRealData=0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4251,9 +4242,9 @@ void TClass::ResetMenuList()
 void TClass::ls(Option_t *options) const
 {
    TNamed::ls(options);
-   if (options==nullptr || options[0]==0) return;
+   if (options==0 || options[0]==0) return;
 
-   if (strstr(options,"streamerinfo")!=nullptr) {
+   if (strstr(options,"streamerinfo")!=0) {
       GetStreamerInfos()->ls(options);
 
       if (fConversionStreamerInfo.load()) {
@@ -4286,7 +4277,7 @@ void TClass::MakeCustomMenuList()
 
    TMethod *method;
    TMethodArg *methodArg;
-   TClass  *classPtr = nullptr;
+   TClass  *classPtr = 0;
    TIter next(methodList);
 
    while ((method = (TMethod*) next())) {
@@ -4305,7 +4296,7 @@ void TClass::MakeCustomMenuList()
       }
       if (sig.Length()!=0) sig.Remove(0,1);  // remove first comma
       menuItem = new TClassMenuItem(TClassMenuItem::kPopupUserFunction, this,
-                                    method->GetName(), method->GetName(),nullptr,
+                                    method->GetName(), method->GetName(),0,
                                     sig.Data(),-1,TClassMenuItem::kIsSelf);
       if (method->IsMenuItem() == kMenuToggle) menuItem->SetToggle();
       fClassMenuList->Add(menuItem);
@@ -4366,7 +4357,7 @@ TListOfFunctions *TClass::GetMethodList()
 
 TMethod *TClass::GetMethodAny(const char *method)
 {
-   if (!HasInterpreterInfo()) return nullptr;
+   if (!HasInterpreterInfo()) return 0;
    return (TMethod*) GetMethodList()->FindObject(method);
 }
 
@@ -4376,7 +4367,7 @@ TMethod *TClass::GetMethodAny(const char *method)
 
 TMethod *TClass::GetMethodAllAny(const char *method)
 {
-   if (!HasInterpreterInfo()) return nullptr;
+   if (!HasInterpreterInfo()) return 0;
 
    TMethod* m = GetMethodAny(method);
    if (m) return m;
@@ -4391,7 +4382,7 @@ TMethod *TClass::GetMethodAllAny(const char *method)
       }
    }
 
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4405,7 +4396,7 @@ TMethod *TClass::GetMethod(const char *method, const char *params,
                            Bool_t objectIsConst /* = kFALSE */)
 {
    if (fCanLoadClassInfo) LoadClassInfo();
-   if (!fClassInfo) return nullptr;
+   if (!fClassInfo) return 0;
 
    if (!gInterpreter)
       Fatal("GetMethod", "gInterpreter not initialized");
@@ -4414,7 +4405,7 @@ TMethod *TClass::GetMethod(const char *method, const char *params,
                                                                      method, params,
                                                                      objectIsConst);
 
-   if (!decl) return nullptr;
+   if (!decl) return 0;
 
    // search recursively in this class or its base classes
    TMethod* f = FindClassOrBaseMethodWithId(decl);
@@ -4423,7 +4414,7 @@ TMethod *TClass::GetMethod(const char *method, const char *params,
    Error("GetMethod",
          "\nDid not find matching TMethod <%s> with \"%s\" %sfor %s",
          method,params,objectIsConst ? "const " : "", GetName());
-   return nullptr;
+   return 0;
 }
 
 
@@ -4451,7 +4442,7 @@ TMethod *TClass::GetMethodWithPrototype(const char *method, const char *proto,
                                         ROOT::EFunctionMatchMode mode /* = ROOT::kConversionMatch */)
 {
    if (fCanLoadClassInfo) LoadClassInfo();
-   if (!fClassInfo) return nullptr;
+   if (!fClassInfo) return 0;
 
    if (!gInterpreter)
       Fatal("GetMethodWithPrototype", "gInterpreter not initialized");
@@ -4460,30 +4451,30 @@ TMethod *TClass::GetMethodWithPrototype(const char *method, const char *proto,
                                                                   method, proto,
                                                             objectIsConst, mode);
 
-   if (!decl) return nullptr;
+   if (!decl) return 0;
    TMethod* f = FindClassOrBaseMethodWithId(decl);
    if (f) return f;
    Error("GetMethodWithPrototype",
          "\nDid not find matching TMethod <%s> with \"%s\" %sfor %s",
          method,proto,objectIsConst ? "const " : "", GetName());
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Look for a method in this class that has the interface function
 /// address faddr.
 
-TMethod *TClass::GetClassMethod(Longptr_t faddr)
+TMethod *TClass::GetClassMethod(Long_t faddr)
 {
-   if (!HasInterpreterInfo()) return nullptr;
+   if (!HasInterpreterInfo()) return 0;
 
    TMethod *m;
    TIter    next(GetListOfMethods());
    while ((m = (TMethod *) next())) {
-      if (faddr == (Longptr_t)m->InterfaceMethod())
+      if (faddr == (Long_t)m->InterfaceMethod())
          return m;
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4496,7 +4487,7 @@ TMethod *TClass::GetClassMethod(const char *name, const char* params,
                                 Bool_t objectIsConst /* = kFALSE */)
 {
    if (fCanLoadClassInfo) LoadClassInfo();
-   if (!fClassInfo) return nullptr;
+   if (!fClassInfo) return 0;
 
    if (!gInterpreter)
       Fatal("GetClassMethod", "gInterpreter not initialized");
@@ -4505,7 +4496,7 @@ TMethod *TClass::GetClassMethod(const char *name, const char* params,
                                                                      name, params,
                                                                      objectIsConst);
 
-   if (!decl) return nullptr;
+   if (!decl) return 0;
 
    TFunction *f = GetMethodList()->Get(decl);
 
@@ -4522,7 +4513,7 @@ TMethod *TClass::GetClassMethodWithPrototype(const char *name, const char* proto
                       ROOT::EFunctionMatchMode mode /* = ROOT::kConversionMatch */)
 {
    if (fCanLoadClassInfo) LoadClassInfo();
-   if (!fClassInfo) return nullptr;
+   if (!fClassInfo) return 0;
 
    if (!gInterpreter)
       Fatal("GetClassMethodWithPrototype", "gInterpreter not initialized");
@@ -4532,7 +4523,7 @@ TMethod *TClass::GetClassMethodWithPrototype(const char *name, const char* proto
                                                                         objectIsConst,
                                                                         mode);
 
-   if (!decl) return nullptr;
+   if (!decl) return 0;
 
    TFunction *f = GetMethodList()->Get(decl);
 
@@ -4729,14 +4720,14 @@ TVirtualStreamerInfo* TClass::GetStreamerInfoAbstractEmulated(Int_t version /* =
       if (!sinfo) {
          // Let's take the first available StreamerInfo as a start
          Int_t ninfos = fStreamerInfo->GetEntriesFast() - 1;
-         for (Int_t i = -1; sinfo == nullptr && i < ninfos; ++i)
+         for (Int_t i = -1; sinfo == 0 && i < ninfos; ++i)
             sinfo = (TVirtualStreamerInfo *)fStreamerInfo->UncheckedAt(i);
       }
 
       if (sinfo) {
          sinfo = dynamic_cast<TVirtualStreamerInfo *>(sinfo->Clone());
          if (sinfo) {
-            sinfo->SetClass(nullptr);
+            sinfo->SetClass(0);
             sinfo->SetName(newname);
             sinfo->BuildCheck();
             sinfo->BuildOld();
@@ -4792,14 +4783,14 @@ TVirtualStreamerInfo* TClass::FindStreamerInfoAbstractEmulated(UInt_t checksum) 
       if (!sinfo) {
          // Let's take the first available StreamerInfo as a start
          Int_t ninfos = fStreamerInfo->GetEntriesFast() - 1;
-         for (Int_t i = -1; sinfo == nullptr && i < ninfos; ++i)
+         for (Int_t i = -1; sinfo == 0 && i < ninfos; ++i)
             sinfo = (TVirtualStreamerInfo *)fStreamerInfo->UncheckedAt(i);
       }
 
       if (sinfo) {
          sinfo = dynamic_cast<TVirtualStreamerInfo*>( sinfo->Clone() );
          if (sinfo) {
-            sinfo->SetClass(nullptr);
+            sinfo->SetClass(0);
             sinfo->SetName( newname );
             sinfo->BuildCheck();
             sinfo->BuildOld();
@@ -4882,7 +4873,7 @@ Bool_t TClass::InheritsFrom(const TClass *cl) const
 
    if (!HasDataMemberInfo()) {
       TVirtualStreamerInfo *sinfo = ((TClass *)this)->GetCurrentStreamerInfo();
-      if (sinfo==nullptr) sinfo = GetStreamerInfo();
+      if (sinfo==0) sinfo = GetStreamerInfo();
       TIter next(sinfo->GetElements());
       TStreamerElement *element;
       while ((element = (TStreamerElement*)next())) {
@@ -4909,16 +4900,16 @@ void *TClass::DynamicCast(const TClass *cl, void *obj, Bool_t up)
 {
    if (cl == this) return obj;
 
-   if (!HasDataMemberInfo()) return nullptr;
+   if (!HasDataMemberInfo()) return 0;
 
    Int_t off;
    if ((off = GetBaseClassOffset(cl, obj)) != -1) {
       if (up)
-         return (void*)((Longptr_t)obj+off);
+         return (void*)((Long_t)obj+off);
       else
-         return (void*)((Longptr_t)obj-off);
+         return (void*)((Long_t)obj-off);
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4993,7 +4984,7 @@ TClass::ObjectPtr TClass::NewObject(ENewType defConstructor, Bool_t quiet) const
       // constructor we can call through the wrapper.
       {
          TClass__GetCallingNewRAII callingNew(defConstructor);
-         p = fNew(nullptr);
+         p = fNew(0);
       }
       if (!p && !quiet) {
          //Error("New", "cannot create object of class %s version %d", GetName(), fClassVersion);
@@ -5050,7 +5041,7 @@ TClass::ObjectPtr TClass::NewObject(ENewType defConstructor, Bool_t quiet) const
       if (!sinfo) {
          if (!quiet)
             Error("New", "Cannot construct class '%s' version %d, no streamer info available!", GetName(), fClassVersion);
-         return nullptr;
+         return 0;
       }
 
       {
@@ -5156,7 +5147,7 @@ TClass::ObjectPtr TClass::NewObject(void *arena, ENewType defConstructor) const
       TVirtualStreamerInfo* sinfo = GetStreamerInfo();
       if (!sinfo) {
          Error("New with placement", "Cannot construct class '%s' version %d at address %p, no streamer info available!", GetName(), fClassVersion, arena);
-         return nullptr;
+         return 0;
       }
 
       {
@@ -5210,7 +5201,7 @@ TClass::ObjectPtr TClass::NewObjectArray(Long_t nElements, ENewType defConstruct
       // constructor we can call through the wrapper.
       {
          TClass__GetCallingNewRAII callingNew(defConstructor);
-         p = fNewArray(nElements, nullptr);
+         p = fNewArray(nElements, 0);
       }
       if (!p) {
          Error("NewArray", "cannot create object of class %s version %d", GetName(), fClassVersion);
@@ -5259,7 +5250,7 @@ TClass::ObjectPtr TClass::NewObjectArray(Long_t nElements, ENewType defConstruct
       TVirtualStreamerInfo* sinfo = GetStreamerInfo();
       if (!sinfo) {
          Error("NewArray", "Cannot construct class '%s' version %d, no streamer info available!", GetName(), fClassVersion);
-         return nullptr;
+         return 0;
       }
 
       {
@@ -5360,7 +5351,7 @@ TClass::ObjectPtr TClass::NewObjectArray(Long_t nElements, void *arena, ENewType
       TVirtualStreamerInfo* sinfo = GetStreamerInfo();
       if (!sinfo) {
          Error("NewArray with placement", "Cannot construct class '%s' version %d at address %p, no streamer info available!", GetName(), fClassVersion, arena);
-         return nullptr;
+         return 0;
       }
 
       {
@@ -5393,7 +5384,7 @@ TClass::ObjectPtr TClass::NewObjectArray(Long_t nElements, void *arena, ENewType
 void TClass::Destructor(void *obj, Bool_t dtorOnly)
 {
    // Do nothing if passed a null pointer.
-   if (obj == nullptr) return;
+   if (obj == 0) return;
 
    void* p = obj;
 
@@ -5464,7 +5455,7 @@ void TClass::Destructor(void *obj, Bool_t dtorOnly)
             Int_t i = fStreamerInfo->LowerBound();
             for (Int_t v = 0; v < fStreamerInfo->GetSize(); ++v, ++i) {
                Error("Destructor", "fStreamerInfo->At(%d): %p", i, fStreamerInfo->At(i));
-               if (fStreamerInfo->At(i) != nullptr) {
+               if (fStreamerInfo->At(i) != 0) {
                   Error("Destructor", "Doing Dump() ...");
                   ((TVirtualStreamerInfo*)fStreamerInfo->At(i))->Dump();
                }
@@ -5483,7 +5474,7 @@ void TClass::Destructor(void *obj, Bool_t dtorOnly)
             Int_t i = fStreamerInfo->LowerBound();
             for (Int_t v = 0; v < fStreamerInfo->GetSize(); ++v, ++i) {
                Error("Destructor2", "fStreamerInfo->At(%d): %p", i, fStreamerInfo->At(i));
-               if (fStreamerInfo->At(i) != nullptr) {
+               if (fStreamerInfo->At(i) != 0) {
                   // Do some debugging output.
                   Error("Destructor2", "Doing Dump() ...");
                   ((TVirtualStreamerInfo*)fStreamerInfo->At(i))->Dump();
@@ -5506,7 +5497,7 @@ void TClass::Destructor(void *obj, Bool_t dtorOnly)
 void TClass::Destructor(TClass::ObjectPtr obj, Bool_t dtorOnly)
 {
    // Do nothing if passed a null pointer.
-   if (obj.GetPtr() == nullptr)
+   if (obj.GetPtr() == 0)
       return;
 
    if (obj.GetAllocator()) {
@@ -5522,7 +5513,7 @@ void TClass::Destructor(TClass::ObjectPtr obj, Bool_t dtorOnly)
 void TClass::DeleteArray(void *ary, Bool_t dtorOnly)
 {
    // Do nothing if passed a null pointer.
-   if (ary == nullptr) return;
+   if (ary == 0) return;
 
    // Make a copy of the address.
    void* p = ary;
@@ -5632,7 +5623,7 @@ void TClass::DeleteArray(void *ary, Bool_t dtorOnly)
 void TClass::DeleteArray(TClass::ObjectPtr obj, Bool_t dtorOnly)
 {
    // Do nothing if passed a null pointer.
-   if (obj.GetPtr() == nullptr) return;
+   if (obj.GetPtr() == 0) return;
 
    if (obj.GetAllocator()) {
       obj.GetAllocator()->DeleteArray(obj.GetPtr(), dtorOnly);
@@ -5668,7 +5659,7 @@ void TClass::SetCanSplit(Int_t splitmode)
 void TClass::SetClassVersion(Version_t version)
 {
    fClassVersion = version;
-   fCurrentInfo = nullptr;
+   fCurrentInfo = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5779,7 +5770,7 @@ TClass *TClass::LoadClassDefault(const char *requestedname, Bool_t /* silent */)
       if (ncl) ncl->PostLoadCheck();
       return ncl;
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5805,7 +5796,7 @@ TClass *TClass::LoadClassCustom(const char *requestedname, Bool_t silent)
          return cl;
       }
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5970,7 +5961,7 @@ void TClass::PostLoadCheck()
       // BuildCheck is not appropriate here since it check a streamerinfo against the
       // 'current streamerinfo' which, at time point, would be the same as 'info'!
       if (info && GetListOfDataMembers() && !GetCollectionProxy()
-          && (info->GetCheckSum()!=GetCheckSum() && !info->CompareContent(this,nullptr,kFALSE,kFALSE, nullptr) && !(MatchLegacyCheckSum(info->GetCheckSum()))))
+          && (info->GetCheckSum()!=GetCheckSum() && !info->CompareContent(this,0,kFALSE,kFALSE, 0) && !(MatchLegacyCheckSum(info->GetCheckSum()))))
       {
          Bool_t warn = ! TestBit(kWarned);
          if (warn && info->GetOldVersion()<=2) {
@@ -6004,7 +5995,7 @@ void TClass::PostLoadCheck()
    the files will not be readable.\n"
                        , fClassVersion, GetName(), GetName(), fStreamerInfo->GetLast()+1);
             }
-            info->CompareContent(this,nullptr,kTRUE,kTRUE,nullptr);
+            info->CompareContent(this,0,kTRUE,kTRUE,0);
             SetBit(kWarned);
          }
       }
@@ -6277,7 +6268,7 @@ void TClass::SetUnloaded()
    // Make sure SetClassInfo, re-calculated the state.
    fState = kForwardDeclared;
 
-   delete fIsA; fIsA = nullptr;
+   delete fIsA; fIsA = 0;
    // Disable the autoloader while calling SetClassInfo, to prevent
    // the library from being reloaded!
    {
@@ -6285,11 +6276,11 @@ void TClass::SetUnloaded()
       TInterpreter::SuspendAutoParsing autoParseRaii(gCling);
       gInterpreter->SetClassInfo(this,kTRUE);
    }
-   fDeclFileName = nullptr;
+   fDeclFileName = 0;
    fDeclFileLine = 0;
-   fImplFileName = nullptr;
+   fImplFileName = 0;
    fImplFileLine = 0;
-   fTypeInfo     = nullptr;
+   fTypeInfo     = 0;
 
    if (fMethod.load()) {
       (*fMethod).Unload();
@@ -6436,7 +6427,7 @@ TVirtualStreamerInfo *TClass::SetStreamerInfo(Int_t /*version*/, const char * /*
    //fStreamerInfo = temp;
    delete [] temp;
 */
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6533,7 +6524,7 @@ UInt_t TClass::GetCheckSum(ECheckSum code, Bool_t &isvalid) const
 
       TIter nextBase(tlb);
 
-      TBaseClass *tbc=nullptr;
+      TBaseClass *tbc=0;
       while((tbc=(TBaseClass*)nextBase())) {
          name = tbc->GetName();
          Bool_t isSTL = TClassEdit::IsSTLCont(name);
@@ -6542,7 +6533,7 @@ UInt_t TClass::GetCheckSum(ECheckSum code, Bool_t &isvalid) const
          il = name.Length();
          for (int i=0; i<il; i++) id = id*3+name[i];
          if (code > kNoBaseCheckSum && !isSTL) {
-            if (tbc->GetClassPointer() == nullptr) {
+            if (tbc->GetClassPointer() == 0) {
                Error("GetCheckSum","Calculating the checksum for (%s) requires the base class (%s) meta information to be available!",
                      GetName(),tbc->GetName());
                isvalid = kFALSE;
@@ -6555,7 +6546,7 @@ UInt_t TClass::GetCheckSum(ECheckSum code, Bool_t &isvalid) const
    TList *tlm = ((TClass*)this)->GetListOfDataMembers();
    if (tlm) {   // Loop over members
       TIter nextMemb(tlm);
-      TDataMember *tdm=nullptr;
+      TDataMember *tdm=0;
       Long_t prop = 0;
       while((tdm=(TDataMember*)nextMemb())) {
          if (!tdm->IsPersistent())        continue;
@@ -6654,24 +6645,20 @@ void TClass::AdoptReferenceProxy(TVirtualRefProxy* proxy)
 
 void TClass::AdoptMemberStreamer(const char *name, TMemberStreamer *p)
 {
-   if (fRealData) {
+   if (!fRealData) return;
 
-      R__LOCKGUARD(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
 
-      TIter next(fRealData);
-      TRealData *rd;
-      while ((rd = (TRealData*)next())) {
-         if (strcmp(rd->GetName(),name) == 0) {
-            // If there is a TStreamerElement that took a pointer to the
-            // streamer we should inform it!
-            rd->AdoptStreamer(p);
-            return;
-         }
+   TIter next(fRealData);
+   TRealData *rd;
+   while ((rd = (TRealData*)next())) {
+      if (strcmp(rd->GetName(),name) == 0) {
+         // If there is a TStreamerElement that took a pointer to the
+         // streamer we should inform it!
+         rd->AdoptStreamer(p);
+         break;
       }
    }
-
-   Error("AdoptMemberStreamer","Cannot adope member streamer for %s::%s",GetName(), name);
-   delete p;
 
 //  NOTE: This alternative was proposed but not is not used for now,
 //  One of the major difference with the code above is that the code below
@@ -6688,6 +6675,7 @@ void TClass::AdoptMemberStreamer(const char *name, TMemberStreamer *p)
 //       return;
 //    }
 //    dm->SetStreamer(p);
+   return;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6756,7 +6744,7 @@ void TClass::StreamerTObject(const TClass* pThis, void *object, TBuffer &b, cons
    if (!pThis->fIsOffsetStreamerSet) {
       pThis->CalculateStreamerOffset();
    }
-   TObject *tobj = (TObject*)((Longptr_t)object + pThis->fOffsetStreamer);
+   TObject *tobj = (TObject*)((Long_t)object + pThis->fOffsetStreamer);
    tobj->Streamer(b);
 }
 
@@ -6765,7 +6753,7 @@ void TClass::StreamerTObject(const TClass* pThis, void *object, TBuffer &b, cons
 
 void TClass::StreamerTObjectInitialized(const TClass* pThis, void *object, TBuffer &b, const TClass * /* onfile_class */)
 {
-   TObject *tobj = (TObject*)((Longptr_t)object + pThis->fOffsetStreamer);
+   TObject *tobj = (TObject*)((Long_t)object + pThis->fOffsetStreamer);
    tobj->Streamer(b);
 }
 
@@ -6875,7 +6863,7 @@ void TClass::SetStreamerFunc(ClassStreamerFunc_t strm)
 {
    R__LOCKGUARD(gInterpreterMutex);
    if (fProperty != -1 && !fConvStreamerFunc &&
-       ( (fStreamerFunc == nullptr && strm != nullptr) || (fStreamerFunc != nullptr && strm == nullptr) ) )
+       ( (fStreamerFunc == 0 && strm != 0) || (fStreamerFunc != 0 && strm == 0) ) )
    {
       fStreamerFunc = strm;
 
@@ -6898,7 +6886,7 @@ void TClass::SetConvStreamerFunc(ClassConvStreamerFunc_t strm)
 {
    R__LOCKGUARD(gInterpreterMutex);
    if (fProperty != -1 &&
-       ( (fConvStreamerFunc == nullptr && strm != nullptr) || (fConvStreamerFunc != nullptr && strm == nullptr) ) )
+       ( (fConvStreamerFunc == 0 && strm != 0) || (fConvStreamerFunc != 0 && strm == 0) ) )
    {
       fConvStreamerFunc = strm;
 
@@ -7008,7 +6996,7 @@ TVirtualStreamerInfo *TClass::FindStreamerInfo(UInt_t checksum, Bool_t isTransie
             return info;
          }
       }
-      return nullptr;
+      return 0;
    }
 }
 
@@ -7029,7 +7017,7 @@ TVirtualStreamerInfo *TClass::FindStreamerInfo(TObjArray* arr, UInt_t checksum) 
          return info;
       }
    }
-   return nullptr;
+   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7039,7 +7027,7 @@ TVirtualStreamerInfo *TClass::GetConversionStreamerInfo( const char* classname, 
 {
    TClass *cl = TClass::GetClass( classname );
    if( !cl )
-      return nullptr;
+      return 0;
    return GetConversionStreamerInfo( cl, version );
 }
 
@@ -7053,7 +7041,7 @@ TVirtualStreamerInfo *TClass::GetConversionStreamerInfo( const TClass* cl, Int_t
    /////////////////////////////////////////////////////////////////////////////
 
    if( !cl )
-      return nullptr;
+      return 0;
 
    if( cl == this )
       return GetStreamerInfo( version );
@@ -7062,7 +7050,7 @@ TVirtualStreamerInfo *TClass::GetConversionStreamerInfo( const TClass* cl, Int_t
    // Check if we already have it
    /////////////////////////////////////////////////////////////////////////////
 
-   TObjArray* arr = nullptr;
+   TObjArray* arr = 0;
    if (fConversionStreamerInfo.load()) {
       std::map<std::string, TObjArray*>::iterator it;
       R__LOCKGUARD(gInterpreterMutex);
@@ -7084,7 +7072,7 @@ TVirtualStreamerInfo *TClass::GetConversionStreamerInfo( const TClass* cl, Int_t
    /////////////////////////////////////////////////////////////////////////////
 
    const TObjArray *clSI = cl->GetStreamerInfos();
-   TVirtualStreamerInfo* info = nullptr;
+   TVirtualStreamerInfo* info = 0;
    if( version >= -1 && version < clSI->GetSize() )
       info = (TVirtualStreamerInfo*)clSI->At( version );
 
@@ -7093,7 +7081,7 @@ TVirtualStreamerInfo *TClass::GetConversionStreamerInfo( const TClass* cl, Int_t
    }
 
    if( !info )
-      return nullptr;
+      return 0;
 
    //----------------------------------------------------------------------------
    // We have the right info so we need to clone it to create new object with
@@ -7109,7 +7097,7 @@ TVirtualStreamerInfo *TClass::GetConversionStreamerInfo( const TClass* cl, Int_t
 
    if( !info->BuildFor( this ) ) {
       delete info;
-      return nullptr;
+      return 0;
    }
 
    if (!info->IsCompiled()) {
@@ -7146,7 +7134,7 @@ TVirtualStreamerInfo *TClass::FindConversionStreamerInfo( const char* classname,
 {
    TClass *cl = TClass::GetClass( classname );
    if( !cl )
-      return nullptr;
+      return 0;
    return FindConversionStreamerInfo( cl, checksum );
 }
 
@@ -7160,7 +7148,7 @@ TVirtualStreamerInfo *TClass::FindConversionStreamerInfo( const TClass* cl, UInt
    /////////////////////////////////////////////////////////////////////////////
 
    if( !cl )
-      return nullptr;
+      return 0;
 
    if( cl == this )
       return FindStreamerInfo( checksum );
@@ -7169,8 +7157,8 @@ TVirtualStreamerInfo *TClass::FindConversionStreamerInfo( const TClass* cl, UInt
    // Check if we already have it
    /////////////////////////////////////////////////////////////////////////////
 
-   TObjArray* arr = nullptr;
-   TVirtualStreamerInfo* info = nullptr;
+   TObjArray* arr = 0;
+   TVirtualStreamerInfo* info = 0;
    if (fConversionStreamerInfo.load()) {
       std::map<std::string, TObjArray*>::iterator it;
 
@@ -7198,7 +7186,7 @@ TVirtualStreamerInfo *TClass::FindConversionStreamerInfo( const TClass* cl, UInt
    info = cl->FindStreamerInfo( checksum );
 
    if( !info )
-      return nullptr;
+      return 0;
 
    //----------------------------------------------------------------------------
    // We have the right info so we need to clone it to create new object with
@@ -7215,7 +7203,7 @@ TVirtualStreamerInfo *TClass::FindConversionStreamerInfo( const TClass* cl, UInt
 
    if( !info->BuildFor( this ) ) {
       delete info;
-      return nullptr;
+      return 0;
    }
 
    if (!info->IsCompiled()) {
@@ -7251,7 +7239,7 @@ void TClass::RegisterStreamerInfo(TVirtualStreamerInfo *info)
       R__LOCKGUARD(gInterpreterMutex);
       Int_t slot = info->GetClassVersion();
       if (fStreamerInfo->GetSize() > (slot-fStreamerInfo->LowerBound())
-          && fStreamerInfo->At(slot) != nullptr
+          && fStreamerInfo->At(slot) != 0
           && fStreamerInfo->At(slot) != info) {
          Error("RegisterStreamerInfo",
                "Register StreamerInfo for %s on non-empty slot (%d).",

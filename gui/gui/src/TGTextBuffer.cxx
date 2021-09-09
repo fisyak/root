@@ -20,17 +20,16 @@
 
 **************************************************************************/
 
-
-/** \class TGTextBuffer
-    \ingroup guiwidgets
-
-A text buffer is used in several widgets, like TGTextEntry,
-TGFileDialog, etc. It is a little wrapper around the powerful
-TString class and used for single line texts. For multi line texts
-use TGText.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGTextBuffer                                                         //
+//                                                                      //
+// A text buffer is used in several widgets, like TGTextEntry,          //
+// TGFileDialog, etc. It is a little wrapper around the powerful        //
+// TString class and used for single line texts. For multi line texts   //
+// use TGText.                                                          //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGTextBuffer.h"
 

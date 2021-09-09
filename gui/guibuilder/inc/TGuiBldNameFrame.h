@@ -12,6 +12,14 @@
 #ifndef ROOT_TGuiBldNameFrame
 #define ROOT_TGuiBldNameFrame
 
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGuiBldNameFrame - frame sdisplaying the class name of frame         //
+//                    and the name  of frame                            //
+//                                                                      //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
 
 #include "TGFrame.h"
 

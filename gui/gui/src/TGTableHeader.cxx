@@ -18,21 +18,20 @@
 
 ClassImp(TGTableHeader);
 
-
-/** \class TGTableHeader
-    \ingroup guiwidgets
-
-TGTableHeader is the class that implements a header for a row or
-column. Interactivity on a per column or row basis is implemented
-using this header.
-
-TGTableHeader is for internal use in TGTable only.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGTableHeader                                                        //
+//                                                                      //
+// TGTableHeader is the class that implements a header for a row or     //
+// column. Interactivity on a per column or row basis is implemented    //
+// using this header.                                                   //
+//                                                                      //
+// TGTableHeader is for internal use in TGTable only.                   //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-/// TGTableHeader constructor.
+/// TGTableHeader constuctor.
 
 TGTableHeader::TGTableHeader(const TGWindow *p, TGTable *table, TGString *label,
                              UInt_t position, EHeaderType type, UInt_t width,
@@ -67,7 +66,7 @@ TGTableHeader::TGTableHeader(const TGWindow *p, TGTable *table, TGString *label,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// TGTableHeader constructor.
+/// TGTableHeader constuctor.
 
 TGTableHeader::TGTableHeader(const TGWindow *p, TGTable *table,
                              const char *label, UInt_t position,

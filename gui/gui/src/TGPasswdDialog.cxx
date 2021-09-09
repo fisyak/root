@@ -9,34 +9,32 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TGPasswdDialog
-    \ingroup guiwidgets
-
-Graphic dialog to enter passwords
-
-Usage:
-
-```
-{
-  // Buffer for the passwd
-  char pwdbuf[128]
-
-  Open the dialog box
-  TGPasswdDialog dialog("My prompt", pwdbuf, 128);
-
-  // Wait until the user is done
-  while (gROOT->IsInterrupted())
-     gSystem->DispatchOneEvent(kFALSE);
-
-  // Password is now in pwdbuf
-  ...
-
-}
-```
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGPasswdDialog                                                       //
+//                                                                      //
+// Graphic dialog to enter passwords                                    //
+//                                                                      //
+// Usage:                                                               //
+//                                                                      //
+// {                                                                    //
+//   // Buffer for the passwd                                           //
+//   char pwdbuf[128]                                                   //
+//                                                                      //
+//   Open the dialog box                                                //
+//   TGPasswdDialog dialog("My prompt", pwdbuf, 128);                   //
+//                                                                      //
+//   // Wait until the user is done                                     //
+//   while (gROOT->IsInterrupted())                                     //
+//      gSystem->DispatchOneEvent(kFALSE);                              //
+//                                                                      //
+//   // Password is now in pwdbuf                                       //
+//   ...                                                                //
+//                                                                      //
+// }                                                                    //
+//                                                                      //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGPasswdDialog.h"
 

@@ -309,7 +309,7 @@ public:
   virtual void printValue(std::ostream& os) const ;
   virtual void printMultiline(std::ostream& os, Int_t contents, Bool_t verbose=kFALSE, TString indent="") const ;
 
-  inline void setCachedValue(double value, bool notifyClients = true) final;
+  static void setCacheCheck(Bool_t flag) ;
 
   // Evaluation error logging 
   class EvalError {
@@ -388,6 +388,7 @@ protected:
 
   
  public:
+  const RooAbsReal* createPlotProjection(const RooArgSet& depVars, const RooArgSet& projVars) const ;
   const RooAbsReal* createPlotProjection(const RooArgSet& depVars, const RooArgSet& projVars, RooArgSet*& cloneSet) const ;
   const RooAbsReal *createPlotProjection(const RooArgSet &dependentVars, const RooArgSet *projectedVars,
 				         RooArgSet *&cloneSet, const char* rangeName=0, const RooArgSet* condObs=0) const;
@@ -420,11 +421,8 @@ protected:
 
 
   // Internal consistency checking (needed by RooDataSet)
-  /// Check if current value is valid.
-  virtual bool isValid() const { return isValidReal(_value); }
-  /// Interface function to check if given value is a valid value for this object. Returns true unless overridden.
-  virtual bool isValidReal(double /*value*/, bool printError = false) const { (void)printError; return true; }
-
+  virtual Bool_t isValid() const ;
+  virtual Bool_t isValidReal(Double_t value, Bool_t printError=kFALSE) const ;
 
   // Function evaluation and error tracing
   Double_t traceEval(const RooArgSet* set) const ;
@@ -590,22 +588,6 @@ class BatchInterfaceAccessor {
       theReal.checkBatchComputation(evalData, evtNo, normSet, relAccuracy);
     }
 };
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Overwrite the value stored in this object's cache.
-/// This can be used to fake a computation that resulted in `value`.
-/// \param[in] value Value to write.
-/// \param[in] setValDirty If true, notify users of this object that its value changed.
-/// This is the default.
-void RooAbsReal::setCachedValue(double value, bool notifyClients) {
-  _value = value;
-
-  if (notifyClients) {
-    setValueDirty();
-    _valueDirty = false;
-  }
-}
 
 
 #endif

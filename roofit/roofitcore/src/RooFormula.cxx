@@ -62,12 +62,12 @@ Check the tutorial rf506_msgservice.C for details.
 #include "RooMsgService.h"
 #include "RooBatchCompute.h"
 
+#include "ROOT/RMakeUnique.hxx"
 #include "TObjString.h"
 #include "TClass.h"
 
-#include <memory>
-#include <regex>
 #include <sstream>
+#include <regex>
 
 using namespace std;
 

@@ -30,7 +30,6 @@
 
 #include "Rtypes.h"
 #include "snprintf.h"
-#include "strlcpy.h"
 
 #include "rootcoreteam.h"
 
@@ -780,9 +779,8 @@ int DrawCredits(bool draw, bool extended)
 
       struct passwd *pwd = getpwuid(getuid());
       if (pwd) {
-         size_t sz = strlen(pwd->pw_gecos)+1;
-         char *name = new char [sz];
-         strlcpy(name, pwd->pw_gecos, sz);
+         char *name = new char [strlen(pwd->pw_gecos)+1];
+         strcpy(name, pwd->pw_gecos);
          char *s = strchr(name, ',');
          if (s) *s = 0;
          char line[1024];

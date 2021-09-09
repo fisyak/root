@@ -26,8 +26,9 @@
 #include "RooAbsCache.h"
 #include "RooAbsCacheElement.h"
 #include "RooNameReg.h"
-#include "RooHelpers.h"
 #include <vector>
+
+class RooNameSet ;
 
 
 template<class T>
@@ -83,8 +84,8 @@ public:
   } 
 
   T* getObjByIndex(Int_t index) const ;
-  RooArgSet selectFromSet1(RooArgSet const& argSet, int index) const ;
-  RooArgSet selectFromSet2(RooArgSet const& argSet, int index) const ;
+  const RooNameSet* nameSet1ByIndex(Int_t index) const ;
+  const RooNameSet* nameSet2ByIndex(Int_t index) const ;
 
   virtual void insertObjectHook(T&) {
     // Interface function to perform post-insert operations on cached object
@@ -220,7 +221,6 @@ Int_t RooCacheManager<T>::setObj(const RooArgSet* nset, const RooArgSet* iset, T
   // Check if object is already registered
   Int_t sterileIdx(-1) ;
   if (getObj(nset,iset,&sterileIdx,isetRangeName)) {
-    delete obj; // important! do not forget to cleanup memory
     return lastIndex() ;
   } 
 
@@ -316,21 +316,29 @@ T* RooCacheManager<T>::getObjByIndex(Int_t index) const
 }
 
 
-/// Create RooArgSet contatining the objects that are both in the cached set 1
-//with a given index and an input argSet.
+/// Retrieve RooNameSet associated with slot at given index.
 template<class T>
-RooArgSet RooCacheManager<T>::selectFromSet1(RooArgSet const& argSet, int index) const
+const RooNameSet* RooCacheManager<T>::nameSet1ByIndex(Int_t index) const
 {
-  return RooHelpers::selectFromArgSet(argSet, _nsetCache.at(index).nameSet1());
+  if (index<0||index>=_size) {
+    oocoutE(_owner,ObjectHandling) << "RooCacheManager::getNormListByIndex: ERROR index (" 
+				   << index << ") out of range [0," << _size-1 << "]" << std::endl ;
+    return 0 ;
+  }
+  return &_nsetCache[index].nameSet1() ;
 }
 
 
-/// Create RooArgSet contatining the objects that are both in the cached set 2
-//with a given index and an input argSet.
+/// Retrieve RooNameSet associated with slot at given index.
 template<class T>
-RooArgSet RooCacheManager<T>::selectFromSet2(RooArgSet const& argSet, int index) const 
+const RooNameSet* RooCacheManager<T>::nameSet2ByIndex(Int_t index) const 
 {
-  return RooHelpers::selectFromArgSet(argSet, _nsetCache.at(index).nameSet2());
+  if (index<0||index>=_size) {
+    oocoutE(_owner,ObjectHandling) << "RooCacheManager::getNormListByIndex: ERROR index (" 
+				   << index << ") out of range [0," << _size-1 << "]" << std::endl ;
+    return 0 ;
+  }
+  return &_nsetCache[index].nameSet2() ;
 }
 
 

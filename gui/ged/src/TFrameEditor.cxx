@@ -10,16 +10,21 @@
  *************************************************************************/
 
 
-
-/** \class TFrameEditor
-    \ingroup ged
-
-Editor of frame objects.
-
-Frame border can be set to sunken, raised or no border.
-Border size can be set for sunken or rized frames (1-15 pixels).
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TFrameEditor                                                        //
+//                                                                      //
+//  Editor of frame objects.                                            //
+//                                                                      //
+//  Frame border can be set to sunken, raised or no border.             //
+//  Border size can be set for sunken or rized frames (1-15 pixels).    //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+//Begin_Html
+/*
+<img src="gif/TFrameEditor.gif">
 */
+//End_Html
 
 #include "TFrameEditor.h"
 #include "TGedEditor.h"

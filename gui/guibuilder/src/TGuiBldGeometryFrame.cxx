@@ -22,10 +22,6 @@
 #include "TGuiBldDragManager.h"
 #include "TGFrame.h"
 
-/** \class TGuiBldGeometryFrame
-    \ingroup guibuilder
-*/
-
 ClassImp(TGuiBldGeometryFrame);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -9,17 +9,14 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
-/** \class TGImageMap
-    \ingroup guiwidgets
-
-(with TGRegion and TGRegionWithId help classes)
-
-A TGImageMap provides the functionality like a clickable image in
-a web browser with sensitive regions (MAP HTML tag).
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGImageMap (with TGRegion and TGRegionWithId help classes)           //
+//                                                                      //
+// A TGImageMap provides the functionality like a clickable image in    //
+// a web browser with sensitive regions (MAP HTML tag).                 //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGImageMap.h"
 #include "TRefCnt.h"
@@ -58,7 +55,7 @@ public:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Assignment of region data object.
+/// Assignemnt of region data object.
 
 TGRegionData &TGRegionData::operator=(const TGRegionData &r)
 {
@@ -71,6 +68,7 @@ TGRegionData &TGRegionData::operator=(const TGRegionData &r)
 }
 
 
+////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a region object.
 
@@ -289,7 +287,7 @@ TGRegion TGRegion::Eor(const TGRegion &r) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return dimension of region (width, height).
+/// Return dimension of region (widht, height).
 
 TGDimension TGRegion::GetDimension() const
 {
@@ -318,6 +316,7 @@ Bool_t TGRegion::operator==(const TGRegion &r) const
 }
 
 
+////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 /// Create GUI region (with id and possible tooltip).
 
@@ -407,6 +406,7 @@ void TGRegionWithId::SetToolTipText(const char *text, Long_t delayms,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 /// Create an image map widget.
 
 TGImageMap::TGImageMap(const TGWindow *p, const TGPicture *pic) :
@@ -479,7 +479,7 @@ void TGImageMap::AddRegion(const TGRegion &region, Int_t id)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Create popup menu or returns existing for regions with specified id.
+/// Create popoup menu or returns existing for regions with specified id.
 
 TGPopupMenu *TGImageMap::CreatePopup(Int_t id)
 {

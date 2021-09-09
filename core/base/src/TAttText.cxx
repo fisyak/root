@@ -34,17 +34,16 @@ by many other classes (graphics, histograms). It holds all the text attributes.
 ## Text attributes
 Text attributes are:
 
-  - [Text Alignment](\ref ATTTEXT1)
-  - [Text Angle](\ref ATTTEXT2)
-  - [Text Color](\ref ATTTEXT3)
-  - [Text Size](\ref ATTTEXT4)
-  - [Text Font and Precision](\ref ATTTEXT5)
-     - [Font quality and speed](\ref ATTTEXT51)
-     - [How to use True Type Fonts](\ref ATTTEXT52)
-     - [List of the currently supported fonts](\ref ATTTEXT53)
+  - [Text Alignment](#T1)
+  - [Text Angle](#T2)
+  - [Text Color](#T3)
+  - [Text Size](#T4)
+  - [Text Font and Precision](#T5)
+     - [Font quality and speed](#T51)
+     - [How to use True Type Fonts](#T52)
+     - [List of the currently supported fonts](#T53)
 
-\anchor ATTTEXT1
-## Text Alignment
+## <a name="T1"></a> Text Alignment
 
 The text alignment is an integer number (`align`) allowing to control
 the horizontal and vertical position of the text string with respect
@@ -93,8 +92,7 @@ They allow to write:
 object->SetTextAlign(kHAlignLeft+kVAlignTop);
 ~~~
 
-\anchor ATTTEXT2
-## Text Angle
+## <a name="T2"></a> Text Angle
 
 Text angle in degrees.
 The text angle of any class inheriting from `TAttText` can
@@ -106,8 +104,7 @@ Begin_Macro(source)
 textangle.C
 End_Macro
 
-\anchor ATTTEXT3
-## Text Color
+## <a name="T3"></a> Text Color
 
 The text color is a color index (integer) pointing in the ROOT
 color table.
@@ -138,8 +135,7 @@ The transparency is available on all platforms when the flag `OpenGL.CanvasPrefe
 in `$ROOTSYS/etc/system.rootrc`, or on Mac with the Cocoa backend. On the file output
 it is visible with PDF, PNG, Gif, JPEG, SVG, TeX ... but not PostScript.
 
-\anchor ATTTEXT4
-## Text Size
+## <a name="T4"></a> Text Size
 
 If the text precision (see next paragraph) is smaller than 3, the text
 size (`textsize`) is a fraction of the current pad size. Therefore the
@@ -169,8 +165,7 @@ The text size of any class inheriting from `TAttText` can
 be changed using the method `SetTextSize` and retrieved using the
 method `GetTextSize`.
 
-\anchor ATTTEXT5
-## Text Font and Precision
+## <a name="T5"></a> Text Font and Precision
 
 The text font code is combination of the font number and the precision.
 ~~~ {.cpp}
@@ -190,8 +185,7 @@ The text font and precision of any class inheriting from `TAttText` can
 be changed using the method `SetTextFont` and retrieved using the
 method `GetTextFont`.
 
-\anchor ATTTEXT51
-### Font quality and speed
+### <a name="T51"></a> Font quality and speed
 
 When precision 0 is used, only the original non-scaled system fonts are
 used. The fonts have a minimum (4) and maximum (37) size in pixels. These
@@ -201,8 +195,7 @@ Precision 1 and 2 fonts have a different behaviour depending if the
 True Type Fonts (TTF) are used or not. If TTF are used, you always get very good
 quality scalable and rotatable fonts. However TTF are slow.
 
-\anchor ATTTEXT52
-### How to use True Type Fonts
+### <a name="T52"></a> How to use True Type Fonts
 
 One can activate the TTF by adding (or activating) the following line
 in the `.rootrc` file:
@@ -225,8 +218,7 @@ printout given by this command:
    Unix.*.Root.UseTTFonts:   true                           [Global]
 ~~~
 
-\anchor ATTTEXT53
-### List of the currently supported fonts
+### <a name="T53"></a> List of the currently supported fonts
 
 ~~~ {.cpp}
    Font number         X11 Names             Win32/TTF Names

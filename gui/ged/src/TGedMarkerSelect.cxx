@@ -10,29 +10,24 @@
  *************************************************************************/
 
 
-
-/** \class TGedMarkerSelect
-    \ingroup ged
-
-The TGedMarkerSelect widget is a button showing selected marker
-and a little down arrow. When clicked on the arrow the
-TGedMarkerPopup pops up.
-
-Selecting a marker in this widget will generate the event:
-kC_MARKERSEL, kMAR_SELCHANGED, widget id, style.
-
-and the signal:
-MarkerSelected(Style_t marker)
-
-*/
-
-/** \class TGedMarkerPopup
-    \ingroup ged
-
-The TGedMarkerPopup is a popup containing buttons to
-select marker style.
-
-*/
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGedMarkerSelect, TGedMarkerPopup                                    //
+//                                                                      //
+// The TGedMarkerPopup is a popup containing buttons to                 //
+// select marker style.                                                 //
+//                                                                      //
+// The TGedMarkerSelect widget is a button showing selected marker      //
+// and a little down arrow. When clicked on the arrow the               //
+// TGedMarkerPopup pops up.                                             //
+//                                                                      //
+// Selecting a marker in this widget will generate the event:           //
+// kC_MARKERSEL, kMAR_SELCHANGED, widget id, style.                     //
+//                                                                      //
+// and the signal:                                                      //
+// MarkerSelected(Style_t marker)                                      //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGedMarkerSelect.h"
 #include "TGPicture.h"

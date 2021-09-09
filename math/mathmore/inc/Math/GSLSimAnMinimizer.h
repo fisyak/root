@@ -50,85 +50,74 @@ namespace ROOT {
 
 
 //_____________________________________________________________________________________
+/**
+   GSLSimAnMinimizer class for minimization using simulated annealing
+   using the algorithm from
+   <A HREF="http://www.gnu.org/software/gsl/manual/html_node/Simulated-Annealing.html">
+   GSL</A>.
+   It implements the ROOT::Minimizer interface and
+   a plug-in (name "GSLSimAn") exists to instantiate this class via the plug-in manager
+
+   @ingroup MultiMin
+*/
+class GSLSimAnMinimizer : public  ROOT::Math::BasicMinimizer {
+
+public:
+
    /**
-      GSLSimAnMinimizer class for minimization using simulated annealing
-      using the algorithm from
-      <A HREF="http://www.gnu.org/software/gsl/manual/html_node/Simulated-Annealing.html">
-      GSL</A>.
-      It implements the ROOT::Minimizer interface and
-      a plug-in (name "GSLSimAn") exists to instantiate this class via the plug-in manager
-      Configuration (Setting/getting) the options is done through the methods defined in the
-      ROOT::Math::Minimizer class.
-      The user needs to call the base class method ROOT::Math::Minimizer::SetOptions to set the
-      corresponding options.
-      Here is some code example for increasing n_tries from 200 (default) to 1000
-       ```
-         ROOT::Math::GenAlgoOptions simanOpt;
-         simanOpt.SetValue("n_tries", 1000);
-         ROOT::Math::MinimizerOptions opt;
-         opt.SetExtraOptions(simanOpt);
-         minimizer->SetOptions(opt);
-       ```
-
-      @ingroup MultiMin
+      Default constructor
    */
-   class GSLSimAnMinimizer : public ROOT::Math::BasicMinimizer {
+   GSLSimAnMinimizer (int type = 0);
 
-   public:
-      /**
-         Default constructor
-      */
-      GSLSimAnMinimizer(int type = 0);
+   /**
+      Destructor (no operations)
+   */
+   virtual ~GSLSimAnMinimizer ();
 
-      /**
-         Destructor (no operations)
-      */
-      virtual ~GSLSimAnMinimizer();
+private:
+   // usually copying is non trivial, so we make this unaccessible
 
-   private:
-      // usually copying is non trivial, so we make this unaccessible
+   /**
+      Copy constructor
+   */
+   GSLSimAnMinimizer(const GSLSimAnMinimizer &) : ROOT::Math::BasicMinimizer() {}
 
-      /**
-         Copy constructor
-      */
-      GSLSimAnMinimizer(const GSLSimAnMinimizer &) : ROOT::Math::BasicMinimizer() {}
+   /**
+      Assignment operator
+   */
+   GSLSimAnMinimizer & operator = (const GSLSimAnMinimizer & rhs)  {
+      if (this == &rhs) return *this;  // time saving self-test
+      return *this;
+   }
 
-      /**
-         Assignment operator
-      */
-      GSLSimAnMinimizer &operator=(const GSLSimAnMinimizer &rhs)
-      {
-         if (this == &rhs)
-            return *this; // time saving self-test
-         return *this;
-      }
+public:
 
-   public:
-      /// method to perform the minimization
-      virtual bool Minimize();
 
-      /// number of calls
-      unsigned int NCalls() const;
+   /// method to perform the minimization
+   virtual  bool Minimize();
 
-      /// Get current minimizer option parameteres
-      const GSLSimAnParams &MinimizerParameters() const { return fSolver.Params(); }
+   /// number of calls
+   unsigned int NCalls() const;
 
-      /// set new minimizer option parameters using directly the GSLSimAnParams structure
-      void SetParameters(const GSLSimAnParams &params)
-      {
-         fSolver.SetParams(params);
-         DoSetMinimOptions(params); // store new parameters also in MinimizerOptions
-      }
+   /// Get current minimizer options
+   virtual ROOT::Math::MinimizerOptions Options() const;
 
-   protected:
-      /// set minimizer option parameters from stored ROOT::Math::MinimizerOptions (fOpt)
-      void DoSetSimAnParameters(const MinimizerOptions &opt);
+   /// Get current minimizer option parameteres 
+   const GSLSimAnParams & MinimizerParameters() const { return fSolver.Params(); }
+   
 
-      /// Set the Minimizer options from the simulated annealing parameters
-      void DoSetMinimOptions(const GSLSimAnParams &params);
+   /// set new minimizer options
+   virtual void SetOptions(const ROOT::Math::MinimizerOptions & opt);
 
-   private:
-      ROOT::Math::GSLSimAnnealing fSolver;
+   /// set new minimizer option parameters using directly the GSLSimAnParams structure 
+   void SetParameters(const  GSLSimAnParams & params ) {  fSolver.SetParams(params); }
+
+protected:
+
+private:
+
+
+   ROOT::Math::GSLSimAnnealing  fSolver;
 
 
 };

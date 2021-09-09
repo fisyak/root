@@ -20,19 +20,16 @@
 
 **************************************************************************/
 
-
-/** \class TGDockableFrame
-    \ingroup guiwidgets
-
-A frame with handles that allow it to be
-undocked (i.e. put in a transient frame of its own) and to be docked
-again or hidden and shown again. It uses the TGDockButton, which is
-a button with two vertical bars (||) and TGDockHideButton, which is
-a button with a small triangle. The TGUndockedFrame is a transient
-frame that on closure will put the frame back in the dock.
-
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// A TGDockableFrame is a frame with handles that allow it to be        //
+// undocked (i.e. put in a transient frame of its own) and to be docked //
+// again or hidden and shown again. It uses the TGDockButton, which is  //
+// a button with two vertical bars (||) and TGDockHideButton, which is  //
+// a button with a small triangle. The TGUndockedFrame is a transient   //
+// frame that on closure will put the frame back in the dock.           //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TColor.h"
 #include "TGFrame.h"

@@ -16,7 +16,6 @@
 #include <map>
 #include <iostream>
 #include <sstream>
-#include <memory>
 
 #include <RooPlot.h>
 #include <RooArgSet.h>
@@ -30,8 +29,7 @@
 
 #include "RooStats/HistFactory/Systematics.h"
 class ParamHistFunc;
-class RooProduct;
-class RooHistFunc;
+
 
 namespace RooStats{
   namespace HistFactory{
@@ -55,7 +53,7 @@ namespace RooStats{
 						    Measurement& measurement );
     
       RooWorkspace* MakeSingleChannelModel( Measurement& measurement, Channel& channel );
-      RooWorkspace*  MakeCombinedModel(std::vector<std::string>, std::vector<std::unique_ptr<RooWorkspace>>&);
+      RooWorkspace*  MakeCombinedModel(std::vector<std::string>, std::vector<RooWorkspace*>);
     
       static RooWorkspace* MakeCombinedModel( Measurement& measurement );
       static void PrintCovarianceMatrix(RooFitResult* result, RooArgSet* params, 
@@ -70,7 +68,7 @@ namespace RooStats{
 			      std::vector<std::string>& likelihoodTermNames, 
 			      std::vector<std::string>& totSystTermNames);
 
-      std::unique_ptr<RooProduct> CreateNormFactor(RooWorkspace* proto, std::string& channel,
+      std::string AddNormFactor(RooWorkspace* proto, std::string& channel, 
 				std::string& sigmaEpsilon, Sample& sample, bool doRatio);
 
       void AddMultiVarGaussConstraint(RooWorkspace* proto, std::string prefix, 
@@ -87,24 +85,26 @@ namespace RooStats{
 			   std::map<std::string,double> logNormSyst, 
 			   std::map<std::string,double> noSyst);
 
-      RooAbsArg* MakeLinInterpWithConstraint(RooHistFunc* nominalHistFunc, RooWorkspace* proto, const std::vector<HistoSys>&,
-				   const std::string& prefix, std::vector<std::string>& likelihoodTermNames, const RooArgList& observables) const;
+      void LinInterpWithConstraint(RooWorkspace* proto, const TH1* nominal, std::vector<HistoSys>,
+				   std::string prefix, std::string productPrefix, 
+				   std::string systTerm, 
+				   std::vector<std::string>& likelihoodTermNames);
 
       RooWorkspace* MakeSingleChannelWorkspace(Measurement& measurement, Channel& channel);
 
-      void MakeTotalExpected(RooWorkspace* proto, const std::string& totName,
-			     const std::vector<RooProduct*>& sampleScaleFactors,
-			     std::vector<std::vector<RooAbsArg*>>&  sampleHistFuncs) const;
+      void MakeTotalExpected(RooWorkspace* proto, std::string totName, 
+			     std::vector<std::string>& syst_x_expectedPrefixNames,
+			     std::vector<std::string>& normByNames);
     
       RooDataSet* MergeDataSets(RooWorkspace* combined,
-				std::vector<std::unique_ptr<RooWorkspace>>& wspace_vec,
+				std::vector<RooWorkspace*> wspace_vec, 
 				std::vector<std::string> channel_names, 
 				std::string dataSetName,
 				RooArgList obsList,
 				RooCategory* channelCat);
 
-      RooHistFunc* MakeExpectedHistFunc(const TH1* hist, RooWorkspace* proto, std::string prefix,
-          const RooArgList& observables) const;
+      void ProcessExpectedHisto(const TH1* hist, RooWorkspace* proto, std::string prefix,
+				std::string productPrefix, std::string systTerm );
 
       void SetObsToExpected(RooWorkspace* proto, std::string obsPrefix, std::string expPrefix, 
 			    int lowBin, int highBin);
@@ -136,9 +136,7 @@ namespace RooStats{
       std::vector<std::string> fObsNameVec;
       std::string fObsName;
       std::vector<std::string> fPreprocessFunctions;
-
-      RooArgList createObservables(const TH1 *hist, RooWorkspace *proto) const;
-
+    
       ClassDef(RooStats::HistFactory::HistoToWorkspaceFactoryFast,3)
     };
   

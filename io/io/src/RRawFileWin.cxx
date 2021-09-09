@@ -10,6 +10,7 @@
  *************************************************************************/
 
 #include "ROOT/RRawFileWin.hxx"
+#include "ROOT/RMakeUnique.hxx"
 
 #include "TError.h"
 
@@ -18,7 +19,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <memory>
 #include <stdexcept>
 #include <string>
 

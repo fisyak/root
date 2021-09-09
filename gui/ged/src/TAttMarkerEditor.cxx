@@ -9,13 +9,19 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/** \class TAttMarkerEditor
-    \ingroup ged
-
-Implements GUI for editing marker attributes.
-        color, style and size
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+//  TAttMarkerEditor                                                    //
+//                                                                      //
+//  Implements GUI for editing marker attributes.                       //
+//            color, style and size                                     //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+//Begin_Html
+/*
+<img src="gif/TAttMarkerEditor.gif">
 */
+//End_Html
 
 
 #include "TAttMarkerEditor.h"

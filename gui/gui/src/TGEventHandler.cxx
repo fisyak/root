@@ -9,10 +9,11 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/** \class TGEventHandler
-    \ingroup guiwidgets
-*/
-
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// TGEventHandler                                                       //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
 
 #include "TGEventHandler.h"
 #include "TGWindow.h"

@@ -6,7 +6,6 @@
  *   WV, Wouter Verkerke, UC Santa Barbara, verkerke@slac.stanford.edu       *
  *   DK, David Kirkby,    UC Irvine,         dkirkby@uci.edu                 *
  *   AL, Alfio Lazzaro,   INFN Milan,        alfio.lazzaro@mi.infn.it        *
- *   PB, Patrick Bos,     NL eScience Center, p.bos@esciencecenter.nl        *
  *                                                                           *
  *                                                                           *
  * Redistribution and use in source and binary forms,                        *
@@ -14,10 +13,10 @@
  * listed in LICENSE (http://roofit.sourceforge.net/license.txt)             *
  *****************************************************************************/
 
+#ifndef __ROOFIT_NOROOMINIMIZER
+
 #ifndef ROO_MINIMIZER
 #define ROO_MINIMIZER
-
-#include <memory>  // shared_ptr, unique_ptr
 
 #include "TObject.h"
 #include "TStopwatch.h"
@@ -27,16 +26,8 @@
 #include <utility>
 #include "TMatrixDSymfwd.h"
 
-#include "RooArgList.h" // cannot just use forward decl due to default argument in lastMinuitFit
-
-#include "RooMinimizerFcn.h"
-#include "RooGradMinimizerFcn.h"
-
-#include "RooSentinel.h"
-#include "RooMsgService.h"
-
 #include "Fit/Fitter.h"
-#include <stdexcept> // logic_error
+#include "RooMinimizerFcn.h"
 
 class RooAbsReal ;
 class RooFitResult ;
@@ -48,11 +39,9 @@ class RooPlot ;
 
 class RooMinimizer : public TObject {
 public:
-  enum class FcnMode { classic, gradient };
 
-  explicit RooMinimizer(RooAbsReal &function, FcnMode fcnMode = FcnMode::classic);
-  static std::unique_ptr<RooMinimizer> create(RooAbsReal &function, FcnMode fcnMode = FcnMode::classic);
-  ~RooMinimizer() override;
+  RooMinimizer(RooAbsReal& function) ;
+  virtual ~RooMinimizer() ;
 
   enum Strategy { Speed=0, Balance=1, Robustness=2 } ;
   enum PrintLevel { None=-1, Reduced=0, Normal=1, ExtraForProblem=2, Maximum=3 } ;
@@ -90,8 +79,6 @@ public:
   void setProfile(Bool_t flag=kTRUE) { _profile = flag ; }
   Bool_t setLogFile(const char* logf=0) { return fitterFcn()->SetLogFile(logf); }
 
-  Int_t getPrintLevel() const;
-
   void setMinimizerType(const char* type) ;
 
   static void cleanup() ;
@@ -104,10 +91,7 @@ public:
 
   ROOT::Fit::Fitter* fitter() ;
   const ROOT::Fit::Fitter* fitter() const ;
-
-  ROOT::Math::IMultiGenFunction* getFitterMultiGenFcn() const;
-  ROOT::Math::IMultiGenFunction* getMultiGenFcn() const;
-
+  
 protected:
 
   friend class RooAbsPdf ;
@@ -116,30 +100,30 @@ protected:
   void profileStart() ;
   void profileStop() ;
 
-  inline Int_t getNPar() const { return fitterFcn()->getNDim() ; }
+  inline Int_t getNPar() const { return fitterFcn()->NDim() ; }
   inline std::ofstream* logfile() { return fitterFcn()->GetLogFile(); }
   inline Double_t& maxFCN() { return fitterFcn()->GetMaxFCN() ; }
-
-  const RooAbsMinimizerFcn *fitterFcn() const;
-  RooAbsMinimizerFcn *fitterFcn();
-
-  bool fitFcn() const;
+  
+  const RooMinimizerFcn* fitterFcn() const {  return ( fitter()->GetFCN() ? ((RooMinimizerFcn*) fitter()->GetFCN()) : _fcn ) ; }
+  RooMinimizerFcn* fitterFcn() { return ( fitter()->GetFCN() ? ((RooMinimizerFcn*) fitter()->GetFCN()) : _fcn ) ; }
 
 private:
-  Int_t _printLevel = 1;
-  Int_t _status = -99;
-  Bool_t _profile = kFALSE;
 
-  Bool_t _verbose = kFALSE;
-  TStopwatch _timer;
-  TStopwatch _cumulTimer;
-  Bool_t _profileStart = kFALSE;
+  Int_t       _printLevel ;
+  Int_t       _status ;
+  Bool_t      _optConst ;
+  Bool_t      _profile ;
+  RooAbsReal* _func ;
 
-  TMatrixDSym *_extV = 0;
+  Bool_t      _verbose ;
+  TStopwatch  _timer ;
+  TStopwatch  _cumulTimer ;
+  Bool_t      _profileStart ;
 
-  RooAbsMinimizerFcn *_fcn;
-  std::string _minimizerType = "Minuit";
-  FcnMode _fcnMode;
+  TMatrixDSym* _extV ;
+
+  RooMinimizerFcn *_fcn;
+  std::string _minimizerType;
 
   static ROOT::Fit::Fitter *_theFitter ;
 
@@ -147,7 +131,10 @@ private:
 
   RooMinimizer(const RooMinimizer&) ;
 	
-  ClassDefOverride(RooMinimizer,0) // RooFit interface to ROOT::Fit::Fitter
+  ClassDef(RooMinimizer,0) // RooFit interface to ROOT::Fit::Fitter
 } ;
+
+
+#endif
 
 #endif

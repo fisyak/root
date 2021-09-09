@@ -20,9 +20,10 @@
 #include "RooRealProxy.h"
 #include "RooSetProxy.h"
 
-namespace ROOT{ namespace Math {
-class RichardsonDerivator;
-}}
+
+#include "Math/WrappedFunction.h"
+#include "Math/RichardsonDerivator.h"
+
 
 class RooRealVar;
 class RooArgList ;

@@ -12,9 +12,8 @@
 #define ROOT_RLAZYDS
 
 #include "ROOT/RDF/RLazyDSImpl.hxx"
+#include "ROOT/RMakeUnique.hxx"
 #include "ROOT/RDataFrame.hxx"
-
-#include <memory>
 
 namespace ROOT {
 

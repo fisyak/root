@@ -25,9 +25,6 @@ ClassImp(ROOT::Internal::TFriendProxyDescriptor);
 namespace ROOT {
 namespace Internal {
 
-   //////////////////////////////////////////////////////////////////////////
-   /// Constructor
-
    TFriendProxyDescriptor::TFriendProxyDescriptor(const char *treename,
                                                   const char *aliasname,
                                                   Int_t index) :
@@ -35,14 +32,14 @@ namespace Internal {
       fDuplicate(kFALSE),
       fIndex(index)
    {
+      // Constructor
    }
-
-   //////////////////////////////////////////////////////////////////////////
-   /// Return true if this descriptor and the other are equivalent (describe the
-   /// same entity).
 
    Bool_t TFriendProxyDescriptor::IsEquivalent(const TFriendProxyDescriptor *other)
    {
+      // Return true if this descriptor and the other are equivalent (describe the
+      // same entity).
+
       if ( !other ) return kFALSE;
       if ( strcmp(GetName(),other->GetName()) ) return kFALSE;
 
@@ -59,11 +56,10 @@ namespace Internal {
       return kTRUE;
    }
 
-   //////////////////////////////////////////////////////////////////////////
-   /// Print the declaration needed for this descriptor.
-
    void TFriendProxyDescriptor::OutputClassDecl(FILE *hf, int offset, UInt_t maxVarname)
    {
+      // Print the declaration needed for this descriptor.
+
       fprintf(hf,"%-*sstruct TFriendPx_%s : public TFriendProxy {\n", offset," ", GetName() );
       fprintf(hf,"%-*s   TFriendPx_%s(TBranchProxyDirector *director,TTree *tree,Int_t index) :\n",
               offset," ", GetName() );
@@ -84,11 +80,10 @@ namespace Internal {
       fprintf(hf,"%-*s};\n",offset," ");
    }
 
-   //////////////////////////////////////////////////////////////////////////
-   /// Print the declaration needed for this descriptor.
-
    void TFriendProxyDescriptor::OutputDecl(FILE *hf, int offset, UInt_t maxVarname)
    {
+      // Print the declaration needed for this descriptor.
+
       TString typeName = "TFriendPx_";
       typeName += GetName();
       fprintf(hf,"%-*s%-*s %s;\n",

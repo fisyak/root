@@ -19,7 +19,6 @@
 #include "TArrayI.h"
 #include "TClass.h"
 
-#include <nlohmann/json.hpp>
 
 using namespace ROOT::Experimental;
 

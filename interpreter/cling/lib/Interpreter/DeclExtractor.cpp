@@ -211,10 +211,7 @@ namespace cling {
       }
     }
 
-    // Create a new body.
-    auto newCS = CompoundStmt::Create(*m_Context, Stmts, CS->getLBracLoc(),
-                                      CS->getRBracLoc());
-    FD->setBody(newCS);
+    CS->replaceStmts(*m_Context, Stmts);
 
     if (hasNoErrors && !TouchedDecls.empty()) {
       // Put the wrapper after its declarations. (Nice when AST dumping)

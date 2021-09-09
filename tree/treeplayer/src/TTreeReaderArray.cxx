@@ -28,6 +28,7 @@
 #include "TTreeReader.h"
 #include "TGenCollectionProxy.h"
 #include "TRegexp.h"
+#include "ROOT/RMakeUnique.hxx"
 
 #include <memory>
 

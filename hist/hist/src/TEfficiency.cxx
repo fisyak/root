@@ -608,12 +608,13 @@ In the 1-dimensional case, you can use the same options as for the TGraphAsymmEr
 method. For 2-dimensional TEfficiency objects, you can pass the same options as
 for a TH2::Draw object.
 
-*/
+********************************************************************************/
+//______________________________________________________________________________
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Default constructor
+///default constructor
 ///
-/// Should not be used explicitly
+///should not be used explicitly
 
 TEfficiency::TEfficiency():
 fBeta_alpha(kDefBetaAlpha),
@@ -636,7 +637,7 @@ fWeight(kDefWeight)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Constructor using two existing histograms as input
+///constructor using two existing histograms as input
 ///
 ///Input: passed - contains the events fulfilling some criteria
 ///       total  - contains all investigated events
