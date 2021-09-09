@@ -176,7 +176,7 @@ ROOT_BUILD_OPTION(spectrum ON "Enable support for TSpectrum")
 ROOT_BUILD_OPTION(unuran OFF "Enable support for UNURAN (package for generating non-uniform random numbers)")
 ROOT_BUILD_OPTION(uring OFF "Enable support for io_uring (requires liburing and Linux kernel >= 5.1)")
 ROOT_BUILD_OPTION(vc OFF "Enable support for Vc (SIMD Vector Classes for C++)")
-ROOT_BUILD_OPTION(vmc OFF "Build VMC simulation library")
+ROOT_BUILD_OPTION(vmc ON "Build VMC simulation library")
 ROOT_BUILD_OPTION(vdt ON "Enable support for VDT (fast and vectorisable mathematical functions)")
 ROOT_BUILD_OPTION(veccore OFF "Enable support for VecCore SIMD abstraction library")
 ROOT_BUILD_OPTION(vecgeom OFF "Enable support for VecGeom vectorized geometry library")
@@ -408,7 +408,7 @@ endif()
 
 #---Removed options------------------------------------------------------------
 foreach(opt afdsmgrd afs bonjour castor chirp geocad glite globus hdfs ios
-            krb5 ldap qt qtgsi rfio ruby sapdb srp table python)
+            krb5 ldap qt qtgsi rfio ruby sapdb srp python)
   if(${opt})
     message(FATAL_ERROR ">>> Option '${opt}' is no longer supported in ROOT ${ROOT_VERSION}.")
   endif()
