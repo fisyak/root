@@ -59,7 +59,7 @@ public:
    void                     SetId(Int_t id)     {fId = id;}
    void                     SetMaterial(TGeoMaterial *mat) {fMaterial = mat;}
    virtual void             SetCerenkovProperties(TObject* cerenkov) {fMaterial->SetCerenkovProperties(cerenkov);}   
-   ClassDef(TGeoMedium, 1)              // tracking medium
+   ClassDef(TGeoMedium, 2)              // tracking medium
 
 };
 
