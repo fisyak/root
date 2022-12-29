@@ -235,7 +235,7 @@ enum ESendRecvOptions {
 #ifdef __CINT__
 typedef void *Func_t;
 #else
-typedef void ((*Func_t)());
+typedef void (*Func_t)();
 #endif
 
 R__EXTERN const char  *gRootDir;
@@ -257,9 +257,9 @@ R__EXTERN TVirtualMutex *gSystemMutex;
 class TProcessEventTimer : public TTimer {
 public:
    TProcessEventTimer(Long_t delay);
-   Bool_t Notify() { return kTRUE; }
+   Bool_t Notify() override { return kTRUE; }
    Bool_t ProcessEvents();
-   ClassDef(TProcessEventTimer,0)  // Process pending events at fixed time intervals
+   ClassDefOverride(TProcessEventTimer,0)  // Process pending events at fixed time intervals
 };
 
 
@@ -283,7 +283,7 @@ protected:
    Int_t            fSigcnt{0};                 //Number of pending signals
    TString          fWdpath;                    //Working directory
    TString          fHostname;                  //Hostname
-   Bool_t           fInsideNotify{kFALSE};      //Used by DispatchTimers()
+   std::atomic<Bool_t> fInsideNotify{kFALSE};   //Used by DispatchTimers()
    Int_t            fBeepFreq{0};               //Used by Beep()
    Int_t            fBeepDuration{0};           //Used by Beep()
 
@@ -291,7 +291,7 @@ protected:
    Bool_t           fDone{kFALSE};              //True if eventloop should be finished
    Int_t            fLevel{0};                  //Level of nested eventloops
 
-   TSeqCollection  *fTimers{nullptr};           //List of timers
+   TList           *fTimers{nullptr};           //List of timers
    TSeqCollection  *fSignalHandler{nullptr};    //List of signal handlers
    TSeqCollection  *fFileHandler{nullptr};      //List of file handlers
    TSeqCollection  *fStdExceptionHandler{nullptr}; //List of std::exception handlers
@@ -389,7 +389,7 @@ public:
 
    //---- Time & Date
    virtual TTime           Now();
-   virtual TSeqCollection *GetListOfTimers() const { return fTimers; }
+   virtual TList          *GetListOfTimers() const { return fTimers; }
    virtual void            AddTimer(TTimer *t);
    virtual TTimer         *RemoveTimer(TTimer *t);
    virtual void            ResetTimer(TTimer *) { }
@@ -401,10 +401,11 @@ public:
    virtual FILE           *OpenPipe(const char *command, const char *mode);
    virtual int             ClosePipe(FILE *pipe);
    virtual TString         GetFromPipe(const char *command);
-   virtual void            Exit(int code, Bool_t mode = kTRUE);
-   virtual void            Abort(int code = 0);
    virtual int             GetPid();
    virtual void            StackTrace();
+
+   [[ noreturn ]] virtual void Exit(int code, Bool_t mode = kTRUE);
+   [[ noreturn ]] virtual void Abort(int code = 0);
 
    //---- Directories
    virtual int             MakeDirectory(const char *name);
@@ -450,7 +451,7 @@ public:
    virtual const char     *UnixPathName(const char *unixpathname);
    virtual const char     *FindFile(const char *search, TString& file, EAccessMode mode = kFileExists);
    virtual char           *Which(const char *search, const char *file, EAccessMode mode = kFileExists);
-   virtual TList          *GetVolumes(Option_t *) const { return 0; }
+   virtual TList          *GetVolumes(Option_t *) const { return nullptr; }
 
    //---- Users & Groups
    virtual Int_t           GetUid(const char *user = nullptr);
@@ -553,7 +554,7 @@ public:
    virtual TString         SplitAclicMode(const char *filename, TString &mode, TString &args, TString &io) const;
    virtual void            CleanCompiledMacros();
 
-   ClassDef(TSystem,0)  //ABC defining a generic interface to the OS
+   ClassDefOverride(TSystem,0)  //ABC defining a generic interface to the OS
 };
 
 R__EXTERN TSystem *gSystem;

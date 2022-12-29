@@ -49,8 +49,8 @@
 class TFormLeafInfo : public TObject {
 public:
    // Constructors
-   TFormLeafInfo(TClass* classptr = 0, Long_t offset = 0,
-                 TStreamerElement* element = 0);
+   TFormLeafInfo(TClass* classptr = nullptr, Longptr_t offset = 0,
+                 TStreamerElement* element = nullptr);
    TFormLeafInfo(const TFormLeafInfo& orig);
    virtual TFormLeafInfo* DeepCopy() const;
    virtual ~TFormLeafInfo();
@@ -59,14 +59,14 @@ public:
    TFormLeafInfo &operator=(const TFormLeafInfo &orig);
 
    // Data Members
-   TClass           *fClass;   //! This is the class of the data pointed to
-   //TStreamerInfo  *fInfo;    //! == fClass->GetStreamerInfo()
-   Long_t            fOffset;  //! Offset of the data pointed inside the class fClass
-   TStreamerElement *fElement; //! Descriptor of the data pointed to.
+   TClass           *fClass;   ///<! This is the class of the data pointed to
+   //TStreamerInfo  *fInfo;    ///<! == fClass->GetStreamerInfo()
+   Longptr_t         fOffset;  ///<! Offset of the data pointed inside the class fClass
+   TStreamerElement *fElement; ///<! Descriptor of the data pointed to.
          //Warning, the offset in fElement is NOT correct because it does not take into
          //account base classes and nested objects (which fOffset does).
    TFormLeafInfo    *fCounter;
-   TFormLeafInfo    *fNext;    // follow this to grab the inside information
+   TFormLeafInfo    *fNext;    ///< follow this to grab the inside information
    TString fClassName;
    TString fElementName;
 
@@ -206,7 +206,7 @@ public:
 class TFormLeafInfoCollectionObject : public TFormLeafInfo {
    Bool_t fTop;  //If true, it indicates that the branch itself contains
 public:
-   TFormLeafInfoCollectionObject(TClass* classptr = 0, Bool_t fTop = kTRUE);
+   TFormLeafInfoCollectionObject(TClass* classptr = nullptr, Bool_t fTop = kTRUE);
    TFormLeafInfoCollectionObject(const TFormLeafInfoCollectionObject &orig);
 
    void Swap(TFormLeafInfoCollectionObject &other);
@@ -234,9 +234,9 @@ class TFormLeafInfoClones : public TFormLeafInfo {
    Bool_t fTop;  //If true, it indicates that the branch itself contains
 public:
    //either the clonesArrays or something inside the clonesArray
-   TFormLeafInfoClones(TClass* classptr = 0, Long_t offset = 0);
-   TFormLeafInfoClones(TClass* classptr, Long_t offset, Bool_t top);
-   TFormLeafInfoClones(TClass* classptr, Long_t offset, TStreamerElement* element,
+   TFormLeafInfoClones(TClass* classptr = nullptr, Longptr_t offset = 0);
+   TFormLeafInfoClones(TClass* classptr, Longptr_t offset, Bool_t top);
+   TFormLeafInfoClones(TClass* classptr, Longptr_t offset, TStreamerElement* element,
                        Bool_t top = kFALSE);
    TFormLeafInfoClones(const TFormLeafInfoClones &orig);
 
@@ -270,13 +270,13 @@ class TFormLeafInfoCollection : public TFormLeafInfo {
 public:
 
    TFormLeafInfoCollection(TClass* classptr,
-                           Long_t offset,
+                           Longptr_t offset,
                            TStreamerElement* element,
                            Bool_t top = kFALSE);
 
    TFormLeafInfoCollection(TClass* motherclassptr,
-                           Long_t offset = 0,
-                           TClass* elementclassptr = 0,
+                           Longptr_t offset = 0,
+                           TClass* elementclassptr = nullptr,
                            Bool_t top = kFALSE);
 
    TFormLeafInfoCollection();
@@ -311,7 +311,7 @@ class TFormLeafInfoCollectionSize : public TFormLeafInfo {
    TVirtualCollectionProxy *fCollProxy;
 public:
    TFormLeafInfoCollectionSize(TClass*);
-   TFormLeafInfoCollectionSize(TClass* classptr,Long_t offset,TStreamerElement* element);
+   TFormLeafInfoCollectionSize(TClass* classptr,Longptr_t offset,TStreamerElement* element);
    TFormLeafInfoCollectionSize();
    TFormLeafInfoCollectionSize(const TFormLeafInfoCollectionSize& orig);
 
@@ -338,8 +338,8 @@ public:
 
 class TFormLeafInfoPointer : public TFormLeafInfo {
 public:
-   TFormLeafInfoPointer(TClass* classptr = 0, Long_t offset = 0,
-                        TStreamerElement* element = 0);
+   TFormLeafInfoPointer(TClass* classptr = nullptr, Longptr_t offset = 0,
+                        TStreamerElement* element = nullptr);
    // The default copy constructor is the right implementation.
 
    virtual TFormLeafInfo* DeepCopy() const;
@@ -365,7 +365,7 @@ class TFormLeafInfoMethod : public TFormLeafInfo {
 public:
    static TClass *ReturnTClass(TMethodCall *mc);
 
-   TFormLeafInfoMethod(TClass* classptr = 0, TMethodCall *method = 0);
+   TFormLeafInfoMethod(TClass* classptr = nullptr, TMethodCall *method = nullptr);
    TFormLeafInfoMethod(const TFormLeafInfoMethod& orig);
    ~TFormLeafInfoMethod();
 
@@ -400,11 +400,11 @@ public:
    Int_t fSecondaryIndex;    // Index of the second dimension
 
 protected:
-   TFormLeafInfoMultiVarDim(TClass* classptr, Long_t offset,
-                            TStreamerElement* element) : TFormLeafInfo(classptr,offset,element),fNsize(0),fSizes(),fCounter2(0),fSumOfSizes(0),fDim(0),fVirtDim(0),fPrimaryIndex(-1),fSecondaryIndex(-1) {}
+   TFormLeafInfoMultiVarDim(TClass* classptr, Longptr_t offset,
+                            TStreamerElement* element) : TFormLeafInfo(classptr,offset,element),fNsize(0),fSizes(),fCounter2(nullptr),fSumOfSizes(0),fDim(0),fVirtDim(0),fPrimaryIndex(-1),fSecondaryIndex(-1) {}
 
 public:
-   TFormLeafInfoMultiVarDim(TClass* classptr, Long_t offset,
+   TFormLeafInfoMultiVarDim(TClass* classptr, Longptr_t offset,
                             TStreamerElement* element, TFormLeafInfo* parent);
    TFormLeafInfoMultiVarDim();
    TFormLeafInfoMultiVarDim(const TFormLeafInfoMultiVarDim& orig);
@@ -458,9 +458,9 @@ public:
 //
 class TFormLeafInfoMultiVarDimCollection : public TFormLeafInfoMultiVarDim {
 public:
-   TFormLeafInfoMultiVarDimCollection(TClass* motherclassptr, Long_t offset,
+   TFormLeafInfoMultiVarDimCollection(TClass* motherclassptr, Longptr_t offset,
       TClass* elementclassptr, TFormLeafInfo *parent);
-   TFormLeafInfoMultiVarDimCollection(TClass* classptr, Long_t offset,
+   TFormLeafInfoMultiVarDimCollection(TClass* classptr, Longptr_t offset,
       TStreamerElement* element, TFormLeafInfo* parent);
    // The default copy constructor is the right implementation.
 
@@ -480,9 +480,9 @@ public:
 //
 class TFormLeafInfoMultiVarDimClones : public TFormLeafInfoMultiVarDim {
 public:
-   TFormLeafInfoMultiVarDimClones(TClass* motherclassptr, Long_t offset,
+   TFormLeafInfoMultiVarDimClones(TClass* motherclassptr, Longptr_t offset,
       TClass* elementclassptr, TFormLeafInfo *parent);
-   TFormLeafInfoMultiVarDimClones(TClass* classptr, Long_t offset,
+   TFormLeafInfoMultiVarDimClones(TClass* classptr, Longptr_t offset,
       TStreamerElement* element, TFormLeafInfo* parent);
    // The default copy constructor is the right implementation.
 
@@ -506,7 +506,7 @@ public:
    Bool_t  fGoodCast;   //! Marked by ReadValue.
    Bool_t  fIsTObject;  //! Indicated whether the fClass inherits from TObject.
 
-   TFormLeafInfoCast(TClass* classptr = 0, TClass* casted = 0);
+   TFormLeafInfoCast(TClass* classptr = nullptr, TClass* casted = nullptr);
    TFormLeafInfoCast(const TFormLeafInfoCast& orig);
    virtual ~TFormLeafInfoCast();
 
@@ -530,7 +530,7 @@ class TFormLeafInfoTTree : public TFormLeafInfo {
    TString  fAlias;
 
 public:
-   TFormLeafInfoTTree(TTree *tree = 0, const char *alias = 0, TTree *current = 0);
+   TFormLeafInfoTTree(TTree *tree = nullptr, const char *alias = nullptr, TTree *current = nullptr);
    TFormLeafInfoTTree(const TFormLeafInfoTTree& orig);
 
    void Swap(TFormLeafInfoTTree &other);

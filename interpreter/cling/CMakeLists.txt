@@ -250,7 +250,7 @@ if(CLING_ENABLE_WARNINGS AND NOT LLVM_ENABLE_WARNINGS AND (LLVM_COMPILER_IS_GCC_
   # Release() (PR32286).
   if (NOT CMAKE_COMPILER_IS_GNUCXX AND NOT WIN32)
     set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
-    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++11 -Werror=non-virtual-dtor")
+    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++14 -Werror=non-virtual-dtor")
     CHECK_CXX_SOURCE_COMPILES("class base {public: virtual void anchor();protected: ~base();};
                                class derived final : public base { public: ~derived();};
                                int main() { return 0; }"
@@ -292,10 +292,16 @@ endif ()
 
 # The package needs to be compiler without RTTI information
 if(MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
-  if(NOT (MSVC_VERSION LESS 1910))
-    # Add the /std:c++14 flag for Visual Studio 2017 (and up)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++14")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -GR-")
+  if(NOT DEFINED ROOT_BINARY_DIR)
+    # Add the /std:c++XX flag for Visual Studio if not building as part of ROOT
+    if(MSVC_VERSION GREATER_EQUAL 1920)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std:c++17")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING")
+    elseif(MSVC_VERSION GREATER_EQUAL 1910)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std:c++14")
+    endif()
   endif()
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
@@ -484,6 +490,7 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     PATTERN "CMakeFiles" EXCLUDE
     PATTERN "*.inc"
     PATTERN "*.h"
+    PATTERN "*.modulemap"
     )
 endif()
 

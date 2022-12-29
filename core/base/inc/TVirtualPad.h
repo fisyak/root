@@ -56,6 +56,20 @@ protected:
    void  *GetSender() override { return this; }  //used to set gTQSender
 
 public:
+
+   /** small helper class to store/restore gPad context in TPad methods */
+   class TContext {
+       Bool_t fInteractive{kFALSE};
+       TVirtualPad *fSaved{nullptr};
+   public:
+       TContext(Bool_t _interactive = kFALSE);
+       TContext(TVirtualPad *gpad, Bool_t interactive = kFALSE, Bool_t not_null = kFALSE);
+       ~TContext();
+       auto IsInteractive() const { return fInteractive; }
+       auto GetSaved() const { return fSaved; }
+   };
+
+
    TVirtualPad();
    TVirtualPad(const char *name, const char *title, Double_t xlow,
                Double_t ylow, Double_t xup, Double_t yup,
@@ -181,9 +195,10 @@ public:
    virtual void     Print(const char *filename, Option_t *option) = 0;
    virtual void     Range(Double_t x1, Double_t y1, Double_t x2, Double_t y2) = 0;
    virtual void     RangeAxis(Double_t xmin, Double_t ymin, Double_t xmax, Double_t ymax) = 0;
+   virtual void     RangeAxisChanged() { Emit("RangeAxisChanged()"); } // *SIGNAL*
            void     RecursiveRemove(TObject *obj) override = 0;
    virtual void     RedrawAxis(Option_t *option="") = 0;
-   virtual void     ResetView3D(TObject *view=0) = 0;
+   virtual void     ResetView3D(TObject *view = nullptr) = 0;
    virtual void     ResizePad(Option_t *option="") = 0;
            void     SaveAs(const char *filename="",Option_t *option="") const override = 0;
    virtual void     SetBatch(Bool_t batch=kTRUE) = 0;
@@ -221,7 +236,7 @@ public:
    virtual void     SetPhi(Double_t phi=30) = 0;
    virtual void     SetToolTipText(const char *text, Long_t delayms = 1000) = 0;
    virtual void     SetVertical(Bool_t vert=kTRUE) = 0;
-   virtual void     SetView(TView *view=0) = 0;
+   virtual void     SetView(TView *view = nullptr) = 0;
    virtual void     SetViewer3D(TVirtualViewer3D * /*viewer3d*/) {}
    virtual void     ShowGuidelines(TObject *object, const Int_t event, const char mode = 'i', const bool cling = true) = 0;
    virtual TObject *WaitPrimitive(const char *pname="", const char *emode="") = 0;

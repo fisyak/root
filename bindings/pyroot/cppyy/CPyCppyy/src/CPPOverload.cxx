@@ -1,10 +1,10 @@
 // Bindings
 #include "CPyCppyy.h"
 #include "structmember.h"    // from Python
-#if PY_VERSION_HEX >= 0x02050000
-#include "code.h"            // from Python
-#else
+#if PY_VERSION_HEX < 0x02050000
 #include "compile.h"         // from Python
+#elif PY_VERSION_HEX < 0x030b0000
+#include "code.h"            // from Python
 #endif
 #ifndef CO_NOFREE
 // python2.2 does not have CO_NOFREE defined
@@ -159,7 +159,7 @@ static inline PyObject* HandleReturn(
         }
 
     // if this new object falls inside self, make sure its lifetime is proper
-        if (pymeth->fMethodInfo->fFlags & CallContext::kSetLifeline)
+        if (pymeth->fMethodInfo->fFlags & CallContext::kSetLifeLine)
             ll_action = 1;
         else if (!(pymeth->fMethodInfo->fFlags & CallContext::kNeverLifeLine) && \
                  CPPInstance_Check(pymeth->fSelf) && CPPInstance_Check(result)) {
@@ -191,7 +191,7 @@ static inline PyObject* HandleReturn(
         if (ll_action == 1 /* directly set */ && CPPInstance_Check(result))
             ((CPPInstance*)result)->fFlags |= CPPInstance::kHasLifeline;   // for chaining
         else
-            pymeth->fMethodInfo->fFlags |= CallContext::kSetLifeline;      // for next time
+            pymeth->fMethodInfo->fFlags |= CallContext::kSetLifeLine;      // for next time
     }
 
 // reset self as necessary to allow re-use of the CPPOverload
@@ -366,7 +366,7 @@ static PyObject* mp_func_code(CPPOverload* pymeth, void*)
     return code;
 #else
 // not important for functioning of most code, so not implemented for p3 for now (TODO)
-    pymeth = 0;
+    (void)pymeth;
     Py_RETURN_NONE;
 #endif
 }
@@ -490,7 +490,7 @@ static int mp_set##name(CPPOverload* pymeth, PyObject* value, void*) {       \
     return set_flag(pymeth, value, flag, label);                             \
 }
 
-CPPYY_BOOLEAN_PROPERTY(lifeline, CallContext::kSetLifeline, "__set_lifeline__")
+CPPYY_BOOLEAN_PROPERTY(lifeline, CallContext::kSetLifeLine, "__set_lifeline__")
 CPPYY_BOOLEAN_PROPERTY(threaded, CallContext::kReleaseGIL,  "__release_gil__")
 CPPYY_BOOLEAN_PROPERTY(useffi,   CallContext::kUseFFI,      "__useffi__")
 CPPYY_BOOLEAN_PROPERTY(sig2exc,  CallContext::kProtected,   "__sig2exc__")
@@ -549,6 +549,7 @@ static PyObject* mp_call(CPPOverload* pymeth, PyObject* args, PyObject* kwds)
     ctxt.fFlags |= (mflags & CallContext::kReleaseGIL);
     ctxt.fFlags |= (mflags & CallContext::kProtected);
     if (IsConstructor(pymeth->fMethodInfo->fFlags)) ctxt.fFlags |= CallContext::kIsConstructor;
+    ctxt.fPyContext = (PyObject*)pymeth->fSelf;  // no Py_INCREF as no ownership
 
 // magic variable to prevent recursion passed by keyword?
     if (kwds && PyDict_CheckExact(kwds) && PyDict_Size(kwds) != 0) {

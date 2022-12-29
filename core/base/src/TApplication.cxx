@@ -59,8 +59,8 @@ TList *TApplication::fgApplications = nullptr;  // List of available application
 
 class TIdleTimer : public TTimer {
 public:
-   TIdleTimer(Long_t ms) : TTimer(ms, kTRUE) { }
-   Bool_t Notify();
+   TIdleTimer(Long_t ms) : TTimer(ms, kTRUE) {}
+   Bool_t Notify() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -95,10 +95,10 @@ static void CallEndOfProcessCleanups()
 /// Default ctor. Can be used by classes deriving from TApplication.
 
 TApplication::TApplication() :
-   fArgc(0), fArgv(0), fAppImp(0), fIsRunning(kFALSE), fReturnFromRun(kFALSE),
-   fNoLog(kFALSE), fNoLogo(kFALSE), fQuit(kFALSE), fUseMemstat(kFALSE),
-   fFiles(0), fIdleTimer(0), fSigHandler(0), fExitOnException(kDontExit),
-   fAppRemote(0)
+   fArgc(0), fArgv(nullptr), fAppImp(nullptr), fIsRunning(kFALSE), fReturnFromRun(kFALSE),
+   fNoLog(kFALSE), fNoLogo(kFALSE), fQuit(kFALSE),
+   fFiles(nullptr), fIdleTimer(nullptr), fSigHandler(nullptr), fExitOnException(kDontExit),
+   fAppRemote(nullptr)
 {
    ResetBit(kProcessRemotely);
 }
@@ -106,7 +106,7 @@ TApplication::TApplication() :
 ////////////////////////////////////////////////////////////////////////////////
 /// Create an application environment. The application environment
 /// provides an interface to the graphics system and eventloop
-/// (be it X, Windows, MacOS or BeOS). After creating the application
+/// (be it X, Windows, macOS or BeOS). After creating the application
 /// object start the eventloop by calling its Run() method. The command
 /// line options recognized by TApplication are described in the GetOptions()
 /// method. The recognized options are removed from the argument array.
@@ -119,10 +119,10 @@ TApplication::TApplication() :
 
 TApplication::TApplication(const char *appClassName, Int_t *argc, char **argv,
                            void * /*options*/, Int_t numOptions) :
-   fArgc(0), fArgv(0), fAppImp(0), fIsRunning(kFALSE), fReturnFromRun(kFALSE),
-   fNoLog(kFALSE), fNoLogo(kFALSE), fQuit(kFALSE), fUseMemstat(kFALSE),
-   fFiles(0), fIdleTimer(0), fSigHandler(0), fExitOnException(kDontExit),
-   fAppRemote(0)
+   fArgc(0), fArgv(nullptr), fAppImp(nullptr), fIsRunning(kFALSE), fReturnFromRun(kFALSE),
+   fNoLog(kFALSE), fNoLogo(kFALSE), fQuit(kFALSE),
+   fFiles(nullptr), fIdleTimer(nullptr), fSigHandler(nullptr), fExitOnException(kDontExit),
+   fAppRemote(nullptr)
 {
    R__LOCKGUARD(gInterpreterMutex);
 
@@ -139,7 +139,7 @@ TApplication::TApplication(const char *appClassName, Int_t *argc, char **argv,
    if (gApplication && gApplication->TestBit(kDefaultApplication)) {
       // allow default TApplication to be replaced by a "real" TApplication
       delete gApplication;
-      gApplication = 0;
+      gApplication = nullptr;
       gROOT->SetBatch(kFALSE);
       fgGraphInit = kFALSE;
    }
@@ -188,7 +188,7 @@ TApplication::TApplication(const char *appClassName, Int_t *argc, char **argv,
    // Initialize the graphics environment
    if (gClassTable->GetDict("TPad")) {
       fgGraphNeeded = kTRUE;
-      InitializeGraphics();
+      InitializeGraphics(gROOT->IsWebDisplay());
    }
 
    // Save current interpreter context
@@ -197,17 +197,6 @@ TApplication::TApplication(const char *appClassName, Int_t *argc, char **argv,
 
    // to allow user to interact with TCanvas's under WIN32
    gROOT->SetLineHasBeenProcessed();
-
-   // activate TMemStat
-   if (fUseMemstat || gEnv->GetValue("Root.TMemStat", 0)) {
-      fUseMemstat = kTRUE;
-      Int_t buffersize = gEnv->GetValue("Root.TMemStat.buffersize", 100000);
-      Int_t maxcalls   = gEnv->GetValue("Root.TMemStat.maxcalls", 5000000);
-      const char *ssystem = gEnv->GetValue("Root.TMemStat.system","gnubuiltin");
-      if (maxcalls > 0) {
-         gROOT->ProcessLine(Form("new TMemStat(\"%s\",%d,%d);",ssystem,buffersize,maxcalls));
-      }
-   }
 
    //Needs to be done last
    gApplication = this;
@@ -227,16 +216,10 @@ TApplication::~TApplication()
    if (fgApplications)
       fgApplications->Remove(this);
 
-   //close TMemStat
-   if (fUseMemstat) {
-      ProcessLine("TMemStat::Close()");
-      fUseMemstat = kFALSE;
-   }
-
    // Reduce the risk of the files or sockets being closed after the
    // end of 'main' (or more exactly before the library start being
    // unloaded).
-   if (fgApplications == 0 || fgApplications->FirstLink() == 0 ) {
+   if (fgApplications == nullptr || fgApplications->FirstLink() == nullptr ) {
       TROOT::ShutDown();
    }
 
@@ -256,49 +239,55 @@ void TApplication::NeedGraphicsLibs()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Initialize the graphics environment.
+/// If @param only_web is specified, only web-related part of graphics is loaded
 
-void TApplication::InitializeGraphics()
+void TApplication::InitializeGraphics(Bool_t only_web)
 {
-   if (fgGraphInit || !fgGraphNeeded) return;
+   if (fgGraphInit || !fgGraphNeeded)
+      return;
 
-   // Load the graphics related libraries
-   LoadGraphicsLibs();
+   if (!only_web) {
+      // Load the graphics related libraries
+      LoadGraphicsLibs();
 
-   // Try to load TrueType font renderer. Only try to load if not in batch
-   // mode and Root.UseTTFonts is true and Root.TTFontPath exists. Abort silently
-   // if libttf or libGX11TTF are not found in $ROOTSYS/lib or $ROOTSYS/ttf/lib.
-   const char *ttpath = gEnv->GetValue("Root.TTFontPath",
-                                       TROOT::GetTTFFontDir());
-   char *ttfont = gSystem->Which(ttpath, "arialbd.ttf", kReadPermission);
-   // Check for use of DFSG - fonts
-   if (!ttfont)
-      ttfont = gSystem->Which(ttpath, "FreeSansBold.ttf", kReadPermission);
+      // Try to load TrueType font renderer. Only try to load if not in batch
+      // mode and Root.UseTTFonts is true and Root.TTFontPath exists. Abort silently
+      // if libttf or libGX11TTF are not found in $ROOTSYS/lib or $ROOTSYS/ttf/lib.
+      const char *ttpath = gEnv->GetValue("Root.TTFontPath",
+                                          TROOT::GetTTFFontDir());
+      char *ttfont = gSystem->Which(ttpath, "arialbd.ttf", kReadPermission);
+      // Check for use of DFSG - fonts
+      if (!ttfont)
+         ttfont = gSystem->Which(ttpath, "FreeSansBold.ttf", kReadPermission);
 
-#if !defined(R__WIN32)
-   if (!gROOT->IsBatch() && !strcmp(gVirtualX->GetName(), "X11") &&
-       ttfont && gEnv->GetValue("Root.UseTTFonts", 1)) {
-      if (gClassTable->GetDict("TGX11TTF")) {
-         // in principle we should not have linked anything against libGX11TTF
-         // but with ACLiC this can happen, initialize TGX11TTF by hand
-         // (normally this is done by the static library initializer)
-         ProcessLine("TGX11TTF::Activate();");
-      } else {
-         TPluginHandler *h;
-         if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualX", "x11ttf")))
-            if (h->LoadPlugin() == -1)
-               Info("InitializeGraphics", "no TTF support");
+   #if !defined(R__WIN32)
+      if (!gROOT->IsBatch() && !strcmp(gVirtualX->GetName(), "X11") &&
+          ttfont && gEnv->GetValue("Root.UseTTFonts", 1)) {
+         if (gClassTable->GetDict("TGX11TTF")) {
+            // in principle we should not have linked anything against libGX11TTF
+            // but with ACLiC this can happen, initialize TGX11TTF by hand
+            // (normally this is done by the static library initializer)
+            ProcessLine("TGX11TTF::Activate();");
+         } else {
+            TPluginHandler *h;
+            if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualX", "x11ttf")))
+               if (h->LoadPlugin() == -1)
+                  Info("InitializeGraphics", "no TTF support");
+         }
       }
+   #endif
+      delete [] ttfont;
    }
-#endif
-   delete [] ttfont;
 
-   // Create WM dependent application environment
-   if (fAppImp)
-      delete fAppImp;
-   fAppImp = gGuiFactory->CreateApplicationImp(gROOT->GetName(), &fArgc, fArgv);
-   if (!fAppImp) {
-      MakeBatch();
+   if (!only_web || !fAppImp) {
+      // Create WM dependent application environment
+      if (fAppImp)
+         delete fAppImp;
       fAppImp = gGuiFactory->CreateApplicationImp(gROOT->GetName(), &fArgc, fArgv);
+      if (!fAppImp) {
+         MakeBatch();
+         fAppImp = gGuiFactory->CreateApplicationImp(gROOT->GetName(), &fArgc, fArgv);
+      }
    }
 
    // Create the canvas colors early so they are allocated before
@@ -310,12 +299,13 @@ void TApplication::InitializeGraphics()
    Init();
 
    // Set default screen factor (if not disabled in rc file)
-   if (gEnv->GetValue("Canvas.UseScreenFactor", 1)) {
+   if (!only_web && gEnv->GetValue("Canvas.UseScreenFactor", 1)) {
       Int_t  x, y;
       UInt_t w, h;
       if (gVirtualX) {
          gVirtualX->GetGeometry(-1, x, y, w, h);
-         if (h > 0 && h < 1000) gStyle->SetScreenFactor(0.0011*h);
+         if (h > 0)
+            gStyle->SetScreenFactor(0.001 * h);
       }
    }
 }
@@ -341,11 +331,11 @@ char *TApplication::Argv(Int_t index) const
    if (fArgv) {
       if (index >= fArgc) {
          Error("Argv", "index (%d) >= number of arguments (%d)", index, fArgc);
-         return 0;
+         return nullptr;
       }
       return fArgv[index];
    }
-   return 0;
+   return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -358,7 +348,7 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
 
    fNoLog = kFALSE;
    fQuit  = kFALSE;
-   fFiles = 0;
+   fFiles = nullptr;
 
    if (!argc)
       return;
@@ -385,9 +375,6 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
       } else if (!strcmp(argv[i], "-config")) {
          fprintf(stderr, "ROOT ./configure options:\n%s\n", gROOT->GetConfigOptions());
          Terminate(0);
-      } else if (!strcmp(argv[i], "-memstat")) {
-         fUseMemstat = kTRUE;
-         argv[i] = null;
       } else if (!strcmp(argv[i], "-b")) {
          MakeBatch();
          argv[i] = null;
@@ -418,15 +405,7 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
          // the web mode is requested
          const char *opt = argv[i] + 5;
          argv[i] = null;
-         TString argw;
-         if (gROOT->IsBatch()) argw = "batch";
-         if (*opt == '=') argw.Append(opt+1);
-         if (gSystem->Load("libROOTWebDisplay") >= 0) {
-            gROOT->SetWebDisplay(argw.Data());
-            gEnv->SetValue("Gui.Factory", "web");
-         } else {
-            Error("GetOptions", "--web option not supported, ROOT should be built with at least c++14 enabled");
-         }
+         gROOT->SetWebDisplay((*opt == '=') ? opt + 1 : "");
       } else if (!strcmp(argv[i], "-e")) {
          argv[i] = null;
          ++i;
@@ -446,11 +425,12 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
 
          if (fFiles) {
             for (auto f: *fFiles) {
-               TObjString* file = dynamic_cast<TObjString*>(f);
+               TObjString *file = dynamic_cast<TObjString *>(f);
                if (!file) {
                   if (!dynamic_cast<TNamed*>(f)) {
                      Error("GetOptions()", "Inconsistent file entry (not a TObjString)!");
-                     f->Dump();
+                     if (f)
+                        f->Dump();
                   } // else we did not find the file.
                   continue;
                }
@@ -683,7 +663,7 @@ static TString UrlGenerator(TString scopeName, EUrl scopeType)
    // We start the URL with a static part, the same for all scopes and members.
    TString url = "https://root.cern/doc/";
    // Then we check the ROOT version used.
-   TPRegexp re4(R"(.*/v(\d)-(\d\d)-00-patches)");
+   TPRegexp re4(R"(.*/(v\d)-(\d\d)-00-patches)");
    const char *branchName = gROOT->GetGitBranch();
    TObjArray *objarr = re4.MatchS(branchName);
    TString version;
@@ -843,7 +823,7 @@ GetUrlForDataMember(const TString &scopeName, const TString &dataMemberName, TDa
    // We create a TString with the name of the scope and the enumeration from which the enumerator is.
    TString scopeEnumeration = dataMember->GetTrueTypeName();
    TString md5EnumClass;
-   if (scopeEnumeration.Contains("(anonymous)")) {
+   if (scopeEnumeration.Contains("(unnamed)")) {
       // FIXME: need to investigate the numbering scheme.
       md5EnumClass.Append(scopeName);
       md5EnumClass.Append("::@1@1");
@@ -1054,7 +1034,7 @@ void TApplication::OpenReferenceGuideFor(const TString &strippedClass)
 ////////////////////////////////////////////////////////////////////////////////
 /// The function lists useful commands (".help") or opens the online reference
 /// guide, generated with Doxygen (".help scope" or ".help scope::member").
-///
+/// \note You can use ".?" as the short version of ".help"
 /// \param[in] line command from the command line
 
 void TApplication::Help(const char *line)
@@ -1064,13 +1044,31 @@ void TApplication::Help(const char *line)
    // If the user chooses ".help" or ".?".
    if ((strippedCommand == ".help") || (strippedCommand == ".?")) {
       gInterpreter->ProcessLine(line);
-      Printf("\nROOT special commands.");
-      Printf("==========================================================================");
-      Printf("   .pwd                : show current directory, pad and style");
-      Printf("   .ls                 : list contents of current directory");
-      Printf("   .which [file]       : shows path of macro file");
-      Printf("   .help Class         : opens the reference guide for that class");
-      Printf("   .help Class::Member : opens the reference guide for function/member");
+      Printf("\n ROOT special commands.");
+      Printf(" ==============================================================================");
+      Printf("   .L <filename>[flags]: load the given file with optional flags like\n"
+             "                         + to compile or ++ to force recompile.\n"
+             "                         Type .? TSystem::CompileMacro for a list of all flags.");
+      Printf("   .(x|X) <filename>[flags](args) :\n"
+             "                         same as .L <filename>[flags] and runs then a function\n"
+             "                         with signature: ret_type filename(args).");
+      Printf("   .credits            : show credits");
+      Printf("   .demo               : launch GUI demo");
+      Printf("   .help Class::Member : open reference guide for that class member (or .?).\n"
+             "                         Specifying '::Member' is optional.");
+      Printf("   .help edit          : show line editing shortcuts (or .?)");
+      Printf("   .license            : show license");
+      Printf("   .ls                 : list contents of current TDirectory");
+      Printf("   .pwd                : show current TDirectory, pad and style");
+      Printf("   .quit (or .exit)    : quit ROOT (long form of .q)");
+      Printf("   .R [user@]host[:dir] [-l user] [-d dbg] [script] :\n"
+             "                         launch process in a remote host");
+      Printf("   .qqq                : quit ROOT - mandatory");
+      Printf("   .qqqqq              : exit process immediately");
+      Printf("   .qqqqqqq            : abort process");
+      Printf("   .which [file]       : show path of macro file");
+      Printf("   .![OS_command]      : execute OS-specific shell command");
+      Printf("   .!root -?           : print ROOT usage (CLI options)");
       return;
    } else {
       // If the user wants to use the extended ".help scopeName" command to access
@@ -1087,6 +1085,70 @@ void TApplication::Help(const char *line)
       }
       // We strip the command line after removing ".help" or ".?".
       strippedCommand = strippedCommand.Strip(TString::kBoth);
+
+      if (strippedCommand == "edit") {
+         Printf("\n ROOT terminal keyboard shortcuts (GNU-readline style).");
+         #ifdef R__MACOSX
+         #define FOOTNOTE " *"
+         Printf("* Some of these commands might be intercepted by macOS predefined system shortcuts.");
+         // https://apple.stackexchange.com/questions/18043/how-can-i-make-ctrlright-left-arrow-stop-changing-desktops-in-lion
+         #else
+         #define FOOTNOTE ""
+         #endif
+         Printf(" ==============================================================================");
+         Printf("   Arrow_Left       : move cursor left [Ctrl+B]");
+         Printf("   Arrow_Right      : move cursor right [Ctrl+F] [Ctrl+G]");
+         #ifdef R__MACOSX
+         Printf("   Fn+Arrow_Left    : move cursor to beginning of line [Ctrl+A]");
+         #else
+         Printf("   Home             : move cursor to beginning of line [Ctrl+A]");
+         #endif
+         #ifdef R__MACOSX
+         Printf("   Fn+Arrow_Right   : move cursor to end of line [Ctrl+E]");
+         #else
+         Printf("   End              : move cursor to end of line [Ctrl+E]");
+         #endif
+         Printf("   Ctrl+Arrow_Left  : jump to previous word [Esc,B] [Alt,B]" FOOTNOTE);
+         Printf("   Ctrl+Arrow_Right : jump to next word [Esc,F] [Alt,F]" FOOTNOTE);
+
+         Printf("   Backspace        : delete previous character [Ctrl+H]");
+         Printf("   Del              : delete next character [Ctrl+D]");
+         Printf("   Esc,Backspace    : delete previous word [Ctrl+W] [Esc,Ctrl+H] [Alt+Backspace] [Esc,Del] [Esc,Ctrl+Del]" FOOTNOTE);// Del is 0x7F on macOS
+         Printf("   Ctrl+Del         : delete next word [Esc,D] [Alt,D]" FOOTNOTE);
+         Printf("   Ctrl+U           : cut all characters between cursor and start of line");
+         Printf("   Ctrl+K           : cut all characters between cursor and end of line");
+
+         Printf("   Ctrl+T           : transpose characters");
+         Printf("   Esc,C            : character to upper and jump to next word");
+         Printf("   Esc,L            : word to lower case and jump to its end");
+         Printf("   Esc,U            : word to upper case and jump to its end");
+         Printf("   Ctrl+Shift+C     : copy clipboard content");
+         Printf("   Ctrl+Shift+V     : paste clipboard content [Ctrl+Y] [Alt+Y]");
+         #ifdef R__MACOSX
+         Printf("   Fn+Enter         : toggle overwrite mode");
+         #else
+         Printf("   Ins              : toggle overwrite mode");
+         #endif
+
+         Printf("   Ctrl+_           : undo last keypress action");
+         Printf("   Tab              : autocomplete command or print suggestions [Ctrl+I] [Esc,Tab]");
+         Printf("   Enter            : execute command [Ctrl+J] [Ctrl+M]");
+         Printf("   Ctrl+L           : clear prompt screen");
+         Printf("   Ctrl+D           : quit ROOT (if empty line)");
+         Printf("   Ctrl+C           : send kSigInt interrupt signal");
+         Printf("   Ctrl+Z           : send kSigStop pause job signal");
+
+         Printf("   Arrow_Down       : navigate downwards in command history [Ctrl+N]");
+         Printf("   Arrow_Up         : navigate upwards in command history [Ctrl+P]");
+         Printf("   Ctrl+R ; Ctrl+S  : search command in your history by typing a string.\n"
+                "                      Use Backspace if you mistyped (but not arrows).\n"
+                "                      Press Ctrl+R (Ctrl+S) repeateadly to navigate matches in reverse (forward) order");
+         Printf("   Arrow_Right      : after Ctrl+R (Ctrl+S), select current match of the history search\n"
+                "                      [Ctrl+O] [Enter] [Ctrl+J] [Ctrl+M] [Arrow_Left] [Esc,Esc].\n"
+                "                      Use Ctrl+F or Ctrl+G to cancel search and revert original line");
+
+         return;
+      }
       // We call the function what handles the extended ".help scopeName" command.
       OpenReferenceGuideFor(strippedCommand);
    }
@@ -1097,17 +1159,16 @@ void TApplication::Help(const char *line)
 
 void TApplication::LoadGraphicsLibs()
 {
-   if (gROOT->IsBatch()) return;
+   if (gROOT->IsBatch())
+      return;
 
-   TPluginHandler *h;
-   if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualPad")))
+   if (auto h = gROOT->GetPluginManager()->FindHandler("TVirtualPad"))
       if (h->LoadPlugin() == -1)
          return;
 
    TString name;
    TString title1 = "ROOT interface to ";
    TString nativex, title;
-   TString nativeg = "root";
 
 #ifdef R__WIN32
    nativex = "win32gdk";
@@ -1123,7 +1184,7 @@ void TApplication::LoadGraphicsLibs()
    title   = title1 + "X11";
 #endif
 
-   TString guiBackend(gEnv->GetValue("Gui.Backend", "native"));
+   TString guiBackend = gEnv->GetValue("Gui.Backend", "native");
    guiBackend.ToLower();
    if (guiBackend == "native") {
       guiBackend = nativex;
@@ -1131,12 +1192,8 @@ void TApplication::LoadGraphicsLibs()
       name  = guiBackend;
       title = title1 + guiBackend;
    }
-   TString guiFactory(gEnv->GetValue("Gui.Factory", "native"));
-   guiFactory.ToLower();
-   if (guiFactory == "native")
-      guiFactory = nativeg;
 
-   if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualX", guiBackend))) {
+   if (auto h = gROOT->GetPluginManager()->FindHandler("TVirtualX", guiBackend)) {
       if (h->LoadPlugin() == -1) {
          gROOT->SetBatch(kTRUE);
          return;
@@ -1144,7 +1201,13 @@ void TApplication::LoadGraphicsLibs()
       gVirtualX = (TVirtualX *) h->ExecPlugin(2, name.Data(), title.Data());
       fgGraphInit = kTRUE;
    }
-   if ((h = gROOT->GetPluginManager()->FindHandler("TGuiFactory", guiFactory))) {
+
+   TString guiFactory = gEnv->GetValue("Gui.Factory", "native");
+   guiFactory.ToLower();
+   if (guiFactory == "native")
+      guiFactory = "root";
+
+   if (auto h = gROOT->GetPluginManager()->FindHandler("TGuiFactory", guiFactory)) {
       if (h->LoadPlugin() == -1) {
          gROOT->SetBatch(kTRUE);
          return;
@@ -1223,7 +1286,7 @@ Int_t TApplication::ParseRemoteLine(const char *ln,
             script = tkn;
             script.Insert(0, "\"");
             script += "\"";
-            isScript = kFALSE;
+            // isScript = kFALSE; // [clang-tidy] never read
             break;
          }
       }
@@ -1246,7 +1309,7 @@ Int_t TApplication::ParseRemoteLine(const char *ln,
 /// The last argument 'script' allows to specify an alternative script to
 /// be executed remotely to startup the session.
 
-Long_t TApplication::ProcessRemote(const char *line, Int_t *)
+Longptr_t TApplication::ProcessRemote(const char *line, Int_t *)
 {
    if (!line) return 0;
 
@@ -1281,12 +1344,12 @@ Long_t TApplication::ProcessRemote(const char *line, Int_t *)
          delete fAppRemote;
       }
       // Return to local run
-      fAppRemote = 0;
+      fAppRemote = nullptr;
       // Done
       return 1;
    } else if (rc == 1) {
       // close an existing remote application
-      TApplication *ap = TApplication::Open(hostdir, 0, 0);
+      TApplication *ap = TApplication::Open(hostdir, 0, nullptr);
       if (ap) {
          TApplication::Close(ap);
          delete ap;
@@ -1295,7 +1358,7 @@ Long_t TApplication::ProcessRemote(const char *line, Int_t *)
    // Attach or start a remote application
    if (user.Length() > 0)
       hostdir.Insert(0,Form("%s@", user.Data()));
-   const char *sc = (script.Length() > 0) ? script.Data() : 0;
+   const char *sc = (script.Length() > 0) ? script.Data() : nullptr;
    TApplication *ap = TApplication::Open(hostdir, dbg, sc);
    if (ap) {
       fAppRemote = ap;
@@ -1326,7 +1389,7 @@ namespace {
 /// command starting with a ".".
 /// Return the return value of the command cast to a long.
 
-Long_t TApplication::ProcessLine(const char *line, Bool_t sync, Int_t *err)
+Longptr_t TApplication::ProcessLine(const char *line, Bool_t sync, Int_t *err)
 {
    if (!line || !*line) return 0;
 
@@ -1390,7 +1453,7 @@ Long_t TApplication::ProcessLine(const char *line, Bool_t sync, Int_t *err)
    }
 
    if (!strncmp(line, ".ls", 3)) {
-      const char *opt = 0;
+      const char *opt = nullptr;
       if (line[3]) opt = &line[3];
       if (gDirectory) gDirectory->ls(opt);
       return 1;
@@ -1410,40 +1473,31 @@ Long_t TApplication::ProcessLine(const char *line, Bool_t sync, Int_t *err)
    }
 
    if (!strncmp(line, ".L", 2) || !strncmp(line, ".U", 2)) {
-      TString aclicMode;
-      TString arguments;
-      TString io;
+      TString aclicMode, arguments, io;
       TString fname = gSystem->SplitAclicMode(line+3, aclicMode, arguments, io);
 
       char *mac = gSystem->Which(TROOT::GetMacroPath(), fname, kReadPermission);
-      if (arguments.Length()) {
-         Warning("ProcessLine", "argument(s) \"%s\" ignored with .%c", arguments.Data(),
-                 line[1]);
-      }
-      Long_t retval = 0;
-      if (!mac)
-         Error("ProcessLine", "macro %s not found in path %s", fname.Data(),
-               TROOT::GetMacroPath());
-      else {
-         TString cmd(line+1);
+      if (arguments.Length())
+         Warning("ProcessLine", "argument(s) \"%s\" ignored with .%c", arguments.Data(), line[1]);
+      Longptr_t retval = 0;
+      if (!mac) {
+         Error("ProcessLine", "macro %s not found in path %s", fname.Data(), TROOT::GetMacroPath());
+      } else {
+         TString cmd(line + 1);
          Ssiz_t posSpace = cmd.Index(' ');
-         if (posSpace == -1) cmd.Remove(1);
-         else cmd.Remove(posSpace);
-         TString tempbuf;
-         if (sync) {
-            tempbuf.Form(".%s %s%s%s", cmd.Data(), mac, aclicMode.Data(),io.Data());
-            retval = gInterpreter->ProcessLineSynch(tempbuf,
-                                                   (TInterpreter::EErrorCode*)err);
-         } else {
-            tempbuf.Form(".%s %s%s%s", cmd.Data(), mac, aclicMode.Data(),io.Data());
-            retval = gInterpreter->ProcessLine(tempbuf,
-                                              (TInterpreter::EErrorCode*)err);
-         }
+         if (posSpace == kNPOS)
+            cmd.Remove(1);
+         else
+            cmd.Remove(posSpace);
+         auto tempbuf = TString::Format(".%s %s%s%s", cmd.Data(), mac, aclicMode.Data(), io.Data());
+         delete[] mac;
+         if (sync)
+            retval = gInterpreter->ProcessLineSynch(tempbuf.Data(), (TInterpreter::EErrorCode *)err);
+         else
+            retval = gInterpreter->ProcessLine(tempbuf.Data(), (TInterpreter::EErrorCode *)err);
       }
 
-      delete [] mac;
-
-      InitializeGraphics();
+      InitializeGraphics(gROOT->IsWebDisplay());
 
       return retval;
    }
@@ -1453,7 +1507,7 @@ Long_t TApplication::ProcessLine(const char *line, Bool_t sync, Int_t *err)
    }
 
    if (!strcmp(line, ".reset")) {
-      // Do nothing, .reset disabled in CINT because too many side effects
+      // Do nothing, .reset disabled in Cling because too many side effects
       Printf("*** .reset not allowed, please use gROOT->Reset() ***");
       return 0;
 
@@ -1474,7 +1528,7 @@ Long_t TApplication::ProcessLine(const char *line, Bool_t sync, Int_t *err)
 ////////////////////////////////////////////////////////////////////////////////
 /// Process a file containing a C++ macro.
 
-Long_t TApplication::ProcessFile(const char *file, Int_t *error, Bool_t keep)
+Longptr_t TApplication::ProcessFile(const char *file, Int_t *error, Bool_t keep)
 {
    return ExecuteFile(file, error, keep);
 }
@@ -1483,7 +1537,7 @@ Long_t TApplication::ProcessFile(const char *file, Int_t *error, Bool_t keep)
 /// Execute a file containing a C++ macro (static method). Can be used
 /// while TApplication is not yet created.
 
-Long_t TApplication::ExecuteFile(const char *file, Int_t *error, Bool_t keep)
+Longptr_t TApplication::ExecuteFile(const char *file, Int_t *error, Bool_t keep)
 {
    static const Int_t kBufSize = 1024;
 
@@ -1519,9 +1573,9 @@ Long_t TApplication::ExecuteFile(const char *file, Int_t *error, Bool_t keep)
    int comment  = 0;
    int ifndefc  = 0;
    int ifdef    = 0;
-   char *s      = 0;
+   char *s      = nullptr;
    Bool_t execute = kFALSE;
-   Long_t retval = 0;
+   Longptr_t retval = 0;
 
    while (1) {
       bool res = (bool)macro.getline(currentline, kBufSize);
@@ -1688,12 +1742,6 @@ void TApplication::Terminate(Int_t status)
    if (fReturnFromRun)
       gSystem->ExitLoop();
    else {
-      //close TMemStat
-      if (fUseMemstat) {
-         ProcessLine("TMemStat::Close()");
-         fUseMemstat = kFALSE;
-      }
-
       gSystem->Exit(status);
    }
 }
@@ -1746,7 +1794,7 @@ void TApplication::CreateApplication()
       Int_t argc = 2;
       argv[0] = a;
       argv[1] = b;
-      new TApplication("RootApp", &argc, argv, 0, 0);
+      new TApplication("RootApp", &argc, argv, nullptr, 0);
       if (gDebug > 0)
          Printf("<TApplication::CreateApplication>: "
                 "created default TApplication");
@@ -1762,7 +1810,7 @@ void TApplication::CreateApplication()
 TApplication *TApplication::Open(const char *url,
                                   Int_t debug, const char *script)
 {
-   TApplication *ap = 0;
+   TApplication *ap = nullptr;
    TUrl nu(url);
    Int_t nnew = 0;
 
@@ -1793,11 +1841,11 @@ TApplication *TApplication::Open(const char *url,
    // If new session on a known machine pass the number as option
    if (nnew > 0) {
       nnew++;
-      nu.SetOptions(Form("%d", nnew));
+      nu.SetOptions(TString::Format("%d", nnew).Data());
    }
 
    // Instantiate the TApplication object to be run
-   TPluginHandler *h = 0;
+   TPluginHandler *h = nullptr;
    if ((h = gROOT->GetPluginManager()->FindHandler("TApplication","remote"))) {
       if (h->LoadPlugin() == 0) {
          ap = (TApplication *) h->ExecPlugin(3, nu.GetUrl(), debug, script);
@@ -1851,7 +1899,7 @@ void TApplication::ls(Option_t *opt) const
 {
    if (fgApplications) {
       TIter nxa(fgApplications);
-      TApplication *a = 0;
+      TApplication *a = nullptr;
       while ((a = (TApplication *) nxa())) {
          a->Print(opt);
       }

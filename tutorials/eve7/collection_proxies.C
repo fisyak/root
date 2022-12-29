@@ -1,7 +1,8 @@
 /// \file
 /// \ingroup tutorial_eve7
-///  This example display collection of ??? in web browser
 ///
+/// This is an example of visualization of containers
+/// with REveDataCollection and REveDataProxyBuilders.
 /// \macro_code
 ///
 
@@ -38,9 +39,9 @@
 #include <iostream>
 
 
-const Double_t kR_min = 300;
-const Double_t kR_max = 299;
-const Double_t kZ_d   = 300;
+const Double_t kR_min = 299;
+const Double_t kR_max = 300;
+const Double_t kZ_d   = 500;
 
 
 namespace fw3dlego {
@@ -135,6 +136,7 @@ public:
          }
       }
       REveSelection* sel = (REveSelection*)eveMng->FindElementById(selectionId);
+      fCollection->GetItemList()->RefSelectedSet() = item_set;
       sel->NewElementPicked(fCollection->GetItemList()->GetElementId(),  multi, true, item_set);
    }
 
@@ -311,9 +313,8 @@ class JetProxyBuilder: public REveDataSimpleProxyBuilderTemplate<Jet>
 {
    bool HaveSingleProduct() const override { return false; }
 
-   using REveDataSimpleProxyBuilderTemplate<Jet>::BuildViewType;
-
-   void BuildViewType(const Jet& dj, int idx, REveElement* iItemHolder,
+   using REveDataSimpleProxyBuilderTemplate<Jet>::BuildItemViewType;
+   void BuildItemViewType(const Jet& dj, int idx, REveElement* iItemHolder,
                       const std::string& viewType, const REveViewContext* context) override
    {
       auto jet = new REveJetCone();
@@ -379,7 +380,7 @@ class TParticleProxyBuilder : public REveDataSimpleProxyBuilderTemplate<TParticl
 {
    using REveDataSimpleProxyBuilderTemplate<TParticle>::Build;
 
-   void Build(const TParticle& p, int idx, REveElement* iItemHolder, const REveViewContext* context) override
+   void BuildItem(const TParticle& p, int idx, REveElement* iItemHolder, const REveViewContext* context) override
    {
       const TParticle *x = &p;
       auto track = new REveTrack((TParticle*)(x), 1, context->GetPropagator());
@@ -388,74 +389,96 @@ class TParticleProxyBuilder : public REveDataSimpleProxyBuilderTemplate<TParticl
    }
 };
 
-class RecHitProxyBuilder: public REveDataProxyBuilderBase
-{
+
+class RecHitProxyBuilder : public REveDataProxyBuilderBase {
 private:
-   void buildBoxSet(REveBoxSet* boxset) {
+   class FWBoxSet : public REveBoxSet {
+   public:
+      using REveElement::GetSelectionMaster;
+      REveElement *GetSelectionMaster() override
+      {
+         if (fSelectionMaster) {
+            REveDataItemList *il = dynamic_cast<REveDataItemList *>(fSelectionMaster);
+            il->RefSelectedSet() = RefSelectedSet();
+            return il;
+         }
+         return nullptr;
+      }
+   };
+
+   REveBoxSet *fBoxSet{nullptr};
+   void buildBoxSet(REveBoxSet *boxset)
+   {
       auto collection = Collection();
       boxset->SetMainColor(collection->GetMainColor());
+      boxset->SetName(collection->GetCName());
+      boxset->SetPickable(true);
+      boxset->SetAlwaysSecSelect(1);
+      boxset->SetDetIdsAsSecondaryIndices(true);
+      boxset->SetSelectionMaster(((REveDataCollection *)collection)->GetItemList());
       boxset->Reset(REveBoxSet::kBT_FreeBox, true, collection->GetNItems());
       TRandom r(0);
-#define RND_BOX(x) (Float_t)r.Uniform(-(x), (x))
-      for (int h = 0; h < collection->GetNItems(); ++h)
-      {
-         RecHit* hit = (RecHit*)collection->GetDataPtr(h);
-         const REveDataItem* item = Collection()->GetDataItem(h);
 
-         if (!item->GetVisible())
-           continue;
+#define RND_BOX(x) (Float_t) r.Uniform(-(x), (x))
+      for (int h = 0; h < collection->GetNItems(); ++h) {
+         RecHit *hit = (RecHit *)collection->GetDataPtr(h);
+         const REveDataItem *item = Collection()->GetDataItem(h);
+
          Float_t x = hit->fX;
          Float_t y = hit->fY;
          Float_t z = hit->fZ;
          Float_t a = hit->fPt;
          Float_t d = 0.05;
-         Float_t verts[24] = {
-                              x - a + RND_BOX(d), y - a + RND_BOX(d), z - a + RND_BOX(d),
-                              x - a + RND_BOX(d), y + a + RND_BOX(d), z - a + RND_BOX(d),
-                              x + a + RND_BOX(d), y + a + RND_BOX(d), z - a + RND_BOX(d),
-                              x + a + RND_BOX(d), y - a + RND_BOX(d), z - a + RND_BOX(d),
-                              x - a + RND_BOX(d), y - a + RND_BOX(d), z + a + RND_BOX(d),
-                              x - a + RND_BOX(d), y + a + RND_BOX(d), z + a + RND_BOX(d),
-                              x + a + RND_BOX(d), y + a + RND_BOX(d), z + a + RND_BOX(d),
-                              x + a + RND_BOX(d), y - a + RND_BOX(d), z + a + RND_BOX(d) };
+         Float_t verts[24] = {x - a + RND_BOX(d), y - a + RND_BOX(d), z - a + RND_BOX(d), x - a + RND_BOX(d),
+                              y + a + RND_BOX(d), z - a + RND_BOX(d), x + a + RND_BOX(d), y + a + RND_BOX(d),
+                              z - a + RND_BOX(d), x + a + RND_BOX(d), y - a + RND_BOX(d), z - a + RND_BOX(d),
+                              x - a + RND_BOX(d), y - a + RND_BOX(d), z + a + RND_BOX(d), x - a + RND_BOX(d),
+                              y + a + RND_BOX(d), z + a + RND_BOX(d), x + a + RND_BOX(d), y + a + RND_BOX(d),
+                              z + a + RND_BOX(d), x + a + RND_BOX(d), y - a + RND_BOX(d), z + a + RND_BOX(d)};
          boxset->AddBox(verts);
-         boxset->DigitId(h);
-         boxset->DigitColor(item->GetVisible() ? collection->GetMainColor() : 0); // set color on the last one
+
+         boxset->DigitValue(item->GetVisible() ? 1 : 0);
+         if (item->GetVisible())
+            boxset->DigitColor(item->GetMainColor());
       }
-      boxset->GetPlex()->Refit();
+      boxset->RefitPlex();
       boxset->StampObjProps();
    }
 
 public:
    using REveDataProxyBuilderBase::Build;
-   void Build(const REveDataCollection* collection, REveElement* product, const REveViewContext*)override
+   void BuildProduct(const REveDataCollection* collection, REveElement* product, const REveViewContext*)override
    {
-      // printf("-------------------------FBOXSET proxy builder %d \n",  collection->GetNItems());
-      auto boxset = new REveBoxSet();
-      boxset->SetName(collection->GetCName());
-      boxset->SetAlwaysSecSelect(1);
-      boxset->SetDetIdsAsSecondaryIndices(true);
-      boxset->SetSelectionMaster(((REveDataCollection*)collection)->GetItemList());
-      buildBoxSet(boxset);
-      product->AddElement(boxset);
+      fBoxSet = new FWBoxSet();
+      buildBoxSet(fBoxSet);
+      product->AddElement(fBoxSet);
    }
 
    using REveDataProxyBuilderBase::FillImpliedSelected;
-   void FillImpliedSelected(REveElement::Set_t& impSet, Product* p) override
+   void FillImpliedSelected(REveElement::Set_t& impSet, const std::set<int>& sec_idcs, Product* p) override
    {
-      // printf("RecHit fill implioed ----------------- !!!%zu\n", Collection()->GetItemList()->RefSelectedSet().size());
-      impSet.insert(p->m_elements->FirstChild());
+     //  printf("RecHit fill implioed ----------------- !!!%zu\n", Collection()->GetItemList()->RefSelectedSet().size());
+      impSet.insert(fBoxSet);
    }
 
    using REveDataProxyBuilderBase::ModelChanges;
    void ModelChanges(const REveDataCollection::Ids_t& ids, Product* product) override
    {
-      // We know there is only one element in this product
-      //  printf("RecHitProxyBuilder::model changes %zu\n", ids.size());
-      buildBoxSet((REveBoxSet*)product->m_elements->FirstChild());
+      for (auto &i : ids)
+      {
+         auto digi = fBoxSet->GetDigit(i);
+         auto item = Collection()->GetDataItem(i);
+         fBoxSet->SetCurrentDigit(i);
+         if (item->GetVisible()) {
+            fBoxSet->DigitValue(1);
+            fBoxSet->DigitColor(item->GetMainColor());
+         } else {
+            fBoxSet->DigitValue(0);
+         }
+      }
+      fBoxSet->StampObjProps();
    }
 }; // RecHitProxyBuilder
-
 
 class CaloTowerProxyBuilder: public REveDataProxyBuilderBase
 {
@@ -488,7 +511,7 @@ public:
    CaloTowerProxyBuilder(REveCaloDataHist* cd) : fCaloData(cd) {}
 
    using REveDataProxyBuilderBase::Build;
-   void Build(const REveDataCollection* collection, REveElement* product, const REveViewContext*)override
+   void BuildProduct(const REveDataCollection* collection, REveElement* product, const REveViewContext*)override
    {
       assertSlice();
       fHist->Reset();
@@ -515,17 +538,17 @@ public:
    }
 
    using REveDataProxyBuilderBase::FillImpliedSelected;
-   void FillImpliedSelected(REveElement::Set_t& impSet, Product*) override
+   void FillImpliedSelected(REveElement::Set_t& impSet, const std::set<int>& sec_idcs, Product*) override
    {
       fCaloData->GetSelector()->SetActiveSlice(fSliceIndex);
       impSet.insert(fCaloData);
-      fCaloData->FillImpliedSelectedSet(impSet);
+      fCaloData->FillImpliedSelectedSet(impSet, sec_idcs);
    }
 
   using REveDataProxyBuilderBase::ModelChanges;
    void ModelChanges(const REveDataCollection::Ids_t& ids, Product* product) override
    {
-      Build();
+      BuildProduct(Collection(), nullptr, nullptr);
    }
 
 }; // CaloTowerProxyBuilder
@@ -654,9 +677,9 @@ public:
       glBuilder->SetHaveAWindow(true);
       for (auto scene : m_scenes)
       {
-         REveElement *product = glBuilder->CreateProduct(scene->GetTitle(), m_viewContext);
-
          if (strncmp(scene->GetCName(), "Tables", 5) == 0) continue;
+
+         REveElement *product = glBuilder->CreateProduct(scene->GetTitle(), m_viewContext);
 
          if (!strncmp(scene->GetCTitle(), "Projected", 8))
          {
@@ -686,7 +709,7 @@ public:
          if (strncmp(s->GetCTitle(), "Table", 5) == 0)
          {
             s->AddElement(tablep);
-            tableBuilder->Build(collection, tablep, m_viewContext );
+            tableBuilder->Build();
          }
       }
       tableMng->AddDelegate([=]() { tableBuilder->ConfigChanged(); });
@@ -705,9 +728,9 @@ public:
                                     {
                                        this->ModelChanged( collection, ids );
                                     });
-      collection->GetItemList()->SetFillImpliedSelectedDelegate([&] (REveDataItemList* collection, REveElement::Set_t& impSelSet)
+      collection->GetItemList()->SetFillImpliedSelectedDelegate([&] (REveDataItemList* collection, REveElement::Set_t& impSelSet, const std::set<int>& sec_idcs)
                                     {
-                                       this->FillImpliedSelected( collection,  impSelSet);
+                                       this->FillImpliedSelected( collection,  impSelSet, sec_idcs);
                                     });
    }
 
@@ -739,7 +762,7 @@ public:
       }
    }
 
-   void FillImpliedSelected(REveDataItemList* itemList, REveElement::Set_t& impSelSet)
+   void FillImpliedSelected(REveDataItemList* itemList, REveElement::Set_t& impSelSet, const std::set<int>& sec_idcs)
    {
       if (m_inEventLoading) return;
 
@@ -747,7 +770,7 @@ public:
       {
          if (proxy->Collection()->GetItemList() == itemList)
          {
-            proxy->FillImpliedSelected(impSelSet);
+            proxy->FillImpliedSelected(impSelSet, sec_idcs);
          }
       }
    }
@@ -772,16 +795,32 @@ public:
 
    virtual void NextEvent()
    {
-      eveMng->DisableRedraw();
       eveMng->GetSelection()->ClearSelection();
       eveMng->GetHighlight()->ClearSelection();
       fEvent->Create();
       fCMng->LoadEvent();
-      eveMng->EnableRedraw();
    }
 };
 
+class FWSelectionDeviator : public REveSelection::Deviator {
+public:
+   FWSelectionDeviator() {}
 
+   using REveSelection::Deviator::DeviateSelection;
+   bool DeviateSelection(REveSelection *selection, REveElement *el, bool multi, bool secondary,
+                         const std::set<int> &secondary_idcs)
+   {
+      if (el) {
+         auto *colItems = dynamic_cast<REveDataItemList *>(el);
+         if (colItems) {
+            // std::cout << "Deviate RefSelected=" << colItems->RefSelectedSet().size() << " passed set " << secondary_idcs.size() << "\n";
+            ExecuteNewElementPicked(selection, colItems, multi, true, colItems->RefSelectedSet());
+            return true;
+         }
+      }
+      return false;
+   }
+};
 //==============================================================================
 //== main() ====================================================================
 //==============================================================================
@@ -791,6 +830,11 @@ void collection_proxies(bool proj=true)
    eveMng = REveManager::Create();
    auto event = new Event();
    event->Create();
+
+   // divert selection to map proxy builder products with collection
+   auto deviator = std::make_shared<FWSelectionDeviator>();
+   eveMng->GetSelection()->SetDeviator(deviator);
+   eveMng->GetHighlight()->SetDeviator(deviator);
 
    // create scenes and views
    REveScene* rhoZEventScene = nullptr;
@@ -805,6 +849,7 @@ void collection_proxies(bool proj=true)
    g_projMng->SetImportEmpty(true);
 
    auto rhoZView = eveMng->SpawnNewViewer("RhoZ View");
+   rhoZView->SetCameraType(REveViewer::kCameraOrthoXOY);
    rhoZView->AddScene(rhoZEventScene);
    auto pgeoScene = eveMng->SpawnNewScene("Geometry projected");
    rhoZView->AddScene(pgeoScene);
@@ -826,13 +871,14 @@ void collection_proxies(bool proj=true)
    REveDataCollection* jetCollection = new REveDataCollection("Jets");
    jetCollection->SetItemClass(Jet::Class());
    jetCollection->SetMainColor(kYellow);
+   jetCollection->SetFilterExpr("i.Pt() > 1");
    collectionMng->addCollection(jetCollection, new JetProxyBuilder());
 
    REveDataCollection* hitCollection = new REveDataCollection("RecHits");
    hitCollection->SetItemClass(RecHit::Class());
    hitCollection->SetMainColor(kOrange + 7);
    hitCollection->SetFilterExpr("i.fPt > 5");
-   collectionMng->addCollection(hitCollection, new RecHitProxyBuilder());
+   collectionMng->addCollection(hitCollection, new RecHitProxyBuilder(), true);
 
    // add calorimeters
    auto calo3d = new REveCalo3D(event->fCaloData);

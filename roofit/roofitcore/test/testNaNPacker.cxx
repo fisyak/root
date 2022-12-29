@@ -100,9 +100,10 @@ TEST(RooNaNPacker, FitSimpleLinear) {
   std::unique_ptr<RooDataSet> data(pdf.generate(x, 1000));
   std::unique_ptr<RooAbsReal> nll(pdf.createNLL(*data));
 
-  ASSERT_FALSE(std::isnan(pdf.getVal(RooArgSet(x))));
+  RooArgSet normSet{x};
+  ASSERT_FALSE(std::isnan(pdf.getVal(normSet)));
   a1.setVal(-9.);
-  ASSERT_TRUE(std::isnan(pdf.getVal(RooArgSet(x))));
+  ASSERT_TRUE(std::isnan(pdf.getVal(normSet)));
 
   RooMinimizer minim(*nll);
   minim.setPrintLevel(-1);
@@ -139,7 +140,7 @@ TEST(RooNaNPacker, FitParabola) {
   for (bool batchMode : std::initializer_list<bool>{true, false}) {
     SCOPED_TRACE(batchMode ? "in batch mode" : "in single-value mode");
 
-    params = evilValues;
+    params.assign(evilValues);
     std::unique_ptr<RooFitResult> fitResultOld( pdf.fitTo(*data,
         RooFit::RecoverFromUndefinedRegions(0.),
         RooFit::Save(),
@@ -148,7 +149,7 @@ TEST(RooNaNPacker, FitParabola) {
         RooFit::BatchMode(batchMode),
         RooFit::Minos()));
 
-    params = evilValues;
+    params.assign(evilValues);
     std::unique_ptr<RooFitResult> fitResultNew( pdf.fitTo(*data,
         RooFit::Save(),
         RooFit::PrintLevel(-1),
@@ -189,7 +190,7 @@ TEST(RooNaNPacker, FitAddPdf_DegenerateCoeff) {
   RooGenericPdf pdf3("gen3", "x*x*x+1", RooArgSet(x));
   RooAddPdf pdf("sum", "a1*gen1 + a2*gen2 + (1-a1-a2)*gen3", RooArgList(pdf1, pdf2, pdf3), RooArgList(a1, a2));
   std::unique_ptr<RooDataSet> data(pdf.generate(x, 2000));
-  auto nll = pdf.createNLL(*data);
+  std::unique_ptr<RooAbsReal> nll{pdf.createNLL(*data)};
 
   RooArgSet params(a1, a2);
   RooArgSet paramsInit;
@@ -200,11 +201,11 @@ TEST(RooNaNPacker, FitAddPdf_DegenerateCoeff) {
   a2.setVal(0.7);
   params.snapshot(evilValues);
 
-  params = evilValues;
+  params.assign(evilValues);
 
   RooFitResult *fitResult1 = nullptr, *fitResult2 = nullptr;
   for (auto tryRecover : std::initializer_list<double>{0., 10.}) {
-    params = evilValues;
+    params.assign(evilValues);
 
     RooMinimizer::cleanup();
     RooMinimizer minim(*nll);
@@ -265,11 +266,11 @@ TEST(RooNaNPacker, Interface_RooAbsPdf_fitTo_RooRealSumPdf_DegenerateCoeff) {
   a2.setVal(0.7);
   params.snapshot(evilValues);
 
-  params = evilValues;
+  params.assign(evilValues);
 
   RooFitResult *fitResult1 = nullptr, *fitResult2 = nullptr;
   for (auto tryRecover : std::initializer_list<double>{0., 10.}) {
-    params = evilValues;
+    params.assign(evilValues);
 
     auto fitResult = pdf.fitTo(*data, RooFit::PrintLevel(-1), RooFit::PrintEvalErrors(-1), RooFit::Save(), RooFit::RecoverFromUndefinedRegions(tryRecover));
     (tryRecover != 0. ? fitResult1 : fitResult2) = fitResult;

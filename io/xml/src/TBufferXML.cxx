@@ -46,8 +46,9 @@ There are limitations for complex objects like TTree, which can not be converted
 #include "TMemberStreamer.h"
 #include "TStreamer.h"
 #include "RZip.h"
-#include "ROOT/RMakeUnique.hxx"
 #include "snprintf.h"
+
+#include <memory>
 
 ClassImp(TBufferXML);
 
@@ -111,7 +112,7 @@ TString TBufferXML::ConvertToXML(const TObject *obj, Bool_t GenericLayout, Bool_
       if (!clActual)
          clActual = TObject::Class();
       else if (clActual != TObject::Class())
-         ptr = (void *)((Long_t)obj - clActual->GetBaseClassOffset(TObject::Class()));
+         ptr = (void *)((Longptr_t)obj - clActual->GetBaseClassOffset(TObject::Class()));
    }
 
    return ConvertToXML(ptr, clActual, GenericLayout, UseNamespaces);
@@ -394,7 +395,7 @@ void TBufferXML::XmlWriteBlock(XMLNodePointer_t node)
    const char *src = Buffer();
    int srcSize = Length();
 
-   char *fZipBuffer = 0;
+   char *fZipBuffer = nullptr;
 
    Int_t compressionLevel = GetCompressionLevel();
    ROOT::RCompressionSetting::EAlgorithm::EValues compressionAlgorithm =
@@ -417,13 +418,14 @@ void TBufferXML::XmlWriteBlock(XMLNodePointer_t node)
    }
 
    TString res;
-   char sbuf[500];
+   constexpr std::size_t sbufSize = 500;
+   char sbuf[sbufSize];
    int block = 0;
    char *tgt = sbuf;
    int srcCnt = 0;
 
    while (srcCnt++ < srcSize) {
-      tgt += sprintf(tgt, " %02x", (unsigned char)*src);
+      tgt += snprintf(tgt, sbufSize - (tgt - sbuf), " %02x", (unsigned char)*src);
       src++;
       if (block++ == 100) {
          res += sbuf;
@@ -528,7 +530,7 @@ Bool_t TBufferXML::ProcessPointer(const void *ptr, XMLNodePointer_t node)
    if (!ptr) {
       refvalue = xmlio::Null; // null
    } else {
-      XMLNodePointer_t refnode = (XMLNodePointer_t)(Long_t)GetObjectTag(ptr);
+      XMLNodePointer_t refnode = (XMLNodePointer_t)(Longptr_t)GetObjectTag(ptr);
       if (!refnode)
          return kFALSE;
 
@@ -766,7 +768,7 @@ XMLNodePointer_t TBufferXML::XmlWriteObject(const void *obj, const TClass *cl, B
    fXML->NewAttr(objnode, nullptr, xmlio::ObjClass, clname);
 
    if (cacheReuse)
-      fMap->Add(Void_Hash(obj), (Long_t)obj, (Long_t)objnode);
+      fMap->Add(Void_Hash(obj), (Longptr_t)obj, (Longptr_t)objnode);
 
    PushStack(objnode);
 
@@ -1056,7 +1058,7 @@ void TBufferXML::ClassBegin(const TClass *cl, Version_t)
 
 void TBufferXML::ClassEnd(const TClass *)
 {
-   DecrementLevel(0);
+   DecrementLevel(nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2532,7 +2534,7 @@ void TBufferXML::ReadCharP(Char_t *c)
    BeforeIOoperation();
    const char *buf;
    if ((buf = XmlReadValue(xmlio::CharStar)))
-      strcpy(c, buf);
+      strcpy(c, buf);  // NOLINT unfortunately, size of target buffer cannot be controlled here
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2554,7 +2556,7 @@ void TBufferXML::ReadTString(TString &s)
          else
             nbig = nwh;
 
-         char *data = new char[nbig];
+         char *data = new char[nbig+1];
          data[nbig] = 0;
          ReadFastArray(data, nbig);
          s = data;
@@ -3128,7 +3130,7 @@ void TBufferXML::XmlReadBasic(ULong64_t &value)
 const char *TBufferXML::XmlReadValue(const char *name)
 {
    if (fErrorFlag > 0)
-      return 0;
+      return nullptr;
 
    Bool_t trysimple = fCanUseCompact;
    fCanUseCompact = kFALSE;
@@ -3142,7 +3144,7 @@ const char *TBufferXML::XmlReadValue(const char *name)
 
    if (!trysimple) {
       if (!VerifyItemNode(name, "XmlReadValue"))
-         return 0;
+         return nullptr;
       fValueBuf = fXML->GetAttr(StackNode(), xmlio::v);
    }
 

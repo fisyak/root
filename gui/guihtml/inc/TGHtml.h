@@ -44,6 +44,7 @@ class TGFont;
 class TGIdleHandler;
 class THashTable;
 class TTimer;
+class TGPopupMenu;
 
 //----------------------------------------------------------------------
 
@@ -251,7 +252,7 @@ public:
    TGHtmlElement(int etype = 0);
 
    virtual int  IsMarkup() const { return (fType > Html_Block); }
-   virtual const char *MarkupArg(const char * /*tag*/, const char * /*zDefault*/) { return 0; }
+   virtual const char *MarkupArg(const char * /*tag*/, const char * /*zDefault*/) { return nullptr; }
    virtual int  GetAlignment(int dflt) { return dflt; }
    virtual int  GetOrderedListType(int dflt) { return dflt; }
    virtual int  GetUnorderedListType(int dflt) { return dflt; }
@@ -881,7 +882,7 @@ public:
    virtual Bool_t HandleIdleEvent(TGIdleHandler *i);
    virtual Bool_t HandleTimer(TTimer *timer);
 
-   virtual Bool_t ProcessMessage(Long_t, Long_t, Long_t);
+   virtual Bool_t ProcessMessage(Longptr_t, Longptr_t, Longptr_t);
 
    virtual void   DrawRegion(Int_t x, Int_t y, UInt_t w, UInt_t h);
    virtual Bool_t ItemLayout();
@@ -891,7 +892,7 @@ public:
 
 public:   // user commands
 
-   int  ParseText(char *text, const char *index = 0);
+   int  ParseText(char *text, const char *index = nullptr);
 
    void SetTableRelief(int relief);
    int  GetTableRelief() const { return fTableRelief; }
@@ -939,7 +940,7 @@ public:   // reloadable methods
 
    // Method to process applets
    virtual TGFrame *ProcessApplet(TGHtmlInput * /*input*/)
-      { return 0; }
+      { return nullptr; }
 
    // Called when parsing forms
    virtual int FormCreate(TGHtmlForm * /*form*/, const char * /*zUrl*/, const char * /*args*/)
@@ -951,27 +952,30 @@ public:   // reloadable methods
 
    // Invoked to find font names
    virtual char *GetFontName()
-      { return 0; }
+      { return nullptr; }
 
    // Invoked for each <SCRIPT> markup
    virtual char *ProcessScript(TGHtmlScript * /*script*/)
-      { return 0; }
+      { return nullptr; }
 
 public:
    const char *GetText() const { return fZText; }
+
+   void HandleMenu(Int_t);
+   void SaveFileAs();
 
    int GetMarginWidth() { return fMargins.fL + fMargins.fR; }
    int GetMarginHeight() { return fMargins.fT + fMargins.fB; }
 
    TGHtmlInput *GetInputElement(int x, int y);
-   const char *GetHref(int x, int y, const char **target = 0);
+   const char *GetHref(int x, int y, const char **target = nullptr);
 
    TGHtmlImage *GetImage(TGHtmlImageMarkup *p);
 
    int  InArea(TGHtmlMapArea *p, int left, int top, int x, int y);
    TGHtmlElement *GetMap(const char *name);
 
-   void ResetBlocks() { fFirstBlock = fLastBlock = 0; }
+   void ResetBlocks() { fFirstBlock = fLastBlock = nullptr; }
    int  ElementCoords(TGHtmlElement *p, int i, int pct, int *coords);
 
    TGHtmlElement *TableDimensions(TGHtmlTable *pStart, int lineWidth);
@@ -1125,6 +1129,10 @@ protected:
    virtual void UpdateBackgroundStart();
 
 protected:
+   enum {
+      kM_FILE_SAVEAS, kM_FILE_PRINT
+   };
+
    TGHtmlElement *fPFirst;          // First HTML token on a list of them all
    TGHtmlElement *fPLast;           // Last HTML token on the list
    int            fNToken;          // Number of HTML tokens on the list.
@@ -1179,6 +1187,7 @@ protected:
    TGHtmlScript  *fPScript;         // <SCRIPT> currently being parsed
 
    TGIdleHandler *fIdle;
+   TGPopupMenu   *fMenu;            // popup menu with user actions
 
    // These fields hold state information used by the HtmlAddStyle routine.
    // We have to store this state information here since HtmlAddStyle

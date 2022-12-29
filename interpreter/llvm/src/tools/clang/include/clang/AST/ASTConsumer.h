@@ -71,12 +71,6 @@ public:
   /// can be defined in declspecs).
   virtual void HandleTagDeclDefinition(TagDecl *D) {}
 
-  /// HandleInvalidTagDeclDefinition - This callback is invoked each time a TagDecl
-  /// (e.g. struct, union, enum, class) end up invalid after attempting completion.
-  /// This allows the client to record (and possibly remove from the AST) the
-  /// decl.
-  virtual void HandleInvalidTagDeclDefinition(TagDecl *D) {}
-
   /// This callback is invoked the first time each TagDecl is required to
   /// be complete.
   virtual void HandleTagDeclRequiredDefinition(const TagDecl *D) {}
@@ -107,6 +101,11 @@ public:
   /// declaration remains a tentative definition and has not been
   /// modified by the introduction of an implicit zero initializer.
   virtual void CompleteTentativeDefinition(VarDecl *D) {}
+
+  /// CompleteExternalDeclaration - Callback invoked at the end of a translation
+  /// unit to notify the consumer that the given external declaration should be
+  /// completed.
+  virtual void CompleteExternalDeclaration(VarDecl *D) {}
 
   /// Callback invoked when an MSInheritanceAttr has been attached to a
   /// CXXRecordDecl.

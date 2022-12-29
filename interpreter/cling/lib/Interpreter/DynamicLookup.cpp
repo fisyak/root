@@ -54,7 +54,7 @@ namespace {
     // * CallExpr
     // * MemberExpr
     // * CXXDependentScopeMemberExpr
-    virtual bool handledStmt(Stmt* S, llvm::raw_ostream& OS) {
+    bool handledStmt(Stmt* S, llvm::raw_ostream& OS) override {
       if (DeclRefExpr* Node = dyn_cast<DeclRefExpr>(S))
         // Exclude the artificially dependent DeclRefExprs, created by the
         // Lookup
@@ -289,12 +289,12 @@ namespace cling {
                "Cannot have more than one stmt at that point");
 
         if (NewNode.isForReplacement()) {
-          if (Expr* E = NewNode.getAs<Expr>())
+          if (Expr* E = NewNode.getAs<Expr>()) {
             // Assume void if still not escaped
             *I = SubstituteUnknownSymbol(m_Context->VoidTy, E);
-        }
-        else {
-          *I = NewNode.getAsSingleNode();
+          } else {
+            *I = NewNode.getAsSingleNode();
+          }
         }
       }
     }
@@ -328,14 +328,21 @@ namespace cling {
     // where we know what to do. For Stmt, though, we need to substitute here,
     // knowing the "target" type.
     ASTNodeInfo thenInfo = Visit(Node->getThen());
-    if (thenInfo.isForReplacement())
-      Node->setThen(SubstituteUnknownSymbol(m_Context->VoidTy,
-                                            thenInfo.getAs<Expr>()));
+    if (thenInfo.isForReplacement()) {
+      Stmt* thenReplacement = thenInfo.getAsSingleNode();
+      if (Expr* thenExpr = dyn_cast<Expr>(thenReplacement))
+        thenReplacement = SubstituteUnknownSymbol(m_Context->VoidTy, thenExpr);
+      Node->setThen(thenReplacement);
+    }
     if (Stmt* ElseExpr = Node->getElse()) {
       ASTNodeInfo elseInfo = Visit(ElseExpr);
-      if (elseInfo.isForReplacement())
-        Node->setElse(SubstituteUnknownSymbol(m_Context->VoidTy,
-                                              elseInfo.getAs<Expr>()));
+      if (elseInfo.isForReplacement()) {
+        Stmt* elseReplacement = elseInfo.getAsSingleNode();
+        if (Expr* elseExpr = dyn_cast<Expr>(elseReplacement))
+          elseReplacement =
+            SubstituteUnknownSymbol(m_Context->VoidTy, elseExpr);
+        Node->setElse(elseReplacement);
+      }
     }
 
     return ASTNodeInfo(Node, false);
@@ -356,10 +363,6 @@ namespace cling {
           ASTNodes& NewStmts(NewNode.getNodes());
           for(unsigned i = 0; i < NewStmts.size(); ++i)
             NewChildren.push_back(NewStmts[i]);
-
-          Node->replaceStmts(*m_Context, NewChildren);
-          // Resolve all 1:n replacements
-          Visit(Node);
         }
         else {
           if (NewNode.isForReplacement()) {
@@ -386,10 +389,12 @@ namespace cling {
       }
     }
 
-    Node->replaceStmts(*m_Context, NewChildren);
+    auto* NewCS = CompoundStmt::Create(*m_Context, NewChildren,
+                                       Node->getLBracLoc(),
+                                       Node->getRBracLoc());
 
     --m_NestedCompoundStmts;
-    return ASTNodeInfo(Node, 0);
+    return ASTNodeInfo(NewCS, true);
   }
 
   ASTNodeInfo EvaluateTSynthesizer::VisitDeclStmt(DeclStmt* Node) {
@@ -616,8 +621,7 @@ namespace cling {
         if (!IsArtificiallyDependent(LHSExpr)) {
           const QualType LHSTy = LHSExpr->getType();
           Node->setRHS(SubstituteUnknownSymbol(LHSTy, rhs.castTo<Expr>()));
-          Node->setTypeDependent(false);
-          Node->setValueDependent(false);
+          assert(Node->getDependence() == ExprDependence::None);
           return ASTNodeInfo(Node, /*needs eval*/false);
         }
     }
@@ -736,7 +740,7 @@ namespace cling {
 #ifndef NDEBUG
         cling::errs() <<
           "with internal representation (look for <dependent type>):\n";
-        SubTree->dump(cling::errs(), m_Sema->getSourceManager());
+        SubTree->dump(cling::errs(), m_Sema->getASTContext());
 #endif
         return SubTree;
       }
@@ -756,7 +760,6 @@ namespace cling {
                                                            TSI,
                                                            m_NoELoc,
                                                            ILE).get();
-    assert (ExprAddresses && "Could not build the void* array");
     if (!ExprAddresses)
        return SubTree;
 
@@ -806,8 +809,9 @@ namespace cling {
     unsigned bitSize = m_Context->getTypeSize(m_Context->VoidPtrTy);
     llvm::APInt ArraySize(bitSize, Value.size() + 1);
     const QualType CCArray = m_Context->getConstantArrayType(CChar,
-                                                            ArraySize,
-                                                            ArrayType::Normal,
+                                                             ArraySize,
+                                                           /*SizeExpr=*/nullptr,
+                                                             ArrayType::Normal,
                                                           /*IndexTypeQuals=*/0);
 
     StringLiteral::StringKind Kind = StringLiteral::Ascii;
@@ -873,7 +877,7 @@ namespace cling {
                                                EPI);
     DeclRefExpr* DRE = m_Sema->BuildDeclRefExpr(Fn,
                                                 FnTy,
-                                                VK_RValue,
+                                                VK_PRValue,
                                                 m_NoSLoc
                                                 );
 #if 0
@@ -935,7 +939,7 @@ namespace cling {
          << m_UniqueNameCounter++;
     return Strm.str();
   }
-  
+
 
   // end Helpers
 
@@ -961,7 +965,7 @@ namespace cling {
       ostrstream stream;
       stream << "delete (" << m_Type << "*) " << m_Memory << ";";
       LockCompilationDuringUserCodeExecutionRAII LCDUCER(*m_Interpreter);
-      m_Interpreter->execute(stream.str());
+      m_Interpreter->execute(stream.str().str());
     }
   } // end namespace internal
   } // end namespace runtime

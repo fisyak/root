@@ -88,7 +88,7 @@ namespace TMVA {
       void AddWeightsXMLTo( void* parent ) const;
       void ReadWeightsFromXML( void* wghtnode );
 
-      Double_t GetMvaValue( Double_t* err=0, Double_t* errUpper = 0 );
+      Double_t GetMvaValue( Double_t* err = nullptr, Double_t* errUpper = nullptr );
 
       // regression response
       virtual const std::vector<Float_t>& GetRegressionValues();
@@ -98,8 +98,12 @@ namespace TMVA {
 
       virtual void MakeClass( const TString& = TString("") ) const {};
 
-   private :
+   protected :
 
+      // signal/background classification response for all current set of data
+      virtual std::vector<Double_t> GetMvaValues(Long64_t firstEvt = 0, Long64_t lastEvt = -1, Bool_t logProgress = false);
+
+   private:
       // initializing mostly monitoring tools of the category process
       void Init();
 

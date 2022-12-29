@@ -307,10 +307,6 @@ void stressGUI()
          TString sp = gSystem->GetFromPipe("uname -a");
          sp.Resize(60);
          printf("*  SYS: %s\n",sp.Data());
-         if (strstr(gSystem->GetBuildNode(),"Linux")) {
-            sp = gSystem->GetFromPipe("lsb_release -d -s");
-            printf("*  SYS: %s\n",sp.Data());
-         }
          if (strstr(gSystem->GetBuildNode(),"Darwin")) {
             sp  = gSystem->GetFromPipe("sw_vers -productVersion");
             sp += " Mac OS X ";
@@ -2185,7 +2181,7 @@ void testSplitFrame()
    first->GetFirst()->VSplit();
    first->GetSecond()->VSplit();
    first->GetSecond()->GetSecond()->SetEditable();
-   new TGTextEditor("stressGUI.cxx", gClient->GetRoot());
+   new TGTextEditor(Form("%s/test/stressGUI.cxx", gRootSys.Data()), gClient->GetRoot());
    first->GetSecond()->GetSecond()->SetEditable(kFALSE);
    mf->MapSubwindows();
    mf->Resize(600, 400);
@@ -2282,9 +2278,9 @@ void testPaletteEditor()
 
 void testHtmlBrowser()
 {
-   TGHtmlBrowser *b = new TGHtmlBrowser("http://bellenot.web.cern.ch/bellenot/Public/html_test/html_test.html");
+   TGHtmlBrowser *b = new TGHtmlBrowser("https://bellenot.web.cern.ch/public/html_test/html_test.html");
    ProcessFrame((TGMainFrame*)b, "HTML Browser 1");
-   b->Selected("http://bellenot.web.cern.ch/bellenot/Public/html_test/gallery/");
+   b->Selected("https://bellenot.web.cern.ch/public/html_test/gallery/");
    ProcessFrame((TGMainFrame*)b, "HTML Browser 2");
    b->CloseWindow();
 }

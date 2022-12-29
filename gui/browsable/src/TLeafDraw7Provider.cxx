@@ -15,18 +15,12 @@ using namespace ROOT::Experimental;
 
 /** Provider for drawing of ROOT7 classes */
 
-class TLeafDraw7Provider : public TLeafProvider<void> {
+class TLeafDraw7Provider : public TLeafProvider {
 public:
    bool AddHist(std::shared_ptr<RPadBase> &subpad, TH1 *hist, const std::string &opt)
    {
       if (!hist)
          return false;
-
-      if (subpad->NumPrimitives() > 0) {
-         subpad->Wipe();
-         subpad->GetCanvas()->Modified();
-         subpad->GetCanvas()->Update(true);
-      }
 
       std::shared_ptr<TH1> shared;
       shared.reset(hist);

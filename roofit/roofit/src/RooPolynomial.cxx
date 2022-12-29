@@ -30,7 +30,6 @@ RooPolynomial::RooPolynomial(const char*, const char*, RooAbsReal&, const RooArg
 **/
 
 #include "RooPolynomial.h"
-#include "RooAbsReal.h"
 #include "RooArgList.h"
 #include "RooMsgService.h"
 #include "RooBatchCompute.h"
@@ -83,9 +82,7 @@ RooPolynomial::RooPolynomial(const char* name, const char* title,
     _lowestOrder=0 ;
   }
 
-  RooFIter coefIter = coefList.fwdIterator() ;
-  RooAbsArg* coef ;
-  while((coef = (RooAbsArg*)coefIter.next())) {
+  for (auto *coef : coefList) {
     if (!dynamic_cast<RooAbsReal*>(coef)) {
       coutE(InputArguments) << "RooPolynomial::ctor(" << GetName() << ") ERROR: coefficient " << coef->GetName()
              << " is not of type RooAbsReal" << endl ;
@@ -123,7 +120,7 @@ RooPolynomial::~RooPolynomial()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Double_t RooPolynomial::evaluate() const
+double RooPolynomial::evaluate() const
 {
   // Calculate and return value of polynomial
 
@@ -134,34 +131,31 @@ Double_t RooPolynomial::evaluate() const
   _wksp.reserve(sz);
   {
     const RooArgSet* nset = _coefList.nset();
-    RooFIter it = _coefList.fwdIterator();
-    RooAbsReal* c;
-    while ((c = (RooAbsReal*) it.next())) _wksp.push_back(c->getVal(nset));
+    for (auto *c : static_range_cast<RooAbsReal *>(_coefList)) {
+       _wksp.push_back(c->getVal(nset));
+    }
   }
-  const Double_t x = _x;
-  Double_t retVal = _wksp[sz - 1];
+  const double x = _x;
+  double retVal = _wksp[sz - 1];
   for (unsigned i = sz - 1; i--; ) retVal = _wksp[i] + x * retVal;
   return retVal * std::pow(x, lowestOrder) + (lowestOrder ? 1.0 : 0.0);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Compute multiple values of Polynomial.  
-RooSpan<double> RooPolynomial::evaluateSpan(RooBatchCompute::RunContext& evalData, const RooArgSet* normSet) const {
-  RooSpan<const double> xData = _x->getValues(evalData, normSet);
-  int batchSize = xData.size();  
-  RooSpan<double> output = evalData.makeBatch(this, batchSize);
+// The batch mode support for RooPolynomial was commented out, because that
+// implementation can't deal with observables used as polynomial coefficients
+// yet.
 
-  const int nCoef = _coefList.getSize();
-  const RooArgSet* listNormSet = _coefList.nset();
-  std::vector<RooBatchCompute::BracketAdapterWithMask> coefList;
-  for (int i=0; i<nCoef; i++) {
-    auto valBatch = static_cast<RooAbsReal&>(_coefList[i]).getValues(evalData, listNormSet);
-    coefList.emplace_back(valBatch);
-  }
-
-  RooBatchCompute::dispatch->computePolynomial(batchSize, output.data(), xData.data(), _lowestOrder, coefList);
-  return output;
-}
+//////////////////////////////////////////////////////////////////////////////////
+///// Compute multiple values of Polynomial.
+//void RooPolynomial::computeBatch(cudaStream_t* stream, double* output, size_t nEvents, RooFit::DataMap& dataMap) const
+//{
+  //RooBatchCompute::ArgVector extraArgs;
+  //for (auto* coef:_coefList)
+    //extraArgs.push_back( static_cast<const RooAbsReal*>(coef)->getVal() );
+  //extraArgs.push_back(_lowestOrder);
+  //auto dispatch = stream ? RooBatchCompute::dispatchCUDA : RooBatchCompute::dispatchCPU;
+  //dispatch->compute(stream, RooBatchCompute::Polynomial, output, nEvents, dataMap, {&*_x,&*_norm}, extraArgs);
+//}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Advertise to RooFit that this function can be analytically integrated.
@@ -173,11 +167,11 @@ Int_t RooPolynomial::getAnalyticalIntegral(RooArgSet& allVars, RooArgSet& analVa
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Do the analytical integral according to the code that was returned by getAnalyticalIntegral().
-Double_t RooPolynomial::analyticalIntegral(Int_t code, const char* rangeName) const
+double RooPolynomial::analyticalIntegral(Int_t code, const char* rangeName) const
 {
   R__ASSERT(code==1) ;
 
-  const Double_t xmin = _x.min(rangeName), xmax = _x.max(rangeName);
+  const double xmin = _x.min(rangeName), xmax = _x.max(rangeName);
   const int lowestOrder = _lowestOrder;
   const unsigned sz = _coefList.getSize();
   if (!sz) return xmax - xmin;
@@ -185,15 +179,13 @@ Double_t RooPolynomial::analyticalIntegral(Int_t code, const char* rangeName) co
   _wksp.reserve(sz);
   {
     const RooArgSet* nset = _coefList.nset();
-    RooFIter it = _coefList.fwdIterator();
     unsigned i = 1 + lowestOrder;
-    RooAbsReal* c;
-    while ((c = (RooAbsReal*) it.next())) {
-      _wksp.push_back(c->getVal(nset) / Double_t(i));
+    for (auto *c : static_range_cast<RooAbsReal *>(_coefList)) {
+      _wksp.push_back(c->getVal(nset) / double(i));
       ++i;
     }
   }
-  Double_t min = _wksp[sz - 1], max = _wksp[sz - 1];
+  double min = _wksp[sz - 1], max = _wksp[sz - 1];
   for (unsigned i = sz - 1; i--; )
     min = _wksp[i] + xmin * min, max = _wksp[i] + xmax * max;
   return max * std::pow(xmax, 1 + lowestOrder) - min * std::pow(xmin, 1 + lowestOrder) +

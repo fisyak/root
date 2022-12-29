@@ -9,6 +9,10 @@
 
 #include "BackendPasses.h"
 
+#include "IncrementalJIT.h"
+
+#include "cling/Utils/Platform.h"
+
 #include "llvm/Analysis/InlineCost.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -43,13 +47,26 @@ namespace {
 
       // GV is a definition.
 
+      // It doesn't make sense to keep unnamed constants, we wouldn't know how
+      // to reference them anyway.
+      if (!GV.hasName())
+        return false;
+
+      if (GV.getName().startswith(".str"))
+        return false;
+
       llvm::GlobalValue::LinkageTypes LT = GV.getLinkage();
       if (!GV.isDiscardableIfUnused(LT))
         return false;
 
       if (LT == llvm::GlobalValue::InternalLinkage
           || LT == llvm::GlobalValue::PrivateLinkage) {
-        GV.setLinkage(llvm::GlobalValue::ExternalLinkage);
+        // We want to keep this GlobalValue around, but have to tell the JIT
+        // linker that it should not error on duplicate symbols.
+        // FIXME: Ideally the frontend would never emit duplicate symbols and
+        // we could just use the old version of saying:
+        // GV.setLinkage(llvm::GlobalValue::ExternalLinkage);
+        GV.setLinkage(llvm::GlobalValue::WeakAnyLinkage);
         return true; // a change!
       }
       return false;
@@ -72,30 +89,146 @@ namespace {
 char KeepLocalGVPass::ID = 0;
 
 namespace {
+  class PreventLocalOptPass: public ModulePass {
+    static char ID;
 
-  // Add a suffix to the CUDA module ctor/dtor to generate a unique name.
-  // This is necessary for lazy compilation. Without suffix, cling cannot
-  // distinguish ctor/dtor of subsequent modules.
+    bool runOnGlobal(GlobalValue& GV) {
+      if (!GV.isDeclaration())
+        return false; // no change.
+
+      // GV is a declaration with no definition. Make sure to prevent any
+      // optimization that tries to take advantage of the actual definition
+      // being "local" because we have no influence on the memory layout of
+      // data sections and how "close" they are to the code.
+
+      bool changed = false;
+
+      if (GV.hasLocalLinkage()) {
+        GV.setLinkage(llvm::GlobalValue::ExternalLinkage);
+        changed = true;
+      }
+
+      if (!GV.hasDefaultVisibility()) {
+        GV.setVisibility(llvm::GlobalValue::DefaultVisibility);
+        changed = true;
+      }
+
+      // Set DSO locality last because setLinkage() and setVisibility() check
+      // isImplicitDSOLocal().
+      if (GV.isDSOLocal()) {
+        GV.setDSOLocal(false);
+        changed = true;
+      }
+
+      return changed;
+    }
+
+  public:
+    PreventLocalOptPass() : ModulePass(ID) {}
+
+    bool runOnModule(Module &M) override {
+      bool ret = false;
+      for (auto &&F: M)
+        ret |= runOnGlobal(F);
+      for (auto &&G: M.globals())
+        ret |= runOnGlobal(G);
+      return ret;
+    }
+  };
+}
+
+char PreventLocalOptPass::ID = 0;
+
+namespace {
+  class WeakTypeinfoVTablePass: public ModulePass {
+    static char ID;
+
+    bool runOnGlobalVariable(GlobalVariable& GV) {
+      // Only need to consider symbols with external linkage because only
+      // these could be reported as duplicate.
+      if (GV.getLinkage() != llvm::GlobalValue::ExternalLinkage)
+        return false;
+
+      if (GV.getName().startswith("_ZT")) {
+        // Currently, if Cling sees the "key function" of a virtual class, it
+        // emits typeinfo and vtable variables in every transaction llvm::Module
+        // that reference them. Turn them into weak linkage to avoid duplicate
+        // symbol errors from the JIT linker.
+        // FIXME: This is a hack, we should teach the frontend to emit these
+        // only once, or mark all duplicates as available_externally (if that
+        // improves performance due to optimizations).
+        GV.setLinkage(llvm::GlobalValue::WeakAnyLinkage);
+        return true; // a change!
+      }
+
+      return false;
+    }
+
+  public:
+    WeakTypeinfoVTablePass() : ModulePass(ID) {}
+
+    bool runOnModule(Module &M) override {
+      bool ret = false;
+      for (auto &&GV : M.globals())
+        ret |= runOnGlobalVariable(GV);
+      return ret;
+    }
+  };
+}
+
+char WeakTypeinfoVTablePass::ID = 0;
+
+namespace {
+
+  // Add a suffix to the CUDA module ctor/dtor, CUDA specific functions and
+  // variables to generate a unique name. This is necessary for lazy
+  // compilation. Without suffix, cling cannot distinguish ctor/dtor, register
+  // function and and ptx code string of subsequent modules.
   class UniqueCUDAStructorName : public ModulePass {
     static char ID;
 
-    bool runOnFunction(Function& F, const StringRef ModuleName){
-      if(F.hasName() && (F.getName() == "__cuda_module_ctor"
-          || F.getName() == "__cuda_module_dtor") ){
-        llvm::SmallString<128> NewFunctionName;
-        NewFunctionName.append(F.getName());
-        NewFunctionName.append("_");
-        NewFunctionName.append(ModuleName);
+    // append a suffix to a symbol to make it unique
+    // the suffix is "_cling_module_<module number>"
+    llvm::SmallString<128> add_module_suffix(const StringRef SymbolName,
+                                             const StringRef ModuleName) {
+      llvm::SmallString<128> NewFunctionName;
+      NewFunctionName.append(SymbolName);
+      NewFunctionName.append("_");
+      NewFunctionName.append(ModuleName);
 
-        for (size_t i = 0; i < NewFunctionName.size(); ++i) {
-          // Replace everything that is not [a-zA-Z0-9._] with a _. This set
-          // happens to be the set of C preprocessing numbers.
-          if (!isPreprocessingNumberBody(NewFunctionName[i]))
-            NewFunctionName[i] = '_';
-        }
+      for (size_t i = 0; i < NewFunctionName.size(); ++i) {
+        // Replace everything that is not [a-zA-Z0-9._] with a _. This set
+        // happens to be the set of C preprocessing numbers.
+        if (!isPreprocessingNumberBody(NewFunctionName[i]))
+          NewFunctionName[i] = '_';
+      }
 
-        F.setName(NewFunctionName);
+      return NewFunctionName;
+    }
 
+    // make CUDA specific variables unique
+    bool runOnGlobal(GlobalValue& GV, const StringRef ModuleName) {
+      if (GV.isDeclaration())
+        return false; // no change.
+
+      if (!GV.hasName())
+        return false;
+
+      if (GV.getName().equals("__cuda_fatbin_wrapper") ||
+          GV.getName().equals("__cuda_gpubin_handle")) {
+        GV.setName(add_module_suffix(GV.getName(), ModuleName));
+        return true;
+      }
+
+      return false;
+    }
+
+    // make CUDA specific functions unique
+    bool runOnFunction(Function& F, const StringRef ModuleName) {
+      if (F.hasName() && (F.getName().equals("__cuda_module_ctor") ||
+                          F.getName().equals("__cuda_module_dtor") ||
+                          F.getName().equals("__cuda_register_globals"))) {
+        F.setName(add_module_suffix(F.getName(), ModuleName));
         return true;
       }
 
@@ -105,17 +238,86 @@ namespace {
   public:
     UniqueCUDAStructorName() : ModulePass(ID) {}
 
-    bool runOnModule(Module &M) override {
+    bool runOnModule(Module& M) override {
       bool ret = false;
       const StringRef ModuleName = M.getName();
-      for (auto &&F: M)
+      for (auto&& F : M)
         ret |= runOnFunction(F, ModuleName);
+      for (auto&& G : M.globals())
+        ret |= runOnGlobal(G, ModuleName);
+      return ret;
+    }
+  };
+} // namespace
+
+char UniqueCUDAStructorName::ID = 0;
+
+
+namespace {
+
+  // Replace definitions of weak symbols for which symbols already exist by
+  // declarations. This reduces the amount of emitted symbols.
+  class ReuseExistingWeakSymbols : public ModulePass {
+    static char ID;
+
+    bool runOnGlobal(GlobalValue& GV) {
+      if (GV.isDeclaration())
+        return false; // no change.
+
+      // GV is a definition.
+
+      llvm::GlobalValue::LinkageTypes LT = GV.getLinkage();
+      if (!GV.isDiscardableIfUnused(LT) || !GV.isWeakForLinker(LT))
+        return false;
+
+      // Find the symbol in JIT or shared libraries (without auto-loading).
+      std::string Name =  GV.getName().str();
+      if (
+#if !defined(_WIN32)
+        llvm::sys::DynamicLibrary::SearchForAddressOfSymbol(Name)
+#else
+        platform::DLSym(Name)
+#endif
+      ) {
+#if !defined(_WIN32)
+        // Heuristically, Windows cannot handle cross-library variables; they
+        // must be library-local.
+        if (auto *Var = dyn_cast<GlobalVariable>(&GV)) {
+          Var->setInitializer(nullptr); // make this a declaration
+        } else
+#endif
+        if (auto *Func = dyn_cast<Function>(&GV)) {
+          Func->deleteBody(); // make this a declaration
+        }
+        return true; // a change!
+      }
+      return false;
+    }
+
+  public:
+    ReuseExistingWeakSymbols() :
+      ModulePass(ID) {}
+
+    bool runOnModule(Module &M) override {
+      bool ret = false;
+      for (auto &&F: M)
+        ret |= runOnGlobal(F);
+      for (auto &&G: M.globals())
+        ret |= runOnGlobal(G);
       return ret;
     }
   };
 }
 
-char UniqueCUDAStructorName::ID = 0;
+char ReuseExistingWeakSymbols::ID = 0;
+
+
+BackendPasses::BackendPasses(const clang::CodeGenOptions &CGOpts,
+                             llvm::TargetMachine& TM):
+   m_TM(TM),
+   m_CGOpts(CGOpts)
+{}
+
 
 BackendPasses::~BackendPasses() {
   //delete m_PMBuilder->Inliner;
@@ -188,6 +390,10 @@ void BackendPasses::CreatePasses(llvm::Module& M, int OptLevel)
   m_MPM[OptLevel].reset(new legacy::PassManager());
 
   m_MPM[OptLevel]->add(new KeepLocalGVPass());
+  m_MPM[OptLevel]->add(new PreventLocalOptPass());
+  m_MPM[OptLevel]->add(new WeakTypeinfoVTablePass());
+  m_MPM[OptLevel]->add(new ReuseExistingWeakSymbols());
+
   // The function __cuda_module_ctor and __cuda_module_dtor will just generated,
   // if a CUDA fatbinary file exist. Without file path there is no need for the
   // function pass.

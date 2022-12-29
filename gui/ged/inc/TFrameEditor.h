@@ -12,16 +12,6 @@
 #ifndef ROOT_TFrameEditor
 #define ROOT_TFrameEditor
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TFrameEditor                                                        //
-//                                                                      //
-//  Editor of frame objects.                                            //
-//                                                                      //
-//  Frame border can be set to sunken, raised or no border.             //
-//  Border size can be set for sunken or rized frames (1-15 pixels).    //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
 
 #include "TGedFrame.h"
 
@@ -34,16 +24,16 @@ class TFrameEditor : public TGedFrame {
 
 protected:
    TFrame              *fFrame;
-   TGRadioButton       *fBmode;            // set sinken frame border mode
-   TGRadioButton       *fBmode0;           // set no border
-   TGRadioButton       *fBmode1;           // set raised frame border mode
-   TGLayoutHints       *fBmodelh;          // layout hints for border mode buttons
-   TGLineWidthComboBox *fBsize;            // set frame border size
+   TGRadioButton       *fBmode;            ///< set sinken frame border mode
+   TGRadioButton       *fBmode0;           ///< set no border
+   TGRadioButton       *fBmode1;           ///< set raised frame border mode
+   TGLayoutHints       *fBmodelh;          ///< layout hints for border mode buttons
+   TGLineWidthComboBox *fBsize;            ///< set frame border size
 
    virtual void ConnectSignals2Slots();
 
 public:
-   TFrameEditor(const TGWindow *p =0,
+   TFrameEditor(const TGWindow *p = nullptr,
                 Int_t width = 140, Int_t height = 30,
                 UInt_t options = kChildFrame,
                 Pixel_t back = GetDefaultFrameBackground());

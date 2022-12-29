@@ -32,8 +32,8 @@ void IntegrationChecker(double a0, double a1, double a2, double a3)
   RooBernstein bern("bern", "bernstein PDF", x, RooArgList(c0, c1, c2, c3));
   RooBernstein bernNumInt(bern);
   // Set normalization range
-  bern.selectNormalizationRange("FULL",kTRUE);
-  bernNumInt.selectNormalizationRange("FULL",kTRUE);
+  bern.selectNormalizationRange("FULL",true);
+  bernNumInt.selectNormalizationRange("FULL",true);
 
   RooNumIntConfig intConfig(*RooAbsReal::defaultIntegratorConfig());
   intConfig.setEpsAbs(1.E-15);
@@ -64,7 +64,7 @@ void IntegrationChecker(double a0, double a1, double a2, double a3)
       accAnaVsNum/100.*numInt_range1->getVal())
   << "Analytical vs numerical integral"
   << " within " << accAnaVsNum << "%. ";
-  
+
   EXPECT_NEAR(int_range1->getVal(), numInt_range1->getVal(),
       accAnaVsNum/100.*numInt_range2->getVal())
   << "Analytical vs numerical integral"

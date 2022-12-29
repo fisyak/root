@@ -10,7 +10,7 @@
  *************************************************************************/
 
 /** \class TGeoElement
-\ingroup Geometry_classes
+\ingroup Materials_classes
 Base class for chemical elements
 */
 
@@ -106,8 +106,8 @@ TGeoElement::TGeoElement()
    fN = 0;
    fNisotopes = 0;
    fA = 0.0;
-   fIsotopes = NULL;
-   fAbundances = NULL;
+   fIsotopes = nullptr;
+   fAbundances = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -123,8 +123,8 @@ TGeoElement::TGeoElement(const char *name, const char *title, Int_t z, Double_t 
    fN = Int_t(a);
    fNisotopes = 0;
    fA = a;
-   fIsotopes = NULL;
-   fAbundances = NULL;
+   fIsotopes = nullptr;
+   fAbundances = nullptr;
    ComputeDerivedQuantities();
 }
 
@@ -158,8 +158,8 @@ TGeoElement::TGeoElement(const char *name, const char *title, Int_t z, Int_t n, 
    fN = n;
    fNisotopes = 0;
    fA = a;
-   fIsotopes = NULL;
-   fAbundances = NULL;
+   fIsotopes = nullptr;
+   fAbundances = nullptr;
    ComputeDerivedQuantities();
 }
 
@@ -240,7 +240,7 @@ TGeoElementTable *TGeoElement::GetElementTable()
 {
    if (!gGeoManager) {
       ::Error("TGeoElementTable::GetElementTable", "Create a geometry manager first");
-      return NULL;
+      return nullptr;
    }
    return gGeoManager->GetElementTable();
 }
@@ -251,16 +251,21 @@ TGeoElementTable *TGeoElement::GetElementTable()
 void TGeoElement::AddIsotope(TGeoIsotope *isotope, Double_t relativeAbundance)
 {
    if (!fIsotopes) {
-      Fatal("AddIsotope", "Cannot add isotopes to normal elements. Use constructor with number of isotopes.");
-      return;
+      fNisotopes = 1;
+      fIsotopes = new TObjArray();
+      fAbundances = new Double_t[1];
    }
    Int_t ncurrent = 0;
    TGeoIsotope *isocrt;
    for (ncurrent=0; ncurrent<fNisotopes; ncurrent++)
       if (!fIsotopes->At(ncurrent)) break;
    if (ncurrent==fNisotopes) {
-      Error("AddIsotope", "All %d isotopes of element %s already defined", fNisotopes, GetName());
-      return;
+      // User requested overwriting a standard element - we need to extend dynamically the support arrays
+      Double_t *abundances = new Double_t[fNisotopes + 1];
+      memcpy(abundances, fAbundances, fNisotopes * sizeof(Double_t));
+      delete[] fAbundances;
+      fAbundances = abundances;
+      fNisotopes++;
    }
    // Check Z of the new isotope
    if ((fZ!=0) && (isotope->GetZ()!=fZ)) {
@@ -316,7 +321,7 @@ TGeoIsotope *TGeoElement::GetIsotope(Int_t i) const
    if (i>=0 && i<fNisotopes) {
       return (TGeoIsotope*)fIsotopes->At(i);
    }
-   return NULL;
+   return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -881,8 +886,8 @@ TGeoElementRN *TGeoElemIter::Up()
          if (Down(ind++)) return (TGeoElementRN*)fElem;
       }
    }
-   fElem = NULL;
-   return NULL;
+   fElem = nullptr;
+   return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -891,10 +896,11 @@ TGeoElementRN *TGeoElemIter::Up()
 
 TGeoElementRN *TGeoElemIter::Down(Int_t ibranch)
 {
+   if (!fElem) return nullptr;
    TGeoDecayChannel *dc = (TGeoDecayChannel*)fElem->Decays()->At(ibranch);
-   if (!dc->Daughter()) return NULL;
+   if (!dc->Daughter()) return nullptr;
    Double_t br = 0.01*fRatio*dc->BranchingRatio();
-   if (br < fLimitRatio) return NULL;
+   if (br < fLimitRatio) return nullptr;
    fLevel++;
    fRatio = br;
    fBranch->Add(dc);
@@ -907,7 +913,7 @@ TGeoElementRN *TGeoElemIter::Down(Int_t ibranch)
 
 TGeoElementRN *TGeoElemIter::Next()
 {
-   if (!fElem) return NULL;
+   if (!fElem) return nullptr;
    // Check if this is the first iteration.
    Int_t nd = fElem->GetNdecays();
    for (Int_t i=0; i<nd; i++) if (Down(i)) return (TGeoElementRN*)fElem;
@@ -1302,7 +1308,7 @@ TGeoElement *TGeoElementTable::FindElement(const char *name) const
 
 TGeoIsotope *TGeoElementTable::FindIsotope(const char *name) const
 {
-   if (!fIsotopes) return NULL;
+   if (!fIsotopes) return nullptr;
    return (TGeoIsotope*)fIsotopes->FindObject(name);
 }
 
@@ -1382,7 +1388,7 @@ TGeoBatemanSol::TGeoBatemanSol(TGeoElementRN *elem)
                 fFactor(1.),
                 fTmin(0.),
                 fTmax(0.),
-                fCoeff(NULL)
+                fCoeff(nullptr)
 {
    fCoeff = new BtCoef_t[fCsize];
    fNcoeff = 1;
@@ -1398,14 +1404,14 @@ TGeoBatemanSol::TGeoBatemanSol(TGeoElementRN *elem)
 
 TGeoBatemanSol::TGeoBatemanSol(const TObjArray *chain)
                :TObject(), TAttLine(), TAttFill(), TAttMarker(),
-                fElem(NULL),
-                fElemTop(NULL),
+                fElem(nullptr),
+                fElemTop(nullptr),
                 fCsize(0),
                 fNcoeff(0),
                 fFactor(1.),
                 fTmin(0.),
                 fTmax(0.),
-                fCoeff(NULL)
+                fCoeff(nullptr)
 {
    TGeoDecayChannel *dc = (TGeoDecayChannel*)chain->At(0);
    if (dc) fElemTop = dc->Parent();
@@ -1430,7 +1436,7 @@ TGeoBatemanSol::TGeoBatemanSol(const TGeoBatemanSol& other)
                 fFactor(other.fFactor),
                 fTmin(other.fTmin),
                 fTmax(other.fTmax),
-                fCoeff(NULL)
+                fCoeff(nullptr)
 {
    if (fCsize) {
       fCoeff = new BtCoef_t[fCsize];

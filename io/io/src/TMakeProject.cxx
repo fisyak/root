@@ -158,7 +158,7 @@ TString TMakeProject::GetHeaderName(const char *in_name, const TList *extrainfos
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Write the start of the class (forward) declaration.
-/// If 'implementEmptyClass' is 3 then never add a #pragma
+/// If 'implementEmptyClass' is 3 then never add a `#pragma`
 
 UInt_t TMakeProject::GenerateClassPrefix(FILE *fp, const char *clname, Bool_t top, TString &protoname,
       UInt_t *numberOfClasses, Int_t implementEmptyClass, Bool_t needGenericTemplate)
@@ -510,6 +510,9 @@ UInt_t TMakeProject::GenerateIncludeForTemplate(FILE *fp, const char *clname, ch
                         break;
                      case ROOT::kSTLbitset:
                         what = "bitset";
+                        break;
+                     case ROOT::kROOTRVec:
+                        what = "ROOT/RVec.hxx";
                         break;
                      default:
                         what = "undetermined_stl_container";

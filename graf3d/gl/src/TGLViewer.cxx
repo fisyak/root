@@ -91,6 +91,7 @@ ClassImp(TGLViewer);
 
 TGLColorSet TGLViewer::fgDefaultColorSet;
 Bool_t      TGLViewer::fgUseDefaultColorSetForNewViewers = kFALSE;
+Float_t     TGLViewer::fgAxisLabelScale = 1;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -456,7 +457,7 @@ void TGLViewer::RequestDraw(Short_t LODInput)
    fLOD = LODInput;
 
    if (!gVirtualX->IsCmdThread())
-      gROOT->ProcessLineFast(Form("((TGLViewer *)0x%lx)->DoDraw()", (ULong_t)this));
+      gROOT->ProcessLineFast(Form("((TGLViewer *)0x%zx)->DoDraw()", (size_t)this));
    else
       DoDraw();
 }
@@ -852,7 +853,7 @@ Bool_t TGLViewer::SavePictureUsingBB(const TString &fileName)
    fRnrCtx->SetGrabImage(kTRUE);
 
    if (!gVirtualX->IsCmdThread())
-      gROOT->ProcessLineFast(Form("((TGLViewer *)0x%lx)->DoDraw(kFALSE)", (ULong_t)this));
+      gROOT->ProcessLineFast(Form("((TGLViewer *)0x%zx)->DoDraw(kFALSE)", (size_t)this));
    else
       DoDraw(kFALSE);
 
@@ -942,7 +943,7 @@ Bool_t TGLViewer::SavePictureUsingFBO(const TString &fileName, Int_t w, Int_t h,
    fRnrCtx->SetGrabImage(kTRUE);
 
    if (!gVirtualX->IsCmdThread())
-      gROOT->ProcessLineFast(Form("((TGLViewer *)0x%lx)->DoDraw(kFALSE)", (ULong_t)this));
+      gROOT->ProcessLineFast(Form("((TGLViewer *)0x%zx)->DoDraw(kFALSE)", (size_t)this));
    else
       DoDraw(kFALSE);
 
@@ -996,7 +997,7 @@ TImage* TGLViewer::GetPictureUsingBB()
     fRnrCtx->SetGrabImage(kTRUE);
 
     if (!gVirtualX->IsCmdThread())
-        gROOT->ProcessLineFast(Form("((TGLViewer *)0x%lx)->DoDraw(kFALSE)", (ULong_t)this));
+        gROOT->ProcessLineFast(Form("((TGLViewer *)0x%zx)->DoDraw(kFALSE)", (size_t)this));
     else
         DoDraw(kFALSE);
 
@@ -1075,7 +1076,7 @@ TImage* TGLViewer::GetPictureUsingFBO(Int_t w, Int_t h,Float_t pixel_object_scal
     fRnrCtx->SetGrabImage(kTRUE);
 
     if (!gVirtualX->IsCmdThread())
-        gROOT->ProcessLineFast(Form("((TGLViewer *)0x%lx)->DoDraw(kFALSE)", (ULong_t)this));
+        gROOT->ProcessLineFast(Form("((TGLViewer *)0x%zx)->DoDraw(kFALSE)", (size_t)this));
     else
         DoDraw(kFALSE);
 
@@ -1179,7 +1180,7 @@ void TGLViewer::DrawGuides()
       glDisable(GL_DEPTH_TEST);
       disabled = kTRUE;
    }
-   TGLUtil::DrawSimpleAxes(*fCamera, fOverallBoundingBox, fAxesType);
+   TGLUtil::DrawSimpleAxes(*fCamera, fOverallBoundingBox, fAxesType, fgAxisLabelScale);
    if (disabled)
       glEnable(GL_DEPTH_TEST);
 }
@@ -1312,7 +1313,7 @@ Bool_t TGLViewer::RequestSelect(Int_t x, Int_t y)
    }
 
    if (!gVirtualX->IsCmdThread())
-      return Bool_t(gROOT->ProcessLineFast(Form("((TGLViewer *)0x%lx)->DoSelect(%d, %d)", (ULong_t)this, x, y)));
+      return Bool_t(gROOT->ProcessLineFast(Form("((TGLViewer *)0x%zx)->DoSelect(%d, %d)", (size_t)this, x, y)));
    else
       return DoSelect(x, y);
 }
@@ -1385,7 +1386,7 @@ Bool_t TGLViewer::RequestSecondarySelect(Int_t x, Int_t y)
    }
 
    if (!gVirtualX->IsCmdThread())
-      return Bool_t(gROOT->ProcessLineFast(Form("((TGLViewer *)0x%lx)->DoSecondarySelect(%d, %d)", (ULong_t)this, x, y)));
+      return Bool_t(gROOT->ProcessLineFast(Form("((TGLViewer *)0x%zx)->DoSecondarySelect(%d, %d)", (size_t)this, x, y)));
    else
       return DoSecondarySelect(x, y);
 }
@@ -1411,8 +1412,8 @@ Bool_t TGLViewer::DoSecondarySelect(Int_t x, Int_t y)
    {
       if (gDebug > 0)
          Info("TGLViewer::SecondarySelect", "Skipping secondary selection "
-              "(sinfo=0x%lx, pshape=0x%lx).\n",
-              (Long_t)fSelRec.GetSceneInfo(), (Long_t)fSelRec.GetPhysShape());
+              "(sinfo=0x%zx, pshape=0x%zx).\n",
+              (size_t)fSelRec.GetSceneInfo(), (size_t)fSelRec.GetPhysShape());
       fSecSelRec.Reset();
       return kFALSE;
    }
@@ -1495,7 +1496,7 @@ Bool_t TGLViewer::RequestOverlaySelect(Int_t x, Int_t y)
    }
 
    if (!gVirtualX->IsCmdThread())
-      return Bool_t(gROOT->ProcessLineFast(Form("((TGLViewer *)0x%lx)->DoOverlaySelect(%d, %d)", (ULong_t)this, x, y)));
+      return Bool_t(gROOT->ProcessLineFast(Form("((TGLViewer *)0x%zx)->DoOverlaySelect(%d, %d)", (size_t)this, x, y)));
    else
       return DoOverlaySelect(x, y);
 }
@@ -1700,6 +1701,16 @@ void TGLViewer::UseDefaultColorSetForNewViewers(Bool_t x)
 Bool_t TGLViewer::IsUsingDefaultColorSetForNewViewers()
 {
    return fgUseDefaultColorSetForNewViewers;
+}
+
+ ////////////////////////////////////////////////////////////////////////////////
+/// Sets static scaling facor that allows simple guide axies to have label values
+/// scaled relative to actual scene dimensions.
+/// This is set to 1 in static initialization.
+
+void TGLViewer::SetAxisLabelScale(Float_t als)
+{
+   fgAxisLabelScale = als;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2093,7 +2104,7 @@ const TGLPhysicalShape * TGLViewer::GetSelected() const
 
 void TGLViewer::MouseOver(TGLPhysicalShape *shape)
 {
-   Emit("MouseOver(TGLPhysicalShape*)", (Long_t)shape);
+   Emit("MouseOver(TGLPhysicalShape*)", (Longptr_t)shape);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2101,8 +2112,8 @@ void TGLViewer::MouseOver(TGLPhysicalShape *shape)
 
 void TGLViewer::MouseOver(TGLPhysicalShape *shape, UInt_t state)
 {
-   Long_t args[2];
-   args[0] = (Long_t)shape;
+   Longptr_t args[2];
+   args[0] = (Longptr_t)shape;
    args[1] = state;
    Emit("MouseOver(TGLPhysicalShape*,UInt_t)", args);
 }
@@ -2112,8 +2123,8 @@ void TGLViewer::MouseOver(TGLPhysicalShape *shape, UInt_t state)
 
 void TGLViewer::MouseOver(TObject *obj, UInt_t state)
 {
-   Long_t args[2];
-   args[0] = (Long_t)obj;
+   Longptr_t args[2];
+   args[0] = (Longptr_t)obj;
    args[1] = state;
    Emit("MouseOver(TObject*,UInt_t)", args);
 }
@@ -2123,8 +2134,8 @@ void TGLViewer::MouseOver(TObject *obj, UInt_t state)
 
 void TGLViewer::ReMouseOver(TObject *obj, UInt_t state)
 {
-   Long_t args[2];
-   args[0] = (Long_t)obj;
+   Longptr_t args[2];
+   args[0] = (Longptr_t)obj;
    args[1] = state;
    Emit("ReMouseOver(TObject*,UInt_t)", args);
 }
@@ -2135,8 +2146,8 @@ void TGLViewer::ReMouseOver(TObject *obj, UInt_t state)
 
 void TGLViewer::UnMouseOver(TObject *obj, UInt_t state)
 {
-   Long_t args[2];
-   args[0] = (Long_t)obj;
+   Longptr_t args[2];
+   args[0] = (Longptr_t)obj;
    args[1] = state;
    Emit("UnMouseOver(TObject*,UInt_t)", args);
 }
@@ -2146,7 +2157,7 @@ void TGLViewer::UnMouseOver(TObject *obj, UInt_t state)
 
 void TGLViewer::Clicked(TObject *obj)
 {
-   Emit("Clicked(TObject*)", (Long_t)obj);
+   Emit("Clicked(TObject*)", (Longptr_t)obj);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2154,8 +2165,8 @@ void TGLViewer::Clicked(TObject *obj)
 
 void TGLViewer::Clicked(TObject *obj, UInt_t button, UInt_t state)
 {
-   Long_t args[3];
-   args[0] = (Long_t)obj;
+   Longptr_t args[3];
+   args[0] = (Longptr_t)obj;
    args[1] = button;
    args[2] = state;
    Emit("Clicked(TObject*,UInt_t,UInt_t)", args);
@@ -2167,8 +2178,8 @@ void TGLViewer::Clicked(TObject *obj, UInt_t button, UInt_t state)
 
 void TGLViewer::ReClicked(TObject *obj, UInt_t button, UInt_t state)
 {
-   Long_t args[3];
-   args[0] = (Long_t)obj;
+   Longptr_t args[3];
+   args[0] = (Longptr_t)obj;
    args[1] = button;
    args[2] = state;
    Emit("ReClicked(TObject*,UInt_t,UInt_t)", args);
@@ -2179,8 +2190,8 @@ void TGLViewer::ReClicked(TObject *obj, UInt_t button, UInt_t state)
 
 void TGLViewer::UnClicked(TObject *obj, UInt_t button, UInt_t state)
 {
-   Long_t args[3];
-   args[0] = (Long_t)obj;
+   Longptr_t args[3];
+   args[0] = (Longptr_t)obj;
    args[1] = button;
    args[2] = state;
    Emit("UnClicked(TObject*,UInt_t,UInt_t)", args);
@@ -2191,11 +2202,11 @@ void TGLViewer::UnClicked(TObject *obj, UInt_t button, UInt_t state)
 
 void TGLViewer::MouseIdle(TGLPhysicalShape *shape, UInt_t posx, UInt_t posy)
 {
-   Long_t args[3];
+   Longptr_t args[3];
    static UInt_t oldx = 0, oldy = 0;
 
    if (oldx != posx || oldy != posy) {
-      args[0] = (Long_t)shape;
+      args[0] = (Longptr_t)shape;
       args[1] = posx;
       args[2] = posy;
       Emit("MouseIdle(TGLPhysicalShape*,UInt_t,UInt_t)", args);

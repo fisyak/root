@@ -39,10 +39,6 @@ Scientific Library version 1.5 and applies the 10-, 21-, 43- and
 reached
 **/
 
-
-
-#include "RooFit.h"
-
 #include <assert.h>
 #include <math.h>
 #include <float.h>
@@ -79,8 +75,8 @@ int gsl_integration_qng (const gsl_function * f,
                          size_t * neval);
 //-------------------------------------------------------------------
 
-// register integrator class 
-// create a derived class in order to call the protected method of the 
+// register integrator class
+// create a derived class in order to call the protected method of the
 // RoodaptiveGaussKronrodIntegrator1D
 namespace RooFit_internal {
 struct Roo_internal_GKInteg1D : public RooGaussKronrodIntegrator1D {
@@ -97,7 +93,7 @@ struct Roo_reg_GKInteg1D {
 };
 
 static Roo_reg_GKInteg1D instance;
-} 
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -106,17 +102,7 @@ static Roo_reg_GKInteg1D instance;
 void RooGaussKronrodIntegrator1D::registerIntegrator(RooNumIntFactory& fact)
 {
   fact.storeProtoIntegrator(new RooGaussKronrodIntegrator1D(),RooArgSet()) ;
-  oocoutI((TObject*)nullptr,Integration) << "RooGaussKronrodIntegrator1D has been registered" << std::endl;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// coverity[UNINIT_CTOR]
-/// Default constructor
-
-RooGaussKronrodIntegrator1D::RooGaussKronrodIntegrator1D() : _x(0)
-{
+  oocoutI(nullptr,Integration) << "RooGaussKronrodIntegrator1D has been registered" << std::endl;
 }
 
 
@@ -130,26 +116,26 @@ RooGaussKronrodIntegrator1D::RooGaussKronrodIntegrator1D(const RooAbsFunc& funct
   _epsAbs(config.epsRel()),
   _epsRel(config.epsAbs())
 {
-  _useIntegrandLimits= kTRUE;
+  _useIntegrandLimits= true;
   _valid= initialize();
-} 
+}
 
 
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Construct integral on 'function' using given configuration object in the given range
 
-RooGaussKronrodIntegrator1D::RooGaussKronrodIntegrator1D(const RooAbsFunc& function, 
-							 Double_t xmin, Double_t xmax, const RooNumIntConfig& config) :
+RooGaussKronrodIntegrator1D::RooGaussKronrodIntegrator1D(const RooAbsFunc& function,
+                      double xmin, double xmax, const RooNumIntConfig& config) :
   RooAbsIntegrator(function),
   _epsAbs(config.epsRel()),
   _epsRel(config.epsAbs()),
   _xmin(xmin),
   _xmax(xmax)
 {
-  _useIntegrandLimits= kFALSE;
+  _useIntegrandLimits= false;
   _valid= initialize();
-} 
+}
 
 
 
@@ -166,10 +152,10 @@ RooAbsIntegrator* RooGaussKronrodIntegrator1D::clone(const RooAbsFunc& function,
 ////////////////////////////////////////////////////////////////////////////////
 /// Perform one-time initialization of integrator
 
-Bool_t RooGaussKronrodIntegrator1D::initialize()
+bool RooGaussKronrodIntegrator1D::initialize()
 {
   // Allocate coordinate buffer size after number of function dimensions
-  _x = new Double_t[_function->getDimension()] ;
+  _x.resize(_function->getDimension());
 
   return checkLimits();
 }
@@ -177,27 +163,15 @@ Bool_t RooGaussKronrodIntegrator1D::initialize()
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Destructor
-
-RooGaussKronrodIntegrator1D::~RooGaussKronrodIntegrator1D()
-{
-  if (_x) {
-    delete[] _x ;
-  }
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Change our integration limits. Return kTRUE if the new limits are
-/// ok, or otherwise kFALSE. Always returns kFALSE and does nothing
+/// Change our integration limits. Return true if the new limits are
+/// ok, or otherwise false. Always returns false and does nothing
 /// if this object was constructed to always use our integrand's limits.
 
-Bool_t RooGaussKronrodIntegrator1D::setLimits(Double_t* xmin, Double_t* xmax) 
+bool RooGaussKronrodIntegrator1D::setLimits(double* xmin, double* xmax)
 {
   if(_useIntegrandLimits) {
-    oocoutE((TObject*)0,Eval) << "RooGaussKronrodIntegrator1D::setLimits: cannot override integrand's limits" << endl;
-    return kFALSE;
+    oocoutE(nullptr,Eval) << "RooGaussKronrodIntegrator1D::setLimits: cannot override integrand's limits" << endl;
+    return false;
   }
   _xmin= *xmin;
   _xmax= *xmax;
@@ -207,22 +181,22 @@ Bool_t RooGaussKronrodIntegrator1D::setLimits(Double_t* xmin, Double_t* xmax)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Check that our integration range is finite and otherwise return kFALSE.
+/// Check that our integration range is finite and otherwise return false.
 /// Update the limits from the integrand if requested.
 
-Bool_t RooGaussKronrodIntegrator1D::checkLimits() const 
+bool RooGaussKronrodIntegrator1D::checkLimits() const
 {
   if(_useIntegrandLimits) {
     assert(0 != integrand() && integrand()->isValid());
     _xmin= integrand()->getMinLimit(0);
     _xmax= integrand()->getMaxLimit(0);
   }
-  return kTRUE ;
+  return true ;
 }
 
 
 
-double RooGaussKronrodIntegrator1D_GSL_GlueFunction(double x, void *data) 
+double RooGaussKronrodIntegrator1D_GSL_GlueFunction(double x, void *data)
 {
   RooGaussKronrodIntegrator1D* instance = (RooGaussKronrodIntegrator1D*) data ;
   return instance->integrand(instance->xvec(x)) ;
@@ -233,7 +207,7 @@ double RooGaussKronrodIntegrator1D_GSL_GlueFunction(double x, void *data)
 ////////////////////////////////////////////////////////////////////////////////
 /// Calculate and return integral
 
-Double_t RooGaussKronrodIntegrator1D::integral(const Double_t *yvec) 
+double RooGaussKronrodIntegrator1D::integral(const double *yvec)
 {
   assert(isValid());
 
@@ -254,7 +228,7 @@ Double_t RooGaussKronrodIntegrator1D::integral(const Double_t *yvec)
   size_t neval = 0 ;
 
   // Call GSL implementation of integeator
-  gsl_integration_qng (&F, _xmin, _xmax, _epsAbs, _epsRel, &result, &error, &neval); 
+  gsl_integration_qng (&F, _xmin, _xmax, _epsAbs, _epsRel, &result, &error, &neval);
 
   return result;
 }
@@ -265,19 +239,19 @@ Double_t RooGaussKronrodIntegrator1D::integral(const Double_t *yvec)
 // ----------------------------------------------------------------------------
 
 /*
- * 
+ *
  * Copyright (C) 1996, 1997, 1998, 1999, 2000 Brian Gough
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or (at
  * your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
@@ -286,7 +260,7 @@ Double_t RooGaussKronrodIntegrator1D::integral(const Double_t *yvec)
 #define GSL_SUCCESS 0
 #define GSL_EBADTOL 13  /* user specified an invalid tolerance */
 #define GSL_ETOL    14  /* failed to reach the specified tolerance */
-#define GSL_ERROR(a,b) oocoutE((TObject*)0,Eval) << "RooGaussKronrodIntegrator1D::integral() ERROR: " << a << endl ; return b ;
+#define GSL_ERROR(a,b) oocoutE(nullptr,Eval) << "RooGaussKronrodIntegrator1D::integral() ERROR: " << a << endl ; return b ;
 #define GSL_DBL_MIN        2.2250738585072014e-308
 #define GSL_DBL_EPSILON    2.2204460492503131e-16
 
@@ -312,12 +286,12 @@ rescale_error (double err, const double result_abs, const double result_asc)
   if (result_asc != 0 && err != 0)
       {
         double scale = TMath::Power((200 * err / result_asc), 1.5) ;
-        
+
         if (scale < 1)
           {
             err = result_asc * scale ;
           }
-        else 
+        else
           {
             err = result_asc ;
           }
@@ -326,12 +300,12 @@ rescale_error (double err, const double result_abs, const double result_asc)
     {
       double min_err = 50 * GSL_DBL_EPSILON * result_abs ;
 
-      if (min_err > err) 
+      if (min_err > err)
         {
           err = min_err ;
         }
     }
-  
+
   return err ;
 }
 
@@ -521,7 +495,7 @@ gsl_integration_qng (const gsl_function *f,
   double fv1[5], fv2[5], fv3[5], fv4[5];
   double savfun[21];  /* array of function values which have been computed */
   double res10, res21, res43, res87;    /* 10, 21, 43 and 87 point results */
-  double result_kronrod, err ; 
+  double result_kronrod, err ;
   double resabs; /* approximation to the integral of abs(f) */
   double resasc; /* approximation to the integral of abs(f-i/(b-a)) */
 
@@ -538,7 +512,7 @@ gsl_integration_qng (const gsl_function *f,
       * abserr = 0;
       * neval = 0;
       GSL_ERROR ("tolerance cannot be acheived with given epsabs and epsrel",
-		 GSL_EBADTOL);
+       GSL_EBADTOL);
     };
 
   /* Compute the integral using the 10- and 21-point formula. */
@@ -576,11 +550,11 @@ gsl_integration_qng (const gsl_function *f,
 
   resabs *= abs_half_length ;
 
-  { 
+  {
     const double mean = 0.5 * res21;
-  
+
     resasc = w21b[5] * fabs (f_center - mean);
-    
+
     for (k = 0; k < 5; k++)
       {
         resasc +=
@@ -591,7 +565,7 @@ gsl_integration_qng (const gsl_function *f,
   }
 
   result_kronrod = res21 * half_length;
-  
+
   err = rescale_error ((res21 - res10) * half_length, resabs, resasc) ;
 
   /*   test for convergence. */
@@ -616,7 +590,7 @@ gsl_integration_qng (const gsl_function *f,
   for (k = 0; k < 11; k++)
     {
       const double abscissa = half_length * x3[k];
-      const double fval = (GSL_FN_EVAL(f, center + abscissa) 
+      const double fval = (GSL_FN_EVAL(f, center + abscissa)
                            + GSL_FN_EVAL(f, center - abscissa));
       res43 += fval * w43b[k];
       savfun[k + 10] = fval;
@@ -647,16 +621,16 @@ gsl_integration_qng (const gsl_function *f,
   for (k = 0; k < 22; k++)
     {
       const double abscissa = half_length * x4[k];
-      res87 += w87b[k] * (GSL_FN_EVAL(f, center + abscissa) 
+      res87 += w87b[k] * (GSL_FN_EVAL(f, center + abscissa)
                           + GSL_FN_EVAL(f, center - abscissa));
     }
 
   /*  test for convergence */
 
   result_kronrod = res87 * half_length ;
-  
+
   err = rescale_error ((res87 - res43) * half_length, resabs, resasc);
-  
+
   if (err < epsabs || err < epsrel * fabs (result_kronrod))
     {
       * result = result_kronrod ;

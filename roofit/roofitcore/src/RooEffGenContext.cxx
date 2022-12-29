@@ -27,7 +27,6 @@ and applying an extra rejection step based on the efficiency function.
 
 #include <memory>
 
-#include "RooFit.h"
 #include "RooEffGenContext.h"
 #include "RooAbsPdf.h"
 #include "RooRandom.h"
@@ -39,18 +38,18 @@ ClassImp(RooEffGenContext);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor of generator context for RooEffProd products
 
-RooEffGenContext::RooEffGenContext(const RooAbsPdf &model, 
+RooEffGenContext::RooEffGenContext(const RooAbsPdf &model,
                                    const RooAbsPdf& pdf, const RooAbsReal& eff,
                                    const RooArgSet &vars,
                                    const RooDataSet *prototype, const RooArgSet* auxProto,
-                                   Bool_t verbose, const RooArgSet* /*forceDirect*/) :
+                                   bool verbose, const RooArgSet* /*forceDirect*/) :
    RooAbsGenContext(model, vars, prototype, auxProto, verbose), _maxEff(0.)
 {
    RooArgSet x(eff,eff.GetName());
-   _cloneSet = static_cast<RooArgSet*>(x.snapshot(kTRUE));
+   _cloneSet = static_cast<RooArgSet*>(x.snapshot(true));
    _eff = dynamic_cast<RooAbsReal*>(_cloneSet->find(eff.GetName()));
    _generator = pdf.genContext(vars, prototype, auxProto, verbose);
-   _vars = static_cast<RooArgSet*>(vars.snapshot(kTRUE));
+   _vars = static_cast<RooArgSet*>(vars.snapshot(true));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -91,7 +90,7 @@ void RooEffGenContext::generateEvent(RooArgSet &theEvent, Int_t remaining)
       _generator->generateEvent(theEvent, remaining);
       double val = _eff->getVal();
       if (val > _maxEff && !_eff->getMaxVal(*_vars)) {
-         coutE(Generation) << ClassName() << "::" << GetName() 
+         coutE(Generation) << ClassName() << "::" << GetName()
               << ":generateEvent: value of efficiency is larger than assumed maximum of 1."  << std::endl;
          continue;
       }

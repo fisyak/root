@@ -36,7 +36,7 @@
 
 ///  Helper function to generate the time data set
 ///  make some time data but not of fixed length.
-///  use a poisson with mu = 5 and troncated at 10
+///  use a poisson with mu = 5 and truncated at 10
 ///
 void MakeTimeData(int n, int ntime, int ndim )
 {
@@ -190,7 +190,7 @@ void TMVA_RNN_Classification(int use_type = 1)
    useKeras = false;
 #endif
 
-   int num_threads = 0;   // use by default all threads 
+   int num_threads = 0;   // use by default all threads
    // do enable MT running
    if (num_threads >= 0) {
       ROOT::EnableImplicitMT(num_threads);
@@ -424,17 +424,19 @@ the option string
             m.AddLine("model.add(Dense(64, activation = 'tanh')) ");
             m.AddLine("model.add(Dense(2, activation = 'sigmoid')) ");
             m.AddLine(
-               "model.compile(loss = 'binary_crossentropy', optimizer = Adam(lr = 0.001), metrics = ['accuracy'])");
+               "model.compile(loss = 'binary_crossentropy', optimizer = Adam(learning_rate = 0.001), metrics = ['accuracy'])");
             m.AddLine(TString::Format("modelName = '%s'", modelName.Data()));
             m.AddLine("model.save(modelName)");
             m.AddLine("model.summary()");
 
             m.SaveSource("make_rnn_model.py");
-            // execute
-            gSystem->Exec("python make_rnn_model.py");
+            // execute python script to make the model
+            auto ret = (TString *)gROOT->ProcessLine("TMVA::Python_Executable()");
+            TString python_exe = (ret) ? *(ret) : "python";
+            gSystem->Exec(python_exe + " make_rnn_model.py");
 
             if (gSystem->AccessPathName(modelName)) {
-               Warning("TMVA_RNN_Classification", "Error creating Keras recurrennt model file - Skip using Keras");
+               Warning("TMVA_RNN_Classification", "Error creating Keras recurrent model file - Skip using Keras");
                useKeras = false;
             } else {
                // book PyKeras method only if Keras model could be created

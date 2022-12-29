@@ -31,13 +31,13 @@
  Example code can be found in
   - tutorials/tree/hsimpleReader.C
   - tutorials/tree/h1analysisTreeReader.C
-  - <a href="http://root.cern.ch/gitweb?p=roottest.git;a=tree;f=root/tree/reader;hb=HEAD">This example</a>
+  - <a href="https://github.com/root-project/roottest/tree/master/root/tree/reader">This example</a>
 
  You can generate a skeleton of `TTreeReaderValue<T>` and `TTreeReaderArray<T>` declarations
  for all of a tree's branches using `TTree::MakeSelector()`.
 
  Roottest contains an
- <a href="http://root.cern.ch/gitweb?p=roottest.git;a=tree;f=root/tree/reader;hb=HEAD">example</a>
+ <a href="https://github.com/root-project/roottest/tree/master/root/tree/reader">example</a>
  showing the full power.
 
 A simpler analysis example can be found below: it histograms a function of the px and py branches.
@@ -346,7 +346,7 @@ Bool_t TTreeReader::Notify()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Tell readers we now have a tree.
-/// fValues gets insertions during this loop (when parameterized arrays are read),
+/// fValues gets insertions during this loop (when parametrized arrays are read),
 /// invalidating iterators. Use old-school counting instead.
 
 Bool_t TTreeReader::SetProxies() {
@@ -416,7 +416,8 @@ TTreeReader::EEntryStatus TTreeReader::SetEntriesRange(Long64_t beginEntry, Long
    // list's number of entries, unless it's a TChain and "max entries" is
    // uninitialized (i.e. TTree::kMaxEntries).
    if (beginEntry >= GetEntries(false) && !(IsChain() && GetEntries(false) == TTree::kMaxEntries)) {
-      Error("SetEntriesRange()", "first entry out of range 0..%lld", GetEntries(false));
+      Error("SetEntriesRange()", "Start entry (%lld) must be lower than the available entries (%lld).", beginEntry,
+            GetEntries(false));
       return kEntryNotFound;
    }
 
@@ -460,7 +461,7 @@ void TTreeReader::Restart() {
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the number of entries of the TEntryList if one is provided, else
 /// of the TTree / TChain, independent of a range set by SetEntriesRange()
-/// by calling TTree/TChain::GetEntriesFast.
+/// by calling TTree/TChain::%GetEntriesFast.
 
 
 Long64_t TTreeReader::GetEntries() const {
@@ -521,7 +522,7 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, Bool_t local
          // don't try to load entries anymore. Can happen in these cases:
          // while (tr.Next()) {something()};
          // while (tr.Next()) {somethingelse()}; // should not be calling somethingelse().
-         fEntryStatus = kEntryNotFound;
+         fEntryStatus = kEntryBeyondEnd;
          return fEntryStatus;
       }
       if (entry >= 0) {
@@ -574,7 +575,7 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, Bool_t local
                value->NotifyNewTree(fTree->GetTree());
             }
          }
-         fEntryStatus = kEntryNotFound;
+         fEntryStatus = kEntryBeyondEnd;
          return fEntryStatus;
       }
 

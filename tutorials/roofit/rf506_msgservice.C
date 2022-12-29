@@ -12,7 +12,6 @@
 #include "RooRealVar.h"
 #include "RooDataSet.h"
 #include "RooGaussian.h"
-#include "RooConstVar.h"
 #include "RooPolynomial.h"
 #include "RooAddPdf.h"
 #include "TCanvas.h"
@@ -79,7 +78,7 @@ void rf506_msgservice()
    RooMsgService::instance().addStream(DEBUG, Topic(Tracing), ClassName("RooGaussian"));
 
    // Perform a fit to generate some tracing messages
-   model.fitTo(*data, Verbose(kTRUE));
+   model.fitTo(*data, Verbose(true));
 
    // Reset message service to default stream configuration
    RooMsgService::instance().reset();
@@ -88,7 +87,7 @@ void rf506_msgservice()
    RooMsgService::instance().addStream(DEBUG, Topic(Tracing), OutputFile("rf506_debug.log"));
 
    // Perform a fit to generate some tracing messages
-   model.fitTo(*data, Verbose(kTRUE));
+   model.fitTo(*data, Verbose(true));
 
    // Reset message service to default stream configuration
    RooMsgService::instance().reset();

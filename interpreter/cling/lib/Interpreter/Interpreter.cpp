@@ -163,8 +163,7 @@ namespace cling {
   bool Interpreter::isValid() const {
     // Should we also check m_IncrParser->getFirstTransaction() ?
     // not much can be done without it (its the initializing transaction)
-    return m_IncrParser && m_IncrParser->isValid() &&
-           m_DyLibManager && m_LookupHelper &&
+    return m_IncrParser && m_IncrParser->isValid() && m_LookupHelper &&
            (isInSyntaxOnlyMode() || m_Executor);
   }
 
@@ -201,7 +200,8 @@ namespace cling {
   Interpreter::Interpreter(int argc, const char* const *argv,
                            const char* llvmdir /*= 0*/,
                            const ModuleFileExtensions& moduleExtensions,
-                           bool noRuntime, const Interpreter* parentInterp) :
+                           void *extraLibHandle, bool noRuntime,
+                           const Interpreter* parentInterp) :
     m_Opts(argc, argv),
     m_UniqueCounter(parentInterp ? parentInterp->m_UniqueCounter + 1 : 0),
     m_PrintDebug(false), m_DynamicLookupDeclared(false),
@@ -213,7 +213,6 @@ namespace cling {
       return;
 
     m_LLVMContext.reset(new llvm::LLVMContext);
-    m_DyLibManager.reset(new DynamicLibraryManager(getOptions()));
     m_IncrParser.reset(new IncrementalParser(this, llvmdir, moduleExtensions));
     if (!m_IncrParser->isValid(false))
       return;
@@ -259,16 +258,21 @@ namespace cling {
       return;
 
     if (!isInSyntaxOnlyMode()) {
-      m_Executor.reset(new IncrementalExecutor(SemaRef.Diags, *getCI()));
+      m_Executor.reset(new IncrementalExecutor(SemaRef.Diags, *getCI(),
+        extraLibHandle, m_Opts.Verbose()));
+
       if (!m_Executor)
         return;
+
+      for (const std::string &P : m_Opts.LibSearchPath)
+        getDynamicLibraryManager()->addSearchPath(P);
     }
 
     bool usingCxxModules = getSema().getLangOpts().Modules;
     if (usingCxxModules) {
       // Explicitly create the modulemanager now. If we would create it later
       // implicitly then it would just overwrite our callbacks we set below.
-      m_IncrParser->getCI()->createModuleManager();
+      m_IncrParser->getCI()->createASTReader();
 
       // When using C++ modules, we setup the callbacks now that we have them
       // ready before we parse code for the first time. Without C++ modules
@@ -278,11 +282,11 @@ namespace cling {
       setupCallbacks(*this, parentInterp);
     }
 
-    if(m_Opts.CompilerOpts.CUDAHost){
-       if(m_DyLibManager->loadLibrary("libcudart.so", true) ==
-         cling::DynamicLibraryManager::LoadLibResult::kLoadLibNotFound){
-           llvm::errs() << "Error: libcudart.so not found!\n" <<
-             "Please add the cuda lib path to LD_LIBRARY_PATH or set it via -L argument.\n";
+    if (m_Opts.CompilerOpts.CUDAHost && !isInSyntaxOnlyMode()) {
+      if (getDynamicLibraryManager()->loadLibrary("libcudart.so", true) ==
+          cling::DynamicLibraryManager::LoadLibResult::kLoadLibNotFound){
+        llvm::errs() << "Error: libcudart.so not found!\n" <<
+          "Please add the cuda lib path to LD_LIBRARY_PATH or set it via -L argument.\n";
        }
     }
 
@@ -318,14 +322,14 @@ namespace cling {
       for (const llvm::StringRef& Sym : Syms) {
         void* Addr = m_Executor->getPointerToGlobalFromJIT(Sym);
 #if defined(__linux__)
-        // libstdc++ mangles at_quick_exit on Linux when g++ < 5
+        // We need to look for the mangled name of at_quick_exit on linux.
         if (!Addr && Sym.equals("at_quick_exit"))
           Addr = m_Executor->getPointerToGlobalFromJIT("_Z13at_quick_exitPFvvE");
 #endif
         if (!Addr) {
           cling::errs() << "Replaced symbol " << Sym << " cannot be found in JIT!\n";
         } else {
-          m_Executor->addSymbol(Sym.str().c_str(), Addr, true);
+          m_Executor->replaceSymbol(Sym.str().c_str(), Addr);
         }
       }
     }
@@ -347,8 +351,8 @@ namespace cling {
                            const char* const *argv,
                            const char* llvmdir /*= 0*/,
                            const ModuleFileExtensions& moduleExtensions/*={}*/,
-                           bool noRuntime /*= true*/) :
-    Interpreter(argc, argv, llvmdir, moduleExtensions, noRuntime,
+                           void *ExtraLibHandle, bool noRuntime /*= true*/) :
+    Interpreter(argc, argv, llvmdir, moduleExtensions, ExtraLibHandle, noRuntime,
                 &parentInterpreter) {
     // Do the "setup" of the connection between this interpreter and
     // its parent interpreter.
@@ -369,6 +373,9 @@ namespace cling {
       // Give my IncrementalExecutor a pointer to the Incremental executor of the
       // parent Interpreter.
       m_Executor->setExternalIncrementalExecutor(parentInterpreter.m_Executor.get());
+
+      if (auto C = parentInterpreter.m_IncrParser->getDiagnosticConsumer())
+        m_IncrParser->setDiagnosticConsumer(C, /*Own=*/false);
     }
   }
 
@@ -448,7 +455,7 @@ namespace cling {
 
     // Intercept all atexit calls, as the Interpreter and functions will be long
     // gone when the -native- versions invoke them.
-#if defined(__linux__)
+#if defined(__GLIBC__)
     const char* LinkageCxx = "extern \"C++\"";
     const char* Attr = LangOpts.CPlusPlus ? " throw () " : "";
 #else
@@ -532,10 +539,10 @@ namespace cling {
 
     if (!SyntaxOnly) {
       // Override the native symbols now, before anything can be emitted.
-      m_Executor->addSymbol("__cxa_atexit",
-                            utils::FunctionToVoidPtr(&local_cxa_atexit), true);
+      m_Executor->replaceSymbol("__cxa_atexit",
+                            utils::FunctionToVoidPtr(&local_cxa_atexit));
       // __dso_handle is inserted for the link phase, as macro is useless then
-      m_Executor->addSymbol("__dso_handle", this, true);
+      m_Executor->replaceSymbol("__dso_handle", this);
 
 #ifdef _MSC_VER
       // According to the PE Format spec, in "The .tls Section"
@@ -546,21 +553,23 @@ namespace cling {
       //   array is at the offset of 0x2C from the beginning of TEB. This
       //   behavior is Intel x86-specific.
       static const unsigned long _tls_array = 0x2C;
-      m_Executor->addSymbol("_tls_array", (void *)&_tls_array, true);
+      m_Executor->replaceSymbol("_tls_array", (void *)&_tls_array);
+      // Support SEH on Windows.
+      m_Executor->replaceSymbol("_CxxThrowException@8", &_CxxThrowException);
 #endif
 
 #ifdef CLING_WIN_SEH_EXCEPTIONS
       // Windows C++ SEH handler
-      m_Executor->addSymbol("_CxxThrowException",
-          utils::FunctionToVoidPtr(&platform::ClingRaiseSEHException), true);
+      m_Executor->replaceSymbol("_CxxThrowException",
+          utils::FunctionToVoidPtr(&platform::ClingRaiseSEHException));
 #endif
     }
 
     if (m_Opts.Verbose())
-      cling::errs() << Strm.str();
+      cling::errs() << Strm.str().str();
 
     Transaction *T;
-    declare(Strm.str(), &T);
+    declare(Strm.str().str(), &T);
     return T;
   }
 
@@ -631,10 +640,9 @@ namespace cling {
     // Add all the new entries into Preprocessor
     for (const size_t N = HOpts.UserEntries.size(); Idx < N; ++Idx) {
       const HeaderSearchOptions::Entry& E = HOpts.UserEntries[Idx];
-      if (const clang::DirectoryEntry *DE = FM.getDirectory(E.Path)) {
-        HSearch.AddSearchPath(DirectoryLookup(DE, SrcMgr::C_User, isFramework),
+      if (auto DE = FM.getOptionalDirectoryRef(E.Path))
+        HSearch.AddSearchPath(DirectoryLookup(*DE, SrcMgr::C_User, isFramework),
                               E.Group == frontend::Angled);
-      }
     }
 
     if (m_CUDACompiler)
@@ -645,9 +653,15 @@ namespace cling {
     return AddIncludePaths(PathsStr, nullptr);
   }
 
-  void Interpreter::DumpIncludePath(llvm::raw_ostream* S) {
-    utils::DumpIncludePaths(getCI()->getHeaderSearchOpts(), S ? *S : cling::outs(),
+  void Interpreter::DumpIncludePath(llvm::raw_ostream* S) const {
+    utils::DumpIncludePaths(getCI()->getHeaderSearchOpts(),
+                            S ? *S : cling::outs(),
                             true /*withSystem*/, true /*withFlags*/);
+  }
+
+  void Interpreter::DumpDynamicLibraryInfo(llvm::raw_ostream* S) const {
+    if (auto DLM = getDynamicLibraryManager())
+      DLM->dump(S);
   }
 
   // FIXME: Add stream argument and move DumpIncludePath path here.
@@ -661,6 +675,7 @@ namespace cling {
                                filter, true  /*DumpDecls*/,
                                false /*Deserialize*/,
                                false /*DumpLookups*/,
+                               false /*DumpDeclTypes*/,
                                ADOF_Default /*DumpFormat*/);
       printer->HandleTranslationUnit(getSema().getASTContext());
     } else if (what.equals("ast"))
@@ -739,6 +754,15 @@ namespace cling {
 
   DiagnosticsEngine& Interpreter::getDiagnostics() const {
     return getCI()->getDiagnostics();
+  }
+
+  void Interpreter::replaceDiagnosticConsumer(clang::DiagnosticConsumer* Consumer,
+					      bool Own) {
+    m_IncrParser->setDiagnosticConsumer(Consumer, Own);
+  }
+
+  bool Interpreter::hasReplacedDiagnosticConsumer() const {
+    return m_IncrParser->getDiagnosticConsumer() != nullptr;
   }
 
   CompilationOptions Interpreter::makeDefaultCompilationOpts() const {
@@ -1078,7 +1102,7 @@ namespace cling {
     Strm << "void ";
     makeUniqueName(Strm, ID);
     Strm << "(void* vpClingValue) {\n ";
-    return Strm.str();
+    return Strm.str().str();
   }
 
   void Interpreter::createUniqueName(std::string &Out) {
@@ -1236,7 +1260,7 @@ namespace cling {
     bool savedAccessControl = LO.AccessControl;
     LO.AccessControl = withAccessControl;
     T = nullptr;
-    cling::Interpreter::CompilationResult CR = declare(code, &T);
+    cling::Interpreter::CompilationResult CR = declare(code.str(), &T);
     LO.AccessControl = savedAccessControl;
 
     Diag.setSeverity(clang::diag::ext_nested_name_member_ref_lookup_ambiguous,
@@ -1389,11 +1413,11 @@ namespace cling {
         !lastT->getWrapperFD()) // no wrapper to run
       return Interpreter::kSuccess;
     else {
+      bool WantValuePrinting = lastT->getCompilationOpts().ValuePrinting
+        != CompilationOptions::VPDisabled;
       ExecutionResult res = RunFunction(lastT->getWrapperFD(), V);
       if (res < kExeFirstError) {
-         if (lastT->getCompilationOpts().ValuePrinting
-            != CompilationOptions::VPDisabled
-            && V->isValid()
+         if (WantValuePrinting && V->isValid()
             // the !V->needsManagedAllocation() case is handled by
             // dumpIfNoStorage.
             && V->needsManagedAllocation())
@@ -1409,8 +1433,7 @@ namespace cling {
   std::string Interpreter::lookupFileOrLibrary(llvm::StringRef file) {
     std::string canonicalFile = DynamicLibraryManager::normalizePath(file);
     if (canonicalFile.empty())
-      canonicalFile = file;
-    const FileEntry* FE = 0;
+      canonicalFile = file.str();
 
     //Copied from clang's PPDirectives.cpp
     bool isAngled = false;
@@ -1423,13 +1446,14 @@ namespace cling {
     Preprocessor& PP = getCI()->getPreprocessor();
     // PP::LookupFile uses it to issue 'nice' diagnostic
     SourceLocation fileNameLoc;
-    FE = PP.LookupFile(fileNameLoc, canonicalFile, isAngled, FromDir, FromFile,
-                       CurDir, /*SearchPath*/0, /*RelativePath*/ 0,
-                       /*suggestedModule*/0, 0 /*IsMapped*/,
-                       /*IsFrameworkFound*/ nullptr, /*SkipCache*/false,
-                       /*OpenFile*/ false, /*CacheFail*/ false);
+    auto FE = PP.LookupFile(fileNameLoc, canonicalFile, isAngled, FromDir,
+                            FromFile, CurDir, /*SearchPath*/0,
+                            /*RelativePath*/ 0, /*suggestedModule*/0,
+                            0 /*IsMapped*/, /*IsFrameworkFound*/ nullptr,
+                            /*SkipCache*/ false, /*OpenFile*/ false,
+                            /*CacheFail*/ false);
     if (FE)
-      return FE->getName();
+      return FE->getName().str();
     return getDynamicLibraryManager()->lookupLibrary(canonicalFile);
   }
 
@@ -1473,6 +1497,7 @@ namespace cling {
   }
 
   void Interpreter::unload(Transaction& T) {
+    T.setUnloading();
     // Clear any stored states that reference the llvm::Module.
     // Do it first in case
     auto Module = T.getModule();
@@ -1594,9 +1619,10 @@ namespace cling {
                                       transactions.size(), 0);
   }
 
-  void Interpreter::installLazyFunctionCreator(void* (*fp)(const std::string&)) {
+  void
+  Interpreter::addGenerator(std::unique_ptr<llvm::orc::DefinitionGenerator> G) {
     if (m_Executor)
-      m_Executor->installLazyFunctionCreator(fp);
+      m_Executor->addGenerator(std::move(G));
   }
 
   Value Interpreter::Evaluate(const char* expr, DeclContext* DC,
@@ -1624,15 +1650,21 @@ namespace cling {
     // We need it to enable LookupObject callback.
     if (!m_Callbacks) {
       m_Callbacks.reset(new MultiplexInterpreterCallbacks(this));
-      // FIXME: Move to the InterpreterCallbacks.cpp;
-      if (DynamicLibraryManager* DLM = getDynamicLibraryManager())
-        DLM->setCallbacks(m_Callbacks.get());
       if (m_Executor)
         m_Executor->setCallbacks(m_Callbacks.get());
     }
 
     static_cast<MultiplexInterpreterCallbacks*>(m_Callbacks.get())
       ->addCallback(std::move(C));
+  }
+
+  const DynamicLibraryManager* Interpreter::getDynamicLibraryManager() const {
+    assert(m_Executor.get() && "We must have an executor");
+    return &m_Executor->getDynamicLibraryManager();
+  }
+  DynamicLibraryManager* Interpreter::getDynamicLibraryManager() {
+    return const_cast<DynamicLibraryManager*>(const_cast<const Interpreter*>(
+                                             this)->getDynamicLibraryManager());
   }
 
   const Transaction* Interpreter::getFirstTransaction() const {
@@ -1689,14 +1721,6 @@ namespace cling {
     return ConvertExecutionResult(ExeRes);
   }
 
-  bool Interpreter::addSymbol(const char* symbolName,  void* symbolAddress) {
-    // Forward to IncrementalExecutor;
-    if (!symbolName || !symbolAddress )
-      return false;
-
-    return m_Executor->addSymbol(symbolName, symbolAddress);
-  }
-
   void* Interpreter::getAddressOfGlobal(const GlobalDecl& GD,
                                         bool* fromJIT /*=0*/) const {
     // Return a symbol's address, and whether it was jitted.
@@ -1748,7 +1772,8 @@ namespace cling {
     std::string llvmdir
       = getCI()->getHeaderSearchOpts().ResourceDir + "/../../../";
     cling::Interpreter fwdGen(1, &dummy, llvmdir.c_str(),
-                              /*moduleExtensions*/ {}, /*noRuntime=*/true);
+                              /*moduleExtensions*/ {},
+                              /*ExtraLibHandle*/ nullptr, /*noRuntime=*/true);
 
     // Copy the same header search options to the new instance.
     Preprocessor& fwdGenPP = fwdGen.getCI()->getPreprocessor();
@@ -1776,9 +1801,9 @@ namespace cling {
 
     std::error_code EC;
     llvm::raw_fd_ostream out(outFile.data(), EC,
-                             llvm::sys::fs::OpenFlags::F_None);
+                             llvm::sys::fs::OpenFlags::OF_None);
     llvm::raw_fd_ostream log((outFile + ".skipped").str().c_str(),
-                             EC, llvm::sys::fs::OpenFlags::F_None);
+                             EC, llvm::sys::fs::OpenFlags::OF_None);
     log << "Generated for :" << inFile << "\n";
     forwardDeclare(*T, fwdGenPP, fwdGen.getCI()->getSema().getASTContext(),
                    out, enableMacros,

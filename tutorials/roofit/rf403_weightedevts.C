@@ -14,11 +14,9 @@
 #include "RooDataSet.h"
 #include "RooDataHist.h"
 #include "RooGaussian.h"
-#include "RooConstVar.h"
 #include "RooFormulaVar.h"
 #include "RooGenericPdf.h"
 #include "RooPolynomial.h"
-#include "RooChi2Var.h"
 #include "RooMinimizer.h"
 #include "TCanvas.h"
 #include "TAxis.h"
@@ -90,7 +88,7 @@ void rf403_weightedevts()
    //
    // A fit in this mode can be performed as follows:
 
-   RooFitResult *r_ml_wgt_corr = p2.fitTo(wdata, Save(), SumW2Error(kTRUE));
+   RooFitResult *r_ml_wgt_corr = p2.fitTo(wdata, Save(), SumW2Error(true));
 
    // P l o t   w e i g h e d   d a t a   a n d   f i t   r e s u l t
    // ---------------------------------------------------------------
@@ -132,8 +130,8 @@ void rf403_weightedevts()
    // NB: Within the usual approximations of a chi2 fit, a chi2 fit to weighted
    // data using sum-of-weights-squared errors does give correct error
    // estimates
-   RooChi2Var chi2("chi2", "chi2", p2, *binnedData, DataError(RooAbsData::SumW2));
-   RooMinimizer m(chi2);
+   std::unique_ptr<RooAbsReal> chi2{p2.createChi2(*binnedData, DataError(RooAbsData::SumW2))};
+   RooMinimizer m(*chi2);
    m.migrad();
    m.hesse();
 

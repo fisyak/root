@@ -44,7 +44,7 @@ else()
     set(UNR_CFLAGS "-m32")
   elseif(ROOT_ARCHITECTURE MATCHES linuxx8664icc)
     set(UNR_CFLAGS "-m64")
-  elseif(ROOT_ARCHITECTURE MATCHES win32)
+  elseif(ROOT_ARCHITECTURE MATCHES win32 OR ROOT_ARCHITECTURE MATCHES win64)
     set(UNR_CFLAGS "-MD -G5 -GX")
   endif()
   if(CMAKE_OSX_SYSROOT)
@@ -64,6 +64,8 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES Clang)
 endif()
 if(${CMAKE_CXX_COMPILER_ID} MATCHES GNU)
   ROOT_ADD_C_FLAG(CMAKE_C_FLAGS -Wno-maybe-uninitialized)
+  ROOT_ADD_C_FLAG(CMAKE_C_FLAGS -Wno-alloc-size-larger-than)
+
 endif()
 
 set(unrsources ${UNR_UNTARDIR}/src/utils/*.c

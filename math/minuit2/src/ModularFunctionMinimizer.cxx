@@ -1,5 +1,5 @@
 // @(#)root/minuit2:$Id$
-// Authors: M. Winkler, F. James, L. Moneta, A. Zsenei   2003-2005
+// Authors: M. Winkler, F. James, L. Moneta, A. Zsenei, E.G.P. Bos   2003-2017
 
 /**********************************************************************
  *                                                                    *
@@ -10,6 +10,7 @@
 #include "Minuit2/ModularFunctionMinimizer.h"
 #include "Minuit2/MinimumSeedGenerator.h"
 #include "Minuit2/AnalyticalGradientCalculator.h"
+#include "Minuit2/ExternalInternalGradientCalculator.h"
 #include "Minuit2/Numerical2PGradientCalculator.h"
 #include "Minuit2/MinimumBuilder.h"
 #include "Minuit2/MinimumSeed.h"
@@ -126,7 +127,7 @@ FunctionMinimum ModularFunctionMinimizer::Minimize(const FCNBase &fcn, const MnU
    // based on FCNBase. Create in this case a NumericalGradient calculator
    // Create the minuit FCN wrapper (MnUserFcn) containing the trasformation (int<->ext)
 
-   // neeed MnUsserFcn for difference int-ext parameters
+   // neeed MnUserFcn for difference int-ext parameters
    MnUserFcn mfcn(fcn, st.Trafo());
    Numerical2PGradientCalculator gc(mfcn, st.Trafo(), strategy);
 
@@ -142,23 +143,30 @@ FunctionMinimum ModularFunctionMinimizer::Minimize(const FCNBase &fcn, const MnU
 FunctionMinimum ModularFunctionMinimizer::Minimize(const FCNGradientBase &fcn, const MnUserParameterState &st,
                                                    const MnStrategy &strategy, unsigned int maxfcn, double toler) const
 {
-   // minimize from a FCNGradientBase and a MnUserparameterState - interface used by all the previous ones
-   // based on FCNGradientBase.
-   // Create in this acase an AnalyticalGradient calculator
-   // Create the minuit FCN wrapper (MnUserFcn) containing the trasformation (int<->ext)
+   // minimize from a FCNGradientBase and a MnUserParameterState -
+   // interface based on FCNGradientBase (external/analytical gradients)
+   // Create in this case an AnalyticalGradient calculator
+   // Create the minuit FCN wrapper (MnUserFcn) containing the transformation (int<->ext)
 
    MnUserFcn mfcn(fcn, st.Trafo());
-   AnalyticalGradientCalculator gc(fcn, st.Trafo());
+   std::unique_ptr<AnalyticalGradientCalculator> gc;
+   if (fcn.gradParameterSpace() == GradientParameterSpace::Internal) {
+        //        std::cout << "-- ModularFunctionMinimizer::Minimize: Internal parameter space" << std::endl;
+        gc = std::unique_ptr<AnalyticalGradientCalculator>(new ExternalInternalGradientCalculator(fcn, st.Trafo()));
+   } else {
+        //        std::cout << "-- ModularFunctionMinimizer::Minimize: External parameter space" << std::endl;
+        gc = std::make_unique<AnalyticalGradientCalculator>(fcn, st.Trafo());
+   }
 
    unsigned int npar = st.VariableParameters();
    if (maxfcn == 0)
       maxfcn = 200 + 100 * npar + 5 * npar * npar;
 
-   // use numerical gradient to compute initial derivatives for SeedGenerator
-   Numerical2PGradientCalculator numgc(mfcn, st.Trafo(), strategy);
-   MinimumSeed mnseeds = SeedGenerator()(mfcn, numgc, st, strategy);
+   // compute seed (will use internally numerical gradient in case calculator does not implement g2 computations)
+   MinimumSeed mnseeds = SeedGenerator()(mfcn, *gc, st, strategy);
+   auto minimum = Minimize(mfcn, *gc, mnseeds, strategy, maxfcn, toler);
 
-   return Minimize(mfcn, gc, mnseeds, strategy, maxfcn, toler);
+   return minimum;
 }
 
 FunctionMinimum ModularFunctionMinimizer::Minimize(const MnFcn &mfcn, const GradientCalculator &gc,
@@ -184,7 +192,7 @@ FunctionMinimum ModularFunctionMinimizer::Minimize(const MnFcn &mfcn, const Grad
       print.Warn("Stop before iterating - call limit already exceeded");
 
       return FunctionMinimum(seed, std::vector<MinimumState>(1, seed.State()), mfcn.Up(),
-                             FunctionMinimum::MnReachedCallLimit());
+                             FunctionMinimum::MnReachedCallLimit);
    }
 
    return mb.Minimum(mfcn, gc, seed, strategy, maxfcn, effective_toler);

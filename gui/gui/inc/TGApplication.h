@@ -13,16 +13,6 @@
 #define ROOT_TGApplication
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGApplication                                                        //
-//                                                                      //
-// This class initialize the ROOT GUI toolkit.                          //
-// This class must be instantiated exactly once in any given            //
-// application.                                                         //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
 #include "TApplication.h"
 
 class TGClient;
@@ -31,12 +21,12 @@ class TGClient;
 class TGApplication : public TApplication {
 
 private:
-   TString        fDisplay;           // display server to connect to
-   TGClient      *fClient{nullptr};   // pointer to the client environment
+   TString        fDisplay;           ///< display server to connect to
+   TGClient      *fClient{nullptr};   ///< pointer to the client environment
 
 protected:
-   TGApplication() : TApplication() { }
-   virtual void LoadGraphicsLibs();
+   TGApplication() : TApplication() {}
+   void LoadGraphicsLibs() override;
 
 public:
    TGApplication(const char *appClassName,
@@ -44,9 +34,9 @@ public:
                  void *options = nullptr, Int_t numOptions = 0);
    virtual ~TGApplication();
 
-   virtual void GetOptions(Int_t *argc, char **argv);
+   void GetOptions(Int_t *argc, char **argv) override;
 
-   ClassDef(TGApplication,0)  //GUI application singleton
+   ClassDefOverride(TGApplication,0)  //GUI application singleton
 };
 
 #endif

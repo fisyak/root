@@ -12,15 +12,6 @@
 #ifndef ROOT_TSessionDialogs
 #define ROOT_TSessionDialogs
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TSessionDialogs                                                      //
-//                                                                      //
-// This file defines several dialogs that are used by TSessionViewer.   //
-// The following dialogs are available: TNewChainDlg and TNewQueryDlg.  //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
 
 #include "TSessionViewer.h"
 
@@ -55,7 +46,7 @@ private:
    TObject              *fChain;          // actual TDSet or TChain
 
 public:
-   TNewChainDlg(const TGWindow *p=0, const TGWindow *main=0);
+   TNewChainDlg(const TGWindow *p=nullptr, const TGWindow *main=nullptr);
    virtual ~TNewChainDlg();
 
    void         UpdateList();
@@ -64,7 +55,7 @@ public:
    void         OnElementClicked(TGLVEntry* entry, Int_t btn);
    void         OnElementSelected(TObject *obj); //*SIGNAL*
 
-   virtual Bool_t ProcessMessage(Long_t msg, Long_t parm1, Long_t parm2);
+   virtual Bool_t ProcessMessage(Longptr_t msg, Longptr_t parm1, Longptr_t parm2);
    virtual void CloseWindow();
 
    ClassDef(TNewChainDlg, 0) // New chain dialog
@@ -99,7 +90,7 @@ private:
 
 public:
    TNewQueryDlg(TSessionViewer *gui, Int_t Width, Int_t Height,
-                   TQueryDescription *query = 0, Bool_t editmode = kFALSE);
+                   TQueryDescription *query = nullptr, Bool_t editmode = kFALSE);
    virtual ~TNewQueryDlg();
    void     Build(TSessionViewer *gui);
    void     OnNewQueryMore();
@@ -114,7 +105,7 @@ public:
    void     Popup();
    void     SettingsChanged();
    void     UpdateFields(TQueryDescription *desc);
-   virtual Bool_t ProcessMessage(Long_t msg, Long_t parm1, Long_t parm2);
+   virtual Bool_t ProcessMessage(Longptr_t msg, Longptr_t parm1, Longptr_t parm2);
 
    ClassDef(TNewQueryDlg, 0) // New query dialog
 };
@@ -149,7 +140,7 @@ public:
    virtual ~TUploadDataSetDlg();
 
    virtual void   CloseWindow();
-   virtual Bool_t ProcessMessage(Long_t msg, Long_t parm1, Long_t parm2);
+   virtual Bool_t ProcessMessage(Longptr_t msg, Longptr_t parm1, Longptr_t parm2);
    void           AddFiles(const char *fileName);
    void           AddFiles(TList *fileList);
    void           BrowseFiles();

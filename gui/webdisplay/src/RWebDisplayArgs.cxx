@@ -33,10 +33,11 @@ RLogChannel &ROOT::Experimental::WebGUILog()
 
 Holds different arguments for starting browser with RWebDisplayHandle::Display() method
 
- */
+*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Default constructor - browser kind configured from gROOT->GetWebDisplay()
+/// Default constructor.
+/// Browser kind configured from gROOT->GetWebDisplay()
 
 RWebDisplayArgs::RWebDisplayArgs()
 {
@@ -44,8 +45,9 @@ RWebDisplayArgs::RWebDisplayArgs()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Constructor - browser kind specified as std::string
-/// See SetBrowserKind() method for description of allowed parameters
+/// Constructor.
+/// Browser kind specified as std::string.
+/// See \ref SetBrowserKind method for description of allowed parameters
 
 RWebDisplayArgs::RWebDisplayArgs(const std::string &browser)
 {
@@ -53,8 +55,9 @@ RWebDisplayArgs::RWebDisplayArgs(const std::string &browser)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Constructor - browser kind specified as const char *
-/// See SetBrowserKind() method for description of allowed parameters
+/// Constructor.
+/// Browser kind specified as `const char *`.
+/// See \ref SetBrowserKind method for description of allowed parameters
 
 RWebDisplayArgs::RWebDisplayArgs(const char *browser)
 {
@@ -62,7 +65,8 @@ RWebDisplayArgs::RWebDisplayArgs(const char *browser)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Constructor - specify window width and height
+/// Constructor.
+/// Let specify window width and height
 
 RWebDisplayArgs::RWebDisplayArgs(int width, int height, int x, int y, const std::string &browser)
 {
@@ -72,21 +76,19 @@ RWebDisplayArgs::RWebDisplayArgs(int width, int height, int x, int y, const std:
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Constructor - specify master window and channel (if reserved already)
+/// Constructor.
+/// Let specify master window and channel (if reserved already)
 
 RWebDisplayArgs::RWebDisplayArgs(std::shared_ptr<RWebWindow> master, int channel)
 {
    SetMasterWindow(master, channel);
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Destructor
+/// Destructor.
+/// Must be defined in source code to correctly call RWebWindow destructor
 
-RWebDisplayArgs::~RWebDisplayArgs()
-{
-  // must be defined here to correctly call RWebWindow destructor
-}
+RWebDisplayArgs::~RWebDisplayArgs() = default;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 /// Set size of web browser window as string like "800x600"
@@ -129,7 +131,7 @@ bool RWebDisplayArgs::SetPosAsStr(const std::string &str)
       return false;
    }
 
-   if ((x<0) || (y<0))
+   if ((x < 0) || (y < 0))
       return false;
 
    SetPos(x, y);
@@ -137,17 +139,20 @@ bool RWebDisplayArgs::SetPosAsStr(const std::string &str)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Set browser kind as string argument
+/// Set browser kind as string argument.
+///
 /// Recognized values:
-///  chrome  - use Google Chrome web browser, supports headless mode from v60, default
-///  firefox - use Mozilla Firefox browser, supports headless mode from v57
-///   native - (or empty string) either chrome or firefox, only these browsers support batch (headless) mode
-///  browser - default system web-browser, no batch mode
-///   safari - Safari browser on Mac
-///      cef - Chromium Embeded Framework, local display, local communication
-///      qt5 - Qt5 WebEngine, local display, local communication
-///    local - either cef or qt5
-///   <prog> - any program name which will be started instead of default browser, like /usr/bin/opera
+///
+///      chrome - use Google Chrome web browser, supports headless mode from v60, default
+///     firefox - use Mozilla Firefox browser, supports headless mode from v57
+///      native - (or empty string) either chrome or firefox, only these browsers support batch (headless) mode
+///     browser - default system web-browser, no batch mode
+///      safari - Safari browser on Mac
+///         cef - Chromium Embeded Framework, local display, local communication
+///         qt5 - Qt5 QWebEngine, local display, local communication
+///         qt6 - Qt6 QWebEngineCore, local display, local communication
+///       local - either cef or qt5 or qt6
+///    `<prog>` - any program name which will be started instead of default browser, like /usr/bin/opera
 
 RWebDisplayArgs &RWebDisplayArgs::SetBrowserKind(const std::string &_kind)
 {
@@ -178,9 +183,16 @@ RWebDisplayArgs &RWebDisplayArgs::SetBrowserKind(const std::string &_kind)
       kind.erase(pos, epos-pos);
    }
 
-   // very special handling of qt5 which can specify pointer as a string
-   if (kind.find("qt5:") == 0) {
-      SetDriverData((void *) std::stoul(kind.substr(4)));
+   pos = kind.rfind("headless");
+   if ((pos != std::string::npos) && (pos == kind.length() - 8)) {
+      SetHeadless(true);
+      kind.resize(pos);
+      if ((pos > 0) && (kind[pos-1] == ';')) kind.resize(pos-1);
+   }
+
+   // very special handling of qt5/qt6 which can specify pointer as a string
+   if ((kind.find("qt5:") == 0) || (kind.find("qt6:") == 0)) {
+      SetDriverData((void *) std::stoull(kind.substr(4)));
       kind.resize(3);
    }
 
@@ -196,18 +208,30 @@ RWebDisplayArgs &RWebDisplayArgs::SetBrowserKind(const std::string &_kind)
 
    if (kind == "local")
       SetBrowserKind(kLocal);
-   else if (kind.empty() || (kind == "native"))
+   else if (kind == "native")
       SetBrowserKind(kNative);
+   else if (kind.empty() || (kind == "dflt") || (kind == "default") || (kind == "browser"))
+      SetBrowserKind(kDefault);
    else if (kind == "firefox")
       SetBrowserKind(kFirefox);
    else if ((kind == "chrome") || (kind == "chromium"))
       SetBrowserKind(kChrome);
+#ifdef _MSC_VER
+   else if ((kind == "edge") || (kind == "msedge"))
+      SetBrowserKind(kEdge);
+#endif
    else if ((kind == "cef") || (kind == "cef3"))
       SetBrowserKind(kCEF);
    else if ((kind == "qt") || (kind == "qt5"))
       SetBrowserKind(kQt5);
+   else if (kind == "qt6")
+      SetBrowserKind(kQt6);
    else if ((kind == "embed") || (kind == "embedded"))
       SetBrowserKind(kEmbedded);
+   else if (kind == "server")
+      SetBrowserKind(kServer);
+   else if (kind == "off")
+      SetBrowserKind(kOff);
    else if (!SetSizeAsStr(kind))
       SetCustomExec(kind);
 
@@ -221,13 +245,17 @@ std::string RWebDisplayArgs::GetBrowserName() const
 {
    switch (GetBrowserKind()) {
       case kChrome: return "chrome";
+      case kEdge: return "edge";
       case kFirefox: return "firefox";
       case kNative: return "native";
       case kCEF: return "cef";
       case kQt5: return "qt5";
+      case kQt6: return "qt6";
       case kLocal: return "local";
-      case kStandard: return "default";
+      case kDefault: return "default";
+      case kServer: return "server";
       case kEmbedded: return "embed";
+      case kOff: return "off";
       case kCustom:
           auto pos = fExec.find(" ");
           return (pos == std::string::npos) ? fExec : fExec.substr(0,pos);
@@ -247,7 +275,7 @@ void RWebDisplayArgs::SetMasterWindow(std::shared_ptr<RWebWindow> master, int ch
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Append string to url options
+/// Append string to url options.
 /// Add "&" as separator if any options already exists
 
 void RWebDisplayArgs::AppendUrlOpt(const std::string &opt)
@@ -261,7 +289,7 @@ void RWebDisplayArgs::AppendUrlOpt(const std::string &opt)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Returns full url, which is combined from URL and extra URL options
+/// Returns full url, which is combined from URL and extra URL options.
 /// Takes into account "#" symbol in url - options are inserted before that symbol
 
 std::string RWebDisplayArgs::GetFullUrl() const
@@ -282,7 +310,7 @@ std::string RWebDisplayArgs::GetFullUrl() const
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// Configure custom web browser
+/// Configure custom web browser.
 /// Either just name of browser which can be used like "opera"
 /// or full execution string which must includes $url like "/usr/bin/opera $url"
 
@@ -293,7 +321,7 @@ void RWebDisplayArgs::SetCustomExec(const std::string &exec)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// returns custom executable to start web browser
+/// Returns custom executable to start web browser
 
 std::string RWebDisplayArgs::GetCustomExec() const
 {
@@ -309,9 +337,11 @@ std::string RWebDisplayArgs::GetCustomExec() const
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-/// returns string which can be used as argument in RWebWindow::Show() method
-/// to display web window in provided QWidget
+/// Returns string which can be used as argument in RWebWindow::Show() method
+/// to display web window in provided QWidget.
+///
 /// After RWebWindow is displayed created QWebEngineView can be found with the command:
+///
 ///     auto view = qparent->findChild<QWebEngineView*>("RootWebView");
 
 std::string RWebDisplayArgs::GetQt5EmbedQualifier(const void *qparent, const std::string &urlopt)
@@ -319,7 +349,7 @@ std::string RWebDisplayArgs::GetQt5EmbedQualifier(const void *qparent, const std
    std::string where = "qt5";
    if (qparent) {
       where.append(":");
-      where.append(std::to_string((unsigned long) qparent));
+      where.append(std::to_string((uintptr_t) qparent));
    }
    if (!urlopt.empty()) {
       where.append("?");

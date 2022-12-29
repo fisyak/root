@@ -15,9 +15,8 @@
 #include "TUrl.h"
 #include "THttpServer.h"
 
-#include "ROOT/RMakeUnique.hxx"
-
 #include <cstring>
+#include <memory>
 
 #ifdef WIN32
 #include <io.h>
@@ -31,17 +30,14 @@ class TFastCgiCallArg : public THttpCallArg {
 
    bool fCanPostpone{false};
 
-protected:
-
-   void CheckWSPageContent(THttpWSHandler *) override
-   {
-      std::string search = "JSROOT.connectWebWindow({";
-      std::string replace = search + "socket_kind:\"longpoll\",";
-      ReplaceAllinContent(search, replace, true);
-   }
-
 public:
-   TFastCgiCallArg(bool can_postpone) : THttpCallArg(), fCanPostpone(can_postpone) {};
+   TFastCgiCallArg(bool can_postpone) : THttpCallArg(), fCanPostpone(can_postpone) {}
+
+   /** provide WS kind  */
+   const char *GetWSKind() const override { return "longpoll"; }
+
+   /** provide WS platform */
+   const char *GetWSPlatform() const override { return "fastcgi"; }
 
    /** All FastCGI requests should be immediately replied to get slot for next */
    Bool_t CanPostpone() const override { return fCanPostpone; }
@@ -54,7 +50,7 @@ public:
 
 #include "fcgiapp.h"
 
-#include <stdlib.h>
+#include <cstdlib>
 
 void FCGX_ROOT_send_file(FCGX_Request *request, const char *fname)
 {
@@ -274,43 +270,43 @@ void run_single_thread(TFastCgi *engine)
 #endif
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TFastCgi                                                             //
-//                                                                      //
-// http engine implementation, based on fastcgi package                 //
-// Allows to redirect http requests from normal web server like         //
-// Apache or lighttpd                                                   //
-//                                                                      //
-// Configuration example for lighttpd                                   //
-//                                                                      //
-// server.modules += ( "mod_fastcgi" )                                  //
-// fastcgi.server = (                                                   //
-//   "/remote_scripts/" =>                                              //
-//     (( "host" => "192.168.1.11",                                     //
-//        "port" => 9000,                                               //
-//        "check-local" => "disable",                                   //
-//        "docroot" => "/"                                              //
-//     ))                                                               //
-// )                                                                    //
-//                                                                      //
-// When creating THttpServer, one should specify:                       //
-//                                                                      //
-//  THttpServer* serv = new THttpServer("fastcgi:9000");                //
-//                                                                      //
-// In this case, requests to lighttpd server will be                    //
-// redirected to ROOT session. Like:                                    //
-//    http://lighttpdhost/remote_scripts/root.cgi/                      //
-//                                                                      //
-// Following additional options can be specified                        //
-//    top=foldername - name of top folder, seen in the browser          //
-//    thrds=N - run N worker threads to process requests, default 10    //
-//    debug=1 - run fastcgi server in debug mode                        //
-// Example:                                                             //
-//    serv->CreateEngine("fastcgi:9000?top=fastcgiserver");             //
-//                                                                      //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+/** \class TFastCgi
+\ingroup http
+
+THttpEngine implementation, based on fastcgi package
+
+Allows to redirect http requests from normal web server like
+Apache2 or lighttpd
+
+Configuration example for lighttpd:
+
+    server.modules += ( "mod_fastcgi" )
+    fastcgi.server = (
+       "/remote_scripts/" =>
+         (( "host" => "192.168.1.11",
+            "port" => 9000,
+            "check-local" => "disable",
+            "docroot" => "/"
+         ))
+    )
+
+When creating THttpServer, one should specify:
+
+    THttpServer* serv = new THttpServer("fastcgi:9000");
+
+In this case, requests to lighttpd server will be
+redirected to ROOT session. Like: `http://lighttpdhost/remote_scripts/root.cgi/`
+
+Following additional options can be specified
+
+    top=foldername - name of top folder, seen in the browser
+    thrds=N        - run N worker threads to process requests, default 10
+    debug=1        - run fastcgi server in debug mode
+
+Example:
+
+    serv->CreateEngine("fastcgi:9000?top=fastcgiserver");
+*/
 
 ////////////////////////////////////////////////////////////////////////////////
 /// normal constructor
@@ -339,7 +335,9 @@ TFastCgi::~TFastCgi()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// initializes fastcgi variables and start thread,
+/// create engine data
+///
+/// initializes fastcgi variables and start thread
 /// which will process incoming http requests
 
 Bool_t TFastCgi::Create(const char *args)

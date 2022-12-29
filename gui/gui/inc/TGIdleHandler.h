@@ -12,19 +12,9 @@
 #ifndef ROOT_TGIdleHandler
 #define ROOT_TGIdleHandler
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGIdleHandler                                                        //
-//                                                                      //
-// Handle idle events, i.e. process GUI actions when there is nothing   //
-// else anymore to do.                                                  //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
 #include "TObject.h"
 
 class TGWindow;
-
 
 class TGIdleHandler : public TObject {
 
@@ -37,7 +27,7 @@ public:
 
    virtual Bool_t HandleEvent();
 
-   ClassDef(TGIdleHandler,0)  // Idle event handler
+   ClassDefOverride(TGIdleHandler,0)  // Idle event handler
 };
 
 #endif

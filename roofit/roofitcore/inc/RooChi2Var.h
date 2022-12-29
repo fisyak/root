@@ -27,53 +27,49 @@ public:
 
   // Constructors, assignment etc
   RooChi2Var(const char *name, const char* title, RooAbsReal& func, RooDataHist& data,
-	     const RooCmdArg& arg1                , const RooCmdArg& arg2=RooCmdArg::none(),const RooCmdArg& arg3=RooCmdArg::none(),
-	     const RooCmdArg& arg4=RooCmdArg::none(), const RooCmdArg& arg5=RooCmdArg::none(),const RooCmdArg& arg6=RooCmdArg::none(),
-	     const RooCmdArg& arg7=RooCmdArg::none(), const RooCmdArg& arg8=RooCmdArg::none(),const RooCmdArg& arg9=RooCmdArg::none()) ;
+        const RooCmdArg& arg1=RooCmdArg::none(), const RooCmdArg& arg2=RooCmdArg::none(),const RooCmdArg& arg3=RooCmdArg::none(),
+        const RooCmdArg& arg4=RooCmdArg::none(), const RooCmdArg& arg5=RooCmdArg::none(),const RooCmdArg& arg6=RooCmdArg::none(),
+        const RooCmdArg& arg7=RooCmdArg::none(), const RooCmdArg& arg8=RooCmdArg::none(),const RooCmdArg& arg9=RooCmdArg::none()) ;
 
   RooChi2Var(const char *name, const char* title, RooAbsPdf& pdf, RooDataHist& data,
-	     const RooCmdArg& arg1                , const RooCmdArg& arg2=RooCmdArg::none(),const RooCmdArg& arg3=RooCmdArg::none(),
-	     const RooCmdArg& arg4=RooCmdArg::none(), const RooCmdArg& arg5=RooCmdArg::none(),const RooCmdArg& arg6=RooCmdArg::none(),
-	     const RooCmdArg& arg7=RooCmdArg::none(), const RooCmdArg& arg8=RooCmdArg::none(),const RooCmdArg& arg9=RooCmdArg::none()) ;
+        const RooCmdArg& arg1=RooCmdArg::none(), const RooCmdArg& arg2=RooCmdArg::none(),const RooCmdArg& arg3=RooCmdArg::none(),
+        const RooCmdArg& arg4=RooCmdArg::none(), const RooCmdArg& arg5=RooCmdArg::none(),const RooCmdArg& arg6=RooCmdArg::none(),
+        const RooCmdArg& arg7=RooCmdArg::none(), const RooCmdArg& arg8=RooCmdArg::none(),const RooCmdArg& arg9=RooCmdArg::none()) ;
 
   enum FuncMode { Function, Pdf, ExtendedPdf } ;
 
-  RooChi2Var(const char *name, const char *title, RooAbsPdf& pdf, RooDataHist& data,
-	    Bool_t extended=kFALSE, const char* rangeName=0, const char* addCoefRangeName=0, 
-	     Int_t nCPU=1, RooFit::MPSplit interleave=RooFit::BulkPartition, Bool_t verbose=kTRUE, Bool_t splitCutRange=kTRUE, RooDataHist::ErrorType=RooDataHist::SumW2) ;
+  RooChi2Var(const RooChi2Var& other, const char* name=nullptr);
+  TObject* clone(const char* newname) const override { return new RooChi2Var(*this,newname); }
+
+  RooAbsTestStatistic* create(const char *name, const char *title, RooAbsReal& pdf, RooAbsData& dhist,
+                                      const RooArgSet& projDeps, RooAbsTestStatistic::Configuration const& cfg) override {
+    // Virtual constructor
+    return new RooChi2Var(name,title,(RooAbsPdf&)pdf,(RooDataHist&)dhist,projDeps,_funcMode,cfg,_etype) ;
+  }
+
+  double defaultErrorLevel() const override {
+    // The default error level for MINUIT error analysis for a chi^2 is 1.0
+    return 1.0 ;
+  }
+
+private:
 
   RooChi2Var(const char *name, const char *title, RooAbsReal& func, RooDataHist& data,
-	     const RooArgSet& projDeps, FuncMode funcMode, const char* rangeName=0, const char* addCoefRangeName=0, 
-	     Int_t nCPU=1, RooFit::MPSplit interleave=RooFit::BulkPartition, Bool_t verbose=kTRUE, Bool_t splitCutRange=kTRUE, RooDataHist::ErrorType=RooDataHist::SumW2) ;
-
-  RooChi2Var(const RooChi2Var& other, const char* name=0);
-  virtual TObject* clone(const char* newname) const { return new RooChi2Var(*this,newname); }
-
-  virtual RooAbsTestStatistic* create(const char *name, const char *title, RooAbsReal& pdf, RooAbsData& dhist,
-				      const RooArgSet& projDeps, const char* rangeName=0, const char* addCoefRangeName=0, 
-				      Int_t nCPU=1, RooFit::MPSplit interleave=RooFit::BulkPartition,Bool_t verbose=kTRUE, Bool_t splitCutRange=kTRUE, Bool_t = kFALSE) {
-    // Virtual constructor
-    return new RooChi2Var(name,title,(RooAbsPdf&)pdf,(RooDataHist&)dhist,projDeps,_funcMode,rangeName,
-			  addCoefRangeName,nCPU,interleave,verbose, splitCutRange,_etype) ;
-  }
-  
-  virtual ~RooChi2Var();
-
-  virtual Double_t defaultErrorLevel() const { 
-    // The default error level for MINUIT error analysis for a chi^2 is 1.0
-    return 1.0 ; 
-  }
+             const RooArgSet& projDeps, FuncMode funcMode,
+             RooAbsTestStatistic::Configuration const& cfg,
+             RooDataHist::ErrorType etype)
+    : RooAbsOptTestStatistic(name,title,func,data,projDeps,cfg), _etype(etype), _funcMode(funcMode) {}
 
 protected:
 
-  static RooArgSet _emptySet ;        // Supports named argument constructor
- 
-  RooDataHist::ErrorType _etype ;     // Error type store in associated RooDataHist
-  FuncMode _funcMode ;                // Function, P.d.f. or extended p.d.f?
+  double evaluatePartition(std::size_t firstEvent, std::size_t lastEvent, std::size_t stepSize) const override ;
 
-  virtual Double_t evaluatePartition(std::size_t firstEvent, std::size_t lastEvent, std::size_t stepSize) const ;
-  
-  ClassDef(RooChi2Var,1) // Chi^2 function of p.d.f w.r.t a binned dataset
+  static RooArgSet _emptySet ;        ///< Supports named argument constructor
+
+  RooDataHist::ErrorType _etype ;     ///< Error type store in associated RooDataHist
+  FuncMode _funcMode ;                ///< Function, P.d.f. or extended p.d.f?
+
+  ClassDefOverride(RooChi2Var,0) // Chi^2 function of p.d.f w.r.t a binned dataset
 };
 
 

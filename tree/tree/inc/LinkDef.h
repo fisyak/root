@@ -92,4 +92,8 @@
 #pragma read sourceClass="TTree" targetClass="TTree" version="[-16]" source="" target="fDefaultEntryOffsetLen" code="{ fDefaultEntryOffsetLen = 1000; }"
 #pragma read sourceClass="TTree" targetClass="TTree" version="[-18]" source="" target="fNClusterRange" code="{ fNClusterRange = 0; }"
 
+#pragma link C++ namespace ROOT::Internal::TreeUtils;
+#pragma link C++ class ROOT::Internal::TreeUtils::RNoCleanupNotifier;
+#pragma link C++ class TNotifyLink<ROOT::Internal::TreeUtils::RNoCleanupNotifierHelper>;
+
 #endif

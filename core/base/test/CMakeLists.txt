@@ -21,6 +21,7 @@ ROOT_ADD_GTEST(CoreBaseTests
   TQObjectTests.cxx
   TExceptionHandlerTests.cxx
   TStringTest.cxx
-  LIBRARIES Core RIO ${extralibs})
+  TBitsTests.cxx
+  LIBRARIES ${extralibs} RIO Core)
 
 ROOT_ADD_GTEST(CoreErrorTests TErrorTests.cxx LIBRARIES Core)

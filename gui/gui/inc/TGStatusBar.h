@@ -13,14 +13,6 @@
 #define ROOT_TGStatusBar
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGStatusBar                                                          //
-//                                                                      //
-// Provides a StatusBar widget.                                         //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
 #include "TGFrame.h"
 
 class TGStatusBarPart;
@@ -35,17 +27,17 @@ private:
    TGStatusBar& operator=(const TGStatusBar&) = delete;
 
 protected:
-   TGStatusBarPart **fStatusPart; // frames containing statusbar text
-   Int_t            *fParts;      // size of parts (in percent of total width)
-   Int_t             fNpart;      // number of parts
-   Int_t             fYt;         // y drawing position (depending on font)
-   Int_t            *fXt;         // x position for each part
-   Bool_t            f3DCorner;   // draw 3D corner (drawn by default)
+   TGStatusBarPart **fStatusPart; ///< frames containing statusbar text
+   Int_t            *fParts;      ///< size of parts (in percent of total width)
+   Int_t             fNpart;      ///< number of parts
+   Int_t             fYt;         ///< y drawing position (depending on font)
+   Int_t            *fXt;         ///< x position for each part
+   Bool_t            f3DCorner;   ///< draw 3D corner (drawn by default)
 
    static const TGFont *fgDefaultFont;
    static TGGC         *fgDefaultGC;
 
-   virtual void DoRedraw();
+   void DoRedraw() override;
 
    static FontStruct_t  GetDefaultFontStruct();
    static const TGGC   &GetDefaultGC();
@@ -56,7 +48,7 @@ public:
                Pixel_t back = GetDefaultFrameBackground());
    virtual ~TGStatusBar();
 
-   virtual void DrawBorder();
+   void         DrawBorder() override;
    virtual void SetText(TGString *text, Int_t partidx = 0);
    virtual void SetText(const char *text, Int_t partidx = 0);
            void AddText(const char *text, Int_t partidx = 0)
@@ -66,11 +58,11 @@ public:
    virtual void SetParts(Int_t *parts, Int_t npart);
    void         Draw3DCorner(Bool_t corner) { f3DCorner = corner; }
    TGCompositeFrame *GetBarPart(Int_t npart) const;
-   TGDimension GetDefaultSize() const;
+   TGDimension GetDefaultSize() const override;
 
-   virtual void SavePrimitive(std::ostream &out, Option_t *option = "");
+   void SavePrimitive(std::ostream &out, Option_t *option = "") override;
 
-   ClassDef(TGStatusBar,0)  // Status bar widget
+   ClassDefOverride(TGStatusBar,0)  // Status bar widget
 };
 
 #endif

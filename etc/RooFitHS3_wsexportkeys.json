@@ -1,0 +1,93 @@
+{
+    "RooGaussian": {
+        "type": "Gaussian",
+        "proxies": {
+            "x": "x",
+            "mean": "mean",
+            "sigma": "sigma"
+        }
+    },
+    "RooPoisson": {
+        "type": "Poisson",
+        "proxies": {
+            "x": "x",
+            "mean": "mean"
+        }
+    },
+    "RooExponential": {
+        "type": "Exponential",
+        "proxies": {
+            "x": "x",
+            "c": "c"
+        }
+    },    
+    "RooProduct": {
+        "type": "prod",
+        "proxies": {
+            "compRSet": "factors",
+            "compCSet": "factors"
+        }
+    },
+    "RooProdPdf": {
+        "type": "pdfprod",
+        "proxies": {
+            "pdfs": "factors"
+        }
+    },
+    "ParamHistFunc": {
+        "type": "paramhist",
+        "proxies": {
+            "dataVars": "observables",
+            "paramSet": "parameters"
+        }
+    },
+    "RooAddPdf": {
+        "type": "pdfsum",
+        "proxies": {
+            "refCoefNorm": "coefnormset",
+            "pdfs": "summands",
+            "coefficients": "coefficients"
+        }
+    },
+    "RooAddition": {
+        "type": "sum",
+        "proxies": {
+            "set": "summands"
+        }
+    },
+    "RooBernstein": {
+        "type": "BernsteinPolynomial",
+        "proxies": {
+            "coefList": "coefficients",
+            "x": "x"	    
+        }
+    },        
+    "RooArgusBG": {
+        "type": "ARGUS",
+        "proxies": {
+            "m": "mass",
+            "m0": "resonance",
+            "c": "slope",
+            "p": "power"
+        }
+    },
+    "RooCBShape": {
+        "type": "CrystalBallShape",
+        "proxies": {
+            "alpha": "alpha",
+            "m": "m",
+            "m0": "m0",
+            "n": "n",
+            "sigma": "sigma"
+        }
+    },
+    "RooBifurGauss": {
+        "type": "BifurkatedGaussian",
+        "proxies": {
+            "x": "x",
+            "mean": "mean",
+            "sigmaL": "sigmaL",
+            "sigmaR": "sigmaR"	    
+        }
+    }
+}

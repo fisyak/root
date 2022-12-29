@@ -80,23 +80,6 @@ void ROOT::Experimental::RCanvas::Update(bool async, CanvasCallback_t callback)
       fPainter->CanvasUpdated(fModified, async, callback);
 }
 
-class RCanvasCleanup : public TObject {
-public:
-
-   static RCanvasCleanup *gInstance;
-
-   RCanvasCleanup() : TObject() { gInstance = this; }
-
-   virtual ~RCanvasCleanup()
-   {
-      gInstance = nullptr;
-      ROOT::Experimental::RCanvas::ReleaseHeldCanvases();
-   }
-};
-
-RCanvasCleanup *RCanvasCleanup::gInstance = nullptr;
-
-
 ///////////////////////////////////////////////////////////////////////////////////////
 /// Create new canvas instance
 
@@ -107,13 +90,6 @@ std::shared_ptr<ROOT::Experimental::RCanvas> ROOT::Experimental::RCanvas::Create
    {
       std::lock_guard<std::mutex> grd(GetHeldCanvasesMutex());
       GetHeldCanvases().emplace_back(pCanvas);
-   }
-
-   if (!RCanvasCleanup::gInstance) {
-      auto cleanup = new RCanvasCleanup();
-      TDirectory *dummydir = new TDirectory("rcanvas_cleanup_dummydir","title");
-      dummydir->GetList()->Add(cleanup);
-      gROOT->GetListOfClosedObjects()->Add(dummydir);
    }
 
    return pCanvas;
@@ -135,6 +111,12 @@ std::shared_ptr<ROOT::Experimental::RCanvas> ROOT::Experimental::RCanvas::Create
 
 void ROOT::Experimental::RCanvas::Show(const std::string &where)
 {
+   // Do not display canvas in batch mode
+   if (gROOT->IsWebDisplayBatch())
+      return;
+
+   fShown = true;
+
    if (fPainter) {
       bool isany = (fPainter->NumDisplays() > 0);
 
@@ -179,7 +161,7 @@ void ROOT::Experimental::RCanvas::Hide()
 
 //////////////////////////////////////////////////////////////////////////
 /// Create image file for the canvas
-/// Supported SVG (extension .svg), JPEG (extension .jpg or .jpeg) and PNG (extension .png)
+/// Supported SVG (extension .svg), JPEG (extension .jpg or .jpeg), PNG (extension .png) or JSON (extension .json)
 
 bool ROOT::Experimental::RCanvas::SaveAs(const std::string &filename)
 {
@@ -189,10 +171,25 @@ bool ROOT::Experimental::RCanvas::SaveAs(const std::string &filename)
    if (!fPainter)
       return false;
 
-   auto width = fSize[0].fVal;
-   auto height = fSize[1].fVal;
+   int width = GetWidth();
+   int height = GetHeight();
 
-   return fPainter->ProduceBatchOutput(filename, width > 1 ? (int) width : 800, height > 1 ? (int) height : 600);
+   return fPainter->ProduceBatchOutput(filename, width > 1 ? width : 800, height > 1 ? height : 600);
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// Create JSON data for the canvas
+/// Can be used of offline display with JSROOT
+
+std::string ROOT::Experimental::RCanvas::CreateJSON()
+{
+   if (!fPainter)
+      fPainter = Internal::RVirtualCanvasPainter::Create(*this);
+
+   if (!fPainter)
+      return "";
+
+   return fPainter->ProduceJSON();
 }
 
 //////////////////////////////////////////////////////////////////////////

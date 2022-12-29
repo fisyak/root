@@ -13,15 +13,6 @@
 #define ROOT_TGToolBar
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGToolBar                                                            //
-//                                                                      //
-// A toolbar is a composite frame that contains TGPictureButtons.       //
-// Often used in combination with a TGHorizontal3DLine.                 //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
 #include "TGFrame.h"
 
 class TGButton;
@@ -42,9 +33,9 @@ struct ToolBarData_t {
 class TGToolBar : public TGCompositeFrame {
 
 protected:
-   TList   *fPictures;      // list of pictures that should be freed
-   TList   *fTrash;         // list of buttons and layout hints to be deleted
-   TMap    *fMapOfButtons;  // map of button/id pairs in this group
+   TList   *fPictures;      ///< list of pictures that should be freed
+   TList   *fTrash;         ///< list of buttons and layout hints to be deleted
+   TMap    *fMapOfButtons;  ///< map of button/id pairs in this group
 
 private:
    TGToolBar(const TGToolBar&) = delete;
@@ -60,10 +51,10 @@ public:
    virtual TGButton *AddButton(const TGWindow *w, TGPictureButton *button, Int_t spacing = 0);
 
    virtual void ChangeIcon(ToolBarData_t *button, const char *new_icon);
-   virtual void Cleanup();
+   void Cleanup() override;
    virtual TGButton *GetButton(Int_t id) const;
-   virtual Long_t    GetId(TGButton *button) const;
-   virtual void      SetId(TGButton *button, Long_t id);
+   virtual Longptr_t GetId(TGButton *button) const;
+   virtual void      SetId(TGButton *button, Longptr_t id);
 
    virtual void ButtonPressed();
    virtual void ButtonReleased();
@@ -73,9 +64,9 @@ public:
    virtual void Released(Int_t id) { Emit("Released(Int_t)",id);}   //*SIGNAL*
    virtual void Clicked(Int_t id)  { Emit("Clicked(Int_t)",id); }   //*SIGNAL*
 
-   virtual void   SavePrimitive(std::ostream &out, Option_t *option = "");
+   void SavePrimitive(std::ostream &out, Option_t *option = "") override;
 
-   ClassDef(TGToolBar,0)  //A bar containing picture buttons
+   ClassDefOverride(TGToolBar,0)  //A bar containing picture buttons
 };
 
 #endif

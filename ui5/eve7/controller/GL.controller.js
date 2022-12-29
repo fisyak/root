@@ -17,7 +17,7 @@ sap.ui.define([
 
       onInit : function()
       {
-         // var id = this.getView().getId();
+         // let id = this.getView().getId();
 
          let viewData = this.getView().getViewData();
          if (viewData)
@@ -29,20 +29,10 @@ sap.ui.define([
             UIComponent.getRouterFor(this).getRoute("View").attachPatternMatched(this.onViewObjectMatched, this);
          }
 
-         this._load_scripts = false;
          this._render_html  = false;
          this.htimeout = 250;
 
          ResizeHandler.register(this.getView(), this.onResize.bind(this));
-
-         JSROOT.require("geom").then(() => this.onLoadScripts());
-      },
-
-      onLoadScripts: function()
-      {
-         this._load_scripts = true;
-
-         this.checkViewReady();
       },
 
       onViewObjectMatched: function(oEvent)
@@ -50,13 +40,13 @@ sap.ui.define([
          let args = oEvent.getParameter("arguments");
 
          // console.log('ON MATCHED', args.viewName);
-         // console.log('MORE DATA', JSROOT.$eve7tmp);
+         // console.log('MORE DATA', EVE.$eve7tmp);
          // console.log('COMPONENT DATA', Component.getOwnerComponentFor(this.getView()).getComponentData());
 
          this.setupManagerAndViewType(Component.getOwnerComponentFor(this.getView()).getComponentData(),
-                                      args.viewName, JSROOT.$eve7tmp);
+                                      args.viewName, EVE.$eve7tmp);
 
-         delete JSROOT.$eve7tmp;
+         delete EVE.$eve7tmp;
 
          this.checkViewReady();
       },
@@ -74,7 +64,6 @@ sap.ui.define([
          if (viewName)
          {
             data.standalone = viewName;
-            data.kind       = viewName;
          }
 
          // console.log("VIEW DATA", data);
@@ -83,7 +72,6 @@ sap.ui.define([
          {
             this.mgr        = moredata.mgr;
             this.eveViewerId  = moredata.eveViewerId;
-            this.kind       = moredata.kind;
             this.standalone = viewName;
             this.checkViewReady();
          }
@@ -97,7 +85,6 @@ sap.ui.define([
          {
             this.mgr       = data.mgr;
             this.eveViewerId = data.eveViewerId;
-            this.kind      = data.kind;
          }
 
          this.mgr.RegisterController(this);
@@ -135,7 +122,6 @@ sap.ui.define([
          if (!found) return;
 
          this.eveViewerId = found.fElementId;
-         this.kind      = (found.fName == "Default Viewer") ? "3D" : "2D";
 
          this.checkViewReady();
       },
@@ -151,7 +137,7 @@ sap.ui.define([
       // Checks if all initialization is performed and startup renderer.
       checkViewReady: function()
       {
-         if (!this.mgr || !this._load_scripts || !this._render_html || !this.eveViewerId || this.viewer_class) return;
+         if (!this.mgr || !this._render_html || !this.eveViewerId || this.viewer_class) return;
 
          this.viewer_class = this.mgr.handle.getUserArgs("GLViewer");
          if ((this.viewer_class != "JSRoot") && (this.viewer_class != "Three") && (this.viewer_class != "RCore"))
@@ -234,7 +220,9 @@ sap.ui.define([
       onResize: function(event)
       {
          // TODO: should be specified somehow in XML file
-         this.getView().$().css("overflow", "hidden").css("width", "100%").css("height", "100%");
+         if (this.viewer_class != "RCore") {
+            this.getView().$().css("overflow", "hidden").css("width", "100%").css("height", "100%");
+         }
 
          if (this.resize_tmout) clearTimeout(this.resize_tmout);
 
@@ -251,6 +239,17 @@ sap.ui.define([
       /** Called from JSROOT context menu when object selected for browsing */
       invokeBrowseOf: function(obj_id) {
          this.mgr.SendMIR("BrowseElement(" + obj_id + ")", 0, "ROOT::Experimental::REveManager");
+      },
+
+      getEveCameraType : function(){
+          let vo = this.mgr.GetElement(this.eveViewerId);
+          return vo.CameraType;
+      },
+
+      isEveCameraPerspective: function() {
+         let vo = this.mgr.GetElement(this.eveViewerId);
+         return vo.CameraType.startsWith("PerspXOZ");
+
       }
 
    });

@@ -1,4 +1,4 @@
-## @author Vincenzo Eduardo Padulano
+# @author Vincenzo Eduardo Padulano
 #  @author Enric Tejedor
 #  @date 2021-02
 
@@ -9,11 +9,12 @@
 # For the licensing terms see $ROOTSYS/LICENSE.                                #
 # For the list of contributors see $ROOTSYS/README/CREDITS.                    #
 ################################################################################
+from __future__ import annotations
 
 import ntpath  # Filename from path (should be platform-independent)
 
 from DistRDF import DataFrame
-from DistRDF import Node
+from DistRDF import HeadNode
 from DistRDF.Backends import Base
 from DistRDF.Backends import Utils
 
@@ -64,16 +65,16 @@ class SparkBackend(Base.BaseBackend):
         else:
             self.sc = pyspark.SparkContext.getOrCreate()
 
-    def optimize_npartitions(self, npartitions):
-        numex = self.sc.getConf().get("spark.executor.instances")
-        numcoresperex = self.sc.getConf().get("spark.executor.cores")
-
-        if numex:
-            if numcoresperex:
-                return int(numex) * int(numcoresperex)
-            return int(numex)
-        else:
-            return npartitions
+    def optimize_npartitions(self) -> int:
+        """
+        The SparkContext.defaultParallelism property roughly translates to the
+        available amount of logical cores on the cluster. Some examples:
+        - spark.master = local[n]: returns n.
+        - spark.executor.instances = m and spark.executor.cores = n: returns `n*m`.
+        By default, the minimum number this returns is 2 if the context
+        doesn't know any better. For example, if dynamic allocation is enabled.
+        """
+        return self.sc.defaultParallelism
 
     def ProcessAndMerge(self, ranges, mapper, reducer):
         """
@@ -149,6 +150,12 @@ class SparkBackend(Base.BaseBackend):
             self.sc.addFile(filepath)
 
     def make_dataframe(self, *args, **kwargs):
-        """Creates an instance of SparkDataFrame"""
-        headnode = Node.HeadNode(*args)
-        return DataFrame.RDataFrame(headnode, self, **kwargs)
+        """
+        Creates an instance of distributed RDataFrame that can send computations
+        to a Spark cluster.
+        """
+        # Set the number of partitions for this dataframe, one of the following:
+        # 1. User-supplied `npartitions` optional argument
+        npartitions = kwargs.pop("npartitions", None)
+        headnode = HeadNode.get_headnode(self, npartitions, *args)
+        return DataFrame.RDataFrame(headnode)

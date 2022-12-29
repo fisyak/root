@@ -13,7 +13,6 @@
 #include "RooRealVar.h"
 #include "RooDataSet.h"
 #include "RooGaussian.h"
-#include "RooConstVar.h"
 #include "RooProdPdf.h"
 #include "RooAddPdf.h"
 #include "RooMinimizer.h"
@@ -56,7 +55,7 @@ void rf601_intminuit()
    RooMinimizer m(*nll);
 
    // Activate verbose logging of MINUIT parameter space stepping
-   m.setVerbose(kTRUE);
+   m.setVerbose(true);
 
    // Call MIGRAD to minimize the likelihood
    m.migrad();
@@ -66,7 +65,7 @@ void rf601_intminuit()
    model.getParameters(x)->Print("s");
 
    // Disable verbose logging
-   m.setVerbose(kFALSE);
+   m.setVerbose(false);
 
    // Run HESSE to calculate errors from d2L/dp2
    m.hesse();
@@ -112,7 +111,7 @@ void rf601_intminuit()
    frac.Print();
 
    // Now fix sigma_g2
-   sigma_g2.setConstant(kTRUE);
+   sigma_g2.setConstant(true);
 
    // Rerun MIGRAD,HESSE
    m.migrad();

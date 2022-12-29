@@ -15,6 +15,7 @@
 #include "BackendPasses.h"
 #include "EnterUserCodeRAII.h"
 
+#include "cling/Interpreter/DynamicLibraryManager.h"
 #include "cling/Interpreter/InterpreterCallbacks.h"
 #include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
@@ -41,16 +42,17 @@ namespace llvm {
   class GlobalValue;
   class Module;
   class TargetMachine;
+  namespace orc {
+    class DefinitionGenerator;
+  }
 }
 
 namespace cling {
+  class DynamicLibraryManager;
   class IncrementalJIT;
   class Value;
 
   class IncrementalExecutor {
-  public:
-    typedef void* (*LazyFunctionCreatorFunc_t)(const std::string&);
-
   private:
     ///\brief Our JIT interface.
     ///
@@ -120,15 +122,6 @@ namespace cling {
       utils::OrderedMap<const Transaction*, std::vector<CXAAtExitElement>>;
     AtExitFunctions m_AtExitFuncs;
 
-    ///\brief Modules to emit upon the next call to the JIT.
-    ///
-    std::vector<llvm::Module*> m_ModulesToJIT;
-
-    ///\brief Lazy function creator, which is a final callback which the
-    /// JIT fires if there is unresolved symbol.
-    ///
-    std::vector<LazyFunctionCreatorFunc_t> m_lazyFuncCreator;
-
     ///\brief Set of the symbols that the JIT couldn't resolve.
     ///
     mutable std::unordered_set<std::string> m_unresolvedSymbols;
@@ -139,9 +132,10 @@ namespace cling {
     clang::DiagnosticsEngine& m_Diags;
 #endif
 
-    ///\brief The list of llvm::Module-s to return the transaction
-    /// after the JIT has emitted them.
-    std::map<llvm::orc::VModuleKey, Transaction*> m_PendingModules;
+    /// Dynamic library manager object.
+    ///
+    DynamicLibraryManager m_DyLibManager;
+
   public:
     enum ExecutionResult {
       kExeSuccess,
@@ -151,24 +145,31 @@ namespace cling {
     };
 
     IncrementalExecutor(clang::DiagnosticsEngine& diags,
-                        const clang::CompilerInstance& CI);
+                        const clang::CompilerInstance& CI,
+                        void *ExtraLibHandle = nullptr,
+                        bool Verbose = false);
 
     ~IncrementalExecutor();
 
     void setExternalIncrementalExecutor(IncrementalExecutor *extIncrExec) {
       m_externalIncrementalExecutor = extIncrExec;
     }
-    void setCallbacks(InterpreterCallbacks* callbacks) {
-      m_Callbacks = callbacks;
+    void setCallbacks(InterpreterCallbacks* callbacks);
+
+    const DynamicLibraryManager& getDynamicLibraryManager() const {
+      return const_cast<IncrementalExecutor*>(this)->m_DyLibManager;
     }
-    void installLazyFunctionCreator(LazyFunctionCreatorFunc_t fp);
+    DynamicLibraryManager& getDynamicLibraryManager() {
+      return m_DyLibManager;
+    }
+
+    /// Register a DefinitionGenerator to dynamically provide symbols for
+    /// generated code that are not already available within the process.
+    void addGenerator(std::unique_ptr<llvm::orc::DefinitionGenerator> G);
 
     ///\brief Unload a set of JIT symbols.
-    bool unloadModule(const llvm::Module* M) const {
-      // FIXME: Propagate the error in a more verbose way.
-      if (auto Err = m_JIT->removeModule(M))
-        return false;
-      return true;
+    llvm::Error unloadModule(const Transaction& T) const {
+      return m_JIT->removeModule(T);
     }
 
     ///\brief Run the static initializers of all modules collected to far.
@@ -183,18 +184,14 @@ namespace cling {
     ///\brief Runs a wrapper function.
     ExecutionResult executeWrapper(llvm::StringRef function,
                                    Value* returnValue = 0) const;
-    ///\brief Adds a symbol (function) to the execution engine.
+    ///\brief Replaces a symbol (function) to the execution engine.
     ///
     /// Allows runtime declaration of a function passing its pointer for being
     /// used by JIT generated code.
     ///
-    /// @param[in] Name - The name of the symbol as required by the
-    ///                         linker (mangled if needed)
+    /// @param[in] Name - The name of the symbol as known by the IR.
     /// @param[in] Address - The function pointer to register
-    /// @param[in] JIT - Add to the JIT injected symbol table
-    /// @returns true if the symbol is successfully registered, false otherwise.
-    ///
-    bool addSymbol(const char* Name, void* Address, bool JIT = false) const;
+    void replaceSymbol(const char* Name, void* Address) const;
 
     ///\brief Tells the execution to run all registered atexit functions once.
     ///
@@ -232,21 +229,17 @@ namespace cling {
     ///
     void AddAtExitFunc(void (*func)(void*), void* arg, const Transaction* T);
 
-    ///\brief Try to resolve a symbol through our LazyFunctionCreators;
-    /// print an error message if that fails.
-    void* NotifyLazyFunctionCreators(const std::string&) const;
-
   private:
     ///\brief Emit a llvm::Module to the JIT.
     ///
     /// @param[in] module - The module to pass to the execution engine.
     /// @param[in] optLevel - The optimization level to be used.
-    llvm::orc::VModuleKey
-    emitModule(std::unique_ptr<llvm::Module> module, int optLevel) const {
+    void emitModule(Transaction &T) const {
       if (m_BackendPasses)
-        m_BackendPasses->runOnModule(*module, optLevel);
+        m_BackendPasses->runOnModule(*T.getModule(),
+                                     T.getCompilationOpts().OptLevel);
 
-      return m_JIT->addModule(std::move(module));
+      m_JIT->addModule(T);
     }
 
     ///\brief Report and empty m_unresolvedSymbols.
@@ -254,9 +247,11 @@ namespace cling {
     bool diagnoseUnresolvedSymbols(llvm::StringRef trigger,
                                llvm::StringRef title = llvm::StringRef()) const;
 
+  public:
     ///\brief Remember that the symbol could not be resolved by the JIT.
     void* HandleMissingFunction(const std::string& symbol) const;
 
+  private:
     ///\brief Runs an initializer function.
     ExecutionResult executeInit(llvm::StringRef function) const {
       typedef void (*InitFun_t)();
@@ -271,13 +266,13 @@ namespace cling {
 
     template <class T>
     ExecutionResult jitInitOrWrapper(llvm::StringRef funcname, T& fun) const {
-      fun = utils::UIntToFunctionPtr<T>(m_JIT->getSymbolAddress(funcname,
-                                                              false /*dlsym*/));
+      void* fun_ptr = m_JIT->getSymbolAddress(funcname, false /*dlsym*/);
 
       // check if there is any unresolved symbol in the list
-      if (diagnoseUnresolvedSymbols(funcname, "function") || !fun)
+      if (diagnoseUnresolvedSymbols(funcname, "function") || !fun_ptr)
         return IncrementalExecutor::kExeUnresolvedSymbols;
 
+      fun = reinterpret_cast<T>(fun_ptr);
       return IncrementalExecutor::kExeSuccess;
     }
   };

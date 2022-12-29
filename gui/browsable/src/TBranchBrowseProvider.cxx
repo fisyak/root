@@ -10,47 +10,123 @@
 #include <ROOT/Browsable/RProvider.hxx>
 #include <ROOT/Browsable/RLevelIter.hxx>
 
+#include "TLeafProvider.hxx"
+
+#include "TTree.h"
+#include "TNtuple.h"
+#include "TBranch.h"
+#include "TLeaf.h"
 #include "TBranchElement.h"
 #include "TBranchBrowsable.h"
 
 using namespace ROOT::Experimental::Browsable;
+using namespace std::string_literals;
 
 
-////////////////////////////////////////////////////////////
-/// Representing TBranchElement in browsables
-/// Kept here only for a demo - default TObject-based API is enough for handling TBranchElement
-
-class TBrElement : public TObjectElement {
-
+class TTreeBrowsingElement : public TObjectElement {
 public:
-   TBrElement(std::unique_ptr<RHolder> &br) : TObjectElement(br) {}
+   TTreeBrowsingElement(std::unique_ptr<RHolder> &obj) : TObjectElement(obj) {}
 
-   virtual ~TBrElement() = default;
-
-   int GetNumChilds() override
+   /** Check if want to perform action */
+   bool IsCapable(EActionKind action) const override
    {
-      auto br = fObject->Get<TBranchElement>();
-      return br && br->IsFolder() ? TObjectElement::GetNumChilds() : 0;
+      return (action == kActTree) || (action == kActDraw6) || (action == kActDraw7);
    }
 
-   /** Create iterator for childs elements if any */
-   std::unique_ptr<RLevelIter> GetChildsIter() override
+   /** Get default action */
+   EActionKind GetDefaultAction() const override
    {
-      auto br = fObject->Get<TBranchElement>();
-      if (br && br->IsFolder())
-         return TObjectElement::GetChildsIter();
-      return nullptr;
+      return GetDrawExpr().empty() ? kActTree : kActDraw6;
    }
+
+   virtual std::string GetDrawExpr() const { return ""s; }
+
+   std::string GetContent(const std::string &kind) override
+   {
+      if (kind == "tree"s)
+         return GetDrawExpr();
+
+      return TObjectElement::GetContent(kind);
+   }
+
 };
 
 
 ////////////////////////////////////////////////////////////
-/// Representing TVirtualBranchBrowsable in browsables
+/// Representing TLeaf in browsables
 
-class TBrBrowsableElement : public TObjectElement {
+class TBrLeafElement : public TTreeBrowsingElement {
 
 public:
-   TBrBrowsableElement(std::unique_ptr<RHolder> &br) : TObjectElement(br) {}
+   TBrLeafElement(std::unique_ptr<RHolder> &leaf) : TTreeBrowsingElement(leaf) {}
+
+   Long64_t GetSize() const override
+   {
+      auto leaf = fObject->Get<TLeaf>();
+      if (!leaf)
+         return -1;
+
+      if (!leaf->GetBranch())
+         return -1;
+
+      return leaf->GetBranch()->GetTotalSize();
+   }
+
+   std::string GetDrawExpr() const override
+   {
+      auto leaf = fObject->Get<TLeaf>();
+
+      TLeafProvider provider;
+      TString expr, name;
+
+      if (provider.GetDrawExpr(leaf, expr, name))
+         return expr.Data();
+
+      return ""s;
+   }
+
+};
+
+////////////////////////////////////////////////////////////
+/// Representing TBranch in browsables
+
+class TBrElement : public TTreeBrowsingElement {
+
+public:
+   TBrElement(std::unique_ptr<RHolder> &br) : TTreeBrowsingElement(br) {}
+
+   Long64_t GetSize() const override
+   {
+      auto br = fObject->Get<TBranch>();
+      return br ? br->GetTotalSize() : -1;
+   }
+
+   std::string GetDrawExpr() const override
+   {
+      auto br = fObject->Get<TBranch>();
+      auto elem = fObject->Get<TBranchElement>();
+
+      TLeafProvider provider;
+      TString expr, name;
+
+      if (provider.GetDrawExpr(elem, expr, name))
+         return expr.Data();
+
+      if (provider.GetDrawExpr(br, expr, name))
+         return expr.Data();
+
+      return ""s;
+   }
+
+};
+
+////////////////////////////////////////////////////////////
+/// Representing TVirtualBranchBrowsable in browsables
+
+class TBrBrowsableElement : public TTreeBrowsingElement {
+
+public:
+   TBrBrowsableElement(std::unique_ptr<RHolder> &br) : TTreeBrowsingElement(br) {}
 
    virtual ~TBrBrowsableElement() = default;
 
@@ -68,8 +144,51 @@ public:
          return GetCollectionIter(br->GetLeaves());
       return nullptr;
    }
+
+   std::string GetDrawExpr() const override
+   {
+      auto browsable = fObject->Get<TVirtualBranchBrowsable>();
+
+      TLeafProvider provider;
+      TString expr, name;
+
+      if (provider.GetDrawExpr(browsable, expr, name))
+         return expr.Data();
+
+      return ""s;
+   }
+
 };
 
+// ==============================================================================================
+
+////////////////////////////////////////////////////////////
+/// Representing TTree in browsables
+
+class TTreeElement : public TObjectElement {
+
+public:
+   TTreeElement(std::unique_ptr<RHolder> &br) : TObjectElement(br) {}
+
+   Long64_t GetSize() const override
+   {
+      auto tr = dynamic_cast<const TTree *>(CheckObject());
+      return tr ? tr->GetTotBytes() : -1;
+   }
+
+   /** Get default action */
+   EActionKind GetDefaultAction() const override
+   {
+      return kActTree;
+   }
+
+   /** Check if want to perform action */
+   bool IsCapable(EActionKind action) const override
+   {
+      return action == kActTree;
+   }
+
+};
 
 // ==============================================================================================
 
@@ -78,8 +197,23 @@ class TBranchBrowseProvider : public RProvider {
 public:
    TBranchBrowseProvider()
    {
+      RegisterBrowse(TLeaf::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
+         return std::make_shared<TBrLeafElement>(object);
+      });
+      RegisterBrowse(TBranch::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
+         return std::make_shared<TBrElement>(object);
+      });
       RegisterBrowse(TBranchElement::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
          return std::make_shared<TBrElement>(object);
+      });
+      RegisterBrowse(TVirtualBranchBrowsable::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
+         return std::make_shared<TBrBrowsableElement>(object);
+      });
+      RegisterBrowse(TTree::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
+         return std::make_shared<TTreeElement>(object);
+      });
+      RegisterBrowse(TNtuple::Class(), [](std::unique_ptr<RHolder> &object) -> std::shared_ptr<RElement> {
+         return std::make_shared<TTreeElement>(object);
       });
    }
 

@@ -12,16 +12,6 @@
 #ifndef ROOT_TGedEditor
 #define ROOT_TGedEditor
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGedEditor                                                           //
-//                                                                      //
-// Editor is a composite frame that contains GUI for editting objects   //
-// in a canvas. It looks for the class ROOT_classname + 'Editor'.       //
-//                                                                      //
-// It connects to a Canvas and listens for selected objects             //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
 
 #include "TGFrame.h"
 #include "TVirtualPadEditor.h"
@@ -44,22 +34,22 @@ private:
    TGedEditor& operator=(const TGedEditor&) = delete;
 
 protected:
-   TMap              fFrameMap;         //global map of available frames
-   TMap              fExclMap;          //map of excluded editors for selected model
-   TList             fGedFrames;        //list visible of frames
+   TMap              fFrameMap;         ///< global map of available frames
+   TMap              fExclMap;          ///< map of excluded editors for selected model
+   TList             fGedFrames;        ///< list visible of frames
 
-   TGCanvas         *fCan;              //provides scroll bars
-   TGTab            *fTab;              //tab widget holding the editor
+   TGCanvas         *fCan;              ///< provides scroll bars
+   TGTab            *fTab;              ///< tab widget holding the editor
 
-   TList             fCreatedTabs;      //list of created tabs
-   TList             fVisibleTabs;      //list ofcurrently used tabs
-   TGCompositeFrame *fTabContainer;     //main tab container
+   TList             fCreatedTabs;      ///< list of created tabs
+   TList             fVisibleTabs;      ///< list ofcurrently used tabs
+   TGCompositeFrame *fTabContainer;     ///< main tab container
 
-   TObject          *fModel;            //selected object
-   TVirtualPad      *fPad;              //selected pad
-   TCanvas          *fCanvas;           //canvas related to the editor
-   TClass           *fClass;            //class of the selected object
-   Bool_t            fGlobal;           //true if editor is global
+   TObject          *fModel;            ///< selected object
+   TVirtualPad      *fPad;              ///< selected pad
+   TCanvas          *fCanvas;           ///< canvas related to the editor
+   TClass           *fClass;            ///< class of the selected object
+   Bool_t            fGlobal;           ///< true if editor is global
 
    void              ConfigureGedFrames(Bool_t objChaged);
 
@@ -72,7 +62,7 @@ public:
    virtual ~TGedEditor();
 
    void          PrintFrameStat();
-   virtual void  Update(TGedFrame* frame = 0);
+   virtual void  Update(TGedFrame* frame = nullptr);
    void          ReinitWorkspace();
    void          ActivateEditor (TClass* cl, Bool_t recurse);
    void          ActivateEditors(TList* bcl, Bool_t recurse);
@@ -84,28 +74,28 @@ public:
    virtual TGCompositeFrame* GetEditorTab(const char* name);
    virtual TGedTabInfo*      GetEditorTabInfo(const char* name);
 
-   virtual TCanvas*          GetCanvas() const { return fCanvas; }
+   TCanvas*                  GetCanvas() const override { return fCanvas; }
    virtual TVirtualPad*      GetPad()    const { return fPad; }
    virtual TObject*          GetModel()  const { return fModel; }
 
 
-   virtual void   CloseWindow();
+   void           CloseWindow() override;
    virtual void   ConnectToCanvas(TCanvas *c);
    virtual void   DisconnectFromCanvas();
-   virtual Bool_t IsGlobal() const  { return fGlobal; }
-   virtual void   Hide();
+   Bool_t         IsGlobal() const  override { return fGlobal; }
+   void           Hide() override;
    virtual void   GlobalClosed();
    virtual void   SetCanvas(TCanvas *c);
-   virtual void   SetGlobal(Bool_t global);
+   void           SetGlobal(Bool_t global) override;
    virtual void   GlobalSetModel(TVirtualPad *, TObject *, Int_t);
    virtual void   SetModel(TVirtualPad* pad, TObject* obj, Int_t event, Bool_t force=kFALSE);
-   virtual void   Show();
-   virtual void   RecursiveRemove(TObject* obj);
+   void           Show() override;
+   void           RecursiveRemove(TObject* obj) override;
 
    static TGedEditor* GetFrameCreator();
    static void SetFrameCreator(TGedEditor* e);
 
-   ClassDef(TGedEditor,0)  // ROOT graphics editor
+   ClassDefOverride(TGedEditor,0)  // ROOT graphics editor
 };
 
 #endif

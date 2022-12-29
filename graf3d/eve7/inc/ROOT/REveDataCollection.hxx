@@ -1,5 +1,8 @@
 // @(#)root/eve7:$Id$
-// Authors: Matevz Tadel & Alja Mrak-Tadel: 2006, 2007, 2018
+// Authors: Matevz Tadel and Alja Mrak Tadel: 2006, 2007, 2018
+//
+// Based of initial implementation of generic collection access interface
+// for CMS framework and Fireworks event display by Christopher D. Jones.
 
 /*************************************************************************
  * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
@@ -61,7 +64,7 @@ class REveDataItemList: public REveElement,
 
 public:
    typedef  std::function<void (REveDataItemList*, const std::vector<int>&)> ItemsChangeFunc_t;
-   typedef  std::function<void (REveDataItemList*, Set_t&)> FillImpliedSelectedFunc_t;
+   typedef  std::function<void (REveDataItemList*, Set_t&, const std::set<int>&)> FillImpliedSelectedFunc_t;
 
    struct TTip {
       std::string    fTooltipTitle;
@@ -73,7 +76,7 @@ private:
    ItemsChangeFunc_t fHandlerItemsChange;
    FillImpliedSelectedFunc_t fHandlerFillImplied;
 
-   std::vector<TTip> fTooltipExpressions;
+   std::vector< std::unique_ptr<TTip> > fTooltipExpressions;
 
 public:
    REveDataItemList(const std::string& n = "Items", const std::string& t = "");
@@ -82,7 +85,7 @@ public:
 
    virtual void ItemChanged(REveDataItem *item);
    virtual void ItemChanged(Int_t idx);
-   void FillImpliedSelectedSet(Set_t &impSelSet) override;
+   void FillImpliedSelectedSet(Set_t &impSelSet, const std::set<int>& sec_idcs) override;
 
    void SetItemVisible(Int_t idx, Bool_t visible);
    void SetItemColorRGB(Int_t idx, UChar_t r, UChar_t g, UChar_t b);
@@ -90,9 +93,10 @@ public:
    Bool_t SingleRnrState() const override { return kTRUE; }
    Bool_t SetRnrState(Bool_t) override;
 
+   void ProcessSelectionStr(ElementId_t id, bool multi, bool secondary, const char* in_secondary_idcs);
    void ProcessSelection(ElementId_t id, bool multi, bool secondary, const std::set<int>& in_secondary_idcs);
 
-   void AddTooltipExpression(const std::string &title, const std::string &expr);
+   void AddTooltipExpression(const std::string &title, const std::string &expr, bool init = true);
 
    using REveElement::GetHighlightTooltip;
    std::string GetHighlightTooltip(const std::set<int>& secondary_idcs) const override;
@@ -101,7 +105,9 @@ public:
    void SetFillImpliedSelectedDelegate (FillImpliedSelectedFunc_t);
 
    static void DummyItemsChange(REveDataItemList*, const std::vector<int>&);
-   static void DummyFillImpliedSelected(REveDataItemList*, Set_t& impSelSet);
+   static void DummyFillImpliedSelected(REveDataItemList*, Set_t& impSelSet, const std::set<int>& sec_idcs);
+
+   std::vector< std::unique_ptr<TTip> >& RefToolTipExpressions() {return fTooltipExpressions;}
 };
 
 //==============================================================================
@@ -110,6 +116,7 @@ class REveDataCollection : public REveElement
 {
 private:
    REveDataItemList* fItemList{nullptr};
+   int      fLayer{0};
 
 public:
    typedef std::vector<int> Ids_t;
@@ -132,12 +139,17 @@ public:
 
 
    TClass *GetItemClass() const { return fItemClass; }
-   void SetItemClass(TClass *cls) { fItemClass = cls;
-  }
+   void SetItemClass(TClass *cls) { fItemClass = cls;}
+
+   int GetLayer() const { return fLayer; }
+   void SetLayer(int i) { fLayer = i; }
+
    REveDataItemList* GetItemList() {return fItemList;}
 
-   void SetFilterExpr(const TString &filter);
+   void SetFilterExpr(const char* filter);
    void ApplyFilter();
+
+   const char* GetFilterExpr(){return fFilterExpr.Data();}
 
    Int_t GetNItems() const { return (Int_t) fItemList->fItems.size(); }
    void *GetDataPtr(Int_t i) const { return  fItemList->fItems[i]->GetDataPtr(); }

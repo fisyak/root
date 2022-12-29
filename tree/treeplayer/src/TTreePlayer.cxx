@@ -27,6 +27,7 @@ extra libraries (Histogram, display, etc).
 #include "TApplication.h"
 #include "TSystem.h"
 #include "TFile.h"
+#include "TEnv.h"
 #include "TEventList.h"
 #include "TEntryList.h"
 #include "TBranchObject.h"
@@ -522,12 +523,12 @@ Long64_t TTreePlayer::DrawSelect(const char *varexp0, const char *selection, Opt
          TObject* para = fSelector->GetObject();
          fTree->Draw(">>enlist",selection,"entrylist",nentries,firstentry);
          TObject *enlist = gDirectory->FindObject("enlist");
-         gROOT->ProcessLine(Form("TParallelCoord::SetEntryList((TParallelCoord*)0x%lx,(TEntryList*)0x%lx)",
-                                     (ULong_t)para, (ULong_t)enlist));
+         gROOT->ProcessLine(Form("TParallelCoord::SetEntryList((TParallelCoord*)0x%zx,(TEntryList*)0x%zx)",
+                                     (size_t)para, (size_t)enlist));
       }
    //*-*- 5d with gl
    } else if (fDimension == 5 && optgl5d) {
-      gROOT->ProcessLineFast(Form("(new TGL5DDataSet((TTree *)0x%lx))->Draw(\"%s\");", (ULong_t)fTree, opt.Data()));
+      gROOT->ProcessLineFast(Form("(new TGL5DDataSet((TTree *)0x%zx))->Draw(\"%s\");", (size_t)fTree, opt.Data()));
       gStyle->SetCanvasPreferGL(pgl);
    }
 
@@ -2948,23 +2949,30 @@ void TTreePlayer::SetEstimate(Long64_t n)
 
 void TTreePlayer::StartViewer(Int_t ww, Int_t wh)
 {
+   // unused variables
+   (void) ww;
+   (void) wh;
+
    if (!gApplication)
       TApplication::CreateApplication();
    // make sure that the Gpad and GUI libs are loaded
+
+   TString hname = gEnv->GetValue("TreeViewer.Name", "TTreeViewer");
+
    TApplication::NeedGraphicsLibs();
    if (gApplication)
-      gApplication->InitializeGraphics();
+      gApplication->InitializeGraphics(hname == "RTreeViewer");
+
    if (gROOT->IsBatch()) {
-      Warning("StartViewer", "The tree viewer cannot run in batch mode");
-      return;
+      if ((hname != "RTreeViewer") || gROOT->IsWebDisplayBatch()) {
+         Warning("StartViewer", "The tree viewer cannot run in batch mode");
+         return;
+      }
    }
 
-   if (ww || wh) { }   // use unused variables
-   TPluginHandler *h;
-   if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualTreeViewer"))) {
-      if (h->LoadPlugin() == -1)
-         return;
-      h->ExecPlugin(1,fTree);
+   if (auto h = gROOT->GetPluginManager()->FindHandler("TVirtualTreeViewer", hname.Data())) {
+      if (h->LoadPlugin() != -1)
+         h->ExecPlugin(1, fTree);
    }
 }
 

@@ -110,15 +110,15 @@ void TText::Copy(TObject &obj) const
    ((TText&)obj).fY = fY;
    TNamed::Copy(obj);
    TAttText::Copy(((TText&)obj));
-   if (((TText&)obj).fWcsTitle != NULL) {
-      if (fWcsTitle != NULL) {
+   if (((TText&)obj).fWcsTitle) {
+      if (fWcsTitle) {
          *reinterpret_cast<std::wstring*>(((TText&)obj).fWcsTitle) = *reinterpret_cast<const std::wstring*>(fWcsTitle);
       } else {
         delete reinterpret_cast<std::wstring*>(((TText&)obj).fWcsTitle);
-        ((TText&)obj).fWcsTitle = NULL;
+        ((TText&)obj).fWcsTitle = nullptr;
       }
    } else {
-      if (fWcsTitle != NULL) {
+      if (fWcsTitle) {
          ((TText&)(obj)).fWcsTitle = new std::wstring(*reinterpret_cast<const std::wstring*>(fWcsTitle));
       }
    }
@@ -129,10 +129,10 @@ void TText::Copy(TObject &obj) const
 
 const void *TText::GetWcsTitle(void) const
 {
-   if (fWcsTitle != NULL) {
+   if (fWcsTitle) {
       return reinterpret_cast<std::wstring *>(fWcsTitle)->c_str();
    } else {
-      return NULL;
+      return nullptr;
    }
 }
 
@@ -792,17 +792,19 @@ void TText::Print(Option_t *) const
 void TText::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
    char quote = '"';
-   if (gROOT->ClassSaved(TText::Class())) {
-       out<<"   ";
-   } else {
-       out<<"   TText *";
-   }
-   TString s = GetTitle();
-   s.ReplaceAll("\"","\\\"");
-   out<<"text = new TText("<<fX<<","<<fY<<","<<quote<<s.Data()<<quote<<");"<<std::endl;
-   if (TestBit(kTextNDC)) out<<"   text->SetNDC();"<<std::endl;
+   if (gROOT->ClassSaved(TText::Class()))
+      out<<"   ";
+   else
+      out<<"   TText *";
 
-   SaveTextAttributes(out,"text",11,0,1,62,0.05);
+   TString s = GetTitle();
+   s.ReplaceSpecialCppChars();
+
+   out<<"text = new TText("<<fX<<","<<fY<<","<<quote<<s<<quote<<");"<<std::endl;
+   if (TestBit(kTextNDC))
+      out<<"   text->SetNDC();"<<std::endl;
+
+   SaveTextAttributes(out, "text", 11, 0, 1, 62, 0.05);
 
    out<<"   text->Draw();"<<std::endl;
 }

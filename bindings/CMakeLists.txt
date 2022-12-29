@@ -1,4 +1,4 @@
-# Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.
+# Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.
 # All rights reserved.
 #
 # For the licensing terms see $ROOTSYS/LICENSE.
@@ -25,8 +25,13 @@ if(pyroot)
     add_subdirectory(tpython)
     add_subdirectory(jupyroot)
     add_subdirectory(jsmva)
-    if(dataframe)
+    if(dataframe AND (PYTHON_VERSION_STRING_Development_Main VERSION_GREATER_EQUAL 3.8))
+      message(STATUS "Distributed RDataFrame enabled")
       add_subdirectory(experimental/distrdf)
+    else()
+      message(STATUS "Requirements to enable distributed RDataFrame:")
+      message(STATUS "    dataframe: required:ON, actual:${dataframe}")
+      message(STATUS "    Python version: required:>=3.8, actual:${PYTHON_VERSION_STRING_Development_Main}")
     endif()
 
   endif()

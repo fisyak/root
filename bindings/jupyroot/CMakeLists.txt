@@ -47,21 +47,12 @@ foreach(val RANGE ${how_many_pythons})
     set_target_properties(${libname} PROPERTIES SUFFIX ".pyd")
     target_link_libraries(${libname} PUBLIC Core  ${python_library})
   elseif(APPLE)
-    target_link_libraries(${libname} PUBLIC -Wl,-bind_at_load -Wl,-undefined -Wl,dynamic_lookup Core)
+    target_link_libraries(${libname} PUBLIC -Wl,-bind_at_load -Wl,-flat_namespace -Wl,-undefined -Wl,suppress Core)
   else()
     target_link_libraries(${libname} PUBLIC -Wl,--unresolved-symbols=ignore-all Core)
   endif()
 
-  target_include_directories(${libname} PRIVATE ${python_include_dir})
-
-  # Disables warnings originating from deprecated register keyword in Python
-  if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_CXX_STANDARD GREATER_EQUAL 11)
-    target_compile_options(${libname} PRIVATE -Wno-register)
-  endif()
-  if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" AND CMAKE_CXX_STANDARD GREATER_EQUAL 11)
-    target_compile_options(${libname} PRIVATE -Wno-register)
-    target_compile_options(${libname} PRIVATE -Wno-deprecated-register)
-  endif()
+  target_include_directories(${libname} SYSTEM PRIVATE ${python_include_dir})
 
   # Compile .py files
   foreach(py_source ${py_sources})

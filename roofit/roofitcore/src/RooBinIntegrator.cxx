@@ -23,12 +23,8 @@ RooBinIntegrator computes the integral over a binned distribution by summing the
 contents of all bins.
 **/
 
-
-#include "RooFit.h"
-#include "Riostream.h"
-
-#include "TClass.h"
 #include "RooBinIntegrator.h"
+
 #include "RooArgSet.h"
 #include "RooRealVar.h"
 #include "RooNumber.h"
@@ -36,6 +32,11 @@ contents of all bins.
 #include "RooNumIntConfig.h"
 #include "RooNumIntFactory.h"
 #include "RooMsgService.h"
+#include "RunContext.h"
+#include "RooRealBinding.h"
+
+#include "TClass.h"
+#include "Math/Util.h"
 
 #include <assert.h>
 
@@ -56,7 +57,7 @@ void RooBinIntegrator::registerIntegrator(RooNumIntFactory& fact)
   RooRealVar numBins("numBins","Number of bins in range",100) ;
   RooBinIntegrator* proto = new RooBinIntegrator() ;
   fact.storeProtoIntegrator(proto,RooArgSet(numBins)) ;
-  RooNumIntConfig::defaultConfig().method1D().setLabel(proto->IsA()->GetName()) ;
+  RooNumIntConfig::defaultConfig().method1D().setLabel(proto->ClassName()) ;
 }
 
 
@@ -64,7 +65,7 @@ void RooBinIntegrator::registerIntegrator(RooNumIntFactory& fact)
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor
 
-RooBinIntegrator::RooBinIntegrator() : _numBins(0), _useIntegrandLimits(kFALSE), _x(0)
+RooBinIntegrator::RooBinIntegrator() : _numBins(0), _useIntegrandLimits(false), _x(0)
 {
 }
 
@@ -72,73 +73,69 @@ RooBinIntegrator::RooBinIntegrator() : _numBins(0), _useIntegrandLimits(kFALSE),
 ////////////////////////////////////////////////////////////////////////////////
 /// Construct integrator on given function binding binding
 
-RooBinIntegrator::RooBinIntegrator(const RooAbsFunc& function) : 
+RooBinIntegrator::RooBinIntegrator(const RooAbsFunc& function, int numBins):
   RooAbsIntegrator(function)
 {
-  _useIntegrandLimits= kTRUE;
-  assert(0 != integrand() && integrand()->isValid());
+  _useIntegrandLimits= true;
+  assert(_function && _function->isValid());
 
   // Allocate coordinate buffer size after number of function dimensions
-  _x = new Double_t[_function->getDimension()] ;
-  _numBins = 100 ;
+  _x.resize(_function->getDimension());
+  _numBins = numBins;
 
   _xmin.resize(_function->getDimension()) ;
   _xmax.resize(_function->getDimension()) ;
 
+  auto realBinding = dynamic_cast<const RooRealBinding*>(_function);
+
+  // We could use BatchMode for RooRealBindings as they implement getValues().
+  // However, this is not efficient right now, because every time getValue() is
+  // called, a new RooFitDriver is created. Needs to be refactored.
+
+  //const bool useBatchMode = realBinding;
+  const bool useBatchMode = false;
+
+  if (useBatchMode) {
+    _evalData.reset(new RooBatchCompute::RunContext());
+    _evalDataOrig.reset(new RooBatchCompute::RunContext());
+  }
+
   for (UInt_t i=0 ; i<_function->getDimension() ; i++) {
-    _xmin[i]= integrand()->getMinLimit(i);
-    _xmax[i]= integrand()->getMaxLimit(i);
+    _xmin[i]= _function->getMinLimit(i);
+    _xmax[i]= _function->getMaxLimit(i);
 
     // Retrieve bin configuration from integrand
-    list<Double_t>* tmp = integrand()->binBoundaries(i) ;
+    std::unique_ptr<list<double>> tmp{ _function->binBoundaries(i) };
     if (!tmp) {
-      oocoutW((TObject*)0,Integration) << "RooBinIntegrator::RooBinIntegrator WARNING: integrand provide no binning definition observable #" 
-				     << i << " substituting default binning of " << _numBins << " bins" << endl ;
-      tmp = new list<Double_t> ;
+      oocoutW(nullptr,Integration) << "RooBinIntegrator::RooBinIntegrator WARNING: integrand provide no binning definition observable #"
+          << i << " substituting default binning of " << _numBins << " bins" << endl ;
+      tmp.reset( new list<double> );
       for (Int_t j=0 ; j<=_numBins ; j++) {
-	tmp->push_back(_xmin[i]+j*(_xmax[i]-_xmin[i])/_numBins) ;
+        tmp->push_back(_xmin[i]+j*(_xmax[i]-_xmin[i])/_numBins) ;
       }
     }
-    _binb.push_back(tmp) ;
+    _binb.emplace_back(tmp->begin(), tmp->end());
+
+    if (useBatchMode) {
+      const std::vector<double>& binb = _binb.back();
+      RooSpan<double> binCentres = _evalDataOrig->makeBatch(realBinding->observable(i), binb.size() - 1);
+      for (unsigned int ibin = 0; ibin < binb.size() - 1; ++ibin) {
+        binCentres[ibin] = (binb[ibin + 1] + binb[ibin]) / 2.;
+      }
+    }
   }
   checkLimits();
 
-} 
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Construct integrator on given function binding binding
 
-RooBinIntegrator::RooBinIntegrator(const RooAbsFunc& function, const RooNumIntConfig& config) : 
-  RooAbsIntegrator(function), _binb(0)
+RooBinIntegrator::RooBinIntegrator(const RooAbsFunc& function, const RooNumIntConfig& config) :
+  RooBinIntegrator(function, static_cast<int>(config.getConfigSection("RooBinIntegrator").getRealValue("numBins")))
 {
-  const RooArgSet& configSet = config.getConfigSection(IsA()->GetName()) ;  
-  _useIntegrandLimits= kTRUE;
-  _numBins = (Int_t) configSet.getRealValue("numBins") ;
-  assert(0 != integrand() && integrand()->isValid());
-  
-  // Allocate coordinate buffer size after number of function dimensions
-  _x = new Double_t[_function->getDimension()] ;
-
-  for (UInt_t i=0 ; i<_function->getDimension() ; i++) {
-    _xmin.push_back(integrand()->getMinLimit(i));
-    _xmax.push_back(integrand()->getMaxLimit(i));
-    
-    // Retrieve bin configuration from integrand
-    list<Double_t>* tmp = integrand()->binBoundaries(i) ;
-    if (!tmp) {
-      oocoutW((TObject*)0,Integration) << "RooBinIntegrator::RooBinIntegrator WARNING: integrand provide no binning definition observable #" 
-				     << i << " substituting default binning of " << _numBins << " bins" << endl ;
-      tmp = new list<Double_t> ;
-      for (Int_t j=0 ; j<=_numBins ; j++) {
-	tmp->push_back(_xmin[i]+j*(_xmax[i]-_xmin[i])/_numBins) ;
-      }
-    }
-    _binb.push_back(tmp) ;
-  }
-
-  checkLimits();
-} 
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -158,24 +155,19 @@ RooAbsIntegrator* RooBinIntegrator::clone(const RooAbsFunc& function, const RooN
 
 RooBinIntegrator::~RooBinIntegrator()
 {
-  if(_x) delete[] _x;
-  for (vector<list<Double_t>*>::iterator iter = _binb.begin() ; iter!=_binb.end() ; ++iter) {
-    delete (*iter) ;
-  }
-
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Change our integration limits. Return kTRUE if the new limits are
-/// ok, or otherwise kFALSE. Always returns kFALSE and does nothing
+/// Change our integration limits. Return true if the new limits are
+/// ok, or otherwise false. Always returns false and does nothing
 /// if this object was constructed to always use our integrand's limits.
 
-Bool_t RooBinIntegrator::setLimits(Double_t *xmin, Double_t *xmax) 
+bool RooBinIntegrator::setLimits(double *xmin, double *xmax)
 {
   if(_useIntegrandLimits) {
-    oocoutE((TObject*)0,Integration) << "RooBinIntegrator::setLimits: cannot override integrand's limits" << endl;
-    return kFALSE;
+    oocoutE(nullptr,Integration) << "RooBinIntegrator::setLimits: cannot override integrand's limits" << endl;
+    return false;
   }
   _xmin[0]= *xmin;
   _xmax[0]= *xmax;
@@ -184,10 +176,10 @@ Bool_t RooBinIntegrator::setLimits(Double_t *xmin, Double_t *xmax)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Check that our integration range is finite and otherwise return kFALSE.
+/// Check that our integration range is finite and otherwise return false.
 /// Update the limits from the integrand if requested.
 
-Bool_t RooBinIntegrator::checkLimits() const 
+bool RooBinIntegrator::checkLimits() const
 {
   if(_useIntegrandLimits) {
     assert(0 != integrand() && integrand()->isValid());
@@ -200,103 +192,98 @@ Bool_t RooBinIntegrator::checkLimits() const
   }
   for (UInt_t i=0 ; i<_function->getDimension() ; i++) {
     if (_xmax[i]<=_xmin[i]) {
-      oocoutE((TObject*)0,Integration) << "RooBinIntegrator::checkLimits: bad range with min >= max (_xmin = " << _xmin[i] << " _xmax = " << _xmax[i] << ")" << endl;
-      return kFALSE;
+      oocoutE(nullptr,Integration) << "RooBinIntegrator::checkLimits: bad range with min >= max (_xmin = " << _xmin[i] << " _xmax = " << _xmax[i] << ")" << endl;
+      return false;
     }
     if (RooNumber::isInfinite(_xmin[i]) || RooNumber::isInfinite(_xmax[i])) {
-      return kFALSE ;
+      return false ;
     }
   }
-  
-  return kTRUE;
+
+  return true;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Calculate numeric integral at given set of function binding parameters
-
-Double_t RooBinIntegrator::integral(const Double_t *) 
+/// Calculate numeric integral at given set of function binding parameters.
+double RooBinIntegrator::integral(const double *)
 {
   assert(isValid());
 
-  double sum = 0. ;
+  ROOT::Math::KahanSum<double> sum;
 
-  if (_function->getDimension()==1) {
-    list<Double_t>::iterator iter = _binb[0]->begin() ;
-    Double_t xlo = *iter ; ++iter ;
-    for (; iter!=_binb[0]->end() ; ++iter) {
-      Double_t xhi = *iter ;
-      Double_t xcenter = (xhi+xlo)/2 ;
-      Double_t binInt = integrand(xvec(xcenter))*(xhi-xlo) ;
-      sum += binInt ;
-      //cout << "RBI::integral over " << _function->getName() << " 1D binInt[" << xcenter << "] = " << binInt << " running sum = " << sum << endl ;
-      xlo=xhi ;
+  if (_function->getDimension() == 1) {
+    const std::vector<double>& binb = _binb[0];
+
+    if (_evalData) {
+      // Real bindings support batch evaluations. Can fast track now.
+      auto realBinding = static_cast<const RooRealBinding*>(integrand());
+
+      // Reset computation results to only contain known bin centres, and keep all memory intact:
+      _evalData->spans = _evalDataOrig->spans;
+      auto results = realBinding->getValuesOfBoundFunction(*_evalData);
+      assert(results.size() == binb.size() - 1);
+
+      for (unsigned int ibin = 0; ibin < binb.size() - 1; ++ibin) {
+        const double width = binb[ibin + 1] - binb[ibin];
+        sum += results[ibin] * width;
+      }
+    } else {
+      // Need to use single-value interface
+      for (unsigned int ibin=0; ibin < binb.size() - 1; ++ibin) {
+        const double xhi = binb[ibin + 1];
+        const double xlo = binb[ibin];
+        const double xcenter = (xhi+xlo)/2.;
+        const double binInt = integrand(xvec(xcenter))*(xhi-xlo) ;
+        sum += binInt ;
+      }
+    }
+  } else if (_function->getDimension() == 2) {
+    const std::vector<double>& binbx = _binb[0];
+    const std::vector<double>& binby = _binb[1];
+
+    for (unsigned int ibin1=0; ibin1 < binbx.size() - 1; ++ibin1) {
+      const double x1hi = binbx[ibin1 + 1];
+      const double x1lo = binbx[ibin1];
+      double x1center = (x1hi+x1lo)/2 ;
+
+      for (unsigned int ibin2=0; ibin2 < binby.size() - 1; ++ibin2) {
+        const double x2hi = binby[ibin2 + 1];
+        const double x2lo = binby[ibin2];
+        const double x2center = (x2hi+x2lo)/2.;
+
+        const double binInt = integrand(xvec(x1center,x2center))*(x1hi-x1lo)*(x2hi-x2lo) ;
+        sum += binInt ;
+      }
+    }
+  } else if (_function->getDimension() == 3) {
+    const std::vector<double>& binbx = _binb[0];
+    const std::vector<double>& binby = _binb[1];
+    const std::vector<double>& binbz = _binb[2];
+
+    for (unsigned int ibin1=0; ibin1 < binbx.size() - 1; ++ibin1) {
+      const double x1hi = binbx[ibin1 + 1];
+      const double x1lo = binbx[ibin1];
+      double x1center = (x1hi+x1lo)/2 ;
+
+      for (unsigned int ibin2=0; ibin2 < binby.size() - 1; ++ibin2) {
+        const double x2hi = binby[ibin2 + 1];
+        const double x2lo = binby[ibin2];
+        const double x2center = (x2hi+x2lo)/2.;
+
+        for (unsigned int ibin3=0; ibin3 < binbz.size() - 1; ++ibin3) {
+          const double x3hi = binbz[ibin3 + 1];
+          const double x3lo = binbz[ibin3];
+          const double x3center = (x3hi+x3lo)/2.;
+
+          const double binInt = integrand(xvec(x1center,x2center,x3center))*(x1hi-x1lo)*(x2hi-x2lo)*(x3hi-x3lo);
+          sum += binInt ;
+        }
+      }
     }
   }
 
-  if (_function->getDimension()==2) {
-
-    list<Double_t>::iterator iter1 = _binb[0]->begin() ;
-
-    Double_t x1lo = *iter1 ; ++iter1 ;
-    for (; iter1!=_binb[0]->end() ; ++iter1) {
-
-      Double_t x1hi = *iter1 ;
-      Double_t x1center = (x1hi+x1lo)/2 ;
-      
-      list<Double_t>::iterator iter2 = _binb[1]->begin() ;
-      Double_t x2lo = *iter2 ; ++iter2 ;
-      for (; iter2!=_binb[1]->end() ; ++iter2) {
-
-	Double_t x2hi = *iter2 ;
-	Double_t x2center = (x2hi+x2lo)/2 ;
-      	
-	Double_t binInt = integrand(xvec(x1center,x2center))*(x1hi-x1lo)*(x2hi-x2lo) ;
-	//cout << "RBI::integral 2D binInt[" << x1center << "," << x2center << "] = " << binInt << " binv = " << (x1hi-x1lo) << "*" << (x2hi-x2lo) << endl ;
-	sum += binInt ;
-	x2lo=x2hi ;
-      }
-      x1lo=x1hi ;
-    }    
-  }
-
-  if (_function->getDimension()==3) {
-
-    list<Double_t>::iterator iter1 = _binb[0]->begin() ;
-
-    Double_t x1lo = *iter1 ; ++iter1 ;
-    for (; iter1!=_binb[0]->end() ; ++iter1) {
-
-      Double_t x1hi = *iter1 ;
-      Double_t x1center = (x1hi+x1lo)/2 ;
-      
-      list<Double_t>::iterator iter2 = _binb[1]->begin() ;
-      Double_t x2lo = *iter2 ; ++iter2 ;
-      for (; iter2!=_binb[1]->end() ; ++iter2) {
-
-	Double_t x2hi = *iter2 ;
-	Double_t x2center = (x2hi+x2lo)/2 ;
-
-	list<Double_t>::iterator iter3 = _binb[2]->begin() ;
-	Double_t x3lo = *iter3 ; ++iter3 ;
-	for (; iter3!=_binb[2]->end() ; ++iter3) {
-
-	  Double_t x3hi = *iter3 ;
-	  Double_t x3center = (x3hi+x3lo)/2 ;
-	  
-	  Double_t binInt = integrand(xvec(x1center,x2center,x3center))*(x1hi-x1lo)*(x2hi-x2lo)*(x3hi-x3lo) ;
-	  //cout << "RBI::integral 3D binInt[" << x1center << "," << x2center << "," << x3center << "] = " << binInt << endl ;
-	  sum += binInt ;
-	  
-	  x3lo=x3hi ;
-	}
-	x2lo=x2hi ;
-      }
-      x1lo=x1hi ;
-    }    
-  }
-
-  return sum;
+  return sum.Sum();
 }
 
 

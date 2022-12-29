@@ -20,6 +20,7 @@
 ## \author Stefan Wunsch (KIT, CERN)
 
 import ROOT
+import sys
 import json
 import argparse
 import os
@@ -32,7 +33,12 @@ parser.add_argument("--full-dataset", action="store_true", default=False,
                     help="Use the full dataset (use --lumi-scale to run only on a fraction of it)")
 parser.add_argument("-b", action="store_true", default=False, help="Use ROOT batch mode")
 parser.add_argument("-t", action="store_true", default=False, help="Use implicit multi threading (for the full dataset only possible with --lumi-scale 1.0)")
-args = parser.parse_args()
+if 'df105_WBosonAnalysis.py' in sys.argv[0]:
+    # Script
+    args = parser.parse_args()
+else:
+    # Notebook
+    args = parser.parse_args(args=[])
 
 if args.b: ROOT.gROOT.SetBatch(True)
 if args.t: ROOT.EnableImplicitMT()
@@ -47,7 +53,7 @@ else: dataset_path = "root://eospublic.cern.ch//eos/root-eos/reduced_atlas_opend
 
 # Create a ROOT dataframe for each dataset
 # Note that we load the filenames from the external json file placed in the same folder than this script.
-files = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "df105_WBosonAnalysis.json")))
+files = json.load(open(os.path.join(ROOT.gROOT.GetTutorialsDir(), "dataframe/df105_WBosonAnalysis.json")))
 processes = files.keys()
 df = {}
 xsecs = {}
@@ -152,14 +158,11 @@ singletop = merge_histos("singletop")
 # Set styles
 ROOT.gROOT.SetStyle("ATLAS")
 
-# Create canvas with pad
+# Create canvas
 c = ROOT.TCanvas("c", "", 600, 600)
-pad = ROOT.TPad("upper_pad", "", 0, 0, 1, 1)
-pad.SetTickx(False)
-pad.SetTicky(False)
-pad.SetLogy()
-pad.Draw()
-pad.cd()
+c.SetTickx(0)
+c.SetTicky(0)
+c.SetLogy()
 
 # Draw stack with MC contributions
 stack = ROOT.THStack()
@@ -201,7 +204,7 @@ legend.AddEntry(zjets, "Z+jets", "f")
 legend.AddEntry(ttbar, "t#bar{t}", "f")
 legend.AddEntry(diboson, "Diboson", "f")
 legend.AddEntry(singletop, "Single top", "f")
-legend.Draw("SAME")
+legend.Draw()
 
 # Add ATLAS label
 text = ROOT.TLatex()

@@ -60,7 +60,7 @@ TRemoteObject::TRemoteObject(const char *name, const char *title,
        !strcmp(classname, "TSystemFile")) {
       gSystem->GetPathInfo(name, fFileStat);
    }
-   Long_t raddr = (Long_t) this;
+   Long64_t raddr = (Long64_t) this;
    fRemoteAddress = raddr;
 }
 
@@ -92,7 +92,7 @@ void TRemoteObject::Browse(TBrowser *b)
       TObject *obj = (TObject *)gROOT->ProcessLine(Form("((TApplicationServer *)gApplication)->BrowseKey(\"%s\");", GetName()));
       if (obj) {
          if (obj->IsA()->GetMethodWithPrototype("SetDirectory", "TDirectory*"))
-            gROOT->ProcessLine(Form("((%s *)0x%lx)->SetDirectory(0);", obj->ClassName(), (ULong_t)obj));
+            gROOT->ProcessLine(Form("((%s *)0x%zx)->SetDirectory(0);", obj->ClassName(), (size_t)obj));
          obj->Browse(b);
          b->SetRefreshFlag(kTRUE);
       }
@@ -139,7 +139,6 @@ TList *TRemoteObject::Browse()
    // allocations of new objects with the same names during browsing.
    TList *objects  = new TList;
 
-   static Int_t level = 0;
    const char *name = GetTitle();
    TRemoteObject *sdir;
 
@@ -157,7 +156,6 @@ TList *TRemoteObject::Browse()
       while ((file=(TSystemFile*)next())) {
          fname = file->GetName();
          if (file->IsDirectory()) {
-            level++;
             TString sdirpath;
             if (!strcmp(fname.Data(), "."))
                sdirpath = name;
@@ -171,7 +169,6 @@ TList *TRemoteObject::Browse()
             }
             sdir = new TRemoteObject(fname.Data(), sdirpath.Data(), "TSystemDirectory");
             objects->Add(sdir);
-            level--;
          }
       }
       // then files...

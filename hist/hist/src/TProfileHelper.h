@@ -282,7 +282,7 @@ Long64_t TProfileHelper::Merge(T* p, TCollection *li) {
             }
          }
       }
-   }  while ( ( h = dynamic_cast<T*> ( next() ) ) != NULL );
+   }  while ( ( h = dynamic_cast<T*> ( next() ) ) != nullptr );
    if (!h && (*next) ) {
       Error("TProfileHelper::Merge","Attempt to merge object of class: %s to a %s",
             (*next)->ClassName(),p->ClassName());
@@ -459,7 +459,7 @@ T* TProfileHelper::ExtendAxis(T* p, Double_t x, TAxis *axis)
    axis->SetLimits(xmin,xmax);
    if (p->fBinSumw2.fN) hold->Sumw2();
 
-   // total bins (inclusing underflow /overflow)
+   // total bins (including underflow /overflow)
    Int_t  nx = p->fXaxis.GetNbins() + 2;
    Int_t  ny = (p->GetDimension() > 1) ? p->fYaxis.GetNbins() + 2 : 1;
    Int_t  nz = (p->GetDimension() > 2) ? p->fZaxis.GetNbins() + 2 : 1;

@@ -49,7 +49,7 @@ void rf203_ranges()
    // ---------------------------
 
    // Fit pdf to all data
-   RooFitResult *r_full = model.fitTo(*modelData, Save(kTRUE));
+   RooFitResult *r_full = model.fitTo(*modelData, Save(true));
 
    // F i t   p a r t i a l   r a n g e
    // ----------------------------------
@@ -58,7 +58,7 @@ void rf203_ranges()
    x.setRange("signal", -3, 3);
 
    // Fit pdf only to data in "signal" range
-   RooFitResult *r_sig = model.fitTo(*modelData, Save(kTRUE), Range("signal"));
+   RooFitResult *r_sig = model.fitTo(*modelData, Save(true), Range("signal"));
 
    // P l o t   /   p r i n t   r e s u l t s
    // ---------------------------------------
@@ -66,7 +66,7 @@ void rf203_ranges()
    // Make plot frame in x and add data and fitted model
    RooPlot *frame = x.frame(Title("Fitting a sub range"));
    modelData->plotOn(frame);
-   model.plotOn(frame, Range("Full"), LineStyle(kDashed), LineColor(kRed)); // Add shape in full ranged dashed
+   model.plotOn(frame, Range(""), LineStyle(kDashed), LineColor(kRed)); // Add shape in full ranged dashed
    model.plotOn(frame);                                                     // By default only fitted range is shown
 
    // Print fit results

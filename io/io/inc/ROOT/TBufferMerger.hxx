@@ -21,7 +21,6 @@
 #include <queue>
 
 namespace ROOT {
-namespace Experimental {
 
 class TBufferMergerFile;
 
@@ -45,7 +44,8 @@ public:
     * @param option Output file creation options
     * @param compress Output file compression level
     */
-   TBufferMerger(const char *name, Option_t *option = "RECREATE", Int_t compress = ROOT::RCompressionSetting::EDefaults::kUseCompiledDefault);
+   TBufferMerger(const char *name, Option_t *option = "RECREATE",
+                 Int_t compress = ROOT::RCompressionSetting::EDefaults::kUseCompiledDefault);
 
    /** Constructor
     * @param output Output \c TFile
@@ -106,7 +106,7 @@ public:
       fMerger.SetNotrees(notrees);
    }
 
-   /** Returns whether the the file has been marked as not containing any TTree objects
+   /** Returns whether the file has been marked as not containing any TTree objects
     * and thus that steps that are specific to TTree can be skipped */
    Bool_t GetNotrees() const
    {
@@ -168,7 +168,7 @@ private:
 };
 
 /**
- * \class TBufferMerger TBufferMerger.hxx
+ * \class TBufferMergerFile TBufferMerger.hxx
  * \ingroup IO
  *
  * A TBufferMergerFile is similar to a TMemFile, but when data
@@ -213,7 +213,6 @@ public:
    ClassDefOverride(TBufferMergerFile, 0);
 };
 
-} // namespace Experimental
 } // namespace ROOT
 
 #endif

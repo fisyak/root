@@ -53,14 +53,31 @@ protected:
 
       auto version = fWindow.GetClientVersion();
       if (!version.empty()) {
-         std::string search = "jsrootsys/scripts/JSRoot.core."s;
-         std::string replace = version + "/jsrootsys/scripts/JSRoot.core."s;
-         // replace link to JSROOT main script to emulate new version
+         // replace link to JSROOT modules in import statements emulating new version for browser
+         std::string search = "from './jsrootsys/"s;
+         std::string replace = "from './"s + version + "/jsrootsys/"s;
+         arg->ReplaceAllinContent(search, replace);
+         // replace link to ROOT ui5 modules in import statements emulating new version for browser
+         search = "from './rootui5sys/"s;
+         replace = "from './"s + version + "/rootui5sys/"s;
+         arg->ReplaceAllinContent(search, replace);
+         // replace link on old JSRoot.core.js script - if still appears
+         search = "jsrootsys/scripts/JSRoot.core."s;
+         replace = version + "/jsrootsys/scripts/JSRoot.core."s;
          arg->ReplaceAllinContent(search, replace, true);
          arg->AddNoCacheHeader();
       }
 
       std::string more_args;
+
+      std::string wskind = arg->GetWSKind();
+      if ((wskind == "websocket") && (GetBoolEnv("WebGui.WSLongpoll") == 1))
+         wskind = "longpoll";
+      if (!wskind.empty() && (wskind != "websocket"))
+         more_args.append("socket_kind: \""s + wskind + "\","s);
+      std::string wsplatform = arg->GetWSPlatform();
+      if (!wsplatform.empty() && (wsplatform != "http"))
+         more_args.append("platform: \""s + wsplatform + "\","s);
       const char *ui5source = gEnv->GetValue("WebGui.openui5src","");
       if (ui5source && *ui5source)
          more_args.append("openui5src: \""s + ui5source + "\","s);
@@ -77,7 +94,7 @@ protected:
       if (!user_args.empty())
          more_args.append("user_args: "s + user_args + ","s);
       if (!more_args.empty()) {
-         std::string search = "JSROOT.connectWebWindow({"s;
+         std::string search = "connectWebWindow({"s;
          std::string replace = search + more_args;
          arg->ReplaceAllinContent(search, replace, true);
          arg->AddNoCacheHeader();
@@ -104,7 +121,13 @@ public:
 
    /// Process websocket request - called from THttpServer thread
    /// THttpWSHandler interface
-   Bool_t ProcessWS(THttpCallArg *arg) override { return arg && !IsDisabled() ? fWindow.ProcessWS(*arg) : kFALSE; }
+   Bool_t ProcessWS(THttpCallArg *arg) override
+   {
+      if (!arg || IsDisabled()) return kFALSE;
+      auto res = fWindow.ProcessWS(*arg);
+      fWindow.CheckThreadAssign();
+      return res;
+   }
 
    /// Allow processing of WS actions in arbitrary thread
    Bool_t AllowMTProcess() const override { return fWindow.fProcessMT; }
@@ -114,6 +137,8 @@ public:
 
    /// React on completion of multi-threaded send operation
    void CompleteWSSend(UInt_t wsid) override { if (!IsDisabled()) fWindow.CompleteWSSend(wsid); }
+
+   static int GetBoolEnv(const std::string &name, int dfl = -1);
 };
 
 } // namespace Experimental

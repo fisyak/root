@@ -68,8 +68,9 @@ private:
 
    struct WebConn {
       unsigned fConnId{0};                 ///<! connection id (unique inside the window)
-      bool fBatchMode{false};              ///<! indicate if connection represent batch job
+      bool fHeadlessMode{false};           ///<! indicate if connection represent batch job
       std::string fKey;                    ///<! key value supplied to the window (when exists)
+      int fKeyUsed{0};                     ///<! key value used to verify connection
       std::unique_ptr<RWebDisplayHandle> fDisplayHandle;  ///<! handle assigned with started web display (when exists)
       std::shared_ptr<THttpCallArg> fHold; ///<! request used to hold headless browser
       timestamp_t fSendStamp;              ///<! last server operation, always used from window thread
@@ -87,14 +88,26 @@ private:
       WebConn() = default;
       WebConn(unsigned connid) : fConnId(connid) {}
       WebConn(unsigned connid, unsigned wsid) : fConnId(connid), fActive(true), fWSId(wsid) {}
-      WebConn(unsigned connid, bool batch_mode, const std::string &key)
-         : fConnId(connid), fBatchMode(batch_mode), fKey(key)
+      WebConn(unsigned connid, bool headless_mode, const std::string &key)
+         : fConnId(connid), fHeadlessMode(headless_mode), fKey(key)
       {
          ResetStamps();
       }
       ~WebConn();
 
       void ResetStamps() { fSendStamp = fRecvStamp = std::chrono::system_clock::now(); }
+
+      void ResetData()
+      {
+         fActive = false;
+         fWSId = 0;
+         fReady = 0;
+         fDoingSend = false;
+         fSendCredits = 0;
+         fClientCredits = 0;
+         while (!fQueue.empty())
+            fQueue.pop();
+      }
    };
 
    enum EQueueEntryKind { kind_None, kind_Connect, kind_Data, kind_Disconnect };
@@ -110,12 +123,13 @@ private:
    using ConnectionsList_t = std::vector<std::shared_ptr<WebConn>>;
 
    std::shared_ptr<RWebWindowsManager> fMgr;        ///<! display manager
-   std::shared_ptr<RWebWindow> fMaster;             ///<! master window where this window is embeded
+   std::shared_ptr<RWebWindow> fMaster;             ///<! master window where this window is embedded
    unsigned fMasterConnId{0};                       ///<! master connection id
    int fMasterChannel{-1};                          ///<! channel id in the master window
    std::string fDefaultPage;                        ///<! HTML page (or file name) returned when window URL is opened
    std::string fPanelName;                          ///<! panel name which should be shown in the window
    unsigned fId{0};                                 ///<! unique identifier
+   bool fUseServerThreads{false};                   ///<! indicates that server thread is using, no special window thread
    bool fProcessMT{false};                          ///<! if window event processing performed in dedicated thread
    bool fSendMT{false};                             ///<! true is special threads should be used for sending data
    std::shared_ptr<RWebWindowWSHandler> fWSHandler; ///<! specialize websocket handler for all incoming connections
@@ -132,6 +146,8 @@ private:
    WebWindowConnectCallback_t fDisconnCallback;     ///<! callback for disconnect event
    std::thread::id fCallbacksThrdId;                ///<! thread id where callbacks should be invoked
    bool fCallbacksThrdIdSet{false};                 ///<! flag indicating that thread id is assigned
+   bool fHasWindowThrd{false};                      ///<! indicate if special window thread was started
+   std::thread fWindowThrd;                         ///<! special thread for that window
    std::queue<QueueEntry> fInputQueue;              ///<! input queue for all callbacks
    std::mutex fInputQueueMutex;                     ///<! mutex to protect input queue
    unsigned fWidth{0};                              ///<! initial window width when displayed
@@ -155,9 +171,12 @@ private:
 
    std::shared_ptr<WebConn> FindOrCreateConnection(unsigned wsid, bool make_new, const char *query);
 
+   /// Find connection with specified websocket id
    std::shared_ptr<WebConn> FindConnection(unsigned wsid) { return FindOrCreateConnection(wsid, false, nullptr); }
 
    std::shared_ptr<WebConn> RemoveConnection(unsigned wsid);
+
+   std::shared_ptr<WebConn> _FindConnWithKey(const std::string &key) const;
 
    std::string _MakeSendHeader(std::shared_ptr<WebConn> &conn, bool txt, const std::string &data, int chid);
 
@@ -173,11 +192,13 @@ private:
 
    bool HasKey(const std::string &key) const;
 
+   std::string GenerateKey() const;
+
    void CheckPendingConnections();
 
    void CheckInactiveConnections();
 
-   unsigned AddDisplayHandle(bool batch_mode, const std::string &key, std::unique_ptr<RWebDisplayHandle> &handle);
+   unsigned AddDisplayHandle(bool headless_mode, const std::string &key, std::unique_ptr<RWebDisplayHandle> &handle);
 
    unsigned AddEmbedWindow(std::shared_ptr<RWebWindow> window, int channel);
 
@@ -185,9 +206,13 @@ private:
 
    bool ProcessBatchHolder(std::shared_ptr<THttpCallArg> &arg);
 
-   void AssignCallbackThreadId();
-
    std::string GetConnToken() const;
+
+   unsigned MakeHeadless(bool create_new = false);
+
+   unsigned FindHeadlessConnection();
+
+   void CheckThreadAssign();
 
 public:
 
@@ -197,6 +222,9 @@ public:
 
    /// Returns ID for the window - unique inside window manager
    unsigned GetId() const { return fId; }
+
+   /// Returns window manager
+   std::shared_ptr<RWebWindowsManager> GetManager() const { return fMgr; }
 
    /// Set content of default window HTML page
    /// This page returns when URL address of the window will be requested
@@ -283,10 +311,6 @@ public:
    /// Returns true when window was shown at least once
    bool IsShown() const { return GetDisplayConnection() != 0; }
 
-   unsigned MakeBatch(bool create_new = false, const RWebDisplayArgs &args = "");
-
-   unsigned FindBatch();
-
    bool CanSend(unsigned connid, bool direct = true) const;
 
    int GetSendQueueLength(unsigned connid) const;
@@ -303,6 +327,8 @@ public:
 
    std::string GetRelativeAddr(const std::shared_ptr<RWebWindow> &win) const;
 
+   std::string GetRelativeAddr(const RWebWindow &win) const;
+
    void SetCallBacks(WebWindowConnectCallback_t conn, WebWindowDataCallback_t data, WebWindowConnectCallback_t disconn = nullptr);
 
    void SetConnectCallBack(WebWindowConnectCallback_t func);
@@ -311,11 +337,19 @@ public:
 
    void SetDisconnectCallBack(WebWindowConnectCallback_t func);
 
+   void AssignThreadId();
+
+   void UseServerThreads();
+
    int WaitFor(WebWindowWaitFunc_t check);
 
    int WaitForTimed(WebWindowWaitFunc_t check);
 
    int WaitForTimed(WebWindowWaitFunc_t check, double duration);
+
+   void StartThread();
+
+   void StopThread();
 
    void TerminateROOT();
 

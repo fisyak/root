@@ -24,12 +24,29 @@ Persistent version of a TClass.
 #include "TList.h"
 #include "TListOfDataMembers.h"
 #include "TListOfEnums.h"
+#include "TListOfEnumsWithLock.h"
 #include "TRealData.h"
 #include "TError.h"
 #include "TVirtualCollectionProxy.h"
 
 #include <cassert>
 #include <unordered_map>
+
+#ifdef WIN32
+#include <io.h>
+#include "Windows4Root.h"
+#include <Psapi.h>
+#define RTLD_DEFAULT ((void *)::GetModuleHandle(NULL))
+#define dlsym(library, function_name) ::GetProcAddress((HMODULE)library, function_name)
+#else
+#include <dlfcn.h>
+#endif
+
+static bool IsFromRootCling() {
+  // rootcling also uses TCling for generating the dictionary ROOT files.
+  const static bool foundSymbol = dlsym(RTLD_DEFAULT, "usedToIdentifyRootClingByDlSym");
+  return foundSymbol;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Initialize a TProtoClass from a TClass.
@@ -90,7 +107,7 @@ TProtoClass::TProtoClass(TClass* cl):
 
    if (!cl->GetCollectionProxy()) {
       // Build the list of RealData before we access it:
-      cl->BuildRealData(0, true /*isTransient*/);
+      cl->BuildRealData(nullptr, true /*isTransient*/);
       // The data members are ordered as follows:
       // - this class's data members,
       // - foreach base: base class's data members.
@@ -149,16 +166,17 @@ TProtoClass::~TProtoClass()
 /// if (fPRealData) fPRealData->Delete(opt);
 /// delete fPRealData; fPRealData = 0;
 
-void TProtoClass::Delete(Option_t* opt /*= ""*/) {
+void TProtoClass::Delete(Option_t* opt /*= ""*/)
+{
    if (fBase) fBase->Delete(opt);
-   delete fBase; fBase = 0;
+   delete fBase; fBase = nullptr;
 
-   for (auto dm: fData) {
+   for (auto dm: fData)
       delete dm;
-   }
+   fData.clear();
 
    if (fEnums) fEnums->Delete(opt);
-   delete fEnums; fEnums = 0;
+   delete fEnums; fEnums = nullptr;
 
    if (gErrorIgnoreLevel==-2) printf("Delete the protoClass %s \n",GetName());
 }
@@ -220,8 +238,8 @@ Bool_t TProtoClass::FillTClass(TClass* cl) {
       // for example in presence of daughter and mother class present in two
       // dictionaries compiled in two different libraries which are not linked
       // one with each other.
-      for (auto element: fPRealData) {
-         //if (element->IsA() == TObjString::Class()) {
+      for (auto &element : fPRealData) {
+         // if (element->IsA() == TObjString::Class()) {
          if (element.IsAClass() ) {
             if (gDebug > 1) Info("","Treating beforehand mother class %s",GetClassName(element.fClassIndex));
             TInterpreter::SuspendAutoParsing autoParseRaii(gInterpreter);
@@ -262,7 +280,8 @@ Bool_t TProtoClass::FillTClass(TClass* cl) {
    // We need to fill enums one by one to initialise the internal map which is
    // transient
    {
-      auto temp = new TListOfEnums();
+      auto temp = cl->fEnums.load() ? cl->fEnums.load() :
+                  IsFromRootCling() ? new TListOfEnums() : new TListOfEnumsWithLock();
       if (fEnums) {
          for (TObject* enumAsTObj : *fEnums){
             temp->Add((TEnum*) enumAsTObj);
@@ -308,12 +327,12 @@ Bool_t TProtoClass::FillTClass(TClass* cl) {
 
 
    TClass* currentRDClass = cl;
-   TRealData * prevRealData = 0;
+   TRealData * prevRealData = nullptr;
    int prevLevel = 0;
    bool first = true;
    if (fPRealData.size()  > 0) {
       size_t element_next_idx = 0;
-      for (auto element: fPRealData) {
+      for (auto &element : fPRealData) {
          ++element_next_idx;
          //if (element->IsA() == TObjString::Class()) {
          if (element.IsAClass() ) {
@@ -389,9 +408,9 @@ Bool_t TProtoClass::FillTClass(TClass* cl) {
    cl->SetStreamerImpl();
 
    // set to zero in order not to delete when protoclass is deleted
-   fBase = 0;
+   fBase = nullptr;
    //fData = 0;
-   fEnums = 0;
+   fEnums = nullptr;
 
    fPRealData.clear();
    fPRealData.shrink_to_fit();  // to reset the underlying allocate space
@@ -420,7 +439,7 @@ TProtoClass::TProtoRealData::TProtoRealData(const TRealData* rd):
    TDataMember * dm = rd->GetDataMember();
    assert(rd->GetDataMember());
    TClass * cl = dm->GetClass();
-   assert(cl != NULL);
+   assert(cl != nullptr);
    fDMIndex = DataMemberIndex(cl,dm->GetName());
    //printf("Index of data member %s for class %s is %d \n",dm->GetName(), cl->GetName() , fDMIndex);
    TString fullDataMemberName = rd->GetName(); // full data member name (e.g. fXaxis.fNbins)

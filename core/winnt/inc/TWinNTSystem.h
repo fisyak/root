@@ -153,9 +153,10 @@ public:
    int               Exec(const char *shellcmd) override;
    FILE             *OpenPipe(const char *shellcmd, const char *mode) override;
    int               ClosePipe(FILE *pipe) override;
-   void              Exit(int code, Bool_t mode = kTRUE) override;
-   void              Abort(int code = 0) override;
    int               GetPid() override;
+   
+   [[ noreturn ]] void Exit (int code, Bool_t mode = kTRUE) override;
+   [[ noreturn ]] void Abort (int code = 0) override;
 
    //---- Environment manipulation -----------------------------
    const char       *Getenv(const char *name) override;
@@ -263,6 +264,6 @@ public:
    ClassDefOverride(TWinNTSystem, 0)
 };
 
-R__EXTERN ULong_t gConsoleWindow;   // console window handle
+R__EXTERN ULongptr_t gConsoleWindow;   // console window handle
 
 #endif

@@ -21,7 +21,7 @@
 ClassImp(TH2Poly);
 
 /** \class TH2Poly
-    \ingroup Hist
+    \ingroup Histograms
 2D Histogram with Polygonal Bins
 
 ## Overview
@@ -75,7 +75,7 @@ many times.
 The following very simple macro shows how to build and fill a `TH2Poly`:
 ~~~ {.cpp}
 {
-    TH2Poly *h2p = new TH2Poly();
+    auto h2p = new TH2Poly();
 
     Double_t x1[] = {0, 5, 6};
     Double_t y1[] = {0, 0, 5};
@@ -740,8 +740,8 @@ Double_t TH2Poly::Integral(Option_t* option) const
          integral += w * (bin->GetContent());
       }
    } else {
-      // need to recompute integral in case somebith called SetBinContent and
-      // cannot use fTsumw since it is not updated in that case
+      // need to recompute integral in case SetBinContent was called.
+      // fTsumw cannot be used since it is not updated in that case
       while ((obj = next())) {
          bin = (TH2PolyBin *)obj;
          integral += (bin->GetContent());
@@ -1322,7 +1322,7 @@ void TH2Poly::GetStats(Double_t *stats) const
 }
 
 /** \class TH2PolyBin
-    \ingroup Hist
+    \ingroup Histograms
 Helper class to represent a bin in the TH2Poly histogram
 */
 
@@ -1560,13 +1560,13 @@ Bool_t TH2PolyBin::IsInside(Double_t x, Double_t y) const
    return in;
 }
 
-////////////////////////////////////////////////////////////////////////
-/// RE-implement dummy functions to avoid users calling the
-/// corresponding implemntations in TH1 or TH2
-//////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+// RE-implement dummy functions to avoid users calling the
+// corresponding implementations in TH1 or TH2
+////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Performs the operation: this = this + c1*f1. NOT IMPLEMENTED for TH2Poly
+/// NOT IMPLEMENTED for TH2Poly
 Bool_t TH2Poly::Add(TF1 *, Double_t, Option_t *)
 {
    Error("Add","Not implement for TH2Poly");
@@ -1574,7 +1574,7 @@ Bool_t TH2Poly::Add(TF1 *, Double_t, Option_t *)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Replace contents of this histogram by the addition of h1 and h2. NOT IMPLEMENTED for TH2Poly
+/// NOT IMPLEMENTED for TH2Poly
 Bool_t TH2Poly::Add(const TH1 *, const TH1 *, Double_t, Double_t)
 {
    Error("Add","Not implement for TH2Poly");
@@ -1582,7 +1582,7 @@ Bool_t TH2Poly::Add(const TH1 *, const TH1 *, Double_t, Double_t)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Performs the operation: this = this / c1*f1. NOT IMPLEMENTED for TH2Poly
+/// NOT IMPLEMENTED for TH2Poly
 Bool_t TH2Poly::Divide(TF1 *, Double_t)
 {
    Error("Divide","Not implement for TH2Poly");

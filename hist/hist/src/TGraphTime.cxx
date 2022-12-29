@@ -19,7 +19,7 @@
 ClassImp(TGraphTime);
 
 /** \class TGraphTime
-    \ingroup Hist
+    \ingroup Graphs
 TGraphTime is used to draw a set of objects evolving with nsteps in time between tmin and tmax.
 Each time step has a new list of objects. This list can be identical to
 the list of objects in the previous steps, but with different attributes.
@@ -174,7 +174,7 @@ void TGraphTime::Paint(Option_t *option)
 void TGraphTime::SaveAnimatedGif(const char *filename) const
 {
    TObject *frame = gPad->GetPrimitive("frame");
-   TList *list = 0;
+   TList *list = nullptr;
    TObjLink *lnk;
 
    for (Int_t s=0;s<fNsteps;s++) {
@@ -190,9 +190,12 @@ void TGraphTime::SaveAnimatedGif(const char *filename) const
             lnk = lnk->Next();
          }
          gPad->Update();
-         if (strlen(filename) > 0) gPad->Print(Form("%s+",filename));
-         else                      gPad->Print(Form("%s+",GetName()));
-         if (fSleepTime > 0) gSystem->Sleep(fSleepTime);
+         if (filename && strlen(filename) > 0)
+            gPad->Print(Form("%s+", filename));
+         else
+            gPad->Print(Form("%s+", GetName()));
+         if (fSleepTime > 0)
+            gSystem->Sleep(fSleepTime);
       }
    }
 }

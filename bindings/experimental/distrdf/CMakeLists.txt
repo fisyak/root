@@ -14,26 +14,29 @@ file(COPY ${DistRDFDir} DESTINATION ${localruntimedir})
 set(py_sources
   DistRDF/__init__.py
   DistRDF/ComputationGraphGenerator.py
+  DistRDF/CppWorkflow.py
   DistRDF/DataFrame.py
+  DistRDF/HeadNode.py
   DistRDF/Node.py
   DistRDF/Operation.py
   DistRDF/Proxy.py
+  DistRDF/PythonMergeables.py
+  DistRDF/Ranges.py
   DistRDF/Backends/__init__.py
   DistRDF/Backends/Base.py
   DistRDF/Backends/Utils.py
   DistRDF/Backends/Spark/__init__.py
   DistRDF/Backends/Spark/Backend.py
+  DistRDF/Backends/Dask/__init__.py
+  DistRDF/Backends/Dask/Backend.py
 )
 
-foreach(val RANGE ${how_many_pythons})
-  list(GET python_executables ${val} python_executable)
-
-  # Compile .py files
-  foreach(py_source ${py_sources})
-    install(CODE "execute_process(COMMAND ${python_executable} -m py_compile ${localruntimedir}/${py_source})")
-    install(CODE "execute_process(COMMAND ${python_executable} -O -m py_compile ${localruntimedir}/${py_source})")
-  endforeach()
-
+# Compile .py files
+# We include DistRDF in the build only if Python 3.8+ is used,
+# so we can directly use the main Python executable to compile the sources
+foreach(py_source ${py_sources})
+  install(CODE "execute_process(COMMAND ${PYTHON_EXECUTABLE_Development_Main} -m py_compile ${localruntimedir}/${py_source})")
+  install(CODE "execute_process(COMMAND ${PYTHON_EXECUTABLE_Development_Main} -O -m py_compile ${localruntimedir}/${py_source})")
 endforeach()
 
 # Install Python sources and bytecode

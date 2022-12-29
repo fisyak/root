@@ -32,6 +32,11 @@ public:
       fCanvas = RCanvas::Create(name);
    }
 
+   RBrowserRCanvasWidget(const std::string &name, std::shared_ptr<RCanvas> &canv) : RBrowserWidget(name)
+   {
+      fCanvas = std::move(canv);
+   }
+
    virtual ~RBrowserRCanvasWidget() = default;
 
    std::string GetKind() const override { return "rcanvas"s; }
@@ -46,7 +51,12 @@ public:
       return "../"s + fCanvas->GetWindowAddr() + "/"s;
    }
 
-   bool DrawElement(std::shared_ptr<Browsable::RElement> &elem, const std::string &opt) override
+   std::string GetTitle() override
+   {
+      return fCanvas->GetTitle();
+   }
+
+   bool DrawElement(std::shared_ptr<Browsable::RElement> &elem, const std::string &opt = "") override
    {
       if (!elem->IsCapable(Browsable::RElement::kActDraw7))
          return false;
@@ -57,13 +67,32 @@ public:
 
       std::shared_ptr<RPadBase> subpad = fCanvas;
 
-      if (obj && Browsable::RProvider::Draw7(subpad, obj, opt)) {
+      std::string drawopt = opt;
+
+      if (drawopt.compare(0,8,"<append>") == 0) {
+         drawopt.erase(0,8);
+      } else if (subpad->NumPrimitives() > 0) {
+         subpad->Wipe();
+         fCanvas->Modified();
+         fCanvas->Update(true);
+      }
+
+      if (drawopt == "<dflt>")
+         drawopt = Browsable::RProvider::GetClassDrawOption(obj->GetClass());
+
+      if (Browsable::RProvider::Draw7(subpad, obj, drawopt)) {
          fCanvas->Modified();
          fCanvas->Update(true);
          return true;
       }
 
       return false;
+   }
+
+   void CheckModified() override
+   {
+      if (fCanvas->IsModified())
+         fCanvas->Update();
    }
 
 };
@@ -76,6 +105,18 @@ protected:
    {
       return std::make_shared<RBrowserRCanvasWidget>(name);
    }
+
+   std::shared_ptr<RBrowserWidget> CreateFor(const std::string &name, std::shared_ptr<Browsable::RElement> &elem) final
+   {
+      auto holder = elem->GetObject();
+      if (!holder) return nullptr;
+
+      auto canv = holder->get_shared<RCanvas>();
+      if (!canv) return nullptr;
+
+      return std::make_shared<RBrowserRCanvasWidget>(name, canv);
+   }
+
 public:
    RBrowserRCanvasProvider() : RBrowserWidgetProvider("rcanvas") {}
    ~RBrowserRCanvasProvider() = default;

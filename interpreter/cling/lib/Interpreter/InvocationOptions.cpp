@@ -18,6 +18,8 @@
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/Option.h"
 #include "llvm/Option/OptTable.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 
 #include <memory>
 
@@ -68,6 +70,28 @@ static const char kNoStdInc[] = "-nostdinc";
     return new ClingOptTable();
   }
 
+#ifndef NDEBUG
+  void setDebugOnlyTypes(const char *FlagsStr) {
+    llvm::SmallString<64> MutFlagsStr(FlagsStr);
+    MutFlagsStr += '\0'; // Code below assumes null-termination
+
+    // Collect single flags and replace seperators with null-terminators
+    std::vector<const char *> DebugTypes;
+    char *Flag = MutFlagsStr.data();
+    do {
+      DebugTypes.push_back(Flag);
+      while (*Flag != ',' && *Flag != ';' && *Flag != '\0')
+        ++Flag;
+      if (*Flag == '\0')
+        break;
+      *(Flag++) = '\0';
+    } while (true);
+
+    DebugFlag = true;
+    setCurrentDebugTypes(DebugTypes.data(), DebugTypes.size());
+  }
+#endif
+
   static void ParseStartupOpts(cling::InvocationOptions& Opts,
                                InputArgList& Args) {
     Opts.ErrorOut = Args.hasArg(OPT__errorout);
@@ -75,6 +99,7 @@ static const char kNoStdInc[] = "-nostdinc";
     Opts.ShowVersion = Args.hasArg(OPT_version);
     Opts.Help = Args.hasArg(OPT_help);
     Opts.NoRuntime = Args.hasArg(OPT_noruntime);
+    Opts.PtrCheck = Args.hasArg(OPT__ptrcheck);
     if (Arg* MetaStringArg = Args.getLastArg(OPT__metastr, OPT__metastr_EQ)) {
       Opts.MetaString = MetaStringArg->getValue();
       if (Opts.MetaString.empty()) {
@@ -82,6 +107,16 @@ static const char kNoStdInc[] = "-nostdinc";
         Opts.MetaString = ".";
       }
     }
+#ifndef NDEBUG
+    if (Arg* DebugFlagsArg = Args.getLastArg(OPT__debugFlags, OPT__debugFlags_EQ)) {
+      const char *FlagsStr = DebugFlagsArg->getValue();
+      if (*FlagsStr == '\0') {
+        cling::errs() << "ERROR: --debug-only argument must be non-empty! Ignoring it.\n";
+      } else {
+        setDebugOnlyTypes(FlagsStr);
+      }
+    }
+#endif
   }
 
   static void Extend(std::vector<std::string>& A, std::vector<std::string> B) {
@@ -114,12 +149,15 @@ CompilerOptions::CompilerOptions(int argc, const char* const* argv)
 void CompilerOptions::Parse(int argc, const char* const argv[],
                             std::vector<std::string>* Inputs) {
   unsigned MissingArgIndex, MissingArgCount;
-  std::unique_ptr<OptTable> OptsC1(createDriverOptTable());
+  const OptTable& OptsC1 = getDriverOptTable();
   ArrayRef<const char *> ArgStrings(argv+1, argv + argc);
 
-  InputArgList Args(OptsC1->ParseArgs(ArgStrings, MissingArgIndex,
+  InputArgList Args(OptsC1.ParseArgs(ArgStrings, MissingArgIndex,
                     MissingArgCount, 0,
                     options::NoDriverOption | options::CLOption));
+
+  std::vector<const char*> LLVMArgs;
+  LLVMArgs.push_back("cling (LLVM option parsing)");
 
   for (const Arg* arg : Args) {
     switch (arg->getOption().getID()) {
@@ -141,18 +179,18 @@ void CompilerOptions::Parse(int argc, const char* const argv[],
       case options::OPT_nostdincxx: NoCXXInc = true; break;
       case options::OPT_v: Verbose = true; break;
       case options::OPT_fmodules: CxxModules = true; break;
-      case options::OPT_fmodule_name_EQ: LLVM_FALLTHROUGH;
-      case options::OPT_fmodule_name: ModuleName = arg->getValue(); break;
+      case options::OPT_fmodule_name_EQ: ModuleName = arg->getValue(); break;
       case options::OPT_fmodules_cache_path: CachePath = arg->getValue(); break;
       case options::OPT_cuda_path_EQ: CUDAPath = arg->getValue(); break;
-      case options::OPT_cuda_gpu_arch_EQ: CUDAGpuArch = arg->getValue(); break;
-      case options::OPT_Xcuda_fatbinary:
-        CUDAFatbinaryArgs.push_back(arg->getValue());
-        break;
+      case options::OPT_offload_arch_EQ: CUDAGpuArch = arg->getValue(); break;
       case options::OPT_cuda_device_only:
         Language = true;
         CUDADevice = true;
         CUDAHost = false;
+        break;
+
+      case options::OPT_mllvm:
+        LLVMArgs.push_back(arg->getValue());
         break;
 
       default:
@@ -160,6 +198,12 @@ void CompilerOptions::Parse(int argc, const char* const argv[],
           Inputs->push_back(arg->getValue());
         break;
     }
+  }
+
+  // Check that there were LLVM arguments, other than the first dummy entry.
+  if (LLVMArgs.size() > 1) {
+    LLVMArgs.push_back(nullptr);
+    llvm::cl::ParseCommandLineOptions(LLVMArgs.size() - 1, LLVMArgs.data());
   }
 }
 
@@ -225,12 +269,12 @@ InvocationOptions::InvocationOptions(int argc, const char* const* argv) :
 void InvocationOptions::PrintHelp() {
   std::unique_ptr<OptTable> Opts(CreateClingOptTable());
 
-  Opts->PrintHelp(cling::outs(), "cling",
+  Opts->printHelp(cling::outs(), "cling",
                   "cling: LLVM/clang C++ Interpreter: http://cern.ch/cling");
 
   cling::outs() << "\n\n";
 
-  std::unique_ptr<OptTable> OptsC1(createDriverOptTable());
-  OptsC1->PrintHelp(cling::outs(), "clang -cc1",
-                    "LLVM 'Clang' Compiler: http://clang.llvm.org");
+  const OptTable& OptsC1 = getDriverOptTable();
+  OptsC1.printHelp(cling::outs(), "clang -cc1",
+                   "LLVM 'Clang' Compiler: http://clang.llvm.org");
 }

@@ -26,7 +26,8 @@ import os
 # Create a ROOT dataframe for each dataset
 # Note that we load the filenames from the external json file placed in the same folder than this script.
 path = "root://eospublic.cern.ch//eos/opendata/atlas/OutreachDatasets/2020-01-22"
-files = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "df106_HiggsToFourLeptons.json")))
+files = json.load(open(os.path.join(ROOT.gROOT.GetTutorialsDir(), "dataframe/df106_HiggsToFourLeptons.json")))
+
 processes = files.keys()
 df = {}
 xsecs = {}
@@ -44,9 +45,8 @@ for p in processes:
 
 # Select events for the analysis
 ROOT.gInterpreter.Declare("""
-using VecF_t = const ROOT::RVec<float>&;
-using VecI_t = const ROOT::RVec<int>&;
-bool GoodElectronsAndMuons(VecI_t type, VecF_t pt, VecF_t eta, VecF_t phi, VecF_t e, VecF_t trackd0pv, VecF_t tracksigd0pv, VecF_t z0)
+using cRVecF = const ROOT::RVecF &;
+bool GoodElectronsAndMuons(const ROOT::RVecI & type, cRVecF pt, cRVecF eta, cRVecF phi, cRVecF e, cRVecF trackd0pv, cRVecF tracksigd0pv, cRVecF z0)
 {
     for (size_t i = 0; i < type.size(); i++) {
         ROOT::Math::PtEtaPhiEVector p(pt[i] / 1000.0, eta[i], phi[i], e[i] / 1000.0);
@@ -96,7 +96,7 @@ for s in samples:
 
 # Compute invariant mass of the four lepton system and make a histogram
 ROOT.gInterpreter.Declare("""
-float ComputeInvariantMass(VecF_t pt, VecF_t eta, VecF_t phi, VecF_t e)
+float ComputeInvariantMass(cRVecF pt, cRVecF eta, cRVecF phi, cRVecF e)
 {
     ROOT::Math::PtEtaPhiEVector p1(pt[0], eta[0], phi[0], e[0]);
     ROOT::Math::PtEtaPhiEVector p2(pt[1], eta[1], phi[1], e[1]);

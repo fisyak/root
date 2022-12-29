@@ -37,7 +37,7 @@ struct IndexSortComparator {
          return *(fValMajor + i1) < *(fValMajor + i2);
    }
 
-  // pointers to the start of index values tables keeping uppder 64bit and lower 64bit
+  // pointers to the start of index values tables keeping upper 64bit and lower 64bit
   // of combined indexed 128bit value
   Long64_t *fValMajor, *fValMinor;
 };
@@ -178,13 +178,21 @@ TTreeIndex::TTreeIndex(const TTree *T, const char *majorname, const char *minorn
          fMinorFormula->UpdateFormulaLeaves();
       }
       auto GetAndRangeCheck = [this](bool isMajor, Long64_t entry) {
-         LongDouble_t ldRet = (isMajor ? fMajorFormula : fMinorFormula)->EvalInstance<LongDouble_t>();
-         Long64_t ret = (Long64_t) ldRet;
-         Long64_t retCloserToZero = ret > 0 ? ret - 1 : ret + 1;
+         LongDouble_t ret = (isMajor ? fMajorFormula : fMinorFormula)->EvalInstance<LongDouble_t>();
+         // Check whether the value (vs significant bits) of ldRet can represent
+         // the full precision of the returned value. If we return 10^60, the
+         // value fits into a long double, but if sizeof(long double) ==
+         // sizeof(double) it cannot store the ones: the value returned by
+         // EvalInstance() only stores the higher bits.
+         LongDouble_t retCloserToZero = ret;
+         if (ret > 0)
+            retCloserToZero -= 1;
+         else
+            retCloserToZero += 1;
          if (retCloserToZero == ret) {
             Warning("TTreeIndex",
-               "In tree entry %lld, %s value %s=%lld possibly out of range for internal `long double`",
-               entry, isMajor ? "major" : "minor", isMajor ? fMajorName.Data() : fMinorName.Data(), ret);
+                    "In tree entry %lld, %s value %s=%Lf possibly out of range for internal `long double`", entry,
+                    isMajor ? "major" : "minor", isMajor ? fMajorName.Data() : fMinorName.Data(), ret);
          }
          return ret;
       };
@@ -397,7 +405,7 @@ Long64_t TTreeIndex::FindValues(Long64_t major, Long64_t minor) const
 /// If it finds a pair that maches val, it returns directly the
 /// index in the table.
 /// If an entry corresponding to major and minor is not found, the function
-/// returns the index of the major,minor pair immediatly lower than the
+/// returns the index of the major,minor pair immediately lower than the
 /// requested value, ie it will return -1 if the pair is lower than
 /// the first entry in the index.
 ///

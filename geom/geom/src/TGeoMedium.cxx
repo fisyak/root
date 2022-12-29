@@ -11,7 +11,7 @@
 
 
 /** \class TGeoMedium
-\ingroup Geometry_classes
+\ingroup Materials_classes
 
 Media are used to store properties related to tracking and which are useful
 only when using geometry with a particle transport MC package (via VMC). One
@@ -28,16 +28,6 @@ in context of GEANT (3 but also 4) or FLUKA interfaces.
 #include "TGeoMedium.h"
 #include "TList.h"
 
-static const Char_t *names[44] = {
-  "ISVOL",  "IFIELD",  "FIELDM",  "TMAXFD",  "STEMAX",
-  "DEEMAX",  "EPSIL",  "STMIN",   "Reserved",  "Reserved",
-  "CUTGAM","CUTELE","CUTNEU","CUTHAD","CUTMUO",
-  "BCUTE" ,"BCUTM" ,"DCUTE" ,"DCUTM" ,"PPCUTM",
-  "PAIR"  ,"COMP"  ,"PHOT"  ,"PFIS"  ,"DRAY"  ,
-  "ANNI"  ,"BREM"  ,"HADR"  ,"MUNU"  ,"DCAY"  ,
-  "LOSS"  ,"MULS"  ,"RAYL"  ,""      ,""      ,
-  "GHCOR1","BIRK1" ,"BIRK2" ,"BIRK3" ,""      ,
-  "LABS" , "SYNC" , "STRA" };
 ClassImp(TGeoMedium);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -46,7 +36,7 @@ ClassImp(TGeoMedium);
 TGeoMedium::TGeoMedium()
 {
    fId      = 0;
-   for (Int_t i=0; i<44; i++) fParams[i] = 0.;
+   for (Int_t i=0; i<20; i++) fParams[i] = 0.;
    fMaterial= 0;
 }
 
@@ -58,7 +48,7 @@ TGeoMedium::TGeoMedium(const char *name, Int_t numed, const TGeoMaterial *mat, D
 {
    fName = fName.Strip();
    fId    = numed;
-   for (Int_t i=0; i<44; i++) fParams[i] = 0.;
+   for (Int_t i=0; i<20; i++) fParams[i] = 0.;
    fMaterial = (TGeoMaterial*)mat;
    for (Int_t i=0;i<10;i++) {
       if (params) fParams[i] = params[i];
@@ -76,7 +66,7 @@ TGeoMedium::TGeoMedium(const char *name, Int_t numed, Int_t imat, Int_t isvol, I
 {
    fName = fName.Strip();
    fId    = numed;
-   for (Int_t i=0; i<44; i++) fParams[i] = 0.;
+   for (Int_t i=0; i<20; i++) fParams[i] = 0.;
    TIter next (gGeoManager->GetListOfMaterials());
    TGeoMaterial *mat;
    while ((mat = (TGeoMaterial*)next())) {
@@ -107,9 +97,9 @@ TGeoMedium::TGeoMedium(const TGeoMedium& gm) :
   fId(gm.fId),
   fMaterial(gm.fMaterial)
 {
-   for(Int_t i=0; i<44; i++) fParams[i]=gm.fParams[i];
+   for(Int_t i=0; i<20; i++) fParams[i]=gm.fParams[i];
 }
- 
+
 ////////////////////////////////////////////////////////////////////////////////
 ///assignment operator
 
@@ -118,7 +108,7 @@ TGeoMedium& TGeoMedium::operator=(const TGeoMedium& gm)
    if(this!=&gm) {
       TNamed::operator=(gm);
       fId=gm.fId;
-      for(Int_t i=0; i<44; i++) fParams[i]=gm.fParams[i];
+      for(Int_t i=0; i<20; i++) fParams[i]=gm.fParams[i];
       fMaterial=gm.fMaterial;
    }
    return *this;
@@ -134,12 +124,12 @@ TGeoMedium::~TGeoMedium()
 ////////////////////////////////////////////////////////////////////////////////
 /// Provide a pointer name containing uid.
 
-char *TGeoMedium::GetPointerName() const
+const char *TGeoMedium::GetPointerName() const
 {
    static TString name;
-   name = TString::Format("pMed%d", GetUniqueID());
-   return (char*)name.Data();
-}   
+   name.Form("pMed%d", GetUniqueID());
+   return name.Data();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Save a primitive as a C++ statement(s) on output stream "out".
@@ -159,21 +149,6 @@ void TGeoMedium::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
    out << "   par[6]  = " << fParams[6] << "; // epsil" << std::endl;
    out << "   par[7]  = " << fParams[7] << "; // stmin" << std::endl;
 
-   out << "   " << GetPointerName() << " = new TGeoMedium(\"" << GetName() << "\", numed," << fMaterial->GetPointerName() << ", par);" << std::endl;
+   out << "   auto " << GetPointerName() << " = new TGeoMedium(\"" << GetName() << "\", numed, " << fMaterial->GetPointerName() << ", par);" << std::endl;
    SetBit(TGeoMedium::kMedSavePrimitive);
-}
-//_____________________________________________________________________________
-Int_t TGeoMedium::ParamId(const Char_t *name) {
-  TString Name(name);
-  Name.ToUpper();
-  Int_t Id = -1;
-  for (Int_t i = 0; i < 44; i++) {
-    if (Name == names[i]) {Id = i; break;}
-  }
-  return Id;
-}
-//_____________________________________________________________________________
-const Char_t *TGeoMedium::ParamName(Int_t id) {
-  if (id >= 0 && id < 44) return names[id];
-  return "Unknown";
 }

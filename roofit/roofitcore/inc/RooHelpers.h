@@ -17,14 +17,17 @@
 #ifndef ROOFIT_ROOFITCORE_INC_ROOHELPERS_H_
 #define ROOFIT_ROOFITCORE_INC_ROOHELPERS_H_
 
-#include "RooMsgService.h"
-#include "RooAbsArg.h"
-#include "RooAbsReal.h"
+#include <RooMsgService.h>
+#include <RooAbsArg.h>
+#include <RooAbsReal.h>
 
 #include <sstream>
 #include <vector>
 #include <string>
 #include <utility>
+
+class RooAbsPdf;
+class RooAbsData;
 
 
 namespace RooHelpers {
@@ -88,13 +91,10 @@ class HijackMessageStream{
 };
 
 
-std::vector<std::string> tokenise(const std::string &str, const std::string &delims, bool returnEmptyToken = true);
-
-
 /// Check if the parameters have a range, and warn if the range extends below / above the set limits.
 void checkRangeOfParameters(const RooAbsReal* callingClass, std::initializer_list<const RooAbsReal*> pars,
     double min = -std::numeric_limits<double>::max(), double max = std::numeric_limits<double>::max(),
-    bool limitsInAllowedRange = false, std::string extraMessage = "");
+    bool limitsInAllowedRange = false, std::string const& extraMessage = "");
 
 
 /// Disable all caches for sub-branches in an expression tree.
@@ -114,11 +114,51 @@ struct DisableCachingRAII {
 };
 
 
+/// Struct to temporarily change the operation mode of a RooAbsArg until it
+/// goes out of scope.
+class ChangeOperModeRAII {
+public:
+   ChangeOperModeRAII(RooAbsArg *arg, RooAbsArg::OperMode opMode) : _arg{arg}, _oldOpMode(arg->operMode())
+   {
+      arg->setOperMode(opMode, /*recurse=*/false);
+   }
+   ~ChangeOperModeRAII() { _arg->setOperMode(_oldOpMode, /*recurse=*/false); }
+
+private:
+   RooAbsArg *_arg = nullptr;
+   RooAbsArg::OperMode _oldOpMode;
+};
+
+
 std::pair<double, double> getRangeOrBinningInterval(RooAbsArg const* arg, const char* rangeName);
 
+bool checkIfRangesOverlap(RooArgSet const& observables,
+                          RooAbsData const& data,
+                          std::vector<std::string> const& rangeNames);
 
+std::string getColonSeparatedNameString(RooArgSet const& argSet);
+RooArgSet selectFromArgSet(RooArgSet const&, std::string const& names);
+
+
+/// Clone RooAbsArg object and reattach to original parameters.
+template<class T>
+std::unique_ptr<T> cloneTreeWithSameParameters(T const& arg, RooArgSet const* observables=nullptr) {
+  std::unique_ptr<T> clone{static_cast<T *>(arg.cloneTree())};
+  RooArgSet origParams;
+  arg.getParameters(observables, origParams);
+  clone->recursiveRedirectServers(origParams);
+  return clone;
 }
 
+std::string getRangeNameForSimComponent(std::string const& rangeName, bool splitRange, std::string const& catName);
 
+struct BinnedLOutput {
+    RooAbsPdf * binnedPdf = nullptr;
+    bool isBinnedL = false;
+};
+
+BinnedLOutput getBinnedL(RooAbsPdf &pdf);
+
+}
 
 #endif /* ROOFIT_ROOFITCORE_INC_ROOHELPERS_H_ */

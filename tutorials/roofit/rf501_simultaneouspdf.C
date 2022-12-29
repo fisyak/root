@@ -14,7 +14,6 @@
 #include "RooRealVar.h"
 #include "RooDataSet.h"
 #include "RooGaussian.h"
-#include "RooConstVar.h"
 #include "RooChebychev.h"
 #include "RooAddPdf.h"
 #include "RooSimultaneous.h"
@@ -79,24 +78,22 @@ void rf501_simultaneouspdf()
    sample.defineType("control");
 
    // Construct combined dataset in (x,sample)
-   RooDataSet combData("combData", "combined data", x, Index(sample), Import("physics", *data),
-                       Import("control", *data_ctl));
+   RooDataSet combData("combData", "combined data", x, Index(sample),
+                       Import({{"physics", data}, {"control", data_ctl}}));
 
    // C o n s t r u c t   a   s i m u l t a n e o u s   p d f   i n   ( x , s a m p l e )
    // -----------------------------------------------------------------------------------
 
-   // Construct a simultaneous pdf using category sample as index
-   RooSimultaneous simPdf("simPdf", "simultaneous pdf", sample);
-
-   // Associate model with the physics state and model_ctl with the control state
-   simPdf.addPdf(model, "physics");
-   simPdf.addPdf(model_ctl, "control");
+   // Construct a simultaneous pdf using category sample as index:
+   // associate model with the physics state and model_ctl with the control state
+   RooSimultaneous simPdf("simPdf", "simultaneous pdf", {{"physics", &model}, {"control", &model_ctl}}, sample);
 
    // P e r f o r m   a   s i m u l t a n e o u s   f i t
    // ---------------------------------------------------
 
    // Perform simultaneous fit of model to data and model_ctl to data_ctl
-   simPdf.fitTo(combData);
+   std::unique_ptr<RooFitResult> fitResult{simPdf.fitTo(combData, PrintLevel(-1), Save())};
+   fitResult->Print();
 
    // P l o t   m o d e l   s l i c e s   o n   d a t a    s l i c e s
    // ----------------------------------------------------------------

@@ -35,7 +35,7 @@ if (XROOTD_INCLUDE_DIR)
   if (${xrdvers} STREQUAL "\"unknown\"")
     math(EXPR xrdversnum 1000000000)
   else ()
-    string(REGEX REPLACE "[^v\\.]+" "" xrdversdots ${xrdvers})
+    string(REGEX REPLACE "[^v\\.-]+" "" xrdversdots ${xrdvers})
     if (${xrdversdots} STREQUAL "v..")
        # Regular version string; parse it out
        string(REGEX MATCH "[0-9\\.]+" xrdvers ${xrdvers})
@@ -43,6 +43,9 @@ if (XROOTD_INCLUDE_DIR)
        string(REGEX REPLACE "^([^.]*)\\.(.*)\\.(.*)" "\\2" xrdversminor ${xrdvers})
        string(REGEX REPLACE "^([^.]*)\\.(.*)\\.(.*)" "\\3" xrdverspatch ${xrdvers})
        math(EXPR xrdversnum ${xrdversmajor}*100000000+${xrdversminor}*10000+${xrdverspatch})
+    elseif (${xrdversdots} STREQUAL "v-")
+       # Untagged commit
+       math(EXPR xrdversnum 1000000000)
     else ()
        # Old version string: we keep only the first numerics, i.e. the date
        string(REGEX REPLACE "[v\"]" "" xrdvers ${xrdvers})
@@ -167,6 +170,12 @@ if(XROOTD_FOUND)
   else ()
     set(XROOTD_FOUND FALSE)
   endif ()
+endif()
+
+if(XROOTD_FOUND AND NOT TARGET Xrootd::Xrootd)
+  add_library(Xrootd::Xrootd INTERFACE IMPORTED)
+  set_property(TARGET Xrootd::Xrootd PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${XROOTD_INCLUDE_DIRS}")
+  set_property(TARGET Xrootd::Xrootd PROPERTY INTERFACE_LINK_LIBRARIES "${XROOTD_LIBRARIES}")
 endif()
 
 mark_as_advanced(XROOTD_INCLUDE_DIR

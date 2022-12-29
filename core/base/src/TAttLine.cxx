@@ -33,11 +33,12 @@ by many other classes (graphics, histograms). It holds all the line attributes.
 ## Line attributes
 Line attributes are:
 
-  - [Line Color](#L1)
-  - [Line Width](#L2)
-  - [Line Style](#L3)
+  - [Line Color](\ref ATTLINE1)
+  - [Line Width](\ref ATTLINE2)
+  - [Line Style](\ref ATTLINE3)
 
-## <a name="L1"></a> Line Color
+\anchor ATTLINE1
+## Line Color
 The line color is a color index (integer) pointing in the ROOT
 color table.
 The line color of any class inheriting from `TAttLine` can
@@ -68,7 +69,8 @@ in `$ROOTSYS/etc/system.rootrc`, or on Mac with the Cocoa backend. On the file o
 it is visible with PDF, PNG, Gif, JPEG, SVG, TeX ... but not PostScript.
 
 
-## <a name="L2"></a> Line Width
+\anchor ATTLINE2
+## Line Width
 The line width is expressed in pixel units.
 The line width of any class inheriting from `TAttLine` can
 be changed using the method `SetLineWidth` and retrieved using the
@@ -91,7 +93,8 @@ Begin_Macro
 }
 End_Macro
 
-## <a name="L3"></a> Line Style
+\anchor ATTLINE3
+## Line Style
 Line styles are identified via integer numbers. The line style of any class
 inheriting from `TAttLine` can be changed using the method
 `SetLineStyle` and retrieved using the method `GetLineStyle`.
@@ -270,10 +273,9 @@ void TAttLine::ResetAttLine(Option_t *)
 void TAttLine::SaveLineAttributes(std::ostream &out, const char *name, Int_t coldef, Int_t stydef, Int_t widdef)
 {
    if (fLineColor != coldef) {
-      if (fLineColor > 228) {
-         TColor::SaveColor(out, fLineColor);
+      if (TColor::SaveColor(out, fLineColor))
          out<<"   "<<name<<"->SetLineColor(ci);" << std::endl;
-      } else
+      else
          out<<"   "<<name<<"->SetLineColor("<<fLineColor<<");"<<std::endl;
    }
    if (fLineStyle != stydef) {

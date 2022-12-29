@@ -16,9 +16,9 @@
 #include "MPCode.h"
 #include "MPSendRecv.h"
 #include "PoolUtils.h"
-#include "ROOT/RConfig.hxx" //R__DEPRECATED
 #include "ROOT/TExecutorCRTP.hxx"
 #include "ROOT/TSeq.hxx"
+#include "ROOT/TypeTraits.hxx"
 #include "TError.h"
 #include "TFileCollection.h"
 #include "TFileInfo.h"
@@ -29,7 +29,6 @@
 #include <algorithm> //std::generate
 #include <numeric> //std::iota
 #include <string>
-#include <type_traits> //std::result_of, std::enable_if
 #include <functional> //std::reference_wrapper
 #include <vector>
 
@@ -37,6 +36,10 @@ namespace ROOT {
 
 class TProcessExecutor : public TExecutorCRTP<TProcessExecutor>, private TMPClient {
    friend TExecutorCRTP;
+
+   template <typename F, typename... Args>
+   using InvokeResult_t = ROOT::TypeTraits::InvokeResult_t<F, Args...>;
+
 public:
    explicit TProcessExecutor(unsigned nWorkers = 0); //default number of workers is the number of processors
    ~TProcessExecutor() = default;
@@ -53,20 +56,17 @@ public:
    // TProcessExecutor's logic
    using TExecutorCRTP<TProcessExecutor>::MapReduce;
    template<class F, class R, class Cond = noReferenceCond<F>>
-   auto MapReduce(F func, unsigned nTimes, R redfunc) -> typename std::result_of<F()>::type;
+   auto MapReduce(F func, unsigned nTimes, R redfunc) -> InvokeResult_t<F>;
    template<class F, class T, class R, class Cond = noReferenceCond<F, T>>
-   auto MapReduce(F func, std::vector<T> &args, R redfunc) -> typename std::result_of<F(T)>::type;
+   auto MapReduce(F func, std::vector<T> &args, R redfunc) -> InvokeResult_t<F, T>;
    template<class F, class T, class R, class Cond = noReferenceCond<F, T>>
-   auto MapReduce(F func, const std::vector<T> &args, R redfunc) -> typename std::result_of<F(T)>::type;
+   auto MapReduce(F func, const std::vector<T> &args, R redfunc) -> InvokeResult_t<F, T>;
 
    // Reduce
    //
    using TExecutorCRTP<TProcessExecutor>::Reduce;
 
    void SetNWorkers(unsigned n) { TMPClient::SetNWorkers(n); }
-
-   /// \deprecated Use GetPoolSize()
-   unsigned GetNWorkers() const _R__DEPRECATED_626("Please use GetPoolSize instead") { return TMPClient::GetNWorkers(); }
 
    //////////////////////////////////////////////////////////////////////////
    /// \brief Return the number of pooled parallel workers.
@@ -78,13 +78,13 @@ private:
    // Implementation of the Map functions declared in the parent class (TExecutorCRTP)
    //
    template<class F, class Cond = noReferenceCond<F>>
-   auto MapImpl(F func, unsigned nTimes) -> std::vector<typename std::result_of<F()>::type>;
+   auto MapImpl(F func, unsigned nTimes) -> std::vector<InvokeResult_t<F>>;
    template<class F, class INTEGER, class Cond = noReferenceCond<F, INTEGER>>
-   auto MapImpl(F func, ROOT::TSeq<INTEGER> args) -> std::vector<typename std::result_of<F(INTEGER)>::type>;
+   auto MapImpl(F func, ROOT::TSeq<INTEGER> args) -> std::vector<InvokeResult_t<F, INTEGER>>;
    template<class F, class T, class Cond = noReferenceCond<F, T>>
-   auto MapImpl(F func, std::vector<T> &args) -> std::vector<typename std::result_of<F(T)>::type>;
+   auto MapImpl(F func, std::vector<T> &args) -> std::vector<InvokeResult_t<F, T>>;
    template<class F, class T, class Cond = noReferenceCond<F, T>>
-   auto MapImpl(F func, const std::vector<T> &args) -> std::vector<typename std::result_of<F(T)>::type>;
+   auto MapImpl(F func, const std::vector<T> &args) -> std::vector<InvokeResult_t<F, T>>;
 
    template<class T> void Collect(std::vector<T> &reslist);
    template<class T> void HandlePoolCode(MPCodeBufPair &msg, TSocket *sender, std::vector<T> &reslist);
@@ -119,7 +119,7 @@ private:
 ///
 /// \copydetails TExecutorCRTP::Map(F func,unsigned nTimes)
 template<class F, class Cond>
-auto TProcessExecutor::MapImpl(F func, unsigned nTimes) -> std::vector<typename std::result_of<F()>::type>
+auto TProcessExecutor::MapImpl(F func, unsigned nTimes) -> std::vector<InvokeResult_t<F>>
 {
    using retType = decltype(func());
    //prepare environment
@@ -160,7 +160,7 @@ auto TProcessExecutor::MapImpl(F func, unsigned nTimes) -> std::vector<typename 
 ///
 /// \copydetails TExecutorCRTP::Map(F func,std::vector<T> &args)
 template<class F, class T, class Cond>
-auto TProcessExecutor::MapImpl(F func, std::vector<T> &args) -> std::vector<typename std::result_of<F(T)>::type>
+auto TProcessExecutor::MapImpl(F func, std::vector<T> &args) -> std::vector<InvokeResult_t<F, T>>
 {
    //check whether func is callable
    using retType = decltype(func(args.front()));
@@ -205,7 +205,7 @@ auto TProcessExecutor::MapImpl(F func, std::vector<T> &args) -> std::vector<type
 ///
 /// \copydetails TExecutorCRTP::Map(F func,const std::vector<T> &args)
 template<class F, class T, class Cond>
-auto TProcessExecutor::MapImpl(F func, const std::vector<T> &args) -> std::vector<typename std::result_of<F(T)>::type>
+auto TProcessExecutor::MapImpl(F func, const std::vector<T> &args) -> std::vector<InvokeResult_t<F, T>>
 {
    //check whether func is callable
    using retType = decltype(func(args.front()));
@@ -250,7 +250,7 @@ auto TProcessExecutor::MapImpl(F func, const std::vector<T> &args) -> std::vecto
 ///
 /// \copydetails TExecutorCRTP::Map(F func,ROOT::TSeq<INTEGER> args)
 template<class F, class INTEGER, class Cond>
-auto TProcessExecutor::MapImpl(F func, ROOT::TSeq<INTEGER> args) -> std::vector<typename std::result_of<F(INTEGER)>::type>
+auto TProcessExecutor::MapImpl(F func, ROOT::TSeq<INTEGER> args) -> std::vector<InvokeResult_t<F, INTEGER>>
 {
    std::vector<INTEGER> vargs(args.size());
    std::copy(args.begin(), args.end(), vargs.begin());
@@ -262,7 +262,7 @@ auto TProcessExecutor::MapImpl(F func, ROOT::TSeq<INTEGER> args) -> std::vector<
 /// \brief Execute a function `nTimes` in parallel (Map) and accumulate the results into a single value (Reduce).
 /// \copydetails  ROOT::Internal::TExecutor::MapReduce(F func,unsigned nTimes,R redfunc)
 template<class F, class R, class Cond>
-auto TProcessExecutor::MapReduce(F func, unsigned nTimes, R redfunc) -> typename std::result_of<F()>::type
+auto TProcessExecutor::MapReduce(F func, unsigned nTimes, R redfunc) -> InvokeResult_t<F>
 {
    using retType = decltype(func());
    //prepare environment
@@ -302,7 +302,7 @@ auto TProcessExecutor::MapReduce(F func, unsigned nTimes, R redfunc) -> typename
 ///
 /// \copydetails ROOT::Internal::TExecutor::MapReduce(F func,std::vector<T> &args,R redfunc,unsigned nChunks).
 template<class F, class T, class R, class Cond>
-auto TProcessExecutor::MapReduce(F func, std::vector<T> &args, R redfunc) -> typename std::result_of<F(T)>::type
+auto TProcessExecutor::MapReduce(F func, std::vector<T> &args, R redfunc) -> InvokeResult_t<F, T>
 {
 
    using retType = decltype(func(args.front()));
@@ -344,7 +344,7 @@ auto TProcessExecutor::MapReduce(F func, std::vector<T> &args, R redfunc) -> typ
 ///
 /// \copydetails ROOT::Internal::TExecutor::MapReduce(F func,const std::vector<T> &args,R redfunc,unsigned nChunks).
 template<class F, class T, class R, class Cond>
-auto TProcessExecutor::MapReduce(F func, const std::vector<T> &args, R redfunc) -> typename std::result_of<F(T)>::type
+auto TProcessExecutor::MapReduce(F func, const std::vector<T> &args, R redfunc) -> InvokeResult_t<F, T>
 {
 
    using retType = decltype(func(args.front()));

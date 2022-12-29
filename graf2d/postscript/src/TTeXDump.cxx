@@ -84,7 +84,7 @@ corresponding pdf file `simple.pdf`.
 
 TTeXDump::TTeXDump() : TVirtualPS()
 {
-   fStream       = 0;
+   fStream       = nullptr;
    fType         = 0;
    gVirtualPS    = this;
    fBoundingBox  = kFALSE;
@@ -109,7 +109,7 @@ TTeXDump::TTeXDump() : TVirtualPS()
 
 TTeXDump::TTeXDump(const char *fname, Int_t wtype) : TVirtualPS(fname, wtype)
 {
-   fStream       = 0;
+   fStream       = nullptr;
    fType         = 0;
    gVirtualPS    = this;
    fBoundingBox  = kFALSE;
@@ -156,9 +156,9 @@ void TTeXDump::Open(const char *fname, Int_t wtype)
 
    // Open OS file
    fStream   = new std::ofstream(fname,std::ios::out);
-   if (fStream == 0 || !fStream->good()) {
+   if (!fStream || !fStream->good()) {
       printf("ERROR in TTeXDump::Open: Cannot open file:%s\n",fname);
-      if (fStream == 0) return;
+      if (!fStream) return;
    }
 
    gVirtualPS = this;
@@ -167,9 +167,23 @@ void TTeXDump::Open(const char *fname, Int_t wtype)
 
    fBoundingBox = kFALSE;
    fRange       = kFALSE;
+   fStandalone  = kFALSE;
 
    // Set a default range
    Range(fXsize, fYsize);
+
+   if (strstr(GetTitle(),"Standalone")) fStandalone = kTRUE;
+   if (fStandalone) {
+      PrintStr("\\documentclass{standalone}@");
+      PrintStr("\\usepackage{tikz}@");
+      PrintStr("\\usetikzlibrary{patterns,plotmarks}@");
+      PrintStr("\\begin{document}@");
+   } else {
+      PrintStr("%\\documentclass{standalone}@");
+      PrintStr("%\\usepackage{tikz}@");
+      PrintStr("%\\usetikzlibrary{patterns,plotmarks}@");
+      PrintStr("%\\begin{document}@");
+   }
 
    NewPage();
 }
@@ -192,11 +206,16 @@ void TTeXDump::Close(Option_t *)
    if (gPad) gPad->Update();
    PrintStr("@");
    PrintStr("\\end{tikzpicture}@");
+   if (fStandalone) {
+      PrintStr("\\end{document}@");
+   } else {
+      PrintStr("%\\end{document}@");
+   }
 
    // Close file stream
-   if (fStream) { fStream->close(); delete fStream; fStream = 0;}
+   if (fStream) { fStream->close(); delete fStream; fStream = nullptr;}
 
-   gVirtualPS = 0;
+   gVirtualPS = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -220,7 +239,7 @@ void TTeXDump::On()
 
 void TTeXDump::Off()
 {
-   gVirtualPS = 0;
+   gVirtualPS = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -639,6 +658,9 @@ void TTeXDump::NewPage()
 
    if(!fBoundingBox) {
       PrintStr("\\begin{tikzpicture}@");
+      PrintStr("\\def\\CheckTikzLibraryLoaded#1{ \\ifcsname tikz@library@#1@loaded\\endcsname \\else \\PackageWarning{tikz}{usetikzlibrary{#1} is missing in the preamble.} \\fi }@");
+      PrintStr("\\CheckTikzLibraryLoaded{patterns}@");
+      PrintStr("\\CheckTikzLibraryLoaded{plotmarks}@");
       DefineMarkers();
       fBoundingBox = kTRUE;
    }
@@ -661,7 +683,6 @@ void TTeXDump::Range(Float_t xsize, Float_t ysize)
 void TTeXDump::SetFillColor( Color_t cindex )
 {
    fFillColor = cindex;
-   if (gStyle->GetFillColor() <= 0) cindex = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

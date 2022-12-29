@@ -13,10 +13,11 @@
 #include <QApplication>
 #include <QWebEngineView>
 #include <qtwebengineglobal.h>
+#include <QWebEngineDownloadItem>
+
 #include <QThread>
 #include <QWebEngineSettings>
 #include <QWebEngineProfile>
-#include <QWebEngineDownloadItem>
 #include <QtGlobal>
 
 #if QT_VERSION >= 0x050C00
@@ -38,7 +39,6 @@
 #include <memory>
 
 #include <ROOT/RWebDisplayHandle.hxx>
-#include <ROOT/RMakeUnique.hxx>
 #include <ROOT/RLogger.hxx>
 
 /** \class TQt5Timer
@@ -88,7 +88,9 @@ protected:
          // if (fHandler)
          //   QWebEngineProfile::defaultProfile()->removeUrlSchemeHandler(fHandler.get());
 
-         R__LOG_DEBUG(0, QtWebDisplayLog()) << "Deleting Qt5Creator";
+         // do not try to destroy objects during exit
+         fHandler.release();
+         fTimer.release();
       }
 
       std::unique_ptr<RWebDisplayHandle> Display(const RWebDisplayArgs &args) override

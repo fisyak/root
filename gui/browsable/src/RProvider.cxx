@@ -18,6 +18,8 @@
 using namespace ROOT::Experimental::Browsable;
 using namespace std::string_literals;
 
+RProvider::BrowseNTupleFunc_t RProvider::gNTupleFunc = nullptr;
+
 //////////////////////////////////////////////////////////////////////////////////
 // Provide map of browsing for different classes
 
@@ -106,7 +108,6 @@ void RProvider::RegisterBrowse(const TClass *cl, BrowseFunc_t func)
     bmap.emplace(cl, StructBrowse{this,func});
 }
 
-
 //////////////////////////////////////////////////////////////////////////////////
 // Register drawing function for v6 canvas
 
@@ -134,10 +135,19 @@ void RProvider::RegisterDraw7(const TClass *cl, Draw7Func_t func)
 }
 
 //////////////////////////////////////////////////////////////////////////////////
+// Register function for browsing RNTuple
+
+void RProvider::RegisterNTupleFunc(BrowseNTupleFunc_t func)
+{
+   gNTupleFunc = func;
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 // Register class with supported libs (if any)
 
 void RProvider::RegisterClass(const std::string &clname, const std::string &iconname,
-                              const std::string &browselib, const std::string &draw6lib, const std::string &draw7lib)
+                              const std::string &browselib, const std::string &draw6lib,
+                              const std::string &draw7lib, const std::string &drawopt)
 {
    auto &bmap = GetClassMap();
 
@@ -148,12 +158,12 @@ void RProvider::RegisterClass(const std::string &clname, const std::string &icon
    bool can_have_childs = !browselib.empty();
    if ((blib == "dflt") || (blib == "TObject")) blib = ""; // just use as indicator that browsing is possible
 
-   bmap.emplace(clname, StructClass{this, can_have_childs, iconname, blib, draw6lib, draw7lib});
+   bmap.emplace(clname, StructClass{this, can_have_childs, iconname, blib, draw6lib, draw7lib, drawopt});
 }
 
 //////////////////////////////////////////////////////////////////////////////////
 // Returns entry for the requested class
-const RProvider::StructClass &RProvider::GetClassEntry(const ClassArg &cl)
+RProvider::StructClass &RProvider::GetClassEntry(const ClassArg &cl)
 {
    if (!cl.empty()) {
       auto &bmap = GetClassMap();
@@ -165,7 +175,7 @@ const RProvider::StructClass &RProvider::GetClassEntry(const ClassArg &cl)
          for (auto &elem : bmap)
             if (cl.name.compare(0, elem.first.length(), elem.first) == 0)
                return elem.second;
-      } else {
+      } else if (cl.cl) {
          auto bases = const_cast<TClass *>(cl.cl)->GetListOfBases();
          const TClass *basecl = bases && (bases->GetSize() > 0) ? dynamic_cast<TBaseClass *>(bases->First())->GetClassPointer() : nullptr;
          if (basecl) return RProvider::GetClassEntry(basecl);
@@ -249,7 +259,6 @@ bool ScanProviderMap(Map_t &fmap, const RProvider::ClassArg &cl, bool test_all =
    return false;
 }
 
-
 /////////////////////////////////////////////////////////////////////////
 /// Create browsable element for the object
 /// Created element may take ownership over the object
@@ -277,6 +286,26 @@ std::shared_ptr<RElement> RProvider::Browse(std::unique_ptr<RHolder> &object)
    ScanProviderMap<BrowseMap_t,BrowseFunc_t>(GetBrowseMap(), object->GetClass(), true, browse_func);
 
    return res;
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+/// Start browsing of RNTuple
+
+std::shared_ptr<RElement> RProvider::BrowseNTuple(const std::string &tuplename, const std::string &filename)
+{
+   if (!gNTupleFunc) {
+      auto &entry = GetClassEntry("ROOT::Experimental::RNTuple");
+
+      if (entry.browselib.empty())
+         return nullptr;
+
+      gSystem->Load(entry.browselib.c_str());
+   }
+
+   if (!gNTupleFunc)
+      return nullptr;
+
+   return gNTupleFunc(tuplename, filename);
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -337,6 +366,27 @@ std::string RProvider::GetClassIcon(const ClassArg &arg, bool is_folder)
    return is_folder ? "sap-icon://folder-blank"s : "sap-icon://electronic-medical-record"s;
 }
 
+/////////////////////////////////////////////////////////////////////
+/// Return configured draw option for the class
+
+std::string RProvider::GetClassDrawOption(const ClassArg &arg)
+{
+   return GetClassEntry(arg).drawopt;
+}
+
+/////////////////////////////////////////////////////////////////////
+/// Set draw option for the class
+/// Return true if entry for the class exists
+
+bool RProvider::SetClassDrawOption(const ClassArg &arg, const std::string &opt)
+{
+   auto &entry = GetClassEntry(arg);
+   if (entry.dummy())
+      return false;
+
+   entry.drawopt = opt;
+   return true;
+}
 
 /////////////////////////////////////////////////////////////////////
 /// Return true if provided class can have childs
@@ -344,6 +394,15 @@ std::string RProvider::GetClassIcon(const ClassArg &arg, bool is_folder)
 bool RProvider::CanHaveChilds(const ClassArg &arg)
 {
    return GetClassEntry(arg).can_have_childs;
+}
+
+/////////////////////////////////////////////////////////////////////
+/// Check if showing of sub-elements was disabled
+
+bool RProvider::NotShowChilds(const ClassArg &arg)
+{
+   auto &entry = GetClassEntry(arg);
+   return !entry.dummy() && !entry.can_have_childs;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -386,6 +445,8 @@ public:
       RegisterClass("ROOT::Experimental::RH1D", "sap-icon://bar-chart", "", "", "libROOTHistDrawProvider");
       RegisterClass("ROOT::Experimental::RH2D", "sap-icon://pixelate", "", "", "libROOTHistDrawProvider");
       RegisterClass("ROOT::Experimental::RH3D", "sap-icon://product", "", "", "libROOTHistDrawProvider");
+      RegisterClass("ROOT::Experimental::RCanvas", "sap-icon://business-objects-experience", "", "", "libROOTHistDrawProvider");
+      RegisterClass("ROOT::Experimental::RNTuple", "sap-icon://table-chart", "libROOTNTupleBrowseProvider", "libROOTNTupleDraw6Provider", "libROOTNTupleDraw7Provider");
    }
 
 } newRDefaultProvider;

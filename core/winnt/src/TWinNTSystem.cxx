@@ -32,6 +32,7 @@
 #include "TException.h"
 #include "TEnv.h"
 #include "TApplication.h"
+#include "TBrowser.h"
 #include "TWin32SplashThread.h"
 #include "Win32Constants.h"
 #include "TInterpreter.h"
@@ -60,6 +61,7 @@
 #include <list>
 #include <shlobj.h>
 #include <conio.h>
+#include <time.h>
 
 #if defined (_MSC_VER) && (_MSC_VER >= 1400)
    #include <intrin.h>
@@ -694,7 +696,7 @@ namespace {
    }
 
    /////////////////////////////////////////////////////////////////////////////
-   /// Resolve a ShellLink (i.e. c:\path\shortcut.lnk) to a real path.
+   /// Resolve a ShellLink (i.e. `c:\path\shortcut.lnk`) to a real path.
 
    static BOOL ResolveShortCut(LPCSTR pszShortcutFile, char *pszPath, int maxbuf)
    {
@@ -929,7 +931,7 @@ namespace {
       // ensure window title has been updated
       ::Sleep(40);
       // look for NewWindowTitle
-      gConsoleWindow = (ULong_t)::FindWindow(0, pszNewWindowTitle);
+      gConsoleWindow = (ULongptr_t)::FindWindow(0, pszNewWindowTitle);
       if (gConsoleWindow) {
          // restore original window title
          ::ShowWindow((HWND)gConsoleWindow, SW_RESTORE);
@@ -952,7 +954,7 @@ namespace {
 ///////////////////////////////////////////////////////////////////////////////
 ClassImp(TWinNTSystem);
 
-ULong_t gConsoleWindow = 0;
+ULongptr_t gConsoleWindow = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
@@ -1186,13 +1188,13 @@ const char *TWinNTSystem::BaseName(const char *name)
 
 void TWinNTSystem::SetProgname(const char *name)
 {
-   ULong_t  idot = 0;
+   size_t idot = 0;
    char *dot = nullptr;
    char *progname;
    char *fullname = nullptr; // the program name with extension
 
   // On command prompt the progname can be supplied with no extension (under Windows)
-   ULong_t namelen=name ? strlen(name) : 0;
+   size_t namelen = name ? strlen(name) : 0;
    if (name && namelen > 0) {
       // Check whether the name contains "extention"
       fullname = new char[namelen+5];
@@ -1202,7 +1204,7 @@ void TWinNTSystem::SetProgname(const char *name)
 
       progname = StrDup(BaseName(fullname));
       dot = strrchr(progname, '.');
-      idot = dot ? (ULong_t)(dot - progname) : strlen(progname);
+      idot = dot ? (size_t)(dot - progname) : strlen(progname);
 
       char *which = nullptr;
 
@@ -1980,13 +1982,13 @@ __inline BOOL DBL_BSLASH(LPCTSTR psz)
 /// Returns TRUE if the given string is a UNC path.
 ///
 /// TRUE
-///      "\\foo\bar"
-///      "\\foo"         <- careful
-///      "\\"
+///      `\\foo\bar`
+///      `\\foo`         <- careful
+///      `\\`
 /// FALSE
-///      "\foo"
-///      "foo"
-///      "c:\foo"
+///      `\foo`
+///      `foo"`
+///      `c:\foo`
 
 BOOL PathIsUNC(LPCTSTR pszPath)
 {
@@ -2052,7 +2054,7 @@ void *TWinNTSystem::OpenDirectory(const char *fdir)
    else
       strlcpy(dir, sdir,MAX_PATH);
 
-   int nche = strlen(dir)+3;
+   size_t nche = strlen(dir)+3;
    char *entry = new char[nche];
    struct _stati64 finfo;
 
@@ -2459,7 +2461,7 @@ Bool_t TWinNTSystem::IsAbsoluteFileName(const char *dir)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Convert a pathname to a unix pathname. E.g. form \user\root to /user/root.
+/// Convert a pathname to a unix pathname. E.g. from `\user\root` to `/user/root`.
 /// General rules for applications creating names for directories and files or
 /// processing names supplied by the user include the following:
 ///
@@ -2602,7 +2604,7 @@ int TWinNTSystem::GetPathInfo(const char *path, FileStat_t &buf)
    // Remove trailing backslashes
    const char *proto = (strstr(path, "file:///")) ? "file://" : "file:";
    char *newpath = StrDup(StripOffProto(path, proto));
-   int l = strlen(newpath);
+   size_t l = strlen(newpath);
    while (l > 1) {
       if (newpath[--l] != '\\' || newpath[--l] != '/') {
          break;
@@ -3873,11 +3875,10 @@ void TWinNTSystem::Exit(int code, Bool_t mode)
             TBrowser *b;
             TIter next(gROOT->GetListOfBrowsers());
             while ((b = (TBrowser*) next()))
-               gROOT->ProcessLine(TString::Format("\
-                  if (((TBrowser*)0x%lx)->GetBrowserImp() &&\
-                      ((TBrowser*)0x%lx)->GetBrowserImp()->GetMainFrame()) \
-                     ((TBrowser*)0x%lx)->GetBrowserImp()->GetMainFrame()->CloseWindow();\
-                  else delete (TBrowser*)0x%lx", (ULong_t)b, (ULong_t)b, (ULong_t)b, (ULong_t)b));
+               if (b->GetBrowserImp() && b->GetBrowserImp()->GetMainFrame())
+                  gROOT->ProcessLine(TString::Format("\
+                     (((TBrowser*)0x%zx)->GetBrowserImp()->GetMainFrame()->CloseWindow();",
+                     (intptr_t)b));
          }
       }
    }
@@ -4389,7 +4390,7 @@ Bool_t TWinNTSystem::DispatchTimers(Bool_t mode)
 
    fInsideNotify = kTRUE;
 
-   TOrdCollectionIter it((TOrdCollection*)fTimers);
+   TListIter it(fTimers);
    TTimer *t;
    Bool_t  timedout = kFALSE;
 

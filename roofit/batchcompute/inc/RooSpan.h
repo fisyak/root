@@ -48,7 +48,7 @@ public:
   { }
 
 
-  /// Conversion constructor from <T> to <const T>
+  /// Conversion constructor from `RooSpan<NON_CONST_T>` to `RooSpan<T>`, where `T` is a `const` type.
   /// If the input span owns some memory, the const-version of the
   /// span will copy the shared_ptr.
   template<typename NON_CONST_T,
@@ -92,7 +92,7 @@ public:
   constexpr RooSpan(std::vector<value_type>&& payload) = delete;
 
 
-  RooSpan<T>& operator=(const RooSpan<T>& other) = default;
+  RooSpan& operator=(const RooSpan& other) = default;
 
 
   constexpr typename std::span<T>::iterator begin() const {
@@ -125,7 +125,7 @@ public:
   constexpr bool empty() const noexcept {
     return _span.empty();
   }
-  
+
   constexpr bool isBatch() const noexcept {
     return true;
   }

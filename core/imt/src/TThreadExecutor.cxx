@@ -1,3 +1,6 @@
+// Require TBB without captured exceptions
+#define TBB_USE_CAPTURED_EXCEPTION 0
+
 #include "ROOT/TThreadExecutor.hxx"
 #include "ROpaqueTaskArena.hxx"
 #if !defined(_MSC_VER)
@@ -155,7 +158,7 @@ TThreadExecutor::TThreadExecutor(UInt_t nThreads)
 /// \param end End index of the loop.
 /// \param step Step size of the loop.
 /// \param f function to execute.
-void TThreadExecutor::ParallelFor(unsigned int start, unsigned int end, unsigned step,
+void TThreadExecutor::ParallelFor(unsigned start, unsigned end, unsigned step,
                                   const std::function<void(unsigned int i)> &f)
 {
    if (GetPoolSize() > tbb::global_control::active_value(tbb::global_control::max_allowed_parallelism)) {

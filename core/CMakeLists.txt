@@ -81,6 +81,9 @@ add_subdirectory(zip)
 add_subdirectory(lzma)
 add_subdirectory(lz4)
 add_subdirectory(zstd)
+if(testing)
+  add_subdirectory(testsupport)
+endif()
 if(asan)
   add_subdirectory(sanitizer)
 endif()
@@ -167,9 +170,9 @@ if (libcxx AND NOT APPLE)
 endif()
 
 if(MSVC)
-  # Definitions of MATH Macros (required in MathCore) like M_PI are only  
-  # exposed on Windows after defining the _USE_MATH_DEFINES macro. By   
-  # specifying it as a property for Core, we ensure that the macros are 
+  # Definitions of MATH Macros (required in MathCore) like M_PI are only
+  # exposed on Windows after defining the _USE_MATH_DEFINES macro. By
+  # specifying it as a property for Core, we ensure that the macros are
   # properly exposed when using Modules on Windows.
   target_compile_definitions(Core PRIVATE _USE_MATH_DEFINES)
 endif()
@@ -215,7 +218,7 @@ endif()
 if(ROOT_ARCHITECTURE MATCHES macosx)
   target_include_directories(Core PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/core/unix/inc> $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/core/macosx/inc>)
   target_include_directories(BaseTROOT PRIVATE ${CMAKE_SOURCE_DIR}/core/unix/inc ${CMAKE_SOURCE_DIR}/core/macosx/inc)
-elseif(ROOT_ARCHITECTURE MATCHES win32)
+elseif(ROOT_ARCHITECTURE MATCHES win32 OR ROOT_ARCHITECTURE MATCHES win64)
   target_include_directories(Core PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/core/winnt/inc>)
   target_include_directories(BaseTROOT PRIVATE ${CMAKE_SOURCE_DIR}/core/winnt/inc)
 else()
@@ -268,6 +271,7 @@ target_link_libraries(Core
     ${ZSTD_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${CMAKE_THREAD_LIBS_INIT}
+    ${ROOT_ATOMIC_LIBS}
     ${corelinklibs}
 )
 add_dependencies(Core CLING)

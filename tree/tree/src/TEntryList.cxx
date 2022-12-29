@@ -91,7 +91,7 @@ an entry list. Example:
               branch->GetEntry(localEntry);
            or
               chain->GetEntry(entryNumber);
-           In the later case the LoadTree is then somewhat redudant.
+           In the later case the LoadTree is then somewhat redundant.
            ...
         }
      }
@@ -342,7 +342,21 @@ TEntryList::~TEntryList()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Add 2 entry lists
+/// \brief Add 2 entry lists.
+///
+/// \param[in] elist The list that should be added to the current one.
+///
+/// \note If you are creating a TEntryList for a TChain and you would like to
+///       have a one to one mapping between the sub lists of the TEntryList and
+///       the sub trees in the TChain, please do not call this function but use
+///       TEntryList::AddSubList instead and pair it with a call to
+///       TChain::SetEntryList with option "sync". See the AddSubList function
+///       documentation for an example usage. This helps for example in a
+///       testing or benchmark scenario where a TChain holds multiple times the
+///       same tree in the same file. In that case, this function would not be
+///       be able to distinguish different sub entry lists that refer to the
+///       same treename and filename. Instead it would create a union of all the
+///       sub entry lists into one list.
 
 void TEntryList::Add(const TEntryList *elist)
 {
@@ -513,6 +527,57 @@ void TEntryList::Add(const TEntryList *elist)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// \brief Add a sub entry list to the current list.
+/// \param[in] elist an entry list that should be added as a sub list of this list.
+///
+/// This function is specifically targeted at situations where there is a global
+/// TEntryList that should hold one or more sub TEntryList objects. For example,
+/// if one wants to create a one to one mapping between the sub entry lists and
+/// the trees in the files that make a TChain. Note that in such cases this
+/// configuration of the entry list should be used in pair with the option \p "sync"
+/// of the function TChain::SetEntryList
+///
+/// ~~~{.cpp}
+/// // Create a TChain with two files. Each contains a tree with 20 entries
+/// TChain chain{"entries"};
+/// chain.Add("file_20entries_1.root");
+/// chain.Add("file_20entries_2.root");
+///
+/// // Create a global, empty TEntryList.
+/// TEntryList elists;
+/// // Create two entry lists. Each one will be referring to a different tree in the chain
+/// TEntryList elist1{"","","entries","file_20entries_1.root"};
+/// TEntryList elist2{"","","entries","file_20entries_2.root"};
+///
+/// // Select the first ten entries from the first tree and all entries from the second
+/// for(auto entry = 0; entry < 10; entry++){
+///     elist1.Enter(entry);
+/// }
+/// for(auto entry = 0; entry < 20; entry++){
+///     elist2.Enter(entry);
+/// }
+///
+/// // Add sub entry lists to the global list
+/// elists.AddSubList(&elist1);
+/// elists.AddSubList(&elist2);
+///
+/// // Set the entry list in the chain. Note the usage of option "sync"
+/// chain.SetEntryList(&elists, "sync");
+/// ~~~
+
+void TEntryList::AddSubList(TEntryList *elist){
+
+   auto elistcopy = new TEntryList{*elist};
+
+   fN += elistcopy->fN;
+
+   if (!fLists){
+      fLists = new TList();
+   }
+   fLists->Add(elistcopy);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// - When tree = 0, returns from the current list
 /// - When tree != 0, finds the list, corresponding to this tree
 /// - When tree is a chain, the entry is assumed to be global index and the local
@@ -607,6 +672,37 @@ Bool_t TEntryList::Enter(Long64_t entry, TTree *tree)
 
 }
 
+Bool_t TEntryList::Enter(Long64_t localentry, const char *treename, const char *filename)
+{
+   SetTree(treename, filename);
+   if (fCurrent) {
+      if (fCurrent->Enter(localentry)) {
+         if (fLists)
+            fN++;
+         return 1;
+      }
+   }
+   return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+/// \brief Enter all entries in a range in the TEntryList.
+/// \param[in] start starting entry to enter.
+/// \param[in] end ending entry to enter.
+/// \param[in] tree passed as is to TEntryList::Enter.
+/// \param[in] step step increase of the loop entering the entries.
+///
+/// This is a helper function that enters all entries between \p start
+/// (inclusive) and \p end (exclusive) to the TEntryList in a loop. It
+/// is useful also in PyROOT to avoid having to do the same in a Python loop.
+
+void TEntryList::EnterRange(Long64_t start, Long64_t end, TTree *tree, UInt_t step)
+{
+   for (auto entry = start; entry < end; entry += step) {
+      this->Enter(entry, tree);
+   }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Remove entry \#entry from the list
 /// - When tree = 0, removes from the current list
@@ -656,7 +752,7 @@ Bool_t TEntryList::Remove(Long64_t entry, TTree *tree)
 /// Return the number of the entry \#index of this TEntryList in the TTree or TChain
 /// See also Next().
 
-Long64_t TEntryList::GetEntry(Int_t index)
+Long64_t TEntryList::GetEntry(Long64_t index)
 {
 
    if ((index>=fN) || (index<0)) {
@@ -732,7 +828,7 @@ Long64_t TEntryList::GetEntry(Int_t index)
 /// Return the index of "index"-th non-zero entry in the TTree or TChain
 /// and the # of the corresponding tree in the chain
 
-Long64_t TEntryList::GetEntryAndTree(Int_t index, Int_t &treenum)
+Long64_t TEntryList::GetEntryAndTree(Long64_t index, Int_t &treenum)
 {
 //If shift is true, then when the requested entry is found in an entry list,
 //for which there is no corresponding tree in the chain, this list is not

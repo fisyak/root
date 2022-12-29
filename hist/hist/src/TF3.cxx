@@ -27,7 +27,7 @@
 ClassImp(TF3);
 
 /** \class TF3
-    \ingroup Hist
+    \ingroup Functions
 A 3-Dim function with parameters
 */
 
@@ -65,7 +65,13 @@ TF3::TF3(const char *name,const char *formula, Double_t xmin, Double_t xmax, Dou
 ////////////////////////////////////////////////////////////////////////////////
 /// F3 constructor using a pointer to real function
 ///
+/// \param[in] name object name
+/// \param[in] fcn pointer to real function
+/// \param[in] xmin,xmax x axis limits
+/// \param[in] ymin,ymax y axis limits
+/// \param[in] zmin,zmax z axis limits
 /// \param[in] npar is the number of free parameters used by the function
+/// \param[in] ndim number of dimensions
 ///
 /// For example, for a 3-dim function with 3 parameters, the user function
 /// looks like:
@@ -73,7 +79,7 @@ TF3::TF3(const char *name,const char *formula, Double_t xmin, Double_t xmax, Dou
 ///     Double_t fun1(Double_t *x, Double_t *par)
 ///     return par[0]*x[2] + par[1]*exp(par[2]*x[0]*x[1]);
 ///
-/// WARNING! A function created with this constructor cannot be Cloned.
+/// \warning A function created with this constructor cannot be Cloned.
 
 TF3::TF3(const char *name,Double_t (*fcn)(Double_t *, Double_t *), Double_t xmin, Double_t xmax, Double_t ymin, Double_t ymax, Double_t zmin, Double_t zmax, Int_t npar,Int_t ndim)
       :TF2(name,fcn,xmin,xmax,ymin,ymax,npar,ndim)
@@ -86,7 +92,13 @@ TF3::TF3(const char *name,Double_t (*fcn)(Double_t *, Double_t *), Double_t xmin
 ////////////////////////////////////////////////////////////////////////////////
 /// F3 constructor using a pointer to real function---
 ///
+/// \param[in] name object name
+/// \param[in] fcn pointer to real function
+/// \param[in] xmin,xmax x axis limits
+/// \param[in] ymin,ymax y axis limits
+/// \param[in] zmin,zmax z axis limits
 /// \param[in] npar is the number of free parameters used by the function
+/// \param[in] ndim number of dimensions
 ///
 /// For example, for a 3-dim function with 3 parameters, the user function
 /// looks like:
@@ -109,9 +121,15 @@ TF3::TF3(const char *name,Double_t (*fcn)(const Double_t *, const Double_t *), D
 ///
 /// a functor class implementing operator() (double *, double *)
 ///
+/// \param[in] name object name
+/// \param[in] f parameter functor
+/// \param[in] xmin,xmax x axis limits
+/// \param[in] ymin,ymax y axis limits
+/// \param[in] zmin,zmax z axis limits
 /// \param[in] npar is the number of free parameters used by the function
+/// \param[in] ndim number of dimensions
 ///
-/// WARNING! A function created with this constructor cannot be Cloned.
+/// \warning A function created with this constructor cannot be Cloned.
 
 TF3::TF3(const char *name, ROOT::Math::ParamFunctor f, Double_t xmin, Double_t xmax, Double_t ymin, Double_t ymax, Double_t zmin, Double_t zmax, Int_t npar, Int_t ndim)
    : TF2(name, f, xmin, xmax, ymin, ymax,  npar, ndim),
@@ -126,9 +144,8 @@ TF3::TF3(const char *name, ROOT::Math::ParamFunctor f, Double_t xmin, Double_t x
 
 TF3& TF3::operator=(const TF3 &rhs)
 {
-   if (this != &rhs) {
-      rhs.Copy(*this);
-   }
+   if (this != &rhs)
+      rhs.TF3::Copy(*this);
    return *this;
 }
 
@@ -144,7 +161,7 @@ TF3::~TF3()
 
 TF3::TF3(const TF3 &f3) : TF2()
 {
-   ((TF3&)f3).Copy(*this);
+   f3.TF3::Copy(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -246,7 +263,7 @@ Double_t TF3::FindMinMax(Double_t *x, Bool_t findmax) const
       xxmin = x[0];
       yymin = x[1];
       zzmin = x[2];
-      zzmin = function(xx);
+      zzmin = function(x);
    }
    xx[0] = xxmin;
    xx[1] = yymin;
@@ -324,7 +341,7 @@ Double_t TF3::GetMaximumXYZ(Double_t &x, Double_t &y, Double_t &z)
 
 void TF3::GetRandom3(Double_t &xrandom, Double_t &yrandom, Double_t &zrandom, TRandom * rng)
 {
-   //  Check if integral array must be build
+   //  Check if integral array must be built
    Int_t i,j,k,cell;
    Double_t dx   = (fXmax-fXmin)/fNpx;
    Double_t dy   = (fYmax-fYmin)/fNpy;
@@ -603,17 +620,15 @@ void TF3::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
    }
 
    if (GetFillColor() != 0) {
-      if (GetFillColor() > 228) {
-         TColor::SaveColor(out, GetFillColor());
+      if (TColor::SaveColor(out, GetFillColor()))
          out<<"   "<<GetName()<<"->SetFillColor(ci);" << std::endl;
-      } else
+      else
          out<<"   "<<GetName()<<"->SetFillColor("<<GetFillColor()<<");"<<std::endl;
    }
    if (GetLineColor() != 1) {
-      if (GetLineColor() > 228) {
-         TColor::SaveColor(out, GetLineColor());
+      if (TColor::SaveColor(out, GetLineColor()))
          out<<"   "<<GetName()<<"->SetLineColor(ci);" << std::endl;
-      } else
+      else
          out<<"   "<<GetName()<<"->SetLineColor("<<GetLineColor()<<");"<<std::endl;
    }
    if (GetNpz() != 100) {

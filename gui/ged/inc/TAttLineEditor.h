@@ -12,13 +12,6 @@
 #ifndef ROOT_TAttLineEditor
 #define ROOT_TAttLineEditor
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TAttLineEditor                                                      //
-//                                                                      //
-//  Implements GUI for editing line attributes.                         //                                             //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
 
 #include "TGedFrame.h"
 
@@ -31,17 +24,17 @@ class TGNumberEntryField;
 class TAttLineEditor : public TGedFrame {
 
 protected:
-   TAttLine             *fAttLine;          // line attribute object
-   TGLineStyleComboBox  *fStyleCombo;       // line style combo box
-   TGLineWidthComboBox  *fWidthCombo;       // line width combo box
-   TGColorSelect        *fColorSelect;      // line color widget
-   TGHSlider            *fAlpha;            // fill opacity
+   TAttLine             *fAttLine;          ///< line attribute object
+   TGLineStyleComboBox  *fStyleCombo;       ///< line style combo box
+   TGLineWidthComboBox  *fWidthCombo;       ///< line width combo box
+   TGColorSelect        *fColorSelect;      ///< line color widget
+   TGHSlider            *fAlpha;            ///< fill opacity
    TGNumberEntryField   *fAlphaField;
 
    virtual void   ConnectSignals2Slots();
 
 public:
-   TAttLineEditor(const TGWindow *p = 0,
+   TAttLineEditor(const TGWindow *p = nullptr,
                   Int_t width = 140, Int_t height = 30,
                   UInt_t options = kChildFrame,
                   Pixel_t back = GetDefaultFrameBackground());
@@ -49,7 +42,7 @@ public:
 
    virtual void   SetModel(TObject* obj);
    virtual void   DoLineColor(Pixel_t color);
-   virtual void   DoLineAlphaColor(ULong_t p);
+   virtual void   DoLineAlphaColor(ULongptr_t p);
    virtual void   DoLineStyle(Int_t style);
    virtual void   DoLineWidth(Int_t width);
    virtual void   DoAlpha();

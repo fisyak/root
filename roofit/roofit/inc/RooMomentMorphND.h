@@ -75,16 +75,15 @@ protected:
       {
          _frac.add(flist);
       };
-      void operModeHook(RooAbsArg::OperMode){};
-      virtual ~CacheElem();
-      virtual RooArgList containedArgs(Action);
+      ~CacheElem() override;
+      RooArgList containedArgs(Action) override;
       RooAbsPdf *_sumPdf;
       RooChangeTracker *_tracker;
       RooArgList _frac;
 
       RooRealVar *frac(int i);
       const RooRealVar *frac(int i) const;
-      void calculateFractions(const RooMomentMorphND &self, Bool_t verbose = kTRUE) const;
+      void calculateFractions(const RooMomentMorphND &self, bool verbose = true) const;
    };
 
 public:
@@ -95,19 +94,19 @@ public:
                     const RooArgList &pdfList, const RooArgList &mrefList, Setting setting);
    RooMomentMorphND(const char *name, const char *title, const RooArgList &parList, const RooArgList &obsList,
                     const Grid &referenceGrid, const Setting &setting);
-   RooMomentMorphND(const RooMomentMorphND &other, const char *name = 0);
+   RooMomentMorphND(const RooMomentMorphND &other, const char *name = nullptr);
    RooMomentMorphND(const char *name, const char *title, RooAbsReal &_m, const RooArgList &varList,
                     const RooArgList &pdfList, const TVectorD &mrefpoints, Setting setting);
-   virtual ~RooMomentMorphND();
-   virtual TObject *clone(const char *newname) const { return new RooMomentMorphND(*this, newname); }
+   ~RooMomentMorphND() override;
+   TObject *clone(const char *newname) const override { return new RooMomentMorphND(*this, newname); }
 
    void setMode(const Setting &setting) { _setting = setting; }
-   virtual Bool_t selfNormalized() const { return kTRUE; }
-   Bool_t setBinIntegrator(RooArgSet &allVars);
-   void useHorizontalMorphing(Bool_t val) { _useHorizMorph = val; }
+   bool selfNormalized() const override { return true; }
+   bool setBinIntegrator(RooArgSet &allVars);
+   void useHorizontalMorphing(bool val) { _useHorizMorph = val; }
 
-   Double_t evaluate() const;
-   virtual Double_t getVal(const RooArgSet *set = 0) const;
+   double evaluate() const override;
+   virtual double getVal(const RooArgSet *set = nullptr) const;
 
 protected:
    void initialize();
@@ -122,14 +121,11 @@ protected:
    friend class CacheElem;
    friend class Grid;
 
-   mutable RooObjCacheManager _cacheMgr;
+   mutable RooObjCacheManager _cacheMgr; ///<! Transient cache manager
    mutable RooArgSet *_curNormSet;
 
    RooListProxy _parList;
    RooSetProxy _obsList;
-   // RooListProxy _pdfList ;
-   TIterator *_parItr; //! Do not persist
-   TIterator *_obsItr; //! Do not persist
    mutable Grid _referenceGrid;
    RooListProxy _pdfList;
 
@@ -139,11 +135,11 @@ protected:
    mutable std::vector<int> _squareIdx;
 
    Setting _setting;
-   Bool_t _useHorizMorph;
+   bool _useHorizMorph;
 
    inline int sij(const int &i, const int &j) const { return (i * _obsList.getSize() + j); }
 
-   ClassDef(RooMomentMorphND, 1)
+   ClassDefOverride(RooMomentMorphND, 2)
 };
 
 #endif

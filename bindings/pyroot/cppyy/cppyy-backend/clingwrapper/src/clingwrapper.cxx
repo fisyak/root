@@ -184,7 +184,7 @@ static void inline do_trace(int sig) {
 
 class TExceptionHandlerImp : public TExceptionHandler {
 public:
-    virtual void HandleException(Int_t sig) {
+    void HandleException(Int_t sig) override {
         if (TROOT::Initialized()) {
             if (gException) {
                 gInterpreter->RewindDictionary();
@@ -271,10 +271,6 @@ public:
                "#include <vector>\n"
                "#include <utility>";
         gInterpreter->ProcessLine(code);
-
-    // make sure we run in batch mode as far as ROOT graphics is concerned
-        if (!getenv("ROOTSYS"))
-            gROOT->SetBatch(kTRUE);
 
     // create helpers for comparing thingies
         gInterpreter->Declare(
@@ -452,7 +448,7 @@ std::string Cppyy::ResolveEnum(const std::string& enum_type)
 
 // desugar the type before resolving
     std::string et_short = TClassEdit::ShortType(enum_type.c_str(), 1);
-    if (et_short.find("(anonymous") == std::string::npos) {
+    if (et_short.find("(unnamed") == std::string::npos) {
         std::ostringstream decl;
     // TODO: now presumed fixed with https://sft.its.cern.ch/jira/browse/ROOT-6988
         for (auto& itype : {"unsigned int"}) {
@@ -597,7 +593,7 @@ Cppyy::TCppType_t Cppyy::GetActualClass(TCppType_t klass, TCppObject_t obj)
     // if the raw name is the empty string (no guarantees that this is so as truly, the
     // address is corrupt, but it is common to be empty), then there is no accessible RTTI
     // and getting the unmangled name will crash ...
-        if (!raw || raw[0] == '\0')
+        if (!raw)
             return klass;
     } catch (std::bad_typeid) {
         return klass;        // can't risk passing to ROOT/meta as it may do RTTI
@@ -886,6 +882,7 @@ Cppyy::TCppObject_t Cppyy::CallO(TCppMethod_t method,
     void* obj = ::operator new(gInterpreter->ClassInfo_Size(cr->GetClassInfo()));
     if (WrapperCall(method, nargs, args, self, obj))
         return (TCppObject_t)obj;
+    ::operator delete(obj);
     return (TCppObject_t)0;
 }
 
@@ -1135,7 +1132,7 @@ std::vector<Cppyy::TCppScope_t> Cppyy::GetUsingNamespaces(TCppScope_t scope)
 
     const std::vector<std::string>& v = gInterpreter->GetUsingNamespaces(cr->GetClassInfo());
     res.reserve(v.size());
-    for (auto uid : v) {
+    for (const auto& uid : v) {
         Cppyy::TCppScope_t uscope = GetScope(uid);
         if (uscope) res.push_back(uscope);
     }
@@ -1216,6 +1213,83 @@ Cppyy::TCppIndex_t Cppyy::GetNumBases(TCppType_t klass)
     if (cr.GetClass() && cr->GetListOfBases() != 0)
         return (TCppIndex_t)cr->GetListOfBases()->GetSize();
     return (TCppIndex_t)0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// \fn Cppyy::TCppIndex_t GetLongestInheritancePath(TClass *klass)
+/// \brief Retrieve number of base classes in the longest branch of the
+///        inheritance tree of the input class.
+/// \param[in] klass The class to start the retrieval process from.
+///
+/// This is a helper function for Cppyy::GetNumBasesLongestBranch.
+/// Given an inheritance tree, the function assigns weight 1 to each class that
+/// has at least one base. Starting from the input class, the function is
+/// called recursively on all the bases. For each base the return value is one
+/// (the weight of the base itself) plus the maximum value retrieved for their
+/// bases in turn. For example, given the following inheritance tree:
+///
+/// ~~~{.cpp}
+/// class A {}; class B: public A {};
+/// class X {}; class Y: public X {}; class Z: public Y {};
+/// class C: public B, Z {};
+/// ~~~
+///
+/// calling this function on an instance of `C` will return 3, the steps
+/// required to go from C to X.
+Cppyy::TCppIndex_t GetLongestInheritancePath(TClass *klass)
+{
+
+   auto directbases = klass->GetListOfBases();
+   if (!directbases) {
+      // This is a leaf with no bases
+      return 0;
+   }
+   auto ndirectbases = directbases->GetSize();
+   if (ndirectbases == 0) {
+      // This is a leaf with no bases
+      return 0;
+   } else {
+      // If there is at least one direct base
+      std::vector<Cppyy::TCppIndex_t> nbases_branches;
+      nbases_branches.reserve(ndirectbases);
+
+      // Traverse all direct bases of the current class and call the function
+      // recursively
+      for (auto baseclass : TRangeDynCast<TBaseClass>(directbases)) {
+         if (!baseclass)
+            continue;
+         if (auto baseclass_tclass = baseclass->GetClassPointer()) {
+            nbases_branches.emplace_back(GetLongestInheritancePath(baseclass_tclass));
+         }
+      }
+
+      // Get longest path among the direct bases of the current class
+      auto longestbranch = std::max_element(std::begin(nbases_branches), std::end(nbases_branches));
+
+      // Add 1 to include the current class in the count
+      return 1 + *longestbranch;
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// \fn Cppyy::TCppIndex_t Cppyy::GetNumBasesLongestBranch(TCppType_t klass)
+/// \brief Retrieve number of base classes in the longest branch of the
+///        inheritance tree.
+/// \param[in] klass The class to start the retrieval process from.
+///
+/// The function converts the input class to a `TClass *` and calls
+/// GetLongestInheritancePath.
+Cppyy::TCppIndex_t Cppyy::GetNumBasesLongestBranch(TCppType_t klass)
+{
+
+   const auto &cr = type_from_handle(klass);
+
+   if (auto klass_tclass = cr.GetClass()) {
+      return GetLongestInheritancePath(klass_tclass);
+   }
+
+   // In any other case, return zero
+   return 0;
 }
 
 std::string Cppyy::GetBaseName(TCppType_t klass, TCppIndex_t ibase)
@@ -2049,7 +2123,7 @@ bool Cppyy::IsEnumData(TCppScope_t scope, TCppIndex_t idata)
         std::string ti = m->GetTypeName();
 
     // can't check anonymous enums by type name, so just accept them as enums
-        if (ti.rfind("(anonymous)") != std::string::npos)
+        if (ti.rfind("(unnamed)") != std::string::npos)
             return m->Property() & kIsEnum;
 
     // since there seems to be no distinction between data of enum type and enum values,
@@ -2380,6 +2454,10 @@ int cppyy_has_complex_hierarchy(cppyy_type_t type) {
 
 int cppyy_num_bases(cppyy_type_t type) {
     return (int)Cppyy::GetNumBases(type);
+}
+
+int cppyy_num_bases_longest_branch(cppyy_type_t type) {
+    return (int)Cppyy::GetNumBasesLongestBranch(type);
 }
 
 char* cppyy_base_name(cppyy_type_t type, int base_index) {

@@ -6,7 +6,7 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/// \file ROOT/RSysFile.cxx
+/// \file
 /// \ingroup rbrowser
 /// \author Sergey Linev <S.Linev@gsi.de>
 /// \date 2019-10-15
@@ -168,9 +168,9 @@ class RSysDirLevelIter : public RLevelIter {
       if (pathinfores) {
 
          if (fCurrentStat.fIsLink) {
-            R__LOG_ERROR(BrowsableLog()) << "Broken symlink of " << path;
+            R__LOG_DEBUG(0, BrowsableLog()) << "Broken symlink of " << path;
          } else {
-            R__LOG_ERROR(BrowsableLog()) << "Can't read file attributes of \"" <<  path << "\" err:" << gSystem->GetError();
+            R__LOG_DEBUG(0, BrowsableLog()) << "Can't read file attributes of \"" <<  path << "\" err:" << gSystem->GetError();
          }
          return false;
       }
@@ -274,20 +274,8 @@ public:
       else
          item->SetIcon(RSysFile::GetFileIcon(GetItemName()));
 
-      // file size
-      Long64_t _fsize = item->size, bsize = item->size;
-      if (_fsize > 1024) {
-         _fsize /= 1024;
-         if (_fsize > 1024) {
-            // 3.7MB is more informative than just 3MB
-            snprintf(tmp, sizeof(tmp), "%lld.%lldM", _fsize/1024, (_fsize%1024)/103);
-         } else {
-            snprintf(tmp, sizeof(tmp), "%lld.%lldK", bsize/1024, (bsize%1024)/103);
-         }
-      } else {
-         snprintf(tmp, sizeof(tmp), "%lld", bsize);
-      }
-      item->fsize = tmp;
+      // set file size as string
+      item->SetSize(item->size);
 
       // modification time
       time_t loctime = (time_t) item->modtime;
@@ -296,9 +284,9 @@ public:
          snprintf(tmp, sizeof(tmp), "%d-%02d-%02d %02d:%02d", newtime->tm_year + 1900,
                   newtime->tm_mon+1, newtime->tm_mday, newtime->tm_hour,
                   newtime->tm_min);
-         item->mtime = tmp;
+         item->SetMTime(tmp);
       } else {
-         item->mtime = "1901-01-01 00:00";
+         item->SetMTime("1901-01-01 00:00");
       }
 
       // file type
@@ -326,16 +314,16 @@ public:
                ((item->type & kS_IROTH) ? 'r' : '-'),
                ((item->type & kS_IWOTH) ? 'w' : '-'),
                ((item->type & kS_ISVTX) ? 't' : ((item->type & kS_IXOTH) ? 'x' : '-')));
-      item->ftype = tmp;
+      item->SetType(tmp);
 
       struct UserGroup_t *user_group = gSystem->GetUserInfo(item->uid);
       if (user_group) {
-         item->fuid = user_group->fUser;
-         item->fgid = user_group->fGroup;
+         item->SetUid(user_group->fUser.Data());
+         item->SetGid(user_group->fGroup.Data());
          delete user_group;
       } else {
-         item->fuid = std::to_string(item->uid);
-         item->fgid = std::to_string(item->gid);
+         item->SetUid(std::to_string(item->uid));
+         item->SetGid(std::to_string(item->gid));
       }
 
       return item;
@@ -381,7 +369,9 @@ std::string RSysFile::GetFileIcon(const std::string &fname)
        (EndsWith(".cxx")) ||
        (EndsWith(".c++")) ||
        (EndsWith(".cxx")) ||
+       (EndsWith(".cc")) ||
        (EndsWith(".h")) ||
+       (EndsWith(".hh")) ||
        (EndsWith(".hpp")) ||
        (EndsWith(".hxx")) ||
        (EndsWith(".h++")) ||
@@ -420,9 +410,9 @@ RSysFile::RSysFile(const std::string &filename) : fFileName(filename)
 {
    if (gSystem->GetPathInfo(fFileName.c_str(), fStat)) {
       if (fStat.fIsLink) {
-         R__LOG_ERROR(BrowsableLog()) << "Broken symlink of " << fFileName;
+         R__LOG_DEBUG(0, BrowsableLog()) << "Broken symlink of " << fFileName;
       } else {
-         R__LOG_ERROR(BrowsableLog()) << "Can't read file attributes of \"" << fFileName
+         R__LOG_DEBUG(0, BrowsableLog()) << "Can't read file attributes of \"" << fFileName
                                     << "\" err:" << gSystem->GetError();
       }
    }
@@ -523,7 +513,11 @@ std::string RSysFile::GetContent(const std::string &kind)
 
       auto pos = GetName().rfind(".");
 
-      return "data:image/"s  + GetName().substr(pos+1) + ";base64,"s + encode.Data();
+      std::string image_kind = GetName().substr(pos+1);
+      std::transform(image_kind.begin(), image_kind.end(), image_kind.begin(), ::tolower);
+      if (image_kind == "svg") image_kind = "svg+xml";
+
+      return "data:image/"s  + image_kind + ";base64,"s + encode.Data();
    }
 
    if (GetContentKind(kind) == kFileName) {
@@ -572,3 +566,26 @@ RElementPath_t RSysFile::ProvideTopEntries(std::shared_ptr<RGroup> &comp, const 
 
    return RElement::ParsePath(seldir);
 }
+
+/////////////////////////////////////////////////////////////////////////////////
+/// Return working path in browser hierarchy
+
+RElementPath_t RSysFile::GetWorkingPath(const std::string &workdir)
+{
+   std::string seldir = workdir;
+
+   if (seldir.empty())
+      seldir = gSystem->WorkingDirectory();
+
+   seldir = gSystem->UnixPathName(seldir.c_str());
+
+   auto volumes = gSystem->GetVolumes("all");
+   if (volumes) {
+      delete volumes;
+   } else {
+      seldir = "/Files system"s + seldir;
+   }
+
+   return RElement::ParsePath(seldir);
+}
+

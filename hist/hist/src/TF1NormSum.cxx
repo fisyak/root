@@ -19,7 +19,7 @@
 ClassImp(TF1NormSum);
 
 /** \class TF1NormSum
-    \ingroup Hist
+    \ingroup Functions
 Class adding two functions: c1*f1+c2*f2
 */
 
@@ -67,11 +67,11 @@ void TF1NormSum::InitializeDataMembers(const std::vector<TF1 *> &functions, cons
    fFunctions = std::vector<std::unique_ptr<TF1>>(functions.size());
    for (unsigned int n = 0; n < fNOfFunctions; n++) {
       // use TF1::Copy and not clone to copy the TF1 pointers
-      // and use IsA()::New() in case we have base class pointers 
+      // and use IsA()::New() in case we have base class pointers
       TF1 * f = (TF1*) functions[n]->IsA()->New();
       functions[n]->Copy(*f);
       fFunctions[n] = std::unique_ptr<TF1>(f);
-     
+
 
       if (!fFunctions[n])
          Fatal("InitializeDataMembers", "Invalid input function -- abort");
@@ -87,12 +87,10 @@ void TF1NormSum::InitializeDataMembers(const std::vector<TF1 *> &functions, cons
       if (fCstIndexes[n]!= -1)                                        //if there exists a constant parameter
       {
          fFunctions[n] -> FixParameter(fCstIndexes[n], 1.); // fixes the parameters called "Constant" to 1
-         int k = 0;                                         // index for the temp array, k wil go form 0 until fNofNonCstParameter
          for (int i=0; i<npar; i++)                         // go through all the parameter to
          {
             if (i==fCstIndexes[n])   continue;              // go to next step if this is the constant parameter
             fParNames.push_back(  fFunctions[n] -> GetParName(i) );
-            k++;
          }
       }
       else {
@@ -255,7 +253,7 @@ TF1NormSum::TF1NormSum(const TString &formula, Double_t xmin, Double_t xmax)
 
 TF1NormSum::TF1NormSum(const TF1NormSum &nsum)
 {
-   nsum.Copy((TObject &)*this);
+   nsum.TF1NormSum::Copy(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -264,7 +262,7 @@ TF1NormSum::TF1NormSum(const TF1NormSum &nsum)
 TF1NormSum &TF1NormSum::operator=(const TF1NormSum &rhs)
 {
    if (this != &rhs)
-      rhs.Copy(*this);
+      rhs.TF1NormSum::Copy(*this);
    return *this;
 }
 
@@ -421,7 +419,7 @@ void TF1NormSum::Copy(TObject &obj) const
    // Clone objects in unique_ptr's
    ((TF1NormSum &)obj).fFunctions = std::vector<std::unique_ptr<TF1>>(fNOfFunctions);
    for (unsigned int n = 0; n < fNOfFunctions; n++) {
-      TF1 * f = (TF1*) fFunctions[n]->IsA()->New();   
+      TF1 * f = (TF1*) fFunctions[n]->IsA()->New();
       fFunctions[n]->Copy(*f);
       ((TF1NormSum &)obj).fFunctions[n] = std::unique_ptr<TF1>(f);
    }

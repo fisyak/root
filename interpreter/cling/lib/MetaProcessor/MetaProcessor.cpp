@@ -286,7 +286,7 @@ namespace cling {
   MetaProcessor::MetaProcessor(Interpreter& interp, raw_ostream& outs)
     : m_Interp(interp), m_Outs(&outs) {
     m_InputValidator.reset(new InputValidator());
-    m_MetaParser.reset(new MetaParser(new MetaSema(interp, *this)));
+    m_MetaSema.reset(new MetaSema(interp, *this));
   }
 
   MetaProcessor::~MetaProcessor() {
@@ -311,12 +311,12 @@ namespace cling {
     }
 
     //  Check for and handle meta commands.
-    m_MetaParser->enterNewInputLine(input_line);
+    MetaParser parser(*m_MetaSema, input_line);
     MetaSema::ActionResult actionResult = MetaSema::AR_Success;
     if (!m_InputValidator->inBlockComment() &&
-         m_MetaParser->isMetaCommand(actionResult, result)) {
+         parser.isMetaCommand(actionResult, result)) {
 
-      if (m_MetaParser->isQuitRequested())
+      if (parser.isQuitRequested())
         return -1;
 
       if (actionResult != MetaSema::AR_Success)
@@ -346,6 +346,11 @@ namespace cling {
 
   void MetaProcessor::cancelContinuation() const {
     m_InputValidator->reset();
+  }
+
+  bool MetaProcessor::awaitingMoreInput() const {
+    return m_InputValidator->getLastResult() ==
+           InputValidator::ValidationResult::kIncomplete;
   }
 
   int MetaProcessor::getExpectedIndent() const {
@@ -488,6 +493,8 @@ namespace cling {
     if (content.back() != ';')
       content.append(";");
 
+    Interpreter::InputFlagsRAII RAII(m_Interp, Interpreter::kInputFromFile |
+                                               (lineByLine ? Interpreter::kIFFLineByLine : 0));
     Interpreter::CompilationResult ret = Interpreter::kSuccess;
     if (lineByLine) {
       int rslt = 0;
@@ -525,7 +532,7 @@ namespace cling {
 
   void MetaProcessor::registerUnloadPoint(const Transaction* T,
                                           llvm::StringRef filename) {
-    m_MetaParser->getActions().registerUnloadPoint(T, filename);
+    m_MetaSema->registerUnloadPoint(T, filename);
   }
 
 } // end namespace cling

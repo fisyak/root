@@ -13,10 +13,8 @@
 #include "RooRealVar.h"
 #include "RooDataSet.h"
 #include "RooGaussian.h"
-#include "RooConstVar.h"
 #include "RooPolynomial.h"
 #include "RooIntegralMorph.h"
-#include "RooNLLVar.h"
 #include "TCanvas.h"
 #include "TAxis.h"
 #include "RooPlot.h"
@@ -36,7 +34,7 @@ void rf705_linearmorph()
    RooGaussian g1("g1", "g1", x, g1mean, RooConst(2));
 
    // Upper end point shape: a Polynomial
-   RooPolynomial g2("g2", "g2", x, RooArgSet(RooConst(-0.03), RooConst(-0.001)));
+   RooPolynomial g2("g2", "g2", x, RooArgSet(-0.03, -0.001));
 
    // C r e a t e   i n t e r p o l a t i n g   p d f
    // -----------------------------------------------
@@ -93,8 +91,8 @@ void rf705_linearmorph()
    RooDataSet *data = lmorph.generate(x, 1000);
 
    // Fit pdf to toy data
-   lmorph.setCacheAlpha(kTRUE);
-   lmorph.fitTo(*data, Verbose(kTRUE));
+   lmorph.setCacheAlpha(true);
+   lmorph.fitTo(*data, Verbose(true));
 
    // Plot fitted pdf and data overlaid
    RooPlot *frame2 = x.frame(Bins(100));
@@ -108,10 +106,10 @@ void rf705_linearmorph()
    RooPlot *frame3 = alpha.frame(Bins(100), Range(0.1, 0.9));
 
    // Make 2D pdf of histogram
-   RooNLLVar nll("nll", "nll", lmorph, *data);
-   nll.plotOn(frame3, ShiftToZero());
+   std::unique_ptr<RooAbsReal> nll{lmorph.createNLL(*data)};
+   nll->plotOn(frame3, ShiftToZero());
 
-   lmorph.setCacheAlpha(kFALSE);
+   lmorph.setCacheAlpha(false);
 
    TCanvas *c = new TCanvas("rf705_linearmorph", "rf705_linearmorph", 800, 800);
    c->Divide(2, 2);

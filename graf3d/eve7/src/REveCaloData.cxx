@@ -15,9 +15,6 @@
 #include "ROOT/REveManager.hxx"
 #include "ROOT/REveSelection.hxx"
 
-
-// #include "TGLSelectRecord.h"
-
 #include "TAxis.h"
 #include "THStack.h"
 #include "TH2.h"
@@ -27,6 +24,8 @@
 #include <cassert>
 #include <algorithm>
 #include <set>
+
+#include <nlohmann/json.hpp>
 
 using namespace ROOT::Experimental;
 
@@ -156,7 +155,7 @@ void REveCaloData::ProcessSelection(vCellId_t& sel_cells, UInt_t selectionId, Bo
 /// Populate set impSelSet with derived / dependant elements.
 ///
 
-void REveCaloData::FillImpliedSelectedSet(Set_t& impSelSet)
+void REveCaloData::FillImpliedSelectedSet(Set_t& impSelSet, const std::set<int>&)
 {
    // printf("REveCaloData::FillImpliedSelectedSet\n");
    for (auto &n : fNieces)

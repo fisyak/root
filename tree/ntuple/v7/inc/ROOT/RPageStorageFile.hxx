@@ -17,9 +17,10 @@
 #define ROOT7_RPageStorageFile
 
 #include <ROOT/RMiniFile.hxx>
-#include <ROOT/RNTupleMetrics.hxx>
+#include <ROOT/RNTupleSerialize.hxx>
 #include <ROOT/RNTupleZip.hxx>
 #include <ROOT/RPageStorage.hxx>
+#include <ROOT/RRawFile.hxx>
 #include <ROOT/RStringView.hxx>
 
 #include <array>
@@ -37,6 +38,8 @@ class RRawFile;
 }
 
 namespace Experimental {
+class RNTuple; // for making RPageSourceFile a friend of RNTuple
+
 namespace Detail {
 
 class RClusterPool;
@@ -54,26 +57,24 @@ The written file can be either in ROOT format or in RNTuple bare format.
 */
 // clang-format on
 class RPageSinkFile : public RPageSink {
-public:
-   static constexpr std::size_t kDefaultElementsPerPage = 10000;
-
 private:
-   RNTupleMetrics fMetrics;
    std::unique_ptr<RPageAllocatorHeap> fPageAllocator;
 
    std::unique_ptr<Internal::RNTupleFileWriter> fWriter;
-   /// Byte offset of the first page of the current cluster
-   std::uint64_t fClusterMinOffset = std::uint64_t(-1);
-   /// Byte offset of the end of the last page of the current cluster
-   std::uint64_t fClusterMaxOffset = 0;
-   /// Helper for zipping keys and header / footer; comprises a 16MB zip buffer
-   RNTupleCompressor fCompressor;
+   /// Number of bytes committed to storage in the current cluster
+   std::uint64_t fNBytesCurrentCluster = 0;
+   RPageSinkFile(std::string_view ntupleName, const RNTupleWriteOptions &options);
+
+   RNTupleLocator WriteSealedPage(const RPageStorage::RSealedPage &sealedPage,
+                                                std::size_t bytesPacked);
 
 protected:
-   void CreateImpl(const RNTupleModel &model) final;
-   RClusterDescriptor::RLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) final;
-   RClusterDescriptor::RLocator CommitClusterImpl(NTupleSize_t nEntries) final;
-   void CommitDatasetImpl() final;
+   void CreateImpl(const RNTupleModel &model, unsigned char *serializedHeader, std::uint32_t length) final;
+   RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) final;
+   RNTupleLocator CommitSealedPageImpl(DescriptorId_t columnId, const RPageStorage::RSealedPage &sealedPage) final;
+   std::uint64_t CommitClusterImpl(NTupleSize_t nEntries) final;
+   RNTupleLocator CommitClusterGroupImpl(unsigned char *serializedPageList, std::uint32_t length) final;
+   void CommitDatasetImpl(unsigned char *serializedFooter, std::uint32_t length) final;
 
 public:
    RPageSinkFile(std::string_view ntupleName, std::string_view path, const RNTupleWriteOptions &options);
@@ -84,12 +85,10 @@ public:
    RPageSinkFile& operator=(const RPageSinkFile&) = delete;
    RPageSinkFile(RPageSinkFile&&) = default;
    RPageSinkFile& operator=(RPageSinkFile&&) = default;
-   virtual ~RPageSinkFile();
+   ~RPageSinkFile() override;
 
-   RPage ReservePage(ColumnHandle_t columnHandle, std::size_t nElements = 0) final;
+   RPage ReservePage(ColumnHandle_t columnHandle, std::size_t nElements) final;
    void ReleasePage(RPage &page) final;
-
-   RNTupleMetrics &GetMetrics() final { return fMetrics; }
 };
 
 
@@ -115,34 +114,18 @@ public:
 */
 // clang-format on
 class RPageSourceFile : public RPageSource {
-public:
-   /// Cannot process pages larger than 1MB
-   static constexpr std::size_t kMaxPageSize = 1024 * 1024;
+   friend class ROOT::Experimental::RNTuple;
 
 private:
-   /// I/O performance counters that get registered in fMetrics
-   struct RCounters {
-      RNTupleAtomicCounter &fNReadV;
-      RNTupleAtomicCounter &fNRead;
-      RNTupleAtomicCounter &fSzReadPayload ;
-      RNTupleAtomicCounter &fSzReadOverhead;
-      RNTupleAtomicCounter &fSzUnzip;
-      RNTupleAtomicCounter &fNClusterLoaded;
-      RNTupleAtomicCounter &fNPageLoaded;
-      RNTupleAtomicCounter &fNPagePopulated;
-      RNTupleAtomicCounter &fTimeWallRead;
-      RNTupleAtomicCounter &fTimeWallUnzip;
-      RNTupleTickCounter<RNTupleAtomicCounter> &fTimeCpuRead;
-      RNTupleTickCounter<RNTupleAtomicCounter> &fTimeCpuUnzip;
-      RNTupleCalcPerf &fBandwidthReadUncompressed;
-      RNTupleCalcPerf &fBandwidthReadCompressed;
-      RNTupleCalcPerf &fBandwidthUnzip;
-      RNTupleCalcPerf &fFractionReadOverhead;
-      RNTupleCalcPerf &fCompressionRatio;
+   /// Summarizes cluster-level information that are necessary to populate a certain page.
+   /// Used by PopulatePageFromCluster().
+   struct RClusterInfo {
+      DescriptorId_t fClusterId = 0;
+      /// Location of the page on disk
+      RClusterDescriptor::RPageRange::RPageInfoExtended fPageInfo;
+      /// The first element number of the page's column in the given cluster
+      std::uint64_t fColumnOffset = 0;
    };
-   std::unique_ptr<RCounters> fCounters;
-   /// Wraps the I/O counters and is observed by the RNTupleReader metrics
-   RNTupleMetrics fMetrics;
 
    /// Populated pages might be shared; there memory buffer is managed by the RPageAllocatorFile
    std::unique_ptr<RPageAllocatorFile> fPageAllocator;
@@ -150,18 +133,32 @@ private:
    std::shared_ptr<RPagePool> fPagePool;
    /// The last cluster from which a page got populated.  Points into fClusterPool->fPool
    RCluster *fCurrentCluster = nullptr;
-   /// Helper to unzip pages and header/footer; comprises a 16MB unzip buffer
-   RNTupleDecompressor fDecompressor;
    /// An RRawFile is used to request the necessary byte ranges from a local or a remote file
    std::unique_ptr<ROOT::Internal::RRawFile> fFile;
    /// Takes the fFile to read ntuple blobs from it
    Internal::RMiniFileReader fReader;
+   /// The descriptor is created from the header and footer either in AttachImpl or in CreateFromAnchor
+   RNTupleDescriptorBuilder fDescriptorBuilder;
    /// The cluster pool asynchronously preloads the next few clusters
    std::unique_ptr<RClusterPool> fClusterPool;
 
+   /// Deserialized header and footer into a minimal descriptor held by fDescriptorBuilder
+   void InitDescriptor(const Internal::RFileNTupleAnchor &anchor);
+
    RPageSourceFile(std::string_view ntupleName, const RNTupleReadOptions &options);
-   RPage PopulatePageFromCluster(ColumnHandle_t columnHandle, const RClusterDescriptor &clusterDescriptor,
+   /// Used from the RNTuple class to build a datasource if the anchor is already available
+   static std::unique_ptr<RPageSourceFile> CreateFromAnchor(const Internal::RFileNTupleAnchor &anchor,
+                                                            std::string_view path, const RNTupleReadOptions &options);
+   RPage PopulatePageFromCluster(ColumnHandle_t columnHandle, const RClusterInfo &clusterInfo,
                                  ClusterSize_t::ValueType idxInCluster);
+
+   /// Helper function for LoadClusters: it prepares the memory buffer (page map) and the
+   /// read requests for a given cluster and columns.  The reead requests are appended to
+   /// the provided vector.  This way, requests can be collected for multiple clusters before
+   /// sending them to RRawFile::ReadV().
+   std::unique_ptr<RCluster> PrepareSingleCluster(
+      const RCluster::RKey &clusterKey,
+      std::vector<ROOT::Internal::RRawFile::RIOVec> &readRequests);
 
 protected:
    RNTupleDescriptor AttachImpl() final;
@@ -175,17 +172,18 @@ public:
 
    RPageSourceFile(const RPageSourceFile&) = delete;
    RPageSourceFile& operator=(const RPageSourceFile&) = delete;
-   RPageSourceFile(RPageSourceFile&&) = default;
-   RPageSourceFile& operator=(RPageSourceFile&&) = default;
-   virtual ~RPageSourceFile();
+   RPageSourceFile(RPageSourceFile &&) = delete;
+   RPageSourceFile &operator=(RPageSourceFile &&) = delete;
+   ~RPageSourceFile() override;
 
    RPage PopulatePage(ColumnHandle_t columnHandle, NTupleSize_t globalIndex) final;
    RPage PopulatePage(ColumnHandle_t columnHandle, const RClusterIndex &clusterIndex) final;
    void ReleasePage(RPage &page) final;
 
-   std::unique_ptr<RCluster> LoadCluster(DescriptorId_t clusterId, const ColumnSet_t &columns) final;
+   void LoadSealedPage(DescriptorId_t columnId, const RClusterIndex &clusterIndex,
+                       RSealedPage &sealedPage) final;
 
-   RNTupleMetrics &GetMetrics() final { return fMetrics; }
+   std::vector<std::unique_ptr<RCluster>> LoadClusters(std::span<RCluster::RKey> clusterKeys) final;
 };
 
 

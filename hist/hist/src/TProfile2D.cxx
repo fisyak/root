@@ -23,7 +23,7 @@ Bool_t TProfile2D::fgApproximate = kFALSE;
 ClassImp(TProfile2D);
 
 /** \class TProfile2D
-    \ingroup Hist
+    \ingroup Histograms
  Profile2D histograms are used to display the mean
  value of Z and its error for each cell in X,Y.
  Profile2D histograms are in many cases an
@@ -203,14 +203,15 @@ void TProfile2D::BuildOptions(Double_t zmin, Double_t zmax, Option_t *option)
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy constructor.
 
-TProfile2D::TProfile2D(const TProfile2D &profile) : TH2D()
+TProfile2D::TProfile2D(const TProfile2D &profile2d) : TH2D()
 {
-   ((TProfile2D&)profile).Copy(*this);
+   profile2d.TProfile2D::Copy(*this);
 }
 
-TProfile2D &TProfile2D::operator=(const TProfile2D &profile)
+TProfile2D &TProfile2D::operator=(const TProfile2D &profile2d)
 {
-   ((TProfile2D &)profile).Copy(*this);
+   if (this != &profile2d)
+      profile2d.TProfile2D::Copy(*this);
    return *this;
 }
 
@@ -385,7 +386,7 @@ Int_t TProfile2D::BufferFill(Double_t x, Double_t y, Double_t z, Double_t w)
 void TProfile2D::Copy(TObject &obj) const
 {
    try {
-      TProfile2D & pobj = dynamic_cast<TProfile2D&>(obj);
+      TProfile2D &pobj = dynamic_cast<TProfile2D &>(obj);
 
       TH2D::Copy(pobj);
       fBinEntries.Copy(pobj.fBinEntries);
@@ -916,7 +917,7 @@ void TProfile2D::GetStats(Double_t *stats) const
 {
    if (fBuffer) ((TProfile2D*)this)->BufferEmpty();
 
-   // check for labels axis . In that case corresponsing statistics do not make sense and it is set to zero
+   // check for labels axis . In that case corresponding statistics do not make sense and it is set to zero
    Bool_t labelXaxis =  ((const_cast<TAxis&>(fXaxis)).GetLabels() && fXaxis.CanExtend() );
    Bool_t labelYaxis =  ((const_cast<TAxis&>(fYaxis)).GetLabels() && fYaxis.CanExtend() );
 
@@ -1820,7 +1821,7 @@ TProfile2D * TProfile2D::Rebin2D(Int_t nxgroup ,Int_t nygroup,const char * newna
    }
    //nxgroup == nygroup == 1
    else{
-      if((newname) && (strlen(newname) > 0))
+      if(newname && (strlen(newname) > 0))
          return (TProfile2D*)Clone(newname);
       else
          return this;

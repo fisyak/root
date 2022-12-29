@@ -1,24 +1,31 @@
-## @author Vincenzo Eduardo Padulano
+#  @author Vincenzo Eduardo Padulano
 #  @author Enric Tejedor
 #  @date 2021-02
 
 ################################################################################
-# Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.                      #
+# Copyright (C) 1995-2022, Rene Brun and Fons Rademakers.                      #
 # All rights reserved.                                                         #
 #                                                                              #
 # For the licensing terms see $ROOTSYS/LICENSE.                                #
 # For the list of contributors see $ROOTSYS/README/CREDITS.                    #
 ################################################################################
+from __future__ import annotations
 
 import logging
 import os
 
+from functools import singledispatch
+from typing import Iterable, Set, Tuple
+
 import ROOT
+from ROOT._pythonization._rdataframe import AsNumpyResult
+
+from DistRDF.PythonMergeables import SnapshotResult
 
 logger = logging.getLogger(__name__)
 
 
-def extend_include_path(include_path):
+def extend_include_path(include_path: str) -> None:
     """
     Extends the list of paths in which ROOT looks for headers and
     libraries. Every header directory is added to the internal include
@@ -38,7 +45,7 @@ def extend_include_path(include_path):
     logger.debug("ROOT include paths:\n{}".format(root_includepath))
 
 
-def declare_headers(headers_to_include):
+def declare_headers(headers_to_include: Iterable[str]) -> None:
     """
     Declares all required headers using the ROOT's C++ Interpreter.
 
@@ -60,7 +67,7 @@ def declare_headers(headers_to_include):
             raise e(msg)
 
 
-def declare_shared_libraries(libraries_to_include):
+def declare_shared_libraries(libraries_to_include: Iterable[str]) -> None:
     """
     Declares all required shared libraries using the ROOT's C++
     Interpreter.
@@ -81,7 +88,7 @@ def declare_shared_libraries(libraries_to_include):
             raise Exception("ROOT couldn't load the shared library!")
 
 
-def get_paths_set_from_string(path_string):
+def get_paths_set_from_string(path_string: str) -> Set[str]:
     """
     Retrieves paths to files (directory or single file) from a string.
 
@@ -115,7 +122,7 @@ def get_paths_set_from_string(path_string):
         return {path_string}
 
 
-def check_pcm_in_library_path(shared_library_path):
+def check_pcm_in_library_path(shared_library_path: str) -> Tuple[Set[str], Set[str]]:
     """
     Retrieves paths to shared libraries and pcm file(s) in a directory.
 
@@ -145,3 +152,92 @@ def check_pcm_in_library_path(shared_library_path):
     }
 
     return pcm_paths, libraries_path
+
+
+@singledispatch
+def get_mergeablevalue(resultptr):
+    """
+    Generally the input argument to this function is an RResultPtr, for which a
+    corresponding RMergeableValue type already exists. Call into the C++
+    function to handle this case.
+    """
+    return ROOT.Detail.RDF.GetMergeableValue(resultptr)
+
+
+@get_mergeablevalue.register(AsNumpyResult)
+def _(resultptr):
+    """
+    Results coming from an `AsNumpy` operation can be merged with others, but
+    we need to make sure to call its `GetValue` method since that will populate
+    the private attribute `_py_arrays` (which is the actual dictionary of
+    numpy arrays extracted from the RDataFrame columns). This extra call is an
+    insurance against backends that do not automatically serialize objects
+    returned by the mapper function (otherwise this would be taken care by the
+    `AsNumpyResult`'s `__getstate__` method).
+    """
+    resultptr.GetValue()
+    return resultptr
+
+
+@get_mergeablevalue.register(SnapshotResult)
+def _(resultptr):
+    """
+    When performing a distributed Snapshot we return an object holding the name
+    of the dataset and the path to the partial snapshot. We can directly return
+    the object, no extra work needed.
+    """
+    return resultptr
+
+
+@singledispatch
+def merge_values(mergeable_out, mergeable_in):
+    """
+    Generally the arguments are `RMergeableValue` instances that can be directly
+    passed to the C++ function responsible for merging them.
+    """
+    ROOT.Detail.RDF.MergeValues(mergeable_out, mergeable_in)
+
+
+@merge_values.register(AsNumpyResult)
+@merge_values.register(SnapshotResult)
+def _(mergeable_out, mergeable_in):
+    """
+    Mergeables coming from `Snapshot` or `AsNumpy` operations have their own
+    `Merge` method.
+    """
+    mergeable_out.Merge(mergeable_in)
+
+
+@singledispatch
+def set_value_on_node(mergeable, node, backend):
+    """
+    Connects the final value after distributed computation to the corresponding
+    DistRDF node.
+    By default, the `GetValue` method of the mergeable returns the final value.
+    """
+    node.value = mergeable.GetValue()
+
+
+@set_value_on_node.register
+def _(mergeable: SnapshotResult, node, backend):
+    """
+    Connects the final value after distributed computation to the corresponding
+    DistRDF node.
+    This overload calls the `GetValue` method of `SnapshotResult`. This method
+    accepts a 'backend' parameter because we need to recreate a distributed
+    RDataFrame with the same backend of the input one.
+    """
+    node.value = mergeable.GetValue(backend)
+
+
+@set_value_on_node.register
+def _(mergeable: ROOT.Detail.RDF.RMergeableVariationsBase, node, backend):
+    """
+    Connects the final value after distributed computation to the corresponding
+    DistRDF node.
+    In this overload, the node stores the reference to the mergeable variations
+    directly. It is then responsibility of the VariationsProxy object to access
+    the specific varied object asked by the user, calling the right method of
+    the RMergeableVariations class.
+    """
+    node.value = mergeable

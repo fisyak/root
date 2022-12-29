@@ -12,14 +12,6 @@
 #ifndef ROOT_TGuiBldNameFrame
 #define ROOT_TGuiBldNameFrame
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGuiBldNameFrame - frame sdisplaying the class name of frame         //
-//                    and the name  of frame                            //
-//                                                                      //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
 
 #include "TGFrame.h"
 
@@ -57,7 +49,7 @@ public:
 
    void              ChangeSelected(TGFrame *frame);
    Bool_t            CheckItems(TGCompositeFrame *main);
-   TGListTreeItem   *FindItemByName(TGListTree *tree, const char* name, TGListTreeItem *item = 0);
+   TGListTreeItem   *FindItemByName(TGListTree *tree, const char* name, TGListTreeItem *item = nullptr);
    TGCompositeFrame *GetMdi(TGFrame *frame);
    void              MapItems(TGCompositeFrame *main);
    void              RemoveFrame(TGFrame *frame);

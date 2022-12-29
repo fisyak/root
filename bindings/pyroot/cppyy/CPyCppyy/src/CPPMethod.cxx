@@ -45,7 +45,7 @@ inline void CPyCppyy::CPPMethod::Copy_(const CPPMethod& /* other */)
 }
 
 //----------------------------------------------------------------------------
-inline void CPyCppyy::CPPMethod::Destroy_() const
+inline void CPyCppyy::CPPMethod::Destroy_()
 {
 // destroy executor and argument converters
     if (fExecutor && fExecutor->HasState()) delete fExecutor;
@@ -55,6 +55,11 @@ inline void CPyCppyy::CPPMethod::Destroy_() const
     }
 
     delete fArgIndices;
+
+    fExecutor = nullptr;
+    fArgIndices = nullptr;
+    fConverters.clear();
+    fArgsRequired = -1;
 }
 
 //----------------------------------------------------------------------------
@@ -267,7 +272,7 @@ void CPyCppyy::CPPMethod::SetPyError_(PyObject* msg)
             PyErr_Format(errtype, "%s =>\n    %s: %s",
                 CPyCppyy_PyText_AsString(doc), cname, details.c_str());
         }
-    } else {
+    } else if (evalue) {
         Py_XDECREF(((CPPExcInstance*)evalue)->fTopMessage);
         if (msg) {
             ((CPPExcInstance*)evalue)->fTopMessage = CPyCppyy_PyText_FromFormat(\
@@ -404,7 +409,7 @@ int CPyCppyy::CPPMethod::GetPriority()
             const std::string& clean_name = TypeManip::clean_type(aname, false);
             Cppyy::TCppScope_t scope = Cppyy::GetScope(clean_name);
             if (scope)
-                priority += (int)Cppyy::GetNumBases(scope);
+                priority += static_cast<int>(Cppyy::GetNumBasesLongestBranch(scope));
 
             if (Cppyy::IsEnum(clean_name))
                 priority -= 100;
@@ -575,7 +580,7 @@ PyObject* CPyCppyy::CPPMethod::ProcessKeywords(PyObject* self, PyObject* args, P
 // set all values to zero to be able to check them later (this also guarantees normal
 // cleanup by the tuple deallocation)
     for (Py_ssize_t i = 0; i < nArgs+nKeys; ++i)
-        PyTuple_SET_ITEM(newArgs, i, nullptr);
+        PyTuple_SET_ITEM(newArgs, i, static_cast<PyObject*>(nullptr));
 
 // next, insert the keyword values
     PyObject *key, *value;

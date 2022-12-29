@@ -70,8 +70,9 @@ namespace cling {
     // file ID of the memory buffer
     clang::FileID m_VirtualFileID;
 
-    // The next available unique sourcelocation offset.
-    unsigned m_VirtualFileLocOffset = 1; // skip the system sloc 0.
+    // The next available unique sourcelocation offset. Skip the system sloc 0
+    // and any offset that may actually exist in the virtual file.
+    unsigned m_VirtualFileLocOffset = 100;
 
     // CI owns it
     DeclCollector* m_Consumer;
@@ -126,6 +127,9 @@ namespace cling {
     clang::Parser* getParser() const { return m_Parser.get(); }
     clang::CodeGenerator* getCodeGenerator() const { return m_CodeGen; }
     bool hasCodeGenerator() const { return m_CodeGen; }
+
+    void setDiagnosticConsumer(clang::DiagnosticConsumer* Consumer, bool Own);
+    clang::DiagnosticConsumer* getDiagnosticConsumer() const;
 
     /// Returns the next available unique source location. It is an offset into
     /// the limitless virtual file. Each time this interface is used it bumps

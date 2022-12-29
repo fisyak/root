@@ -13,27 +13,6 @@
 #ifndef ROOT_TGColorDialog
 #define ROOT_TGColorDialog
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGColorPalette, TGColorPick and TGColorDialog.                       //
-//                                                                      //
-// The TGColorPalette is a widget showing an matrix of color cells. The //
-// colors can be set and selected.                                      //
-//                                                                      //
-// The TGColorPick is a widget which allows a color to be picked from   //
-// HLS space. It consists of two elements: a color map window from      //
-// where the user can select the hue and saturation level of a color,   //
-// and a slider to select color's lightness.                            //
-//                                                                      //
-// Selecting a color in these two widgets will generate the event:      //
-// kC_COLORSEL, kCOL_CLICK, widget id, 0.                               //
-// and the signal:                                                      //
-// ColorSelected(Pixel_t color)                                         //
-//                                                                      //
-// The TGColorDialog presents a full featured color selection dialog.   //
-// It uses 2 TGColorPalette's and the TGColorPick widgets.              //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
 
 #include "TGFrame.h"
 #include "TGWidget.h"
@@ -58,31 +37,31 @@ private:
    TGColorPalette& operator=(const TGColorPalette&) = delete;
 
 protected:
-   Int_t    fCx;           // x coordinate of currently selected color cell
-   Int_t    fCy;           // y coordinate of currently selected color cell
-   UInt_t   fCw;           // color cell width
-   UInt_t   fCh;           // color cell height
-   Int_t    fRows;         // number of color cell rows
-   Int_t    fCols;         // number of color cell columns
-   Pixel_t *fPixels;       // pixel value of colors
-   TGGC     fDrawGC;       // graphics context used for drawing
+   Int_t    fCx;           ///< x coordinate of currently selected color cell
+   Int_t    fCy;           ///< y coordinate of currently selected color cell
+   UInt_t   fCw;           ///< color cell width
+   UInt_t   fCh;           ///< color cell height
+   Int_t    fRows;         ///< number of color cell rows
+   Int_t    fCols;         ///< number of color cell columns
+   Pixel_t *fPixels;       ///< pixel value of colors
+   TGGC     fDrawGC;       ///< graphics context used for drawing
 
-   virtual void DoRedraw();
+   void DoRedraw() override;
    virtual void GotFocus();
    virtual void LostFocus();
 
    void DrawFocusHilite(Int_t onoff);
 
 public:
-   TGColorPalette(const TGWindow *p = 0, Int_t cols = 8, Int_t rows = 8, Int_t id = -1);
+   TGColorPalette(const TGWindow *p = nullptr, Int_t cols = 8, Int_t rows = 8, Int_t id = -1);
    virtual ~TGColorPalette();
 
-   virtual Bool_t HandleButton(Event_t *event);
-   virtual Bool_t HandleMotion(Event_t *event);
-   virtual Bool_t HandleKey(Event_t *event);
+   Bool_t HandleButton(Event_t *event) override;
+   Bool_t HandleMotion(Event_t *event) override;
+   Bool_t HandleKey(Event_t *event) override;
 
-   virtual TGDimension GetDefaultSize() const
-            { return TGDimension((fCw + 5) * fCols, (fCh + 5) * fRows); }
+   TGDimension GetDefaultSize() const override
+      { return TGDimension((fCw + 5) * fCols, (fCh + 5) * fRows); }
 
    void    SetColors(Pixel_t colors[]);
    void    SetColor(Int_t ix, Pixel_t color);
@@ -96,7 +75,7 @@ public:
    virtual void ColorSelected(Pixel_t col = 0)
             { Emit("ColorSelected(Pixel_t)", col ? col : GetCurrentColor()); }  //*SIGNAL*
 
-   ClassDef(TGColorPalette,0)  // Color palette widget
+   ClassDefOverride(TGColorPalette,0)  // Color palette widget
 };
 
 //----------------------------------------------------------------------
@@ -108,19 +87,19 @@ private:
    Pixel_t  fPixel[64];          // pixel values
 
 protected:
-   Pixmap_t     fHSimage;        // hue / saturation colormap pixmap
-   Pixmap_t     fLimage;         // color lightness slider pixmap
-   Int_t        fNColors;        // number of color samples
-   Int_t        fClick;          // mouse click location (kCLICK_NONE, kCLICK_HS, kCLICK_L)
-   Int_t        fCx;             // x position in hs colormap
-   Int_t        fCy;             // y position in hs colormap
-   Int_t        fCz;             // position in lightness slider
-   Pixel_t      fCurrentColor;   // currently selected color value
-   Rectangle_t  fColormapRect;   // hue / saturation colormap rectangle
-   Rectangle_t  fSliderRect;     // color lightness slider rectangle
-   TGGC         fCursorGC;       // color lightness slider cursor GC
+   Pixmap_t     fHSimage;        ///< hue / saturation colormap pixmap
+   Pixmap_t     fLimage;         ///< color lightness slider pixmap
+   Int_t        fNColors;        ///< number of color samples
+   Int_t        fClick;          ///< mouse click location (kCLICK_NONE, kCLICK_HS, kCLICK_L)
+   Int_t        fCx;             ///< x position in hs colormap
+   Int_t        fCy;             ///< y position in hs colormap
+   Int_t        fCz;             ///< position in lightness slider
+   Pixel_t      fCurrentColor;   ///< currently selected color value
+   Rectangle_t  fColormapRect;   ///< hue / saturation colormap rectangle
+   Rectangle_t  fSliderRect;     ///< color lightness slider rectangle
+   TGGC         fCursorGC;       ///< color lightness slider cursor GC
 
-   virtual void DoRedraw();
+   void    DoRedraw() override;
 
    void    DrawHScursor(Int_t onoff);
    void    DrawLcursor(Int_t onoff);
@@ -137,11 +116,11 @@ protected:
    void    CreateDitheredImage(Pixmap_t image, Int_t which);
 
 public:
-   TGColorPick(const TGWindow *p = 0, Int_t w = 1, Int_t h = 1, Int_t id = -1);
+   TGColorPick(const TGWindow *p = nullptr, Int_t w = 1, Int_t h = 1, Int_t id = -1);
    virtual ~TGColorPick();
 
-   virtual Bool_t HandleButton(Event_t *event);
-   virtual Bool_t HandleMotion(Event_t *event);
+   Bool_t HandleButton(Event_t *event) override;
+   Bool_t HandleMotion(Event_t *event) override;
 
    void     SetColor(Pixel_t color);
    Pixel_t  GetCurrentColor() const { return fCurrentColor; }
@@ -149,7 +128,7 @@ public:
    virtual  void ColorSelected(Pixel_t col = 0)
             { Emit("ColorSelected(Pixel_t)", col ? col : GetCurrentColor()); }  //*SIGNAL*
 
-   ClassDef(TGColorPick,0)  // Color picker widget
+   ClassDefOverride(TGColorPick,0)  // Color picker widget
 };
 
 //----------------------------------------------------------------------
@@ -162,32 +141,32 @@ private:
    TGColorDialog& operator=(const TGColorDialog&) = delete;
 
 protected:
-   Pixel_t         fCurrentColor;   // currently selected color
-   Pixel_t         fInitColor;      // initially set color
-   Int_t          *fRetc;           // return code (kMBOk, kMBCancel)
-   Pixel_t        *fRetColor;       // return color
-   TColor         *fRetTColor;      // return TColor, needed for changed alpha
+   Pixel_t         fCurrentColor;   ///< currently selected color
+   Pixel_t         fInitColor;      ///< initially set color
+   Int_t          *fRetc;           ///< return code (kMBOk, kMBCancel)
+   Pixel_t        *fRetColor;       ///< return color
+   TColor         *fRetTColor;      ///< return TColor, needed for changed alpha
 
-   TGColorPalette *fPalette;        // color palette
-   TGColorPalette *fCpalette;       // color palette
-   TGColorPick    *fColors;         // color pick widget
-   TGFrame        *fSample;         // color sample frame
-   TGFrame        *fSampleOld;      // color sample frame
-   TGTextEntry    *fRte, *fGte, *fBte, *fHte, *fLte, *fSte, *fAle; // RGB/HLS text entries
-   TGTextBuffer   *fRtb, *fGtb, *fBtb, *fHtb, *fLtb, *fStb, *fAlb; // RGB/HLS associated buffers
-   Bool_t          fWaitFor;         // call WaitFor method in constructor
+   TGColorPalette *fPalette;        ///< color palette
+   TGColorPalette *fCpalette;       ///< color palette
+   TGColorPick    *fColors;         ///< color pick widget
+   TGFrame        *fSample;         ///< color sample frame
+   TGFrame        *fSampleOld;      ///< color sample frame
+   TGTextEntry    *fRte, *fGte, *fBte, *fHte, *fLte, *fSte, *fAle; ///< RGB/HLS text entries
+   TGTextBuffer   *fRtb, *fGtb, *fBtb, *fHtb, *fLtb, *fStb, *fAlb; ///< RGB/HLS associated buffers
+   Bool_t          fWaitFor;         ///< call WaitFor method in constructor
 
-   TGTab               *fTab;        //tab widget holding the color selectors
-   TRootEmbeddedCanvas *fEcanvas;    //embedded canvas holding the color wheel
-   TColorWheel         *fColorWheel; //color wheel
-   TGLabel             *fColorInfo;  //color info
-   TGTextButton        *fPreview;    //preview button;
+   TGTab               *fTab;        ///< tab widget holding the color selectors
+   TRootEmbeddedCanvas *fEcanvas;    ///< embedded canvas holding the color wheel
+   TColorWheel         *fColorWheel; ///< color wheel
+   TGLabel             *fColorInfo;  ///< color info
+   TGTextButton        *fPreview;    ///< preview button;
 
-   void           UpdateRGBentries(Pixel_t *c);
-   void           UpdateHLSentries(Pixel_t *c);
-   void           UpdateAlpha(Pixel_t *c);
-   virtual void   CloseWindow();
-   virtual Bool_t ProcessMessage(Long_t msg, Long_t parm1, Long_t parm2);
+   void   UpdateRGBentries(Pixel_t *c);
+   void   UpdateHLSentries(Pixel_t *c);
+   void   UpdateAlpha(Pixel_t *c);
+   void   CloseWindow() override;
+   Bool_t ProcessMessage(Longptr_t msg, Longptr_t parm1, Longptr_t parm2) override;
 
 public:
    TGColorDialog(const TGWindow *p = nullptr, const TGWindow *m = nullptr, Int_t *retc = nullptr,
@@ -198,12 +177,12 @@ public:
    TGColorPalette *GetCustomPalette() const { return fCpalette; }
 
    virtual void ColorSelected(Pixel_t); //*SIGNAL*
-   virtual void AlphaColorSelected(ULong_t); //*SIGNAL*
+   virtual void AlphaColorSelected(ULongptr_t); //*SIGNAL*
            void DoPreview();
    virtual void SetCurrentColor(Pixel_t col);
            void SetColorInfo(Int_t event, Int_t px, Int_t py, TObject *selected);
 
-   ClassDef(TGColorDialog,0)  // Color selection dialog
+   ClassDefOverride(TGColorDialog,0)  // Color selection dialog
 };
 
 #endif

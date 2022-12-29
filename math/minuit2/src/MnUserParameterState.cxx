@@ -300,6 +300,8 @@ void MnUserParameterState::Fix(unsigned int e)
    if (!Parameter(e).IsFixed() && !Parameter(e).IsConst()) {
       unsigned int i = IntOfExt(e);
       if (fCovarianceValid) {
+         // when covariance is valid remove fixed parameter row/column in covariance matrix
+         // use squeeze to remove first from Hessian and obtain then new covariance
          fCovariance = MnCovarianceSqueeze()(fCovariance, i);
          fIntCovariance = MnCovarianceSqueeze()(fIntCovariance, i);
       }
@@ -312,8 +314,8 @@ void MnUserParameterState::Fix(unsigned int e)
 void MnUserParameterState::Release(unsigned int e)
 {
    // release parameter e (external index)
-   // no-op if parameter is const
-   if (Parameter(e).IsConst())
+   // no-op if parameter is const or if it is not fixed
+   if (Parameter(e).IsConst() || !Parameter(e).IsFixed())
       return;
    fParameters.Release(e);
    fCovarianceValid = false;

@@ -63,7 +63,7 @@ foreach(val RANGE ${how_many_pythons})
     set_target_properties(${libname} PROPERTIES PREFIX "lib")
     set_target_properties(${libname} PROPERTIES SUFFIX ".pyd")
   elseif(APPLE)
-    target_link_libraries(${libname} PUBLIC -Wl,-bind_at_load -Wl,-undefined -Wl,dynamic_lookup cppyy_backend${python_under_version_string})
+    target_link_libraries(${libname} PUBLIC -Wl,-bind_at_load -Wl,-flat_namespace -Wl,-undefined -Wl,suppress cppyy_backend${python_under_version_string})
   else()
     target_link_libraries(${libname} PUBLIC -Wl,--unresolved-symbols=ignore-all cppyy_backend${python_under_version_string})
   endif()
@@ -82,26 +82,19 @@ foreach(val RANGE ${how_many_pythons})
     target_compile_options(${libname} PRIVATE -Wno-cast-function-type)
   endif()
 
-  # Disables warnings originating from deprecated register keyword in Python
-  if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_CXX_STANDARD GREATER_EQUAL 11)
-    target_compile_options(${libname} PRIVATE -Wno-register)
-  endif()
-  if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" AND CMAKE_CXX_STANDARD GREATER_EQUAL 11)
-    target_compile_options(${libname} PRIVATE -Wno-register)
-    target_compile_options(${libname} PRIVATE -Wno-deprecated-register)
-  endif()
-
   # Disables warnings due to new field tp_vectorcall in Python 3.8
   if(NOT MSVC AND ${python_version_string} VERSION_GREATER_EQUAL "3.8")
     target_compile_options(${libname} PRIVATE -Wno-missing-field-initializers)
   endif()
 
   target_include_directories(${libname}
+     SYSTEM PUBLIC ${python_include_dir})
+
+  target_include_directories(${libname}
      PRIVATE
         ${CMAKE_SOURCE_DIR}/core/foundation/inc   # needed for string_view backport
         ${CMAKE_BINARY_DIR}/ginclude
      PUBLIC
-        ${python_include_dir}
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
   )

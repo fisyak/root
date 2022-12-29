@@ -104,7 +104,7 @@ ClassImp(TPDF);
 
 TPDF::TPDF() : TVirtualPS()
 {
-   fStream          = 0;
+   fStream          = nullptr;
    fCompress        = kFALSE;
    fPageNotEmpty    = kFALSE;
    gVirtualPS       = this;
@@ -119,9 +119,6 @@ TPDF::TPDF() : TVirtualPS()
    fPageOrientation = 0;
    fStartStream     = 0;
    fLineScale       = 0.;
-   fObjPosSize      = 0;
-   fObjPos          = 0;
-   fNbObj           = 0;
    fNbPage          = 0;
    fRange           = kFALSE;
    SetTitle("PDF");
@@ -138,7 +135,7 @@ TPDF::TPDF() : TVirtualPS()
 
 TPDF::TPDF(const char *fname, Int_t wtype) : TVirtualPS(fname, wtype)
 {
-   fStream          = 0;
+   fStream          = nullptr;
    fCompress        = kFALSE;
    fPageNotEmpty    = kFALSE;
    fRed             = 0.;
@@ -152,8 +149,6 @@ TPDF::TPDF(const char *fname, Int_t wtype) : TVirtualPS(fname, wtype)
    fPageOrientation = 0;
    fStartStream     = 0;
    fLineScale       = 0.;
-   fObjPosSize      = 0;
-   fNbObj           = 0;
    fNbPage          = 0;
    fRange           = kFALSE;
    SetTitle("PDF");
@@ -342,9 +337,9 @@ void TPDF::Close(Option_t *)
    PrintStr("%%EOF@");
 
    // Close file stream
-   if (fStream) { fStream->close(); delete fStream; fStream = 0;}
+   if (fStream) { fStream->close(); delete fStream; fStream = nullptr;}
 
-   gVirtualPS = 0;
+   gVirtualPS = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1628,7 +1623,7 @@ void TPDF::NewPage()
 
 void TPDF::Off()
 {
-   gVirtualPS = 0;
+   gVirtualPS = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1691,9 +1686,9 @@ void TPDF::Open(const char *fname, Int_t wtype)
 #else
       fStream->open(fname, std::ofstream::out);
 #endif
-   if (fStream == 0 || !fStream->good()) {
+   if (!fStream || !fStream->good()) {
       printf("ERROR in TPDF::Open: Cannot open file:%s\n",fname);
-      if (fStream == 0) return;
+      if (!fStream) return;
    }
 
    gVirtualPS = this;
@@ -1722,7 +1717,7 @@ void TPDF::Open(const char *fname, Int_t wtype)
    // Set a default range
    Range(fXsize, fYsize);
 
-   fObjPos = 0;
+   fObjPos = nullptr;
    fObjPosSize = 0;
    fNbObj = 0;
    fNbPage = 0;
@@ -1861,51 +1856,8 @@ void TPDF::PrintFast(Int_t len, const char *str)
 
 void TPDF::Range(Float_t xsize, Float_t ysize)
 {
-   Float_t xps, yps, xncm, yncm, dxwn, dywn, xwkwn, ywkwn, xymax;
-
    fXsize = xsize;
    fYsize = ysize;
-
-   xps = xsize;
-   yps = ysize;
-
-   if (xsize <= xps && ysize < yps) {
-      if ( xps > yps) xymax = xps;
-      else            xymax = yps;
-      xncm  = xsize/xymax;
-      yncm  = ysize/xymax;
-      dxwn  = ((xps/xymax)-xncm)/2;
-      dywn  = ((yps/xymax)-yncm)/2;
-   } else {
-      if (xps/yps < 1) xwkwn = xps/yps;
-      else             xwkwn = 1;
-      if (yps/xps < 1) ywkwn = yps/xps;
-      else             ywkwn = 1;
-
-      if (xsize < ysize)  {
-         xncm = ywkwn*xsize/ysize;
-         yncm = ywkwn;
-         dxwn = (xwkwn-xncm)/2;
-         dywn = 0;
-         if (dxwn < 0) {
-            xncm = xwkwn;
-            dxwn = 0;
-            yncm = xwkwn*ysize/xsize;
-            dywn = (ywkwn-yncm)/2;
-         }
-      } else {
-         xncm = xwkwn;
-         yncm = xwkwn*ysize/xsize;
-         dxwn = 0;
-         dywn = (ywkwn-yncm)/2;
-         if (dywn < 0) {
-            yncm = ywkwn;
-            dywn = 0;
-            xncm = ywkwn*xsize/ysize;
-            dxwn = (xwkwn-xncm)/2;
-         }
-      }
-   }
    fRange = kTRUE;
 }
 
@@ -2008,7 +1960,6 @@ void TPDF::SetColor(Float_t r, Float_t g, Float_t b)
 void TPDF::SetFillColor( Color_t cindex )
 {
    fFillColor = cindex;
-   if (gStyle->GetFillColor() <= 0) cindex = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2043,6 +1994,21 @@ void TPDF::SetFillPatterns(Int_t ipat, Int_t color)
       WriteReal(colRed);
       WriteReal(colGreen);
       WriteReal(colBlue);
+   }
+
+   if (fPageOrientation == 2) {
+      switch (ipat) {
+         case 4:  ipat = 5;  break;
+         case 5:  ipat = 4;  break;
+         case 6:  ipat = 7;  break;
+         case 7:  ipat = 6;  break;
+         case 17: ipat = 18; break;
+         case 18: ipat = 17; break;
+         case 20: ipat = 16; break;
+         case 16: ipat = 20; break;
+         case 21: ipat = 22; break;
+         case 22: ipat = 21; break;
+      }
    }
    snprintf(cpat,10," /P%2.2d scn", ipat);
    PrintStr(cpat);
@@ -2298,7 +2264,7 @@ void TPDF::Text(Double_t xx, Double_t yy, const char *chars)
    Bool_t kerning;
    if (wa0-wa1 != 0) kerning = kTRUE;
    else              kerning = kFALSE;
-   Int_t *charDeltas = 0;
+   Int_t *charDeltas = nullptr;
    if (kerning) {
         charDeltas = new Int_t[len];
         for (Int_t i = 0;i < len;i++) {
@@ -2450,6 +2416,9 @@ void TPDF::WriteCompressedBuffer()
    }
 
    err = deflateEnd(&stream);
+   if (err != Z_OK) {
+      Error("WriteCompressedBuffer", "error in deflateEnd (zlib)");
+   }
 
    fStream->write(out, stream.total_out);
 

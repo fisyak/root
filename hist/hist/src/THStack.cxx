@@ -32,7 +32,7 @@ ClassImp(THStack);
 ////////////////////////////////////////////////////////////////////////////////
 
 /** \class THStack
-    \ingroup Hist
+    \ingroup Histograms
 The Histogram stack class
 
 A THStack is a collection of TH1 or TH2 histograms.
@@ -42,7 +42,8 @@ to the drawing option.
 THStack::Add() allows to add a new histogram to the list.
 The THStack does not own the objects in the list.
 
-### <a name="HS00"></a> Stack painting
+\anchor HS00
+### Stack painting
 
 By default, histograms are shown stacked.
   - the first histogram is paint
@@ -51,7 +52,7 @@ By default, histograms are shown stacked.
 The axis ranges are computed automatically along the X and Y axis in
 order to show the complete histogram collection.
 
-### <a name="HS01"></a> Stack's drawing options
+### Stack's drawing options
 
 The specific stack's drawing options are:
 
@@ -78,27 +79,26 @@ Example;
 
 Begin_Macro(source)
 {
-   THStack *hs = new THStack("hs","");
-   TH1F *h1 = new TH1F("h1","test hstack",10,-4,4);
+   auto hs = new THStack("hs","");
+   auto h1 = new TH1F("h1","test hstack",10,-4,4);
    h1->FillRandom("gaus",20000);
    h1->SetFillColor(kRed);
    hs->Add(h1);
-   TH1F *h2 = new TH1F("h2","test hstack",10,-4,4);
+   auto h2 = new TH1F("h2","test hstack",10,-4,4);
    h2->FillRandom("gaus",15000);
    h2->SetFillColor(kBlue);
    hs->Add(h2);
-   TH1F *h3 = new TH1F("h3","test hstack",10,-4,4);
+   auto h3 = new TH1F("h3","test hstack",10,-4,4);
    h3->FillRandom("gaus",10000);
    h3->SetFillColor(kGreen);
    hs->Add(h3);
-   TCanvas *cs = new TCanvas("cs","cs",10,10,700,900);
+   auto cs = new TCanvas("cs","cs",10,10,700,900);
    TText T; T.SetTextFont(42); T.SetTextAlign(21);
    cs->Divide(2,2);
    cs->cd(1); hs->Draw(); T.DrawTextNDC(.5,.95,"Default drawing option");
    cs->cd(2); hs->Draw("nostack"); T.DrawTextNDC(.5,.95,"Option \"nostack\"");
    cs->cd(3); hs->Draw("nostackb"); T.DrawTextNDC(.5,.95,"Option \"nostackb\"");
    cs->cd(4); hs->Draw("lego1"); T.DrawTextNDC(.5,.95,"Option \"lego1\"");
-   return cs;
 }
 End_Macro
 
@@ -130,28 +130,11 @@ End_Macro
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// THStack default constructor
-
-THStack::THStack(): TNamed()
-{
-   fHists     = 0;
-   fStack     = 0;
-   fHistogram = 0;
-   fMaximum   = -1111;
-   fMinimum   = -1111;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 /// constructor with name and title
 
 THStack::THStack(const char *name, const char *title)
        : TNamed(name,title)
 {
-   fHists     = 0;
-   fStack     = 0;
-   fHistogram = 0;
-   fMaximum   = -1111;
-   fMinimum   = -1111;
    R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfCleanups()->Add(this);
 }
@@ -169,7 +152,7 @@ THStack::THStack(const char *name, const char *title)
 /// - axis:  for TH2: "x" for ProjectionX, "y" for ProjectionY.
 ///          for TH3: see TH3::Project3D.
 /// - name:  fName is set to name if given, otherwise to histo's name with
-///          "_stack_<axis>" appended, where <axis> is the value of the
+///          "_stack_<axis>" appended, where `<axis>` is the value of the
 ///          parameter axis.
 /// - title: fTitle is set to title if given, otherwise to histo's title
 ///          with ", stack of <axis> projections" appended.
@@ -187,15 +170,11 @@ THStack::THStack(const char *name, const char *title)
 ///          option passed to THStack::Add.
 
 THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
-                 const char *name /*=0*/, const char *title /*=0*/,
+                 const char *name /*=nullptr*/, const char *title /*=nullptr*/,
                  Int_t firstbin /*=1*/, Int_t lastbin /*=-1*/,
                  Int_t firstbin2 /*=1*/, Int_t lastbin2 /*=-1*/,
-                 Option_t* proj_option /*=""*/, Option_t* draw_option /*=""*/): TNamed(name, title) {
-   fHists     = 0;
-   fStack     = 0;
-   fHistogram = 0;
-   fMaximum   = -1111;
-   fMinimum   = -1111;
+                 Option_t* proj_option /*=""*/, Option_t* draw_option /*=""*/)
+     : TNamed(name, title) {
    {
       R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfCleanups()->Add(this);
@@ -208,33 +187,33 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
       Warning("THStack", "Need a histogram.");
       return;
    }
-   Bool_t isTH2=hist->IsA()->InheritsFrom(TH2::Class());
-   Bool_t isTH3=hist->IsA()->InheritsFrom(TH3::Class());
+   Bool_t isTH2 = hist->IsA()->InheritsFrom(TH2::Class());
+   Bool_t isTH3 = hist->IsA()->InheritsFrom(TH3::Class());
    if (!isTH2 && !isTH3) {
       Warning("THStack", "Need a histogram deriving from TH2 or TH3.");
       return;
    }
 
    if (!fName.Length())
-      fName=Form("%s_stack%s", hist->GetName(), axis);
+      fName.Form("%s_stack%s", hist->GetName(), axis);
    if (!fTitle.Length()) {
       if (hist->GetTitle() && strlen(hist->GetTitle()))
-         fTitle=Form("%s, stack of %s projections", hist->GetTitle(), axis);
+         fTitle.Form("%s, stack of %s projections", hist->GetTitle(), axis);
       else
-         fTitle=Form("stack of %s projections", axis);
+         fTitle.Form("stack of %s projections", axis);
    }
 
    if (isTH2) {
-      TH2* hist2=(TH2*) hist;
-      Bool_t useX=(strchr(axis,'x')) || (strchr(axis,'X'));
-      Bool_t useY=(strchr(axis,'y')) || (strchr(axis,'Y'));
+      TH2* hist2 = (TH2*) hist;
+      Bool_t useX = (strchr(axis,'x')) || (strchr(axis,'X'));
+      Bool_t useY = (strchr(axis,'y')) || (strchr(axis,'Y'));
       if ((!useX && !useY) || (useX && useY)) {
          Warning("THStack", "Need parameter axis=\"x\" or \"y\" for a TH2, not none or both.");
          return;
       }
-      TAxis* haxis= useX ? hist->GetYaxis() : hist->GetXaxis();
+      TAxis* haxis = useX ? hist->GetYaxis() : hist->GetXaxis();
       if (!haxis) {
-         Warning("HStack","Histogram axis is NULL");
+         Warning("THStack","Histogram axis is NULL");
          return;
       }
       Int_t nbins = haxis->GetNbins();
@@ -242,16 +221,18 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
       if (lastbin  < 0) lastbin  = nbins;
       if (lastbin  > nbins+1) lastbin = nbins;
       for (Int_t iBin=firstbin; iBin<=lastbin; iBin++) {
-         TH1* hProj=0;
-         if (useX) hProj=hist2->ProjectionX(Form("%s_px%d",hist2->GetName(), iBin),
-                                            iBin, iBin, proj_option);
-         else hProj=hist2->ProjectionY(Form("%s_py%d",hist2->GetName(), iBin),
-                                       iBin, iBin, proj_option);
+         TH1* hProj = nullptr;
+         if (useX)
+            hProj = hist2->ProjectionX(TString::Format("%s_px%d",hist2->GetName(), iBin).Data(),
+                                          iBin, iBin, proj_option);
+         else
+            hProj = hist2->ProjectionY(TString::Format("%s_py%d",hist2->GetName(), iBin).Data(),
+                                         iBin, iBin, proj_option);
          Add(hProj, draw_option);
       }
    } else {
       // hist is a TH3
-      TH3* hist3=(TH3*) hist;
+      TH3* hist3 = (TH3*) hist;
       TString sAxis(axis);
       sAxis.ToLower();
       Int_t dim=3-sAxis.Length();
@@ -261,16 +242,16 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
       }
 
       if (dim==1) {
-         TAxis* haxis = 0;
+         TAxis* haxis = nullptr;
          // look for the haxis _not_ in axis
          if (sAxis.First('x')==kNPOS)
-            haxis=hist->GetXaxis();
+            haxis = hist->GetXaxis();
          else if (sAxis.First('y')==kNPOS)
-            haxis=hist->GetYaxis();
+            haxis = hist->GetYaxis();
          else if (sAxis.First('z')==kNPOS)
-            haxis=hist->GetZaxis();
+            haxis = hist->GetZaxis();
          if (!haxis) {
-            Warning("HStack","Histogram axis is NULL");
+            Warning("THStack","Histogram axis is NULL");
             return;
          }
 
@@ -283,15 +264,15 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
          for (Int_t iBin=firstbin; iBin<=lastbin; iBin++) {
             haxis->SetRange(iBin, iBin);
             // build projection named axis_iBin (passed through "option")
-            TH1* hProj=hist3->Project3D(Form("%s_%s%s_%d", hist3->GetName(),
-                                             axis, proj_option, iBin));
+            TH1* hProj = hist3->Project3D(TString::Format("%s_%s%s_%d", hist3->GetName(),
+                                             axis, proj_option, iBin).Data());
             Add(hProj, draw_option);
          }
          haxis->SetRange(iFirstOld, iLastOld);
       }  else {
          // if dim==2
-         TAxis* haxis1 = 0;
-         TAxis* haxis2 = 0;
+         TAxis* haxis1 = nullptr;
+         TAxis* haxis2 = nullptr;
          // look for the haxis _not_ in axis
          if (sAxis.First('x')!=kNPOS) {
             haxis1=hist->GetYaxis();
@@ -304,7 +285,7 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
             haxis2=hist->GetYaxis();
          }
          if (!haxis1 || !haxis2) {
-            Warning("HStack","Histogram axis is NULL");
+            Warning("THStack","Histogram axis is NULL");
             return;
          }
 
@@ -316,17 +297,17 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
          if (firstbin2 < 0) firstbin2 = 1;
          if (lastbin2  < 0) lastbin2  = nbins2;
          if (lastbin2  > nbins2+1) lastbin2 = nbins2;
-         Int_t iFirstOld1=haxis1->GetFirst();
-         Int_t iLastOld1=haxis1->GetLast();
-         Int_t iFirstOld2=haxis2->GetFirst();
-         Int_t iLastOld2=haxis2->GetLast();
+         Int_t iFirstOld1 = haxis1->GetFirst();
+         Int_t iLastOld1 = haxis1->GetLast();
+         Int_t iFirstOld2 = haxis2->GetFirst();
+         Int_t iLastOld2 = haxis2->GetLast();
          for (Int_t iBin=firstbin; iBin<=lastbin; iBin++) {
             haxis1->SetRange(iBin, iBin);
             for (Int_t jBin=firstbin2; jBin<=lastbin2; jBin++) {
                haxis2->SetRange(jBin, jBin);
                // build projection named axis_iBin (passed through "option")
-               TH1* hProj=hist3->Project3D(Form("%s_%s%s_%d", hist3->GetName(),
-                                                axis, proj_option, iBin));
+               TH1* hProj=hist3->Project3D(TString::Format("%s_%s%s_%d", hist3->GetName(),
+                                                axis, proj_option, iBin).Data());
                Add(hProj, draw_option);
             }
          }
@@ -347,12 +328,17 @@ THStack::~THStack()
       gROOT->GetListOfCleanups()->Remove(this);
    }
    if (!fHists) return;
+
    fHists->Clear("nodelete");
    delete fHists;
-   fHists = 0;
-   if (fStack) {fStack->Delete(); delete fStack;}
+   fHists = nullptr;
+   if (fStack) {
+      fStack->Delete();
+      delete fStack;
+      fStack = nullptr;
+   }
    delete fHistogram;
-   fHistogram = 0;
+   fHistogram = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -360,9 +346,6 @@ THStack::~THStack()
 
 THStack::THStack(const THStack &hstack) :
    TNamed(hstack),
-   fHists(0),
-   fStack(0),
-   fHistogram(0),
    fMaximum(hstack.fMaximum),
    fMinimum(hstack.fMinimum)
 {
@@ -440,11 +423,10 @@ Int_t THStack::DistancetoPrimitive(Int_t px, Int_t py)
 
    //*-*- Loop on the list of histograms
    if (!fHists) return distance;
-   TH1 *h = 0;
    const char *doption = GetDrawOption();
    Int_t nhists = fHists->GetSize();
    for (Int_t i=0;i<nhists;i++) {
-      h = (TH1*)fHists->At(i);
+      TH1 *h = (TH1*)fHists->At(i);
       if (fStack && !strstr(doption,"nostack")) h = (TH1*)fStack->At(i);
       Int_t dist = h->DistancetoPrimitive(px,py);
       if (dist <= 0) return 0;
@@ -498,12 +480,11 @@ void THStack::Draw(Option_t *option)
 TH1 *THStack::GetHistogram() const
 {
    if (fHistogram) return fHistogram;
-   if (!gPad) return 0;
+   if (!gPad) return nullptr;
    gPad->Modified();
    gPad->Update();
    if (fHistogram) return fHistogram;
-   TH1 *h1 = (TH1*)gPad->FindObject("hframe");
-   return h1;
+   return (TH1*)gPad->FindObject("hframe");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -525,11 +506,16 @@ Double_t THStack::GetMaximum(Option_t *option)
    if (!opt.Contains("nostack")) {
       BuildStack();
       h = (TH1*)fStack->At(nhists-1);
+      if (fHistogram) h->GetXaxis()->SetRange(fHistogram->GetXaxis()->GetFirst(),
+                                              fHistogram->GetXaxis()->GetLast());
       themax = h->GetMaximum();
    } else {
       for (Int_t i=0;i<nhists;i++) {
          h = (TH1*)fHists->At(i);
+         if (fHistogram) h->GetXaxis()->SetRange(fHistogram->GetXaxis()->GetFirst(),
+                                                 fHistogram->GetXaxis()->GetLast());
          them = h->GetMaximum();
+         if (fHistogram) h->GetXaxis()->SetRange(0,0);
          if (them > themax) themax = them;
       }
    }
@@ -622,14 +608,14 @@ TObjArray *THStack::GetStack()
 
 TAxis *THStack::GetXaxis() const
 {
-   if (!gPad) return 0;
+   if (!gPad) return nullptr;
    TH1 *h = GetHistogram();
-   if (!h) return 0;
+   if (!h) return nullptr;
    return h->GetXaxis();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Get x axis of the histogram used to draw the stack.
+/// Get y axis of the histogram used to draw the stack.
 ///
 /// IMPORTANT NOTE
 ///  You must call Draw before calling this function. The returned histogram
@@ -637,10 +623,26 @@ TAxis *THStack::GetXaxis() const
 
 TAxis *THStack::GetYaxis() const
 {
-   if (!gPad) return 0;
+   if (!gPad) return nullptr;
    TH1 *h = GetHistogram();
-   if (!h) return 0;
+   if (!h) return nullptr;
    return h->GetYaxis();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get z axis of the histogram used to draw the stack.
+///
+/// IMPORTANT NOTE
+///  You must call Draw before calling this function. The returned histogram
+///  depends on the selected Draw options.
+
+TAxis *THStack::GetZaxis() const
+{
+   if (!gPad) return nullptr;
+   TH1 *h = GetHistogram();
+   if (!h->IsA()->InheritsFrom(TH2::Class())) Warning("THStack","1D Histograms don't have a Z axis");
+   if (!h) return nullptr;
+   return h->GetZaxis();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -687,15 +689,23 @@ void THStack::Modified()
    if (!fStack) return;
    fStack->Delete();
    delete fStack;
-   fStack = 0;
+   fStack = nullptr;
    delete fHistogram;
-   fHistogram = 0;
+   fHistogram = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// [Paint the list of histograms.](#HS00)
 
-void THStack::Paint(Option_t *choptin)
+void THStack::Paint(Option_t *chopt)
+{
+   BuildAndPaint(chopt, kTRUE);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Create all additional objects and stack (if specified)
+
+void THStack::BuildAndPaint(Option_t *choptin, Bool_t paint)
 {
    if (!fHists) return;
    if (!fHists->GetSize()) return;
@@ -714,7 +724,6 @@ void THStack::Paint(Option_t *choptin)
       if (l3) memcpy(l3,"   ",3);
       TString ws = option;
       if (ws.IsWhitespace()) strncpy(option,"\0",1);
-      TObjOptLink *lnk = (TObjOptLink*)fHists->FirstLink();
       TH1* hAti;
       TH1* hsAti;
       Int_t nhists = fHists->GetSize();
@@ -732,7 +741,6 @@ void THStack::Paint(Option_t *choptin)
             if (l2) hsAti->SetLineColor(ic);
             if (l3) hsAti->SetMarkerColor(ic);
          }
-         lnk = (TObjOptLink*)lnk->Next();
       }
    }
 
@@ -766,18 +774,17 @@ void THStack::Paint(Option_t *choptin)
          Int_t ny = nx;
          if (((nx*ny)-nx) >= npads) ny--;
          padsav->Divide(nx,ny);
+
+         Int_t i = 0;
+         auto lnk = fHists->FirstLink();
+         while (lnk) {
+            i++;
+            padsav->cd(i);
+            lnk->GetObject()->Draw(lnk->GetOption());
+            lnk = lnk->Next();
+         }
+         padsav->cd();
       }
-      TH1 *h;
-      Int_t i = 0;
-      TObjOptLink *lnk = (TObjOptLink*)fHists->FirstLink();
-      while (lnk) {
-         i++;
-         padsav->cd(i);
-         h = (TH1*)lnk->GetObject();
-         h->Draw(lnk->GetOption());
-         lnk = (TObjOptLink*)lnk->Next();
-      }
-      padsav->cd();
       return;
    }
 
@@ -887,32 +894,35 @@ void THStack::Paint(Option_t *choptin)
    }
 
    // Copy the axis labels if needed.
-   TH1 *hfirst;
-   TObjOptLink *lnk = (TObjOptLink*)fHists->FirstLink();
-   hfirst = (TH1*)lnk->GetObject();
+   TH1 *hfirst = (TH1*)fHists->First();
    THashList* labels = hfirst->GetXaxis()->GetLabels();
    if (labels) {
       TIter iL(labels);
-      TObjString* lb;
       Int_t ilab = 1;
-      while ((lb=(TObjString*)iL())) {
+      while (auto lb=(TObjString*)iL()) {
          fHistogram->GetXaxis()->SetBinLabel(ilab,lb->String().Data());
          ilab++;
       }
    }
 
-   if (!lsame) fHistogram->Paint(loption.Data());
+   // Set fHistogram attributes and paint it.
+   if (!lsame) {
+      fHistogram->SetLineWidth(0);
+      if (paint)
+         fHistogram->Paint(loption.Data());
+   }
 
-   if (fHistogram->GetDimension() > 1) SetDrawOption(loption.Data());
-   if (loption.Index("lego")>=0) return;
+   if (fHistogram->GetDimension() > 1)
+      SetDrawOption(loption.Data());
+   if (loption.Index("lego")>=0)
+      return;
 
    char noption[32];
    strlcpy(noption,loption.Data(),32);
    Int_t nhists = fHists->GetSize();
    if (nostack || candle || violin) {
-      lnk = (TObjOptLink*)fHists->FirstLink();
-      TH1* hAti;
-      Double_t bo=0.03;
+      auto lnk = fHists->FirstLink();
+      Double_t bo = 0.03;
       Double_t bw = (1.-(2*bo))/nhists;
       for (Int_t i=0;i<nhists;i++) {
          if (strstr(lnk->GetOption(),"same")) {
@@ -925,7 +935,7 @@ void THStack::Paint(Option_t *choptin)
             else if (candle && (indivOpt.Contains("candle") || indivOpt.Contains("violin"))) loption.Form("%ssame",lnk->GetOption());
             else          loption.Form("%ssame%s",noption,lnk->GetOption());
          }
-         hAti = (TH1F*)(fHists->At(i));
+         TH1* hAti = (TH1*) fHists->At(i);
          if (nostackb) {
             hAti->SetBarWidth(bw);
             hAti->SetBarOffset(bo);
@@ -938,12 +948,12 @@ void THStack::Paint(Option_t *choptin)
             hAti->SetBarWidth(candleSpace);
             hAti->SetBarOffset(candleOffset);
          }
-         hAti->Paint(loption.Data());
-         lnk = (TObjOptLink*)lnk->Next();
+         if (paint)
+            hAti->Paint(loption.Data());
+         lnk = lnk->Next();
       }
    } else {
-      lnk = (TObjOptLink*)fHists->LastLink();
-      TH1 *h1;
+      auto lnk = fHists->LastLink();
       Int_t h1col, h1fill;
       for (Int_t i=0;i<nhists;i++) {
          if (strstr(lnk->GetOption(),"same")) {
@@ -951,15 +961,15 @@ void THStack::Paint(Option_t *choptin)
          } else {
             loption.Form("%ssame%s",noption,lnk->GetOption());
          }
-         h1 = (TH1*)fStack->At(nhists-i-1);
-         if (i>0 && lclear) {
+         TH1 *h1 = (TH1*) fStack->At(nhists-i-1);
+         if ((i > 0) && lclear && paint) {
             // Erase before drawing the histogram
             h1col  = h1->GetFillColor();
             h1fill = h1->GetFillStyle();
             h1->SetFillColor(10);
             h1->SetFillStyle(1001);
             h1->Paint(loption.Data());
-            static TClassRef clTFrame = TClass::GetClass("TFrame",kFALSE);
+            static TClassRef clTFrame = TClass::GetClass("TFrame", kFALSE);
             TAttFill *frameFill = (TAttFill*)clTFrame->DynamicCast(TAttFill::Class(),gPad->GetFrame());
             if (frameFill) {
                h1->SetFillColor(frameFill->GetFillColor());
@@ -969,14 +979,16 @@ void THStack::Paint(Option_t *choptin)
             h1->SetFillColor(h1col);
             h1->SetFillStyle(h1fill);
          }
-         h1->Paint(loption.Data());
-         lnk = (TObjOptLink*)lnk->Prev();
+         if (paint)
+            h1->Paint(loption.Data());
+         lnk = lnk->Prev();
       }
    }
 
    opt.ReplaceAll("nostack","");
    opt.ReplaceAll("candle","");
-   if (!lsame && !opt.Contains("a")) fHistogram->Paint("axissame");
+   if (!lsame && !opt.Contains("a") && paint)
+      fHistogram->Paint("axissame");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1030,30 +1042,27 @@ void THStack::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
    if (fHistogram) {
       frameNumber++;
       TString hname = fHistogram->GetName();
-      hname += "_stack_";
-      hname += frameNumber;
-      fHistogram->SetName(hname.Data());
+      fHistogram->SetName(TString::Format("%s_stack_%d", hname.Data(), frameNumber).Data());
       fHistogram->SavePrimitive(out,"nodraw");
       out<<"   "<<GetName()<<"->SetHistogram("<<fHistogram->GetName()<<");"<<std::endl;
       out<<"   "<<std::endl;
+      fHistogram->SetName(hname.Data()); // restore histogram name
    }
 
-   TH1 *h;
    if (fHists) {
-      TObjOptLink *lnk = (TObjOptLink*)fHists->FirstLink();
+      auto lnk = fHists->FirstLink();
       Int_t hcount = 0;
       while (lnk) {
-         h = (TH1*)lnk->GetObject();
+         auto h = (TH1 *) lnk->GetObject();
          TString hname = h->GetName();
-         hname += Form("_stack_%d",++hcount);
-         h->SetName(hname);
+         h->SetName(TString::Format("%s_stack_%d", hname.Data(), ++hcount).Data());
          h->SavePrimitive(out,"nodraw");
          out<<"   "<<GetName()<<"->Add("<<h->GetName()<<","<<quote<<lnk->GetOption()<<quote<<");"<<std::endl;
-         lnk = (TObjOptLink*)lnk->Next();
+         lnk = lnk->Next();
+         h->SetName(hname.Data()); // restore histogram name
       }
    }
-   out<<"   "<<GetName()<<"->Draw("
-      <<quote<<option<<quote<<");"<<std::endl;
+   out<<"   "<<GetName()<<"->Draw("<<quote<<option<<quote<<");"<<std::endl;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1062,7 +1071,7 @@ void THStack::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
 void THStack::SetMaximum(Double_t maximum)
 {
    fMaximum = maximum;
-   if (fHistogram)  fHistogram->SetMaximum(maximum);
+   if (fHistogram) fHistogram->SetMaximum(maximum);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1079,5 +1088,5 @@ void THStack::SetMinimum(Double_t minimum)
 /// Get iterator over internal hists list.
 TIter THStack::begin() const
 {
-  return TIter(fHists);
+   return TIter(fHists);
 }

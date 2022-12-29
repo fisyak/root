@@ -179,7 +179,10 @@ function(REFLEX_GENERATE_DICTIONARY dictionary)
 
   IF(TARGET ${dictionary})
     LIST(APPEND include_dirs $<TARGET_PROPERTY:${dictionary},INCLUDE_DIRECTORIES>)
-    LIST(APPEND definitions $<TARGET_PROPERTY:${dictionary},COMPILE_DEFINITIONS>)
+    # The COMPILE_DEFINITIONS list might contain empty elements. These are
+    # removed with the FILTER generator expression, excluding elements that
+    # match the ^$ regexp (only matches empty strings).
+    LIST(APPEND definitions "$<FILTER:$<TARGET_PROPERTY:${dictionary},COMPILE_DEFINITIONS>,EXCLUDE,^$>")
   ENDIF()
 
   add_custom_command(
@@ -286,8 +289,8 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
     set(libprefix "")
   endif()
 
-   # list of include directories for dictionary generation
-   set(incdirs)
+  # list of include directories for dictionary generation
+  set(incdirs)
 
   if((CMAKE_PROJECT_NAME STREQUAL ROOT) AND (TARGET ${ARG_MODULE}))
     set(headerdirs)
@@ -296,16 +299,19 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
     if(target_incdirs)
        foreach(dir ${target_incdirs})
           string(REGEX REPLACE "^[$]<BUILD_INTERFACE:(.+)>" "\\1" dir ${dir})
+          # BUILD_INTERFACE might contain space-separated paths. They are split by
+          # foreach, leaving a trailing 'include/something>'. Remove the trailing '>'.
+          string(REGEX REPLACE ">$" "" dir ${dir})
           # check that dir not a empty dir like $<BUILD_INTERFACE:>
           if(NOT ${dir} MATCHES "^[$]")
              list(APPEND incdirs ${dir})
           endif()
-          if(${dir} MATCHES "^${CMAKE_SOURCE_DIR}")
+          string(FIND ${dir} "${CMAKE_SOURCE_DIR}" src_dir_in_dir)
+          if(${src_dir_in_dir} EQUAL 0)
              list(APPEND headerdirs ${dir})
           endif()
        endforeach()
     endif()
-
 
     # if (cxxmodules OR runtime_cxxmodules)
     # Comments from Vassil:
@@ -410,14 +416,14 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
         else()
           set(incdirs_in_build)
           set(incdirs_in_prefix ${headerdirs_dflt})
-          string(REGEX REPLACE "([][+.*()^])" "\\\\\\1" _source_dir "${CMAKE_SOURCE_DIR}")
-          string(REGEX REPLACE "([][+.*()^])" "\\\\\\1" _binary_dir "${CMAKE_BINARY_DIR}")
-          string(REGEX REPLACE "([][+.*()^])" "\\\\\\1" _curr_binary_dir "${CMAKE_CURRENT_BINARY_DIR}")
           foreach(incdir ${incdirs})
+            string(FIND ${incdir} "${CMAKE_SOURCE_DIR}" src_dir_in_dir)
+            string(FIND ${incdir} "${CMAKE_BINARY_DIR}" bin_dir_in_dir)
+            string(FIND ${incdir} "${CMAKE_CURRENT_BINARY_DIR}" cur_dir_in_dir)
             if(NOT IS_ABSOLUTE ${incdir}
-               OR ${incdir} MATCHES "^${_source_dir}"
-               OR ${incdir} MATCHES "^${_binary_dir}"
-               OR ${incdir} MATCHES "^${_curr_binary_dir}")
+               OR ${src_dir_in_dir} EQUAL 0
+               OR ${bin_dir_in_dir} EQUAL 0
+               OR ${cur_dir_in_dir} EQUAL 0)
               list(APPEND incdirs_in_build ${incdir})
             else()
               list(APPEND incdirs_in_prefix ${incdir})
@@ -515,6 +521,11 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
     endif()
   endif(ARG_MODULE)
 
+  # modules.idx deps
+  get_property(local_modules_idx_deps GLOBAL PROPERTY modules_idx_deps_property)
+  list(APPEND local_modules_idx_deps ${library_target_name})
+  set_property(GLOBAL PROPERTY modules_idx_deps_property "${local_modules_idx_deps}")
+
   #---Set the library output directory-----------------------
   ROOT_GET_LIBRARY_OUTPUT_DIR(library_output_dir)
   set(runtime_cxxmodule_dependencies )
@@ -576,15 +587,23 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
 
   #---what rootcling command to use--------------------------
   if(ARG_STAGE1)
-    set(command ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:$ENV{LD_LIBRARY_PATH}" $<TARGET_FILE:rootcling_stage1>)
+    if(MSVC AND CMAKE_ROOTTEST_DICT)
+      set(command ${CMAKE_COMMAND} -E ${CMAKE_BINARY_DIR}/bin/rootcling_stage1.exe)
+    else()
+      set(command ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:$ENV{LD_LIBRARY_PATH}" $<TARGET_FILE:rootcling_stage1>)
+    endif()
     set(ROOTCINTDEP rconfigure)
     set(pcm_name)
   else()
     if(CMAKE_PROJECT_NAME STREQUAL ROOT)
-      set(command ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:$ENV{LD_LIBRARY_PATH}"
-                  "ROOTIGNOREPREFIX=1" $<TARGET_FILE:rootcling> -rootbuild)
-      # Modules need RConfigure.h copied into include/.
-      set(ROOTCINTDEP rootcling rconfigure)
+      if(MSVC AND CMAKE_ROOTTEST_DICT)
+        set(command ${CMAKE_COMMAND} -E env "ROOTIGNOREPREFIX=1" ${CMAKE_BINARY_DIR}/bin/rootcling.exe)
+      else()
+        set(command ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:$ENV{LD_LIBRARY_PATH}"
+                    "ROOTIGNOREPREFIX=1" $<TARGET_FILE:rootcling> -rootbuild)
+        # Modules need RConfigure.h copied into include/.
+        set(ROOTCINTDEP rootcling rconfigure)
+      endif()
     elseif(TARGET ROOT::rootcling)
       set(command ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${ROOT_LIBRARY_DIR}:$ENV{LD_LIBRARY_PATH}" $<TARGET_FILE:ROOT::rootcling>)
     else()
@@ -609,12 +628,14 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
 
     # get target properties added after call to ROOT_GENERATE_DICTIONARY()
     if(TARGET ${ARG_MODULE})
-      if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.15)
-        set(module_incs $<REMOVE_DUPLICATES:$<TARGET_PROPERTY:${ARG_MODULE},INCLUDE_DIRECTORIES>>)
-      else()
-        set(module_incs $<TARGET_PROPERTY:${ARG_MODULE},INCLUDE_DIRECTORIES>)
-      endif()
-      set(module_defs $<TARGET_PROPERTY:${ARG_MODULE},COMPILE_DEFINITIONS>)
+      # NOTE that module_sysincs is already part of ${module_sysincs}. But -isystem "wins",
+      # and list exclusion for generator expressions is too complex.
+      set(module_incs $<REMOVE_DUPLICATES:$<TARGET_PROPERTY:${ARG_MODULE},INCLUDE_DIRECTORIES>>)
+      set(module_sysincs $<REMOVE_DUPLICATES:$<TARGET_PROPERTY:${ARG_MODULE},INTERFACE_SYSTEM_INCLUDE_DIRECTORIES>>)
+      # The COMPILE_DEFINITIONS list might contain empty elements. These are
+      # removed with the FILTER generator expression, excluding elements that
+      # match the ^$ regexp (only matches empty strings).
+      set(module_defs "$<FILTER:$<TARGET_PROPERTY:${ARG_MODULE},COMPILE_DEFINITIONS>,EXCLUDE,^$>")
     endif()
   endif()
 
@@ -627,11 +648,18 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
      endforeach()
   endif()
 
+  set(compIncPaths)
+  foreach(implinc IN LISTS CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES)
+    list(APPEND compIncPaths "-compilerI${implinc}")
+  endforeach()
+
   #---call rootcint------------------------------------------
   add_custom_command(OUTPUT ${dictionary}.cxx ${pcm_name} ${rootmap_name} ${cpp_module_file}
                      COMMAND ${command} -v2 -f  ${dictionary}.cxx ${newargs} ${excludepathsargs} ${rootmapargs}
                                         ${ARG_OPTIONS}
                                         ${definitions} "$<$<BOOL:${module_defs}>:-D$<JOIN:${module_defs},;-D>>"
+                                        ${compIncPaths}
+                                        "$<$<BOOL:${module_sysincs}>:-isystem;$<JOIN:${module_sysincs},;-isystem;>>"
                                         ${includedirs} "$<$<BOOL:${module_incs}>:-I$<JOIN:${module_incs},;-I>>"
                                         ${headerfiles} ${_linkdef}
                      IMPLICIT_DEPENDS ${_implicitdeps}
@@ -914,14 +942,19 @@ function(ROOT_LINKER_LIBRARY library)
           get_target_property(_target_type ${lib} TYPE)
           if(${_target_type} STREQUAL "INTERFACE_LIBRARY")
             get_target_property(lib_incdirs ${lib} INTERFACE_INCLUDE_DIRECTORIES)
+            get_target_property(lib_rpath   ${lib} INTERFACE_BUILD_RPATH)
           else()
             get_target_property(lib_incdirs ${lib} INCLUDE_DIRECTORIES)
+            get_target_property(lib_rpath   ${lib} BUILD_RPATH)
           endif()
           if(lib_incdirs)
             foreach(dir ${lib_incdirs})
               string(REGEX REPLACE "^[$]<BUILD_INTERFACE:(.+)>" "\\1" dir ${dir})
               list(APPEND dep_inc_list ${dir})
             endforeach()
+          endif()
+          if(lib_rpath)
+            set_target_properties(${library} PROPERTIES BUILD_RPATH ${lib_rpath})
           endif()
         endif()
       endforeach()
@@ -1045,7 +1078,7 @@ function(ROOT_OBJECT_LIBRARY library)
   endif()
 
   #--- Fill the property OBJECTS with all the object files
-  #    This is needed becuase the generator expression $<TARGET_OBJECTS:target>
+  #    This is needed because the generator expression $<TARGET_OBJECTS:target>
   #    does not get expanded when used in custom command dependencies
   get_target_property(sources ${library} SOURCES)
   foreach(s ${sources})
@@ -1054,11 +1087,11 @@ function(ROOT_OBJECT_LIBRARY library)
       set(obj ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.build/${CMAKE_CFG_INTDIR}/${library}.build/Objects-normal/x86_64/${name}${CMAKE_CXX_OUTPUT_EXTENSION})
     else()
       if(IS_ABSOLUTE ${s})
-        string(REGEX REPLACE "([][.?*+|()$^-])" "\\\\\\1" escaped_source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
-        string(REGEX REPLACE "([][.?*+|()$^-])" "\\\\\\1" escaped_binary_dir "${CMAKE_CURRENT_BINARY_DIR}")
-        if(${s} MATCHES "^${escaped_source_dir}")
+        string(FIND ${s} "${CMAKE_CURRENT_SOURCE_DIR}" src_dir_in_src)
+        string(FIND ${s} "${CMAKE_CURRENT_BINARY_DIR}" bin_dir_in_src)
+        if(${src_dir_in_src} EQUAL 0)
           string(REPLACE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${library}.dir src ${s})
-        elseif(${s} MATCHES "^${escaped_binary_dir}")
+        elseif(${bin_dir_in_src} EQUAL 0)
           string(REPLACE ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${library}.dir src ${s})
         else()
           #message(WARNING "Unknown location of source ${s} for object library ${library}")
@@ -1143,6 +1176,7 @@ endfunction(ROOT_GENERATE_ROOTMAP)
 #---ROOT_FIND_DIRS_WITH_HEADERS([dir1 dir2 ...] OPTIONS [options])
 #---------------------------------------------------------------------------------------------------
 function(ROOT_FIND_DIRS_WITH_HEADERS result_dirs)
+  set(dirs "")
   if(ARGN)
     set(dirs ${ARGN})
   else()
@@ -1439,14 +1473,18 @@ set(ROOT_TEST_DRIVER ${CMAKE_CURRENT_LIST_DIR}/RootTestDriver.cmake)
 #                        [BUILD target] [PROJECT project]
 #                        [PASSREGEX exp] [FAILREGEX epx]
 #                        [PASSRC code]
+#                        [RESOURCE_LOCK lock]
+#                        [FIXTURES_SETUP ...] [FIXTURES_CLEANUP ...] [FIXTURES_REQUIRED ...]
 #                        [LABELS label1 label2]
 #                        [PYTHON_DEPS numpy numba keras torch ...] # List of python packages required to run this test.
-#                                                              A fixture will be added the tries to import them before the test starts.)
+#                                                              A fixture will be added the tries to import them before the test starts.
+#                        [PROPERTIES prop1 value1 prop2 value2...] 
+#                       )
 #
 function(ROOT_ADD_TEST test)
   CMAKE_PARSE_ARGUMENTS(ARG "DEBUG;WILLFAIL;CHECKOUT;CHECKERR;RUN_SERIAL"
-                            "TIMEOUT;BUILD;INPUT;OUTPUT;ERROR;SOURCE_DIR;BINARY_DIR;WORKING_DIR;PROJECT;PASSRC"
-                            "COMMAND;COPY_TO_BUILDDIR;DIFFCMD;OUTCNV;OUTCNVCMD;PRECMD;POSTCMD;ENVIRONMENT;COMPILEMACROS;DEPENDS;PASSREGEX;OUTREF;ERRREF;FAILREGEX;LABELS;PYTHON_DEPS"
+                            "TIMEOUT;BUILD;INPUT;OUTPUT;ERROR;SOURCE_DIR;BINARY_DIR;WORKING_DIR;PROJECT;PASSRC;RESOURCE_LOCK"
+                            "COMMAND;COPY_TO_BUILDDIR;DIFFCMD;OUTCNV;OUTCNVCMD;PRECMD;POSTCMD;ENVIRONMENT;COMPILEMACROS;DEPENDS;PASSREGEX;OUTREF;ERRREF;FAILREGEX;LABELS;PYTHON_DEPS;FIXTURES_SETUP;FIXTURES_CLEANUP;FIXTURES_REQUIRED;PROPERTIES"
                             ${ARGN})
 
   #- Handle COMMAND argument
@@ -1566,11 +1604,17 @@ function(ROOT_ADD_TEST test)
   #- Handle ENVIRONMENT argument
   if(ASAN_EXTRA_LD_PRELOAD)
     # Address sanitizer runtime needs to be preloaded in all python tests
-    # Check now if the -DCMD= contains "python[0-9.] "
+    # Check now if the -DCMD= contains "python[0-9.] ", but exclude helper
+    # scripts such as roottest/root/meta/genreflex/XMLParsing/parseXMLs.py
+    # and roottest/root/rint/driveTabCom.py
     set(theCommand ${_command})
     list(FILTER theCommand INCLUDE REGEX "^-DCMD=.*python[0-9.]*[\\^]")
-    if(theCommand OR _command MATCHES roottest/python/cmdLineUtils)
-      list(APPEND ARG_ENVIRONMENT ${ld_preload}=${ASAN_EXTRA_LD_PRELOAD})
+    if((theCommand AND
+        NOT (_command MATCHES XMLParsing/parseXMLs.py OR
+             _command MATCHES roottest/root/rint/driveTabCom.py))
+       OR (_command MATCHES roottest/python/cmdLineUtils AND
+           NOT _command MATCHES MakeNameCyclesRootmvInput))
+      set(_command ${_command} -DCMD_ENV=${ld_preload}=${ASAN_EXTRA_LD_PRELOAD})
     endif()
   endif()
 
@@ -1623,9 +1667,30 @@ function(ROOT_ADD_TEST test)
     endif()
   endif()
 
+  #- provided fixtures and resource lock are set here
+  if (ARG_FIXTURES_SETUP)
+    set_property(TEST ${test} PROPERTY
+      FIXTURES_SETUP ${ARG_FIXTURES_SETUP})
+  endif()
+
+  if (ARG_FIXTURES_CLEANUP)
+    set_property(TEST ${test} PROPERTY
+      FIXTURES_CLEANUP ${ARG_FIXTURES_CLEANUP})
+  endif()
+
+  if (ARG_FIXTURES_REQUIRED)
+    set_property(TEST ${test} PROPERTY
+      FIXTURES_REQUIRED ${ARG_FIXTURES_REQUIRED})
+  endif()
+
+  if (ARG_RESOURCE_LOCK)
+    set_property(TEST ${test} PROPERTY
+      RESOURCE_LOCK ${ARG_RESOURCE_LOCK})
+  endif()
+
   set_property(TEST ${test} APPEND PROPERTY ENVIRONMENT ROOT_HIST=0)
 
-  #- Handle TIMOUT and DEPENDS arguments
+  #- Handle TIMEOUT and DEPENDS arguments
   if(ARG_TIMEOUT)
     set_property(TEST ${test} PROPERTY TIMEOUT ${ARG_TIMEOUT})
   endif()
@@ -1665,6 +1730,11 @@ function(ROOT_ADD_TEST test)
 
   if(ARG_RUN_SERIAL)
     set_property(TEST ${test} PROPERTY RUN_SERIAL true)
+  endif()
+
+  # Pass PROPERTIES argument to the set_tests_properties as-is
+  if(ARG_PROPERTIES)
+    set_tests_properties(${test} PROPERTIES ${ARG_PROPERTIES})
   endif()
 
 endfunction()
@@ -1708,21 +1778,20 @@ endfunction()
 
 #----------------------------------------------------------------------------
 # function ROOT_ADD_GTEST(<testsuite> source1 source2...
-#                        [WILLFAIL]
-#                        [COPY_TO_BUILDDIR file1 file2...] -- files to copy in the build directory
+#                        [WILLFAIL] Negate output of test
+#                        [COPY_TO_BUILDDIR file1 file2] Copy listed files when ctest invokes the test.
 #                        [LIBRARIES lib1 lib2...] -- Libraries to link against
 #                        [LABELS label1 label2...] -- Labels to annotate the test
 #                        [INCLUDE_DIRS label1 label2...] -- Extra target include directories
 #                        [REPEATS number] -- Repeats testsuite `number` times, stopping at the first failure.
-
+#                        [FAILREGEX ...] Fail test if this regex matches.
+# Creates a new googletest exectuable, and registers it as a test.
+#----------------------------------------------------------------------------
 function(ROOT_ADD_GTEST test_suite)
-  CMAKE_PARSE_ARGUMENTS(ARG "WILLFAIL" "REPEATS" "COPY_TO_BUILDDIR;LIBRARIES;LABELS;INCLUDE_DIRS" ${ARGN})
-
-  # ROOTUnitTestSupport
-  if(NOT TARGET ROOTUnitTestSupport)
-    add_library(ROOTUnitTestSupport INTERFACE)
-    target_include_directories(ROOTUnitTestSupport INTERFACE ${CMAKE_SOURCE_DIR}/test/unit_testing_support)
-  endif()
+  cmake_parse_arguments(ARG
+    "WILLFAIL"
+    "REPEATS;FAILREGEX"
+    "COPY_TO_BUILDDIR;LIBRARIES;LABELS;INCLUDE_DIRS" ${ARGN})
 
   ROOT_GET_SOURCES(source_files . ${ARG_UNPARSED_ARGUMENTS})
   # Note we cannot use ROOT_EXECUTABLE without user-specified set of LIBRARIES to link with.
@@ -1731,7 +1800,13 @@ function(ROOT_ADD_GTEST test_suite)
   # against. For example, tests in Core should link only against libCore. This could be tricky
   # to implement because some ROOT components create more than one library.
   ROOT_EXECUTABLE(${test_suite} ${source_files} LIBRARIES ${ARG_LIBRARIES})
-  target_link_libraries(${test_suite} gtest gtest_main gmock gmock_main ROOTUnitTestSupport)
+  target_link_libraries(${test_suite} gtest gtest_main gmock gmock_main)
+  if(TARGET ROOT::TestSupport)
+    target_link_libraries(${test_suite} ROOT::TestSupport)
+  else()
+    message(WARNING "ROOT_ADD_GTEST(${test_suite} ...): The target ROOT::TestSupport is missing. It looks like the test is declared against a ROOT build that is configured with -Dtesting=OFF.
+            If this test sends warning or error messages, this will go unnoticed.")
+  endif()
   target_include_directories(${test_suite} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
   if (ARG_INCLUDE_DIRS)
     target_include_directories(${test_suite} PRIVATE ${ARG_INCLUDE_DIRS})
@@ -1761,6 +1836,7 @@ function(ROOT_ADD_GTEST test_suite)
     COPY_TO_BUILDDIR ${ARG_COPY_TO_BUILDDIR}
     ${willfail}
     ${labels}
+    FAILREGEX ${ARG_FAILREGEX}
   )
 endfunction()
 

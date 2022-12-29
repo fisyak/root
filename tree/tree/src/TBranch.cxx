@@ -133,61 +133,61 @@ TBranch::TBranch()
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a Branch as a child of a Tree
 ///
-///       * address is the address of the first item of a structure
-///         or the address of a pointer to an object (see example in TTree.cxx).
-///       * leaflist is the concatenation of all the variable names and types
-///         separated by a colon character :
-///         The variable name and the variable type are separated by a
-///         slash (/). The variable type must be 1 character. (Characters
-///         after the first are legal and will be appended to the visible
-///         name of the leaf, but have no effect.) If no type is given, the
-///         type of the variable is assumed to be the same as the previous
-///         variable. If the first variable does not have a type, it is
-///         assumed of type F by default. The list of currently supported
-///         types is given below:
-///            - `C` : a character string terminated by the 0 character
-///            - `B` : an 8 bit signed integer (`Char_t`)
-///            - `b` : an 8 bit unsigned integer (`UChar_t`)
-///            - `S` : a 16 bit signed integer (`Short_t`)
-///            - `s` : a 16 bit unsigned integer (`UShort_t`)
-///            - `I` : a 32 bit signed integer (`Int_t`)
-///            - `i` : a 32 bit unsigned integer (`UInt_t`)
-///            - `F` : a 32 bit floating point (`Float_t`)
-///            - `f` : a 24 bit floating point with truncated mantissa (`Float16_t`)
-///            - `D` : a 64 bit floating point (`Double_t`)
-///            - `d` : a 24 bit truncated floating point (`Double32_t`)
-///            - `L` : a 64 bit signed integer (`Long64_t`)
-///            - `l` : a 64 bit unsigned integer (`ULong64_t`)
-///            - `G` : a long signed integer, stored as 64 bit (`Long_t`)
-///            - `g` : a long unsigned integer, stored as 64 bit (`ULong_t`)
-///            - `O` : [the letter `o`, not a zero] a boolean (`Bool_t`)
+///   * address is the address of the first item of a structure
+///     or the address of a pointer to an object (see example in TTree.cxx).
+///   * leaflist is the concatenation of all the variable names and types
+///     separated by a colon character :
+///     The variable name and the variable type are separated by a
+///     slash (/). The variable type must be 1 character. (Characters
+///     after the first are legal and will be appended to the visible
+///     name of the leaf, but have no effect.) If no type is given, the
+///     type of the variable is assumed to be the same as the previous
+///     variable. If the first variable does not have a type, it is
+///     assumed of type F by default. The list of currently supported
+///     types is given below:
+///        - `C` : a character string terminated by the 0 character
+///        - `B` : an 8 bit signed integer (`Char_t`)
+///        - `b` : an 8 bit unsigned integer (`UChar_t`)
+///        - `S` : a 16 bit signed integer (`Short_t`)
+///        - `s` : a 16 bit unsigned integer (`UShort_t`)
+///        - `I` : a 32 bit signed integer (`Int_t`)
+///        - `i` : a 32 bit unsigned integer (`UInt_t`)
+///        - `F` : a 32 bit floating point (`Float_t`)
+///        - `f` : a 24 bit floating point with truncated mantissa (`Float16_t`)
+///        - `D` : a 64 bit floating point (`Double_t`)
+///        - `d` : a 24 bit truncated floating point (`Double32_t`)
+///        - `L` : a 64 bit signed integer (`Long64_t`)
+///        - `l` : a 64 bit unsigned integer (`ULong64_t`)
+///        - `G` : a long signed integer (`Long_t`, which `sizeof` is platform dependent), stored as a 64 bit integer but usually held in memory as a 64 bit integer on 64 bit machines and 32 bit on 32 bit machines. Due to this difference, this data type is **not cross-platform**.
+///        - `g` : a long unsigned integer (`ULong_t`, which `sizeof` is platform dependent), stored as a 64 bit unsigned integer but held in memory usually as a 64 bit integer on 64 bit machines and 32 bit on 32 bit machines. Due to this difference, this data type is **not cross-platform**.
+///        - `O` : [the letter `o`, not a zero] a boolean (`Bool_t`)
 ///
-///         Arrays of values are supported with the following syntax:
-///         - If leaf name has the form var[nelem], where nelem is alphanumeric, then
-///              if nelem is a leaf name, it is used as the variable size of the array,
-///              otherwise return 0.
-///              The leaf referred to by nelem **MUST** be an int (/I),
-///         - If leaf name has the form var[nelem], where nelem is a non-negative integers, then
-///              it is used as the fixed size of the array.
-///         - If leaf name has the form of a multi dimension array (e.g. var[nelem][nelem2])
-///              where nelem and nelem2 are non-negative integers) then
-///              it is used as a 2 dimensional array of fixed size.
-///         - In case of the truncated floating point types (Float16_t and Double32_t) you can
-///              furthermore specify the range in the style [xmin,xmax] or [xmin,xmax,nbits] after
-///              the type character. See `TStreamerElement::GetRange()` for further information.
-///         - Any of other form is not supported.
+///     Arrays of values are supported with the following syntax:
+///     - If leaf name has the form var[nelem], where nelem is alphanumeric, then
+///          if nelem is a leaf name, it is used as the variable size of the array,
+///          otherwise return 0.
+///          The leaf referred to by nelem **MUST** be an int (/I),
+///     - If leaf name has the form var[nelem], where nelem is a non-negative integers, then
+///          it is used as the fixed size of the array.
+///     - If leaf name has the form of a multi dimension array (e.g. var[nelem][nelem2])
+///          where nelem and nelem2 are non-negative integers) then
+///          it is used as a 2 dimensional array of fixed size.
+///     - In case of the truncated floating point types (Float16_t and Double32_t) you can
+///          furthermore specify the range in the style [xmin,xmax] or [xmin,xmax,nbits] after
+///          the type character. See `TStreamerElement::GetRange()` for further information.
+///     - Any of other form is not supported.
 ///
 ///    Note that the TTree will assume that all the item are contiguous in memory.
 ///    On some platform, this is not always true of the member of a struct or a class,
 ///    due to padding and alignment.  Sorting your data member in order of decreasing
 ///    sizeof usually leads to their being contiguous in memory.
 ///
-///       * bufsize is the buffer size in bytes for this branch
-///         The default value is 32000 bytes and should be ok for most cases.
-///         You can specify a larger value (e.g. 256000) if your Tree is not split
-///         and each entry is large (Megabytes)
-///         A small value for bufsize is optimum if you intend to access
-///         the entries in the Tree randomly and your Tree is in split mode.
+///   * bufsize is the buffer size in bytes for this branch
+///     The default value is 32000 bytes and should be ok for most cases.
+///     You can specify a larger value (e.g. 256000) if your Tree is not split
+///     and each entry is large (Megabytes)
+///     A small value for bufsize is optimum if you intend to access
+///     the entries in the Tree randomly and your Tree is in split mode.
 ///
 ///   See an example of a Branch definition in the TTree constructor.
 ///
@@ -464,6 +464,8 @@ TBranch::~TBranch()
    delete [] fBasketBytes;
    fBasketBytes = 0;
 
+   if (fExtraBasket && !fBaskets.Remove(fExtraBasket))
+      delete fExtraBasket;
    fBaskets.Delete();
    fNBaskets = 0;
    fCurrentBasket = 0;
@@ -1219,7 +1221,7 @@ Int_t TBranch::FlushOneBasket(UInt_t ibasket)
 /// Return pointer to basket basketnumber in this Branch
 ///
 /// If a new buffer must be created and the user_buffer argument is non-null,
-/// then the memory in the user_bufer will be shared with the returned TBasket.
+/// then the memory in the user_buffer will be shared with the returned TBasket.
 
 TBasket* TBranch::GetBasketImpl(Int_t basketnumber, TBuffer *user_buffer)
 {
@@ -1243,7 +1245,7 @@ TBasket* TBranch::GetBasketImpl(Int_t basketnumber, TBuffer *user_buffer)
    // if cluster pre-fetching or retaining is on, do not re-use existing baskets
    // unless a new cluster is used.
    if (fTree->GetMaxVirtualSize() < 0 || fTree->GetClusterPrefetch())
-      basket = GetFreshCluster();
+      basket = GetFreshCluster(user_buffer);
    else
       basket = GetFreshBasket(basketnumber, user_buffer);
 
@@ -1619,6 +1621,12 @@ Int_t TBranch::GetEntriesSerialized(Long64_t entry, TBuffer &user_buf, TBuffer *
       }
    }
 
+   if (fCurrentBasket == nullptr) {
+      R__ASSERT(fExtraBasket == nullptr && "fExtraBasket should have been set to nullptr by GetFreshBasket");
+      fExtraBasket = basket;
+      basket->DisownBuffer();
+   }
+
    return N;
 }
 
@@ -1820,7 +1828,7 @@ TFile* TBranch::GetFile(Int_t mode)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return a fresh basket by either resusing an existing basket that needs
+/// Return a fresh basket by either reusing an existing basket that needs
 /// to be drop (according to TTree::MemoryFull) or create a new one.
 ///
 /// If the user_buffer argument is non-null, then the memory in the
@@ -1888,23 +1896,36 @@ TBasket* TBranch::GetFreshBasket(Int_t basketnumber, TBuffer* user_buffer)
 /// Drops the cluster two behind the current cluster and returns a fresh basket
 /// by either reusing or creating a new one
 
-TBasket *TBranch::GetFreshCluster()
+TBasket *TBranch::GetFreshCluster(TBuffer* user_buffer)
 {
    TBasket *basket = 0;
+
+   auto CreateOrReuseBasket = [this, user_buffer]() -> TBasket* {
+      TBasket *newbasket = nullptr;
+      if (fExtraBasket) {
+         newbasket = fExtraBasket;
+         fExtraBasket = nullptr;
+      } else {
+         newbasket = fTree->CreateBasket(this);
+      }
+      if (user_buffer)
+         newbasket->AdoptBuffer(user_buffer);
+      return newbasket;
+   };
 
    // If GetClusterIterator is called with a negative entry then GetStartEntry will be 0
    // So we need to check if we reach the zero before we have gone back (1-VirtualSize) clusters
    // if this is the case, we want to keep everything in memory so we return a new basket
    TTree::TClusterIterator iter = fTree->GetClusterIterator(fBasketEntry[fReadBasket]);
    if (iter.GetStartEntry() == 0) {
-      return fTree->CreateBasket(this);
+      return CreateOrReuseBasket();
    }
 
    // Iterate backwards (1-VirtualSize) clusters to reach cluster to be unloaded from memory,
    // skipped if VirtualSize > 0.
    for (Int_t j = 0; j < -fTree->GetMaxVirtualSize(); j++) {
       if (iter.Previous() == 0) {
-         return fTree->CreateBasket(this);
+         return CreateOrReuseBasket();
       }
    }
 
@@ -1916,7 +1937,7 @@ TBasket *TBranch::GetFreshCluster()
    while (fBasketEntry[basketToUnload] != entryToUnload) {
       basketToUnload--;
       if (basketToUnload < 0) {
-         return fTree->CreateBasket(this);
+         return CreateOrReuseBasket();
       }
    }
 
@@ -1927,7 +1948,7 @@ TBasket *TBranch::GetFreshCluster()
       fBaskets.AddAt(0, basketToUnload);
       --fNBaskets;
    } else {
-      basket = fTree->CreateBasket(this);
+      basket = CreateOrReuseBasket();
    }
    ++basketToUnload;
 
@@ -1959,11 +1980,19 @@ TString TBranch::GetFullName() const
    if (!mother || mother==this) {
       return fName;
    }
-   TString motherName(mother->GetName());
-   if (motherName.Length() && (motherName[motherName.Length()-1] == '.')) {
+
+   const auto motherName = mother->GetName();
+   const auto len = strlen(motherName);
+   if (len > 0 && (motherName[len-1] == '.')) {
       return fName;
    }
-   return motherName + "." + fName;
+
+   // Reserve the final size to avoid allocations
+   TString result{static_cast<Ssiz_t>(len + 1 + fName.Length())};
+   result  = motherName;
+   result += ".";
+   result += fName;
+   return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

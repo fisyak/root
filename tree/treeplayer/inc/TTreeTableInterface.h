@@ -25,19 +25,19 @@ class TList;
 class TTreeTableInterface : public TVirtualTableInterface {
 
 private:
-   TTree               *fTree;       // Data in a TTree
-   TList               *fFormulas;   // Array of TTreeFormulas to display values
-   Long64_t             fEntry;      // Present entry number in fTree.
-   Long64_t             fNEntries;   // Number of entries in the tree.
-   Long64_t             fFirstEntry; // First entry.
-   TTreeFormulaManager *fManager;    // Coordinator for the formulas.
-   TTreeFormula        *fSelect;     // Selection condition
-   TSelectorDraw       *fSelector;   // Selector
-   TList               *fInput;      // Used for fSelector.
-   Bool_t               fForceDim;   // Force dimension.
-   TEntryList          *fEntries;    // Currently active entries
-   UInt_t               fNRows;      // Amount of rows in the data
-   UInt_t               fNColumns;   // Amount of columns in the data
+   TTree               *fTree;       ///< Data in a TTree
+   TList               *fFormulas;   ///< Array of TTreeFormulas to display values
+   Long64_t             fEntry;      ///< Present entry number in fTree.
+   Long64_t             fNEntries;   ///< Number of entries in the tree.
+   Long64_t             fFirstEntry; ///< First entry.
+   TTreeFormulaManager *fManager;    ///< Coordinator for the formulas.
+   TTreeFormula        *fSelect;     ///< Selection condition
+   TSelectorDraw       *fSelector;   ///< Selector
+   TList               *fInput;      ///< Used for fSelector.
+   Bool_t               fForceDim;   ///< Force dimension.
+   TEntryList          *fEntries;    ///< Currently active entries
+   UInt_t               fNRows;      ///< Amount of rows in the data
+   UInt_t               fNColumns;   ///< Amount of columns in the data
 
    void SetVariablesExpression(const char *varexp);
    void SyncFormulas();
@@ -46,8 +46,8 @@ private:
 protected:
 
 public:
-   TTreeTableInterface(TTree *tree = 0, const char *varexp = 0,
-                       const char *selection = 0, Option_t *option = 0,
+   TTreeTableInterface(TTree *tree = nullptr, const char *varexp = nullptr,
+                       const char *selection = nullptr, Option_t *option = nullptr,
                        Long64_t nentries = 0, Long64_t firstentry = 0);
    virtual ~TTreeTableInterface();
 
@@ -64,7 +64,7 @@ public:
    virtual void RemoveColumn(UInt_t position);
    virtual void SetFormula(TTreeFormula *formula, UInt_t position);
    virtual void SetSelection(const char *selection);
-   virtual void SetEntryList(TEntryList *entrylist = 0);
+   virtual void SetEntryList(TEntryList *entrylist = nullptr);
 
    ClassDef(TTreeTableInterface, 0) // Interface to data in a TTree
 };

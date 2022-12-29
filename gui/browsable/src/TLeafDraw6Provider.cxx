@@ -12,15 +12,13 @@
 
 /** Provider for drawing of ROOT6 classes */
 
-class TLeafDraw6Provider : public TLeafProvider<void> {
+class TLeafDraw6Provider : public TLeafProvider {
 public:
 
    bool AddHist(TVirtualPad *pad, TH1 *hist, const std::string &opt)
    {
       if (!hist)
          return false;
-
-      pad->GetListOfPrimitives()->Clear();
 
       pad->GetListOfPrimitives()->Add(hist, opt.c_str());
 

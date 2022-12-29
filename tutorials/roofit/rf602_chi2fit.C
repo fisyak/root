@@ -12,10 +12,8 @@
 #include "RooRealVar.h"
 #include "RooDataSet.h"
 #include "RooGaussian.h"
-#include "RooConstVar.h"
 #include "RooChebychev.h"
 #include "RooAddPdf.h"
-#include "RooChi2Var.h"
 #include "TCanvas.h"
 #include "TAxis.h"
 #include "RooPlot.h"
@@ -72,6 +70,6 @@ void rf602_chi2fit()
    // messages
    RooDataSet *dsmall = (RooDataSet *)d->reduce(EventRange(1, 100));
    RooDataHist *dhsmall = dsmall->binnedClone();
-   RooChi2Var chi2_lowstat("chi2_lowstat", "chi2", model, *dhsmall);
-   cout << chi2_lowstat.getVal() << endl;
+   std::unique_ptr<RooAbsReal> chi2_lowstat{model.createChi2(*dhsmall)};
+   cout << chi2_lowstat->getVal() << endl;
 }

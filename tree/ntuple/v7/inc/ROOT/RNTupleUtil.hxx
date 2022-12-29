@@ -19,6 +19,7 @@
 #include <cstdint>
 
 #include <string>
+#include <variant>
 
 #include <ROOT/RLogger.hxx>
 
@@ -29,26 +30,18 @@ class RLogChannel;
 /// Log channel for RNTuple diagnostics.
 RLogChannel &NTupleLog();
 
-struct RNTuple;
-
-namespace Internal {
-
-void PrintRNTuple(const RNTuple& ntuple, std::ostream& output);
-
-} // namespace Internal
-
 /**
  * The fields in the ntuple model tree can carry different structural information about the type system.
  * Leaf fields contain just data, collection fields resolve to offset columns, record fields have no
  * materialization on the primitive column layer.
  */
 enum ENTupleStructure {
-  kLeaf,
-  kCollection,
-  kRecord,
-  kVariant,
-  kReference, // unimplemented so far
-  kInvalid,
+   kLeaf,
+   kCollection,
+   kRecord,
+   kVariant,
+   kReference, // unimplemented so far
+   kInvalid,
 };
 
 /// Integer type long enough to hold the maximum number of entries in a column
@@ -116,38 +109,44 @@ public:
    ClusterSize_t::ValueType GetIndex() const { return fIndex; }
 };
 
-/// Every NTuple is identified by a UUID.  TODO(jblomer): should this be a TUUID?
-using RNTupleUuid = std::string;
+/// RNTupleLocator payload that is common for object stores using 64bit location information.
+/// This might not contain the full location of the content. In particular, for page locators this information may be
+/// used in conjunction with the cluster and column ID.
+struct RNTupleLocatorObject64 {
+   std::uint64_t fLocation = 0;
+   bool operator==(const RNTupleLocatorObject64 &other) const { return fLocation == other.fLocation; }
+};
 
+/// Generic information about the physical location of data. Values depend on the concrete storage type.  E.g.,
+/// for a local file `fPosition` might be a 64bit file offset. Referenced objects on storage can be compressed
+/// and therefore we need to store their actual size.
+/// TODO(jblomer): consider moving this to `RNTupleDescriptor`
+struct RNTupleLocator {
+   /// Values for the _Type_ field in non-disk locators; see `doc/specifications.md` for details
+   enum ELocatorType : std::uint8_t {
+      kTypeFile = 0x00,
+      kTypeURI = 0x01,
+      kTypeDAOS = 0x02,
+   };
 
-/// 64 possible flags to apply to all versioned entities (so far unused).
-using NTupleFlags_t = std::uint64_t;
-/// For forward and backward compatibility, attach version information to
-/// the consitituents of the file format (column, field, cluster, ntuple).
-class RNTupleVersion {
-private:
-   /// The version used to write an entity
-   std::uint32_t fVersionUse = 0;
-   /// The minimum required version necessary to read an entity
-   std::uint32_t fVersionMin = 0;
-   NTupleFlags_t fFlags = 0;
+   /// Simple on-disk locators consisting of a 64-bit offset use variant type `uint64_t`; extended locators have
+   /// `fPosition.index()` > 0
+   std::variant<std::uint64_t, std::string, RNTupleLocatorObject64> fPosition;
+   std::uint32_t fBytesOnStorage = 0;
+   /// For non-disk locators, the value for the _Type_ field. This makes it possible to have different type values even
+   /// if the payload structure is identical.
+   ELocatorType fType = kTypeFile;
+   /// Reserved for use by concrete storage backends
+   std::uint8_t fReserved = 0;
 
-public:
-   RNTupleVersion() = default;
-   RNTupleVersion(std::uint32_t versionUse, std::uint32_t versionMin)
-     : fVersionUse(versionUse), fVersionMin(versionMin)
-   {}
-   RNTupleVersion(std::uint32_t versionUse, std::uint32_t versionMin, NTupleFlags_t flags)
-     : fVersionUse(versionUse), fVersionMin(versionMin), fFlags(flags)
-   {}
-
-   bool operator ==(const RNTupleVersion &other) const {
-      return fVersionUse == other.fVersionUse && fVersionMin == other.fVersionMin && fFlags == other.fFlags;
+   bool operator==(const RNTupleLocator &other) const {
+      return fPosition == other.fPosition && fBytesOnStorage == other.fBytesOnStorage && fType == other.fType;
    }
-
-   std::uint32_t GetVersionUse() const { return fVersionUse; }
-   std::uint32_t GetVersionMin() const { return fVersionMin; }
-   NTupleFlags_t GetFlags() const { return fFlags; }
+   template <typename T>
+   const T &GetPosition() const
+   {
+      return std::get<T>(fPosition);
+   }
 };
 
 } // namespace Experimental

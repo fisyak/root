@@ -20,7 +20,7 @@ Monte Carlo event generator (integrator) FOAM.
    an arbitrary probability distribution  in n dimensions,
    for which you supply your own method. FOAM can do it for you!
    Even if your distributions has quite strong peaks and is discontinuous!
--  FOAM generates random points with weight one or with variable weight.
+ - FOAM generates random points with weight one or with variable weight.
  - FOAM is capable to integrate using efficient "adaptive" MC method.
    (The distribution does not need to be normalized to one.)
 
@@ -126,10 +126,10 @@ public:
 
    FoamIntegrandFunction(FunctionPtr func) : fFunc(func) {}
 
-   virtual ~FoamIntegrandFunction() {}
+   ~FoamIntegrandFunction() override {}
 
    // evaluate the density using the provided function pointer
-   Double_t Density (Int_t nDim, Double_t * x) {
+   Double_t Density (Int_t nDim, Double_t * x) override {
       return fFunc(nDim,x);
    }
 
@@ -751,7 +751,7 @@ void TFoam::Varedu(Double_t ceSum[5], Int_t &kBest, Double_t &xBest, Double_t &y
 void TFoam::Carver(Int_t &kBest, Double_t &xBest, Double_t &yBest)
 {
    Int_t    kProj,iBin;
-   Double_t carve,carvTot,carvMax,carvOne,binMax,binTot;
+   Double_t carve,carvTot,carvMax,carvOne,binMax;
    Int_t    jLow,jUp,iLow,iUp;
    Double_t theBin;
    // Int_t    jDivi; // TEST
@@ -780,10 +780,8 @@ void TFoam::Carver(Int_t &kBest, Double_t &xBest, Double_t &yBest)
             return;
          }
          carvTot = 0.0;
-         binTot  = 0.0;
          for(iBin=0;iBin<fNBin;iBin++){
             carvTot = carvTot + (binMax-bins[iBin]);     // Total Carve (more stable)
-            binTot  +=bins[iBin];
          }
          // primTot = binMax*fNBin;
          //std::cout <<"Carver:  CarvTot "<<CarvTot<< "    primTot "<<primTot<<std::endl;
@@ -1068,9 +1066,9 @@ Double_t TFoam::Eval(Double_t *xRand)
    Double_t result;
 
    if(!fRho) {   //interactive mode
-      Long_t paramArr[3];
-      paramArr[0]=(Long_t)fDim;
-      paramArr[1]=(Long_t)xRand;
+      Longptr_t paramArr[3];
+      paramArr[0]=(Longptr_t)fDim;
+      paramArr[1]=(Longptr_t)xRand;
       fMethodCall->SetParamPtrs(paramArr);
       fMethodCall->Execute(result);
    } else {       //compiled mode

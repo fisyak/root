@@ -1,9 +1,9 @@
 \defgroup Matrix Matrix Linear Algebra
 \ingroup Math
-\brief The ROOT Matrix Linear Algebra  package.
+\brief The %ROOT Matrix Linear Algebra  package.
 
 
-The ROOT linear algebra package provides a complete environment in ROOT to perform matrix
+The %ROOT linear algebra package provides a complete environment in %ROOT to perform matrix
 calculations such as matrix-vector and matrix-matrix  multiplications and other linear
 algebra calculations like equation solving and eigenvalue decompositions.
 
@@ -16,7 +16,7 @@ The present package implements all the basic algorithms dealing
 
 ### Matrix classes
 
-ROOT provides the following matrix classes, among others:
+%ROOT provides the following matrix classes, among others:
 
 - `TMatrixDBase`
 
@@ -236,7 +236,7 @@ less accurate.
 
 #### Using decomposition classes for inverting
 
-You can also use the following decomposition classes (see → [Matrix decompositions](#MD"))
+You can also use the following decomposition classes (see → [Matrix decompositions](\ref MD))
 for inverting a matrix:
 
 
@@ -357,7 +357,8 @@ The next table summarizes how to access the individual matrix elements in the ma
 | TMatrixDSub(A(i) TMatrixDSub(A,rl,rh,cl,ch)(i,j) | element A<sub>ij</sub><br>element A<sub>rl+i,cl+j</sub> |
 
 
-#### <a name="MD"></a> Matrix decompositions
+\anchor MD
+#### Matrix decompositions
 
 There are the following classes available for matrix decompositions:
 
@@ -384,8 +385,8 @@ eigenvectors for general dense and symmetric real matrices.
  conversion is completely transparent to the end user, e.g.
  "TMatrixT m = THaarMatrixT(5);" and _is_ efficient.
 
- Since TMatrixT et al. are fully integrated in ROOT, they of course
- can be stored in a ROOT database.
+ Since TMatrixT et al. are fully integrated in %ROOT, they of course
+ can be stored in a %ROOT database.
 
 ### How to efficiently use this package
 
@@ -441,7 +442,7 @@ is still better).
    TMatrixD C(A,TMatrixD::kTransposeMult,B);
 ~~~
 
-like in the following snippet (from $ROOTSYS/test/vmatrix.cxx)
+like in the following snippet (from `$ROOTSYS/test/vmatrix.cxx`)
 that verifies that for an orthogonal matrix T, T'T = TT' = E.
 
 ~~~ {.cpp}
@@ -510,7 +511,7 @@ Another example is applying of a simple function to each matrix element:
    }
 ~~~
 
-Validation code $ROOTSYS/test/vmatrix.cxx and vvector.cxx contain
+Validation code `$ROOTSYS/test/vmatrix.cxx` and `vvector.cxx` contain
 a few more examples of that kind.
 
 #### 6. Lazy matrices:

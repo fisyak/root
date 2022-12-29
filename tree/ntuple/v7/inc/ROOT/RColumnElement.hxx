@@ -17,14 +17,42 @@
 #define ROOT7_RColumnElement
 
 #include <ROOT/RColumnModel.hxx>
+#include <ROOT/RConfig.hxx>
 #include <ROOT/RNTupleUtil.hxx>
 
+#include <Byteswap.h>
 #include <TError.h>
 
 #include <cstring> // for memcpy
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <type_traits>
+
+#ifndef R__LITTLE_ENDIAN
+#ifdef R__BYTESWAP
+// `R__BYTESWAP` is defined in RConfig.hxx for little-endian architectures; undefined otherwise
+#define R__LITTLE_ENDIAN 1
+#else
+#define R__LITTLE_ENDIAN 0
+#endif
+#endif /* R__LITTLE_ENDIAN */
+
+namespace {
+/// \brief Copy and byteswap `count` elements of size `N` from `source` to `destination`.
+///
+/// Used on big-endian architectures for packing/unpacking elements whose column type requires
+/// a little-endian on-disk representation.
+template <std::size_t N>
+static void CopyElementsBswap(void *destination, const void *source, std::size_t count)
+{
+   auto dst = reinterpret_cast<typename RByteSwap<N>::value_type *>(destination);
+   auto src = reinterpret_cast<const typename RByteSwap<N>::value_type *>(source);
+   for (std::size_t i = 0; i < count; ++i) {
+      dst[i] = RByteSwap<N>::bswap(src[i]);
+   }
+}
+} // anonymous namespace
 
 namespace ROOT {
 namespace Experimental {
@@ -71,6 +99,7 @@ public:
 
    static std::unique_ptr<RColumnElementBase> Generate(EColumnType type);
    static std::size_t GetBitsOnStorage(EColumnType type);
+   static std::string GetTypeName(EColumnType type);
 
    /// Write one or multiple column elements into destination
    void WriteTo(void *destination, std::size_t count) const {
@@ -100,12 +129,41 @@ public:
 
    void *GetRawContent() const { return fRawContent; }
    std::size_t GetSize() const { return fSize; }
+   std::size_t GetPackedSize(std::size_t nElements) const { return (nElements * GetBitsOnStorage() + 7) / 8; }
+};
+
+/**
+ * Base class for columns whose on-storage representation is little-endian.
+ * The implementation of `Pack` and `Unpack` takes care of byteswap if the memory page is big-endian.
+ */
+template <typename CppT>
+class RColumnElementLE : public RColumnElementBase {
+public:
+   static constexpr bool kIsMappable = (R__LITTLE_ENDIAN == 1);
+   RColumnElementLE(void *rawContent, std::size_t size) : RColumnElementBase(rawContent, size) {}
+
+   void Pack(void *dst, void *src, std::size_t count) const final
+   {
+#if R__LITTLE_ENDIAN == 1
+      RColumnElementBase::Pack(dst, src, count);
+#else
+      CopyElementsBswap<sizeof(CppT)>(dst, src, count);
+#endif
+   }
+   void Unpack(void *dst, void *src, std::size_t count) const final
+   {
+#if R__LITTLE_ENDIAN == 1
+      RColumnElementBase::Unpack(dst, src, count);
+#else
+      CopyElementsBswap<sizeof(CppT)>(dst, src, count);
+#endif
+   }
 };
 
 /**
  * Pairs of C++ type and column type, like float and EColumnType::kReal32
  */
-template <typename CppT, EColumnType ColumnT>
+template <typename CppT, EColumnType ColumnT = EColumnType::kUnknown>
 class RColumnElement : public RColumnElementBase {
 public:
    explicit RColumnElement(CppT* value) : RColumnElementBase(value, sizeof(CppT))
@@ -116,25 +174,153 @@ public:
    }
 };
 
+template <>
+class RColumnElement<bool, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(bool);
+   explicit RColumnElement(bool *value) : RColumnElementBase(value, kSize) {}
+};
 
 template <>
-class RColumnElement<float, EColumnType::kReal32> : public RColumnElementBase {
+class RColumnElement<char, EColumnType::kUnknown> : public RColumnElementBase {
 public:
-   static constexpr bool kIsMappable = true;
+   static constexpr std::size_t kSize = sizeof(char);
+   explicit RColumnElement(char *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<std::int8_t, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(std::int8_t);
+   explicit RColumnElement(std::int8_t *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<std::uint8_t, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(std::uint8_t);
+   explicit RColumnElement(std::uint8_t *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<std::int16_t, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(std::int16_t);
+   explicit RColumnElement(std::int16_t *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<std::uint16_t, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(std::uint16_t);
+   explicit RColumnElement(std::uint16_t *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<std::int32_t, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(std::int32_t);
+   explicit RColumnElement(std::int32_t *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<std::uint32_t, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(std::uint32_t);
+   explicit RColumnElement(std::uint32_t *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<std::int64_t, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(std::int64_t);
+   explicit RColumnElement(std::int64_t *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<std::uint64_t, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(std::uint64_t);
+   explicit RColumnElement(std::uint64_t *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<float, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(float);
+   explicit RColumnElement(float *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<double, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(double);
+   explicit RColumnElement(double *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<ClusterSize_t, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(ClusterSize_t);
+   explicit RColumnElement(ClusterSize_t *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<RColumnSwitch, EColumnType::kUnknown> : public RColumnElementBase {
+public:
+   static constexpr std::size_t kSize = sizeof(RColumnSwitch);
+   explicit RColumnElement(RColumnSwitch *value) : RColumnElementBase(value, kSize) {}
+};
+
+template <>
+class RColumnElement<float, EColumnType::kReal32> : public RColumnElementLE<float> {
+public:
    static constexpr std::size_t kSize = sizeof(float);
    static constexpr std::size_t kBitsOnStorage = kSize * 8;
-   explicit RColumnElement(float *value) : RColumnElementBase(value, kSize) {}
+   explicit RColumnElement(float *value) : RColumnElementLE(value, kSize) {}
    bool IsMappable() const final { return kIsMappable; }
    std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
 };
 
 template <>
-class RColumnElement<double, EColumnType::kReal64> : public RColumnElementBase {
+class RColumnElement<double, EColumnType::kReal64> : public RColumnElementLE<double> {
 public:
-   static constexpr bool kIsMappable = true;
    static constexpr std::size_t kSize = sizeof(double);
    static constexpr std::size_t kBitsOnStorage = kSize * 8;
-   explicit RColumnElement(double *value) : RColumnElementBase(value, kSize) {}
+   explicit RColumnElement(double *value) : RColumnElementLE(value, kSize) {}
+   bool IsMappable() const final { return kIsMappable; }
+   std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
+};
+
+template <>
+class RColumnElement<std::int8_t, EColumnType::kInt8> : public RColumnElementBase {
+public:
+   static constexpr bool kIsMappable = true;
+   static constexpr std::size_t kSize = sizeof(std::int8_t);
+   static constexpr std::size_t kBitsOnStorage = kSize * 8;
+   explicit RColumnElement(std::int8_t *value) : RColumnElementBase(value, kSize) {}
+   bool IsMappable() const final { return kIsMappable; }
+   std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
+};
+
+template <>
+class RColumnElement<std::uint8_t, EColumnType::kInt8> : public RColumnElementBase {
+public:
+   static constexpr bool kIsMappable = true;
+   static constexpr std::size_t kSize = sizeof(std::uint8_t);
+   static constexpr std::size_t kBitsOnStorage = kSize * 8;
+   explicit RColumnElement(std::uint8_t *value) : RColumnElementBase(value, kSize) {}
+   bool IsMappable() const final { return kIsMappable; }
+   std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
+};
+
+template <>
+class RColumnElement<std::int8_t, EColumnType::kByte> : public RColumnElementBase {
+public:
+   static constexpr bool kIsMappable = true;
+   static constexpr std::size_t kSize = sizeof(std::int8_t);
+   static constexpr std::size_t kBitsOnStorage = kSize * 8;
+   explicit RColumnElement(std::int8_t *value) : RColumnElementBase(value, kSize) {}
    bool IsMappable() const final { return kIsMappable; }
    std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
 };
@@ -151,56 +337,71 @@ public:
 };
 
 template <>
-class RColumnElement<std::int32_t, EColumnType::kInt32> : public RColumnElementBase {
+class RColumnElement<std::int16_t, EColumnType::kInt16> : public RColumnElementLE<std::int16_t> {
 public:
-   static constexpr bool kIsMappable = true;
+   static constexpr std::size_t kSize = sizeof(std::int16_t);
+   static constexpr std::size_t kBitsOnStorage = kSize * 8;
+   explicit RColumnElement(std::int16_t *value) : RColumnElementLE(value, kSize) {}
+   bool IsMappable() const final { return kIsMappable; }
+   std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
+};
+
+template <>
+class RColumnElement<std::uint16_t, EColumnType::kInt16> : public RColumnElementLE<std::uint16_t> {
+public:
+   static constexpr std::size_t kSize = sizeof(std::uint16_t);
+   static constexpr std::size_t kBitsOnStorage = kSize * 8;
+   explicit RColumnElement(std::uint16_t *value) : RColumnElementLE(value, kSize) {}
+   bool IsMappable() const final { return kIsMappable; }
+   std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
+};
+
+template <>
+class RColumnElement<std::int32_t, EColumnType::kInt32> : public RColumnElementLE<std::int32_t> {
+public:
    static constexpr std::size_t kSize = sizeof(std::int32_t);
    static constexpr std::size_t kBitsOnStorage = kSize * 8;
-   explicit RColumnElement(std::int32_t *value) : RColumnElementBase(value, kSize) {}
+   explicit RColumnElement(std::int32_t *value) : RColumnElementLE(value, kSize) {}
    bool IsMappable() const final { return kIsMappable; }
    std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
 };
 
 template <>
-class RColumnElement<std::uint32_t, EColumnType::kInt32> : public RColumnElementBase {
+class RColumnElement<std::uint32_t, EColumnType::kInt32> : public RColumnElementLE<std::uint32_t> {
 public:
-   static constexpr bool kIsMappable = true;
    static constexpr std::size_t kSize = sizeof(std::uint32_t);
    static constexpr std::size_t kBitsOnStorage = kSize * 8;
-   explicit RColumnElement(std::uint32_t *value) : RColumnElementBase(value, kSize) {}
+   explicit RColumnElement(std::uint32_t *value) : RColumnElementLE(value, kSize) {}
    bool IsMappable() const final { return kIsMappable; }
    std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
 };
 
 template <>
-class RColumnElement<std::int64_t, EColumnType::kInt64> : public RColumnElementBase {
+class RColumnElement<std::int64_t, EColumnType::kInt64> : public RColumnElementLE<std::int64_t> {
 public:
-   static constexpr bool kIsMappable = true;
    static constexpr std::size_t kSize = sizeof(std::int64_t);
    static constexpr std::size_t kBitsOnStorage = kSize * 8;
-   explicit RColumnElement(std::int64_t *value) : RColumnElementBase(value, kSize) {}
+   explicit RColumnElement(std::int64_t *value) : RColumnElementLE(value, kSize) {}
    bool IsMappable() const final { return kIsMappable; }
    std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
 };
 
 template <>
-class RColumnElement<std::uint64_t, EColumnType::kInt64> : public RColumnElementBase {
+class RColumnElement<std::uint64_t, EColumnType::kInt64> : public RColumnElementLE<std::uint64_t> {
 public:
-   static constexpr bool kIsMappable = true;
    static constexpr std::size_t kSize = sizeof(std::uint64_t);
    static constexpr std::size_t kBitsOnStorage = kSize * 8;
-   explicit RColumnElement(std::uint64_t *value) : RColumnElementBase(value, kSize) {}
+   explicit RColumnElement(std::uint64_t *value) : RColumnElementLE(value, kSize) {}
    bool IsMappable() const final { return kIsMappable; }
    std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
 };
 
 template <>
-class RColumnElement<ClusterSize_t, EColumnType::kIndex> : public RColumnElementBase {
+class RColumnElement<ClusterSize_t, EColumnType::kIndex> : public RColumnElementLE<ClusterSize_t::ValueType> {
 public:
-   static constexpr bool kIsMappable = true;
    static constexpr std::size_t kSize = sizeof(ROOT::Experimental::ClusterSize_t);
    static constexpr std::size_t kBitsOnStorage = kSize * 8;
-   explicit RColumnElement(ClusterSize_t *value) : RColumnElementBase(value, kSize) {}
+   explicit RColumnElement(ClusterSize_t *value) : RColumnElementLE(value, kSize) {}
    bool IsMappable() const final { return kIsMappable; }
    std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
 };
@@ -208,16 +409,30 @@ public:
 template <>
 class RColumnElement<RColumnSwitch, EColumnType::kSwitch> : public RColumnElementBase {
 public:
-   static constexpr bool kIsMappable = true;
+   static constexpr bool kIsMappable = false;
    static constexpr std::size_t kSize = sizeof(ROOT::Experimental::RColumnSwitch);
    static constexpr std::size_t kBitsOnStorage = kSize * 8;
    explicit RColumnElement(RColumnSwitch *value) : RColumnElementBase(value, kSize) {}
    bool IsMappable() const final { return kIsMappable; }
    std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
+
+   void Pack(void *dst, void *src, std::size_t count) const final;
+   void Unpack(void *dst, void *src, std::size_t count) const final;
 };
 
 template <>
 class RColumnElement<char, EColumnType::kByte> : public RColumnElementBase {
+public:
+   static constexpr bool kIsMappable = true;
+   static constexpr std::size_t kSize = sizeof(char);
+   static constexpr std::size_t kBitsOnStorage = kSize * 8;
+   explicit RColumnElement(char *value) : RColumnElementBase(value, kSize) {}
+   bool IsMappable() const final { return kIsMappable; }
+   std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
+};
+
+template <>
+class RColumnElement<char, EColumnType::kChar> : public RColumnElementBase {
 public:
    static constexpr bool kIsMappable = true;
    static constexpr std::size_t kSize = sizeof(char);
@@ -234,6 +449,20 @@ public:
    static constexpr std::size_t kSize = sizeof(bool);
    static constexpr std::size_t kBitsOnStorage = 1;
    explicit RColumnElement(bool *value) : RColumnElementBase(value, kSize) {}
+   bool IsMappable() const final { return kIsMappable; }
+   std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
+
+   void Pack(void *dst, void *src, std::size_t count) const final;
+   void Unpack(void *dst, void *src, std::size_t count) const final;
+};
+
+template <>
+class RColumnElement<std::int64_t, EColumnType::kInt32> : public RColumnElementBase {
+public:
+   static constexpr bool kIsMappable = false;
+   static constexpr std::size_t kSize = sizeof(std::int64_t);
+   static constexpr std::size_t kBitsOnStorage = 32;
+   explicit RColumnElement(std::int64_t *value) : RColumnElementBase(value, kSize) {}
    bool IsMappable() const final { return kIsMappable; }
    std::size_t GetBitsOnStorage() const final { return kBitsOnStorage; }
 

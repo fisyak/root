@@ -210,6 +210,11 @@ namespace Math {
       void Gaussian2D(double sigmaX, double sigmaY, double rho, double &x, double &y) const;
 
       /**
+         Multivariate Gaussian distribution
+      */
+      void GaussianND(const int dim, double *pars, double *covmat, double *genpars) const;
+
+      /**
          Exponential distribution
       */
       double Exponential(double mu) const;
@@ -513,7 +518,7 @@ namespace Math {
    public:
       typedef GSLRandomEngine BaseType; 
       GSLRngMixMax();
-      virtual ~GSLRngMixMax();  // we need a dtcor since is not a standard GSL engine
+      ~GSLRngMixMax() override;  // we need a dtcor since is not a standard GSL engine
    };
 
 } // namespace Math

@@ -29,8 +29,8 @@ ClassImp(TPaletteAxis);
 ////////////////////////////////////////////////////////////////////////////////
 
 /*! \class TPaletteAxis
-\ingroup Histpainter
-\brief The palette painting class.
+    \ingroup Histpainter
+    \brief The palette painting class.
 
 A `TPaletteAxis` object is used to display the color palette when
 drawing 2-d histograms.
@@ -54,8 +54,7 @@ macro gives an example.
 
 Begin_Macro(source)
 {
-   TCanvas *c1 = new TCanvas("c1","c1",600,400);
-   TH2F *h2 = new TH2F("h2","Example of a resized palette ",40,-4,4,40,-20,20);
+   auto h2 = new TH2F("h2","Example of a resized palette ",40,-4,4,40,-20,20);
    Float_t px, py;
    for (Int_t i = 0; i < 25000; i++) {
       gRandom->Rannor(px,py);
@@ -64,9 +63,8 @@ Begin_Macro(source)
    gStyle->SetPalette(1);
    h2->Draw("COLZ");
    gPad->Update();
-   TPaletteAxis *palette = (TPaletteAxis*)h2->GetListOfFunctions()->FindObject("palette");
+   auto palette = (TPaletteAxis*)h2->GetListOfFunctions()->FindObject("palette");
    palette->SetY2NDC(0.7);
-   return c1;
 }
 End_Macro
 
@@ -82,18 +80,19 @@ As default labels and ticks are drawn by `TGAxis` at equidistant (lin or log)
 points as controlled by SetNdivisions.
 If option "CJUST" is given labels and ticks are justified at the
 color boundaries defined by the contour levels.
-In this case no optimization can be done. It is responsiblity of the
+In this case no optimization can be done. It is responsibility of the
 user to adjust minimum, maximum of the histogram and/or the contour levels
 to get a reasonable look of the plot.
 Only overlap of the labels is avoided if too many contour levels are used.
 
 This option is especially useful with user defined contours.
 An example is shown here:
+
 Begin_Macro(source)
 {
    gStyle->SetOptStat(0);
-   TCanvas *c1 = new TCanvas("c1","exa_CJUST",300,10,400,400);
-   TH2F *hpxpy = new TH2F("hpxpy","py vs px",40,-4,4,40,-4,4);
+   auto c = new TCanvas("c","exa_CJUST",300,10,400,400);
+   auto hpxpy = new TH2F("hpxpy","py vs px",40,-4,4,40,-4,4);
    // Fill histograms randomly
    TRandom3 randomNum;
    Float_t px, py;
@@ -119,7 +118,7 @@ End_Macro
 
 TPaletteAxis::TPaletteAxis(): TPave()
 {
-   fH  = 0;
+   fH = nullptr;
    SetName("");
 }
 
@@ -131,6 +130,7 @@ TPaletteAxis::TPaletteAxis(Double_t x1, Double_t y1, Double_t x2, Double_t  y2, 
    : TPave(x1, y1, x2, y2)
 {
    fH = h;
+   if (!fH) return;
    SetName("palette");
    TAxis *zaxis = fH->GetZaxis();
    fAxis.ImportAxisAttributes(zaxis);
@@ -151,7 +151,7 @@ TPaletteAxis::~TPaletteAxis()
 
 TPaletteAxis::TPaletteAxis(const TPaletteAxis &palette) : TPave(palette)
 {
-   ((TPaletteAxis&)palette).Copy(*this);
+   palette.TPaletteAxis::Copy(*this);
 }
 
 
@@ -160,7 +160,8 @@ TPaletteAxis::TPaletteAxis(const TPaletteAxis &palette) : TPave(palette)
 
 TPaletteAxis& TPaletteAxis::operator=(const TPaletteAxis &orig)
 {
-   orig.Copy( *this );
+   if (this != &orig)
+      orig.TPaletteAxis::Copy(*this);
    return *this;
 }
 
@@ -172,7 +173,6 @@ void TPaletteAxis::Copy(TObject &obj) const
 {
    TPave::Copy(obj);
    ((TPaletteAxis&)obj).fH    = fH;
-   ((TPaletteAxis&)obj).fName = fName;
 }
 
 
@@ -258,26 +258,28 @@ void TPaletteAxis::ExecuteEvent(Int_t event, Int_t px, Int_t py)
             ratio2 = temp;
          }
          if (ratio2 - ratio1 > 0.05) {
-            if (fH->GetDimension() == 2) {
-               Double_t zmin = fH->GetMinimum();
-               Double_t zmax = fH->GetMaximum();
-               if (gPad->GetLogz()) {
-                  if (zmin <= 0 && zmax > 0) zmin = TMath::Min((Double_t)1,
-                                                                  (Double_t)0.001 * zmax);
-                  zmin = TMath::Log10(zmin);
-                  zmax = TMath::Log10(zmax);
+            if (fH) {
+               if (fH->GetDimension() == 2) {
+                  Double_t zmin = fH->GetMinimum();
+                  Double_t zmax = fH->GetMaximum();
+                  if (gPad->GetLogz()) {
+                     if (zmin <= 0 && zmax > 0) zmin = TMath::Min((Double_t)1,
+                                                                     (Double_t)0.001 * zmax);
+                     zmin = TMath::Log10(zmin);
+                     zmax = TMath::Log10(zmax);
+                  }
+                  Double_t newmin = zmin + (zmax - zmin) * ratio1;
+                  Double_t newmax = zmin + (zmax - zmin) * ratio2;
+                  if (newmin < zmin)newmin = fH->GetBinContent(fH->GetMinimumBin());
+                  if (newmax > zmax)newmax = fH->GetBinContent(fH->GetMaximumBin());
+                  if (gPad->GetLogz()) {
+                     newmin = TMath::Exp(2.302585092994 * newmin);
+                     newmax = TMath::Exp(2.302585092994 * newmax);
+                  }
+                  fH->SetMinimum(newmin);
+                  fH->SetMaximum(newmax);
+                  fH->SetBit(TH1::kIsZoomed);
                }
-               Double_t newmin = zmin + (zmax - zmin) * ratio1;
-               Double_t newmax = zmin + (zmax - zmin) * ratio2;
-               if (newmin < zmin)newmin = fH->GetBinContent(fH->GetMinimumBin());
-               if (newmax > zmax)newmax = fH->GetBinContent(fH->GetMaximumBin());
-               if (gPad->GetLogz()) {
-                  newmin = TMath::Exp(2.302585092994 * newmin);
-                  newmax = TMath::Exp(2.302585092994 * newmax);
-               }
-               fH->SetMinimum(newmin);
-               fH->SetMaximum(newmax);
-               fH->SetBit(TH1::kIsZoomed);
             }
             gPad->Modified(kTRUE);
          }
@@ -307,6 +309,7 @@ void TPaletteAxis::ExecuteEvent(Int_t event, Int_t px, Int_t py)
 
 Int_t TPaletteAxis::GetBinColor(Int_t i, Int_t j)
 {
+   if (!fH) return 0;
    Double_t zc = fH->GetBinContent(i, j);
    return GetValueColor(zc);
 }
@@ -320,8 +323,12 @@ char *TPaletteAxis::GetObjectInfo(Int_t /* px */, Int_t py) const
    Double_t z;
    static char info[64];
 
-   Double_t zmin = fH->GetMinimum();
-   Double_t zmax = fH->GetMaximum();
+   Double_t zmin = 0.;
+   Double_t zmax = 0.;
+   if (fH) {
+      zmin = fH->GetMinimum();
+      zmax = fH->GetMaximum();
+   }
    Int_t   y1   = gPad->GetWh() - gPad->VtoPixel(fY1NDC);
    Int_t   y2   = gPad->GetWh() - gPad->VtoPixel(fY2NDC);
    Int_t   y    = gPad->GetWh() - py;
@@ -361,6 +368,8 @@ char *TPaletteAxis::GetObjectInfo(Int_t /* px */, Int_t py) const
 
 Int_t TPaletteAxis::GetValueColor(Double_t zc)
 {
+   if (!fH) return 0;
+
    Double_t wmin  = fH->GetMinimum();
    Double_t wmax  = fH->GetMaximum();
    Double_t wlmin = wmin;
@@ -374,7 +383,8 @@ Int_t TPaletteAxis::GetValueColor(Double_t zc)
    }
 
    Int_t ncolors = gStyle->GetNumberOfColors();
-   Int_t ndivz = fH->GetContour();
+   Int_t ndivz =0;
+   if (fH) ndivz = fH->GetContour();
    if (ndivz == 0) return 0;
    ndivz = TMath::Abs(ndivz);
    Int_t theColor, color;
@@ -395,6 +405,9 @@ Int_t TPaletteAxis::GetValueColor(Double_t zc)
 
 void TPaletteAxis::Paint(Option_t *)
 {
+
+   if (!fH) return;
+
    ConvertNDCtoPad();
 
    SetFillStyle(1001);
@@ -406,7 +419,8 @@ void TPaletteAxis::Paint(Option_t *)
    Double_t wmax = fH->GetMaximum();
    Double_t wlmin = wmin;
    Double_t wlmax = wmax;
-   Double_t y1, y2, w1, w2, zc;
+   Double_t b1, b2, w1, w2, zc;
+   Bool_t   kHorizontal = false;
 
    if ((wlmax - wlmin) <= 0) {
       Double_t mz = wlmin * 0.1;
@@ -417,9 +431,10 @@ void TPaletteAxis::Paint(Option_t *)
       wmax  = wlmax;
    }
 
+   if (GetX2NDC()-GetX1NDC() > GetY2NDC()-GetY1NDC()) kHorizontal = true;
+
    if (gPad->GetLogz()) {
-      if (wmin <= 0 && wmax > 0) wmin = TMath::Min((Double_t)1,
-                                                      (Double_t)0.001 * wmax);
+      if (wmin <= 0 && wmax > 0) wmin = TMath::Min((Double_t)1, (Double_t)0.001 * wmax);
       wlmin = TMath::Log10(wmin);
       wlmax = TMath::Log10(wmax);
    }
@@ -432,18 +447,20 @@ void TPaletteAxis::Paint(Option_t *)
    // import Attributes already here since we might need them for CJUST
    if (fH->GetDimension() == 2) fAxis.ImportAxisAttributes(fH->GetZaxis());
    // case option "CJUST": put labels directly at color boundaries
-   TLatex *label = NULL;
-   TLine *line = NULL;
+   TLatex *label = nullptr;
+   TLine *line = nullptr;
    Double_t prevlab = 0;
    TString opt(fH->GetDrawOption());
    if (opt.Contains("CJUST", TString::kIgnoreCase)) {
       label = new TLatex();
       label->SetTextFont(fAxis.GetLabelFont());
       label->SetTextColor(fAxis.GetLabelColor());
-      label->SetTextAlign(kHAlignLeft+kVAlignCenter);
+      if (kHorizontal) label->SetTextAlign(kHAlignCenter+kVAlignTop);
+      else             label->SetTextAlign(kHAlignLeft+kVAlignCenter);
       line = new TLine();
       line->SetLineColor(fAxis.GetLineColor());
-      line->PaintLine(xmax, ymin, xmax, ymax);
+      if (kHorizontal) line->PaintLine(xmin, ymin, xmax, ymin);
+      else             line->PaintLine(xmax, ymin, xmax, ymax);
    }
    Double_t scale = ndivz / (wlmax - wlmin);
    for (Int_t i = 0; i < ndivz; i++) {
@@ -463,8 +480,13 @@ void TPaletteAxis::Paint(Option_t *)
       }
 
       if (w2 <= wlmin) continue;
-      y1 = ymin + (w1 - wlmin) * (ymax - ymin) / ws;
-      y2 = ymin + (w2 - wlmin) * (ymax - ymin) / ws;
+      if (kHorizontal) {
+         b1 = xmin + (w1 - wlmin) * (xmax - xmin) / ws;
+         b2 = xmin + (w2 - wlmin) * (xmax - xmin) / ws;
+      } else {
+         b1 = ymin + (w1 - wlmin) * (ymax - ymin) / ws;
+         b2 = ymin + (w2 - wlmin) * (ymax - ymin) / ws;
+      }
 
       if (fH->TestBit(TH1::kUserContour)) {
          color = i;
@@ -475,7 +497,8 @@ void TPaletteAxis::Paint(Option_t *)
       theColor = Int_t((color + 0.99) * Double_t(ncolors) / Double_t(ndivz));
       SetFillColor(gStyle->GetColorPalette(theColor));
       TAttFill::Modify();
-      gPad->PaintBox(xmin, y1, xmax, y2);
+      if (kHorizontal) gPad->PaintBox(b1, ymin, b2, ymax);
+      else             gPad->PaintBox(xmin, b1, xmax, b2);
       // case option "CJUST": put labels directly
       if (label) {
          Double_t lof = fAxis.GetLabelOffset()*(gPad->GetUxmax()-gPad->GetUxmin());
@@ -488,16 +511,21 @@ void TPaletteAxis::Paint(Option_t *)
             zlab = TMath::Power(10, zlab);
          }
          // make sure labels dont overlap
-         if (i == 0 || (y1 - prevlab) > 1.5*lsize_user) {
-            label->PaintLatex(xmax + lof, y1, 0, lsize, Form("%g", zlab));
-            prevlab = y1;
+         if (i == 0 || (b1 - prevlab) > 1.5*lsize_user) {
+            if (kHorizontal) label->PaintLatex(b1, ymin - lof, 0, lsize, Form("%g", zlab));
+            else             label->PaintLatex(xmax + lof, b1, 0, lsize, Form("%g", zlab));
+            prevlab = b1;
          }
-         line->PaintLine(xmax-tlength, y1, xmax, y1);
+         if (kHorizontal) line->PaintLine(b2, ymin+tlength, b2, ymin);
+         else             line->PaintLine(xmax-tlength, b1, xmax, b1);
          if (i == ndivz-1) {
             // label + tick at top of axis
-            if ((y2 - prevlab > 1.5*lsize_user))
-               label->PaintLatex(xmax + lof, y2, 0, lsize, Form("%g",fH->GetMaximum()));
-            line->PaintLine(xmax-tlength, y2, xmax, y2);
+            if ((b2 - prevlab > 1.5*lsize_user)) {
+               if (kHorizontal) label->PaintLatex(b2, ymin - lof, 0, lsize, Form("%g",fH->GetMaximum()));
+               else             label->PaintLatex(xmax + lof, b2, 0, lsize, Form("%g",fH->GetMaximum()));
+            }
+            if (kHorizontal) line->PaintLine(b1, ymin+tlength, b1, ymin);
+            else             line->PaintLine(xmax-tlength, b2, xmax, b2);
          }
       }
    }
@@ -528,7 +556,8 @@ void TPaletteAxis::Paint(Option_t *)
       delete line;
    } else {
       // default
-      fAxis.PaintAxis(xmax, ymin, xmax, ymax, wmin, wmax, ndiv, chopt);
+      if (kHorizontal) fAxis.PaintAxis(xmin, ymin, xmax, ymin, wmin, wmax, ndiv, chopt);
+      else             fAxis.PaintAxis(xmax, ymin, xmax, ymax, wmin, wmax, ndiv, chopt);
    }
 }
 
@@ -538,7 +567,10 @@ void TPaletteAxis::Paint(Option_t *)
 
 void TPaletteAxis::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 {
-   //char quote = '"';
+   if (!fH) return;
+
+   char quote = '"';
+
    out << "   " << std::endl;
    if (gROOT->ClassSaved(TPaletteAxis::Class())) {
       out << "   ";
@@ -552,12 +584,19 @@ void TPaletteAxis::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
       out << "palette = new " << ClassName() << "(" << fX1 << "," << fY1 << "," << fX2 << "," << fY2
           << "," << fH->GetName() << ");" << std::endl;
    }
-   out << "   palette->SetLabelColor(" << fAxis.GetLabelColor() << ");" << std::endl;
-   out << "   palette->SetLabelFont("  << fAxis.GetLabelFont() << ");" << std::endl;
-   out << "   palette->SetLabelOffset(" << fAxis.GetLabelOffset() << ");" << std::endl;
-   out << "   palette->SetLabelSize("  << fAxis.GetLabelSize() << ");" << std::endl;
-   out << "   palette->SetTitleOffset(" << fAxis.GetTitleOffset() << ");" << std::endl;
-   out << "   palette->SetTitleSize("  << fAxis.GetTitleSize() << ");" << std::endl;
+   out << "   palette->SetNdivisions(" << fH->GetZaxis()->GetNdivisions() << ");" << std::endl;
+   out << "   palette->SetAxisColor(" << fH->GetZaxis()->GetAxisColor() << ");" << std::endl;
+   out << "   palette->SetLabelColor(" << fH->GetZaxis()->GetLabelColor() << ");" << std::endl;
+   out << "   palette->SetLabelFont(" << fH->GetZaxis()->GetLabelFont() << ");" << std::endl;
+   out << "   palette->SetLabelOffset(" << fH->GetZaxis()->GetLabelOffset() << ");" << std::endl;
+   out << "   palette->SetLabelSize(" << fH->GetZaxis()->GetLabelSize() << ");" << std::endl;
+   out << "   palette->SetMaxDigits(" << fH->GetZaxis()->GetMaxDigits() << ");" << std::endl;
+   out << "   palette->SetTickLength(" << fH->GetZaxis()->GetTickLength() << ");" << std::endl;
+   out << "   palette->SetTitleOffset(" << fH->GetZaxis()->GetTitleOffset() << ");" << std::endl;
+   out << "   palette->SetTitleSize(" << fH->GetZaxis()->GetTitleSize() << ");" << std::endl;
+   out << "   palette->SetTitleColor(" << fH->GetZaxis()->GetTitleColor() << ");" << std::endl;
+   out << "   palette->SetTitleFont(" << fH->GetZaxis()->GetTitleFont() << ");" << std::endl;
+   out << "   palette->SetTitle(" << quote << fH->GetZaxis()->GetTitle() << quote << ");" << std::endl;
    SaveFillAttributes(out, "palette", -1, -1);
    SaveLineAttributes(out, "palette", 1, 1, 1);
 }
@@ -568,10 +607,11 @@ void TPaletteAxis::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
 
 void TPaletteAxis::UnZoom()
 {
-   TView *view = gPad->GetView();
+   if (!fH) return;
+   TView *view = gPad ? gPad->GetView() : nullptr;
    if (view) {
       delete view;
-      gPad->SetView(0);
+      gPad->SetView(nullptr);
    }
    fH->GetZaxis()->SetRange(0, 0);
    if (fH->GetDimension() == 2) {

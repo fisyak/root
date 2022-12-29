@@ -13,15 +13,6 @@
 #define ROOT_TGGC
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGGC and TGGCPool                                                    //
-//                                                                      //
-// Encapsulate a graphics context used in the low level graphics.       //
-// TGGCPool provides a pool of graphics contexts.                       //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
 #include "TGObject.h"
 #include "TRefCnt.h"
 
@@ -33,8 +24,8 @@ class TGGC : public TObject, public TRefCnt {
 friend class TGGCPool;
 
 protected:
-   GCValues_t fValues = {}; // graphics context values + mask
-   GContext_t fContext;     // graphics context handle
+   GCValues_t fValues = {}; ///< graphics context values + mask
+   GContext_t fContext;     ///< graphics context handle
 
    TGGC(GCValues_t *values, Bool_t calledByGCPool);
    void UpdateValues(GCValues_t *v);
@@ -102,10 +93,10 @@ public:
    const char       *GetDashes() const { return fValues.fDashes; }
    Int_t             GetArcMode() const { return fValues.fArcMode; }
 
-   void Print(Option_t *option="") const;
-   void SavePrimitive(std::ostream &out, Option_t *option = "");
+   void Print(Option_t *option="") const override;
+   void SavePrimitive(std::ostream &out, Option_t *option = "") override;
 
-   ClassDef(TGGC,0)  // Graphics context
+   ClassDefOverride(TGGC,0)  // Graphics context
 };
 
 
@@ -123,8 +114,13 @@ private:
 protected:
    TGGCPool(const TGGCPool& gp) : TGObject(gp), fList(gp.fList) { }
    TGGCPool& operator=(const TGGCPool& gp)
-     {if(this!=&gp) {TGObject::operator=(gp); fList=gp.fList;}
-     return *this;}
+   {
+      if (this != &gp) {
+         TGObject::operator=(gp);
+         fList = gp.fList;
+      }
+      return *this;
+   }
 
 public:
    TGGCPool(TGClient *client);
@@ -138,9 +134,9 @@ public:
    TGGC *FindGC(const TGGC *gc);
    TGGC *FindGC(GContext_t gc);
 
-   void  Print(Option_t *option="") const;
+   void  Print(Option_t *option="") const override;
 
-   ClassDef(TGGCPool,0)  // Graphics context pool
+   ClassDefOverride(TGGCPool,0)  // Graphics context pool
 };
 
 #endif

@@ -364,9 +364,9 @@ static int BuildScopeProxyDict(Cppyy::TCppScope_t scope, PyObject* pyclass)
 
             PyErr_Clear();
 
-        // it could still be that this is an anonymous enum, which is not in the list
+        // it could still be that this is an unnamed enum, which is not in the list
         // provided by the class
-            if (strstr(Cppyy::GetDatamemberType(scope, idata).c_str(), "(anonymous)") != 0) {
+            if (strstr(Cppyy::GetDatamemberType(scope, idata).c_str(), "(unnamed)") != 0) {
                 AddPropertyToClass(pyclass, scope, idata);
                 continue;
             }
@@ -642,6 +642,11 @@ PyObject* CPyCppyy::CreateScopeProxy(const std::string& name, PyObject* parent)
             // done with part (note that pos is moved one ahead here)
                 last = pos+2; ++pos;
             }
+        }
+
+        if (!parent && name.size() > 0) {
+        // Didn't find any scope in the name, so must be global
+	    parent = CreateScopeProxy(Cppyy::gGlobalScope);
         }
 
         if (parent && !CPPScope_Check(parent)) {

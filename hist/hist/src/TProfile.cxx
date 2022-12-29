@@ -26,7 +26,7 @@ Bool_t TProfile::fgApproximate = kFALSE;
 ClassImp(TProfile);
 
 /** \class TProfile
-    \ingroup Hist
+    \ingroup Histograms
  Profile Histogram.
  Profile histograms are used to display the mean
  value of Y and its error for each bin in X. The displayed error is by default the
@@ -243,12 +243,13 @@ void TProfile::BuildOptions(Double_t ymin, Double_t ymax, Option_t *option)
 
 TProfile::TProfile(const TProfile &profile) : TH1D()
 {
-   ((TProfile&)profile).Copy(*this);
+   profile.TProfile::Copy(*this);
 }
 
 TProfile &TProfile::operator=(const TProfile &profile)
 {
-   ((TProfile &)profile).Copy(*this);
+   if (this != &profile)
+      profile.TProfile::Copy(*this);
    return *this;
 }
 
@@ -419,7 +420,7 @@ Int_t TProfile::BufferFill(Double_t x, Double_t y, Double_t w)
 void TProfile::Copy(TObject &obj) const
 {
    try {
-      TProfile & pobj = dynamic_cast<TProfile&>(obj);
+      TProfile &pobj = dynamic_cast<TProfile&>(obj);
       TH1D::Copy(pobj);
       fBinEntries.Copy(pobj.fBinEntries);
       fBinSumw2.Copy(pobj.fBinSumw2);
@@ -1178,7 +1179,7 @@ void TProfile::LabelsOption(Option_t *option, Option_t * /*ax */)
 /// add bin contents, errors and statistics.
 /// If overflows are present and limits are different the function will fail.
 /// The function returns the total number of entries in the result histogram
-/// if the merge is successfull, -1 otherwise.
+/// if the merge is successful, -1 otherwise.
 ///
 /// IMPORTANT remark. The axis x may have different number
 /// of bins and different limits, BUT the largest bin width must be
@@ -1630,7 +1631,7 @@ void TProfile::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
    out<<"   "<<std::endl;
    out<<"   "<<ClassName()<<" *";
 
-   //histogram pointer has by default teh histogram name.
+   //histogram pointer has by default the histogram name.
    //however, in case histogram has no directory, it is safer to add a incremental suffix
    static Int_t hcounter = 0;
    TString histName = GetName();

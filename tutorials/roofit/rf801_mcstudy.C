@@ -13,7 +13,6 @@
 #include "RooRealVar.h"
 #include "RooDataSet.h"
 #include "RooGaussian.h"
-#include "RooConstVar.h"
 #include "RooChebychev.h"
 #include "RooAddPdf.h"
 #include "RooMCStudy.h"
@@ -77,7 +76,7 @@ void rf801_mcstudy()
    // to speed up the study at the expense of some precision
 
    RooMCStudy *mcstudy =
-      new RooMCStudy(model, x, Binned(kTRUE), Silence(), Extended(), FitOptions(Save(kTRUE), PrintEvalErrors(0)));
+      new RooMCStudy(model, x, Binned(true), Silence(), Extended(), FitOptions(Save(true), PrintEvalErrors(0)));
 
    // G e n e r a t e   a n d   f i t   e v e n t s
    // ---------------------------------------------
@@ -91,7 +90,7 @@ void rf801_mcstudy()
    // Make plots of the distributions of mean, the error on mean and the pull of mean
    RooPlot *frame1 = mcstudy->plotParam(mean, Bins(40));
    RooPlot *frame2 = mcstudy->plotError(mean, Bins(40));
-   RooPlot *frame3 = mcstudy->plotPull(mean, Bins(40), FitGauss(kTRUE));
+   RooPlot *frame3 = mcstudy->plotPull(mean, Bins(40), FitGauss(true));
 
    // Plot distribution of minimized likelihood
    RooPlot *frame4 = mcstudy->plotNLL(Bins(40));

@@ -13,14 +13,6 @@
 #define ROOT_TGFSContainer
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGFileIcon, TGFileEntry, TGFSContainer                               //
-//                                                                      //
-// Utility classes used by the file selection dialog (TGFileDialog).    //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
 #include "TGListView.h"
 #include "TGDNDManager.h"
 
@@ -50,20 +42,20 @@ struct FileStat_t;
 class TGFileItem : public TGLVEntry {
 
 protected:
-   const TGPicture  *fBlpic;        // big icon
-   const TGPicture  *fSlpic;        // small icon
-   const TGPicture  *fLcurrent;     // current icon
-   Int_t             fType;         // file type
-   Int_t             fUid, fGid;    // file uid and gid
-   Bool_t            fIsLink;       // true if symbolic link
-   Long_t            fModTime;      // modification time
-   Long64_t          fSize;         // file size
-   TBufferFile      *fBuf;          // buffer used for Drag and Drop
-   TDNDData          fDNDData;      // Drag and Drop data
+   const TGPicture  *fBlpic;        ///< big icon
+   const TGPicture  *fSlpic;        ///< small icon
+   const TGPicture  *fLcurrent;     ///< current icon
+   Int_t             fType;         ///< file type
+   Int_t             fUid, fGid;    ///< file uid and gid
+   Bool_t            fIsLink;       ///< true if symbolic link
+   Long_t            fModTime;      ///< modification time
+   Long64_t          fSize;         ///< file size
+   TBufferFile      *fBuf;          ///< buffer used for Drag and Drop
+   TDNDData          fDNDData;      ///< Drag and Drop data
 
    void         Init(const TGPicture *blpic, const TGPicture *slpic,
                      FileStat_t &stat, EListViewMode viewMode);
-   virtual void DoRedraw();
+   void DoRedraw() override;
 
 public:
    TGFileItem(const TGWindow *p = nullptr,
@@ -83,9 +75,9 @@ public:
 
    virtual ~TGFileItem();
 
-   virtual void SetViewMode(EListViewMode viewMode);
+   void     SetViewMode(EListViewMode viewMode) override;
 
-   Bool_t   IsActive() const { return fActive; }
+   Bool_t   IsActive() const override { return fActive; }
    Bool_t   IsSymLink() const { return fIsLink; }
    Int_t    GetType() const { return fType; }
    Long64_t GetSize() const { return fSize; }
@@ -97,18 +89,18 @@ public:
       return &fDNDData;
    }
 
-   virtual Atom_t HandleDNDEnter(Atom_t *);
+   Atom_t HandleDNDEnter(Atom_t *) override;
 
-   virtual Bool_t HandleDNDLeave() {
+   Bool_t HandleDNDLeave() override {
       return kTRUE;
    }
 
-   virtual Atom_t HandleDNDPosition(int, int, Atom_t action, int, int) {
+   Atom_t HandleDNDPosition(int, int, Atom_t action, int, int) override {
       if (action == TGDNDManager::GetDNDActionCopy()) return action;
       return kNone;
    }
 
-   virtual Bool_t HandleDNDFinished() {
+   Bool_t HandleDNDFinished() override {
       return ((TGFrame *)(const_cast<TGWindow*>(GetParent())))->HandleDNDFinished();
    }
 
@@ -116,7 +108,7 @@ public:
 
    void SetDNDObject(TObject *obj);
 
-   ClassDef(TGFileItem,0)   // Class representing file system object
+   ClassDefOverride(TGFileItem,0)   // Class representing file system object
 };
 
 
@@ -125,23 +117,23 @@ class TGFileContainer : public TGLVContainer {
 friend class TGFSFrameElement;
 
 protected:
-   EFSSortMode       fSortType;       // sorting mode of contents
-   TRegexp          *fFilter;         // file filter
-   TViewUpdateTimer *fRefresh;        // refresh timer
-   ULong_t           fMtime;          // directory modification time
-   TString           fDirectory;      // current directory
-   TList            *fCleanups;       // list of pictures to cleanup
-   const TGPicture  *fFolder_t;       // small folder icon
-   const TGPicture  *fFolder_s;       // big folder icon
-   const TGPicture  *fApp_t;          // small application icon
-   const TGPicture  *fApp_s;          // big application icon
-   const TGPicture  *fDoc_t;          // small document icon
-   const TGPicture  *fDoc_s;          // big document icon
-   const TGPicture  *fSlink_t;        // small symbolic link icon
-   const TGPicture  *fSlink_s;        // big symbolic link icon
-   Bool_t            fCachePictures;  // kTRUE use caching
-   Bool_t            fDisplayStat;    // kFALSE to interrupt display directory
-                                      // contents in case of many files inside
+   EFSSortMode       fSortType;       ///< sorting mode of contents
+   TRegexp          *fFilter;         ///< file filter
+   TViewUpdateTimer *fRefresh;        ///< refresh timer
+   ULong_t           fMtime;          ///< directory modification time
+   TString           fDirectory;      ///< current directory
+   TList            *fCleanups;       ///< list of pictures to cleanup
+   const TGPicture  *fFolder_t;       ///< small folder icon
+   const TGPicture  *fFolder_s;       ///< big folder icon
+   const TGPicture  *fApp_t;          ///< small application icon
+   const TGPicture  *fApp_s;          ///< big application icon
+   const TGPicture  *fDoc_t;          ///< small document icon
+   const TGPicture  *fDoc_s;          ///< big document icon
+   const TGPicture  *fSlink_t;        ///< small symbolic link icon
+   const TGPicture  *fSlink_s;        ///< big symbolic link icon
+   Bool_t            fCachePictures;  ///< kTRUE use caching
+   Bool_t            fDisplayStat;    ///< kFALSE to interrupt display directory
+                                      ///< contents in case of many files inside
 
    void CreateFileList();
 
@@ -154,13 +146,13 @@ public:
 
    virtual ~TGFileContainer();
 
-   virtual Bool_t HandleTimer(TTimer *t);
+   Bool_t HandleTimer(TTimer *t) override;
    void StopRefreshTimer();
    void StartRefreshTimer(ULong_t msec=1000);
 
    virtual TGFileItem *AddFile(const char *name, const TGPicture *pic = nullptr, const TGPicture *lpic = nullptr);
    virtual TGFileItem *AddRemoteFile(TObject *obj, const TGPicture *ipic = nullptr, const TGPicture *ilpic = nullptr);
-   virtual void AddFrame(TGFrame *f, TGLayoutHints *l = nullptr);
+   void AddFrame(TGFrame *f, TGLayoutHints *l = nullptr) override;
    virtual void Sort(EFSSortMode sortType);
    virtual void SetFilter(const char *filter);
    virtual void ChangeDirectory(const char *path);
@@ -174,9 +166,9 @@ public:
                                 Int_t file_type, Bool_t is_link, const char *ext,
                                 Bool_t small);
 
-   virtual void SavePrimitive(std::ostream &out, Option_t *option = "");
+   void SavePrimitive(std::ostream &out, Option_t *option = "") override;
 
-   ClassDef(TGFileContainer,0)  // Container containing file system objects
+   ClassDefOverride(TGFileContainer,0)  // Container containing file system objects
 };
 
 #endif

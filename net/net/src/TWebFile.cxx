@@ -143,7 +143,9 @@ ClassImp(TWebFile);
 /// to see if the file is accessible. The preferred interface to this
 /// constructor is via TFile::Open().
 
-TWebFile::TWebFile(const char *url, Option_t *opt) : TFile(url, "WEB"), fSocket(0)
+TWebFile::TWebFile(const char *url, Option_t *opt)
+   : TFile(url, strstr(opt, "_WITHOUT_GLOBALREGISTRATION") != nullptr ? "WEB_WITHOUT_GLOBALREGISTRATION" : "WEB"),
+     fSocket(0)
 {
    TString option = opt;
    fNoProxy = kFALSE;
@@ -928,7 +930,6 @@ Int_t TWebFile::GetFromWeb10(char *buf, Int_t len, const TString &msg, Int_t nse
    }
 
    if (redirect && redir.IsNull()) {
-      ret = -1;
       Error("GetFromWeb10", "error - redirect without location from host %s", fUrl.GetHost());
    }
 
@@ -1188,7 +1189,7 @@ Int_t TWebFile::GetHead()
 ////////////////////////////////////////////////////////////////////////////////
 /// Read a line from the socket. Reads at most one less than the number of
 /// characters specified by maxsize. Reading stops when a newline character
-/// is found, The newline (\n) and cr (\r), if any, are removed.
+/// is found, The newline (\\n) and cr (\\r), if any, are removed.
 /// Returns -1 in case of error, or the number of characters read (>= 0)
 /// otherwise.
 
@@ -1351,13 +1352,15 @@ const char *TWebFile::HttpTerminator(const char *start, const char *peeked,
    if (p[0] == '\r' && p[1] == '\n')
       return p + 2;
 #else
-   if (start) { }   // start unused, silence compiler
-   const char *p = (const char*) memchr(peeked, '\n', peeklen);
-   if (p)
-      // p+1 because the line must include '\n'
-      return p + 1;
+   (void) start;   // start unused, silence compiler
+   if (peeked) {
+      const char *p = (const char*) memchr(peeked, '\n', peeklen);
+      if (p)
+         // p+1 because the line must include '\n'
+         return p + 1;
+   }
 #endif
-   return 0;
+   return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

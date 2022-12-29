@@ -6,7 +6,7 @@
 
 INCLUDE (CheckCXXSourceCompiles)
 
-#---Define a function to do not polute the top level namespace with unneeded variables-----------------------
+#---Define a function not to pollute the top level namespace with unneeded variables-----------------------
 function(RootConfigure)
 
 #---Define all sort of variables to bridge between the old Module.mk and the new CMake equivalents-----------
@@ -225,8 +225,6 @@ set(gfallibdir ${GFAL_LIBRARY_DIR})
 set(gfallib ${GFAL_LIBRARY})
 set(gfalincdir ${GFAL_INCLUDE_DIR})
 
-set(buildmemstat ${value${memstat}})
-
 set(buildalien ${value${alien}})
 set(alienlibdir ${ALIEN_LIBRARY_DIR})
 set(alienlib ${ALIEN_LIBRARY})
@@ -276,13 +274,8 @@ set(gvizcflags)
 
 set(buildpython ${value${pyroot}})
 set(pythonlibdir ${PYTHON_LIBRARY_DIR})
-if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.14)
-  set(pythonlib ${PYTHON_LIBRARIES})
-  set(pythonincdir ${PYTHON_INCLUDE_DIRS})
-else()
-  set(pythonlib ${PYTHON_LIBRARY})
-  set(pythonincdir ${PYTHON_INCLUDE_DIR})
-endif()
+set(pythonlib ${PYTHON_LIBRARIES})
+set(pythonincdir ${PYTHON_INCLUDE_DIRS})
 set(pythonlibflags)
 
 set(buildxml ${value${xml}})
@@ -385,6 +378,11 @@ if(CMAKE_USE_PTHREADS_INIT)
 else()
   set(haspthread undef)
 endif()
+if(cuda)
+  set(hascuda define)
+else()
+  set(hascuda undef)
+endif()
 if(x11)
   set(hasxft define)
 else()
@@ -409,11 +407,6 @@ if(vc)
   set(hasvc define)
 else()
   set(hasvc undef)
-endif()
-if(vmc)
-  set(hasvmc define)
-else()
-  set(hasvmc undef)
 endif()
 if(vdt)
   set(hasvdt define)
@@ -513,6 +506,11 @@ if (uring)
   set(hasuring define)
 else()
   set(hasuring undef)
+endif()
+if (roofit_multiprocess)
+  set(hasroofit_multiprocess define)
+else()
+  set(hasroofit_multiprocess undef)
 endif()
 
 # clear cache to allow reconfiguring
@@ -656,6 +654,12 @@ else()
    set(hashardwareinterferencesize undef)
 endif()
 
+if(root7 AND webgui)
+   set(root_browser_class "ROOT::Experimental::RWebBrowserImp")
+else()
+   set(root_browser_class "TRootBrowser")
+endif()
+
 #---root-config----------------------------------------------------------------------------------------------
 ROOT_GET_OPTIONS(features ENABLED)
 set(features "cxx${CMAKE_CXX_STANDARD} ${features}")
@@ -675,6 +679,11 @@ if(PYTHON_VERSION_STRING_Development_Other)
 endif()
 
 #---RConfigure.h---------------------------------------------------------------------------------------------
+try_compile(has__cplusplus "${CMAKE_BINARY_DIR}" SOURCES "${CMAKE_SOURCE_DIR}/config/__cplusplus.cxx"
+            OUTPUT_VARIABLE __cplusplus_PPout)
+string(REGEX MATCH "__cplusplus=([0-9]+)" __cplusplus "${__cplusplus_PPout}")
+set(__cplusplus ${CMAKE_MATCH_1}L)
+
 configure_file(${PROJECT_SOURCE_DIR}/config/RConfigure.in ginclude/RConfigure.h NEWLINE_STYLE UNIX)
 install(FILES ${CMAKE_BINARY_DIR}/ginclude/RConfigure.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
@@ -704,6 +713,11 @@ configure_file(${CMAKE_SOURCE_DIR}/cmake/scripts/ROOTConfig-version.cmake.in
 #---Compiler flags (because user apps are a bit dependent on them...)----------------------------------------
 string(REGEX REPLACE "(^|[ ]*)-W[^ ]*" "" __cxxflags "${CMAKE_CXX_FLAGS}")
 string(REGEX REPLACE "(^|[ ]*)-W[^ ]*" "" __cflags "${CMAKE_C_FLAGS}")
+
+if(MSVC)
+  string(REPLACE "-I${CMAKE_SOURCE_DIR}/build/win" "" __cxxflags "${__cxxflags}")
+  string(REPLACE "-I${CMAKE_SOURCE_DIR}/build/win" "" __cflags "${__cflags}")
+endif()
 
 if (cxxmodules)
   # Re-add the -Wno-module-import-in-extern-c which we just filtered out.
@@ -810,10 +824,10 @@ endif()
 
 #---compiledata.h--------------------------------------------------------------------------------------------
 
-if(APPLE AND runtime_cxxmodules)
-  # Modules have superior dynamic linker and they can resolve undefined symbols upon library loading.
-  set(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS} -undefined dynamic_lookup")
-  set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS} -undefined dynamic_lookup")
+# ROOTBUILD definition (it is defined in compiledata.h and used by ACLIC
+# to decide whether (by default) to optimize or not optimize the user scripts.)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+  set(ROOTBUILD "debug")
 endif()
 
 if(WIN32)
@@ -824,14 +838,14 @@ else()
     ${CMAKE_BINARY_DIR}/ginclude/compiledata.h "${CMAKE_CXX_COMPILER}"
         "${CMAKE_CXX_FLAGS_RELEASE}" "${CMAKE_CXX_FLAGS_DEBUG}" "${CMAKE_CXX_FLAGS}"
         "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS}" "${CMAKE_EXE_FLAGS}" "so"
-        "${libdir}" "-lCore" "-lRint" "${incdir}" "" "" "${ROOT_ARCHITECTURE}" "")
+        "${libdir}" "-lCore" "-lRint" "${incdir}" "" "" "${ROOT_ARCHITECTURE}" "${ROOTBUILD}")
 endif()
 
-#---Get the value of CMAKE_CXX_FLAGS provided by the user in the command line
+#---Get the values of ROOT_ALL_OPTIONS and CMAKE_CXX_FLAGS provided by the user in the command line
+set(all_features ${ROOT_ALL_OPTIONS})
 set(usercflags ${CMAKE_CXX_FLAGS-CACHED})
 file(REMOVE ${CMAKE_BINARY_DIR}/installtree/root-config)
 configure_file(${CMAKE_SOURCE_DIR}/config/root-config.in ${CMAKE_BINARY_DIR}/installtree/root-config @ONLY NEWLINE_STYLE UNIX)
-configure_file(${CMAKE_SOURCE_DIR}/config/memprobe.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/memprobe @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.sh ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.sh @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.csh ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.csh @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.fish ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.fish @ONLY NEWLINE_STYLE UNIX)
@@ -840,14 +854,17 @@ configure_file(${CMAKE_SOURCE_DIR}/config/setxrd.sh ${CMAKE_RUNTIME_OUTPUT_DIREC
 configure_file(${CMAKE_SOURCE_DIR}/config/proofserv.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/proofserv @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/roots.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/roots @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/root-help.el.in root-help.el @ONLY NEWLINE_STYLE UNIX)
+configure_file(${CMAKE_SOURCE_DIR}/config/rootssh ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/rootssh @ONLY NEWLINE_STYLE UNIX)
 if(xproofd AND xrootd AND ssl AND XROOTD_NOMAIN)
   configure_file(${CMAKE_SOURCE_DIR}/config/xproofd.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/xproofd @ONLY NEWLINE_STYLE UNIX)
 endif()
 if(WIN32)
   set(thisrootbat ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.bat)
+  set(thisrootps1 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.ps1)
   configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.bat ${thisrootbat} @ONLY)
   configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.ps1 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.ps1 @ONLY)
   configure_file(${CMAKE_SOURCE_DIR}/config/root.rc.in ${CMAKE_BINARY_DIR}/etc/root.rc @ONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/config/root-manifest.xml.in ${CMAKE_BINARY_DIR}/etc/root-manifest.xml @ONLY)
   install(FILES ${CMAKE_SOURCE_DIR}/build/win/w32pragma.h  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT headers)
   install(FILES ${CMAKE_SOURCE_DIR}/build/win/sehmap.h  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT headers)
 endif()
@@ -863,6 +880,11 @@ set(mandir $ROOTSYS/man)
 configure_file(${CMAKE_SOURCE_DIR}/config/root-config.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/root-config @ONLY NEWLINE_STYLE UNIX)
 if(MSVC)
   configure_file(${CMAKE_SOURCE_DIR}/config/root-config.bat.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/root-config.bat @ONLY)
+  install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/root-config.bat
+  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+              GROUP_EXECUTE GROUP_READ
+              WORLD_EXECUTE WORLD_READ
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.sh
@@ -871,15 +893,16 @@ install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.sh
               ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/setxrd.csh
               ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/setxrd.sh
               ${thisrootbat}
+              ${thisrootps1}
               PERMISSIONS OWNER_WRITE OWNER_READ
                           GROUP_READ
                           WORLD_READ
               DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/memprobe
-              ${CMAKE_BINARY_DIR}/installtree/root-config
+install(FILES ${CMAKE_BINARY_DIR}/installtree/root-config
               ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/roots
               ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/proofserv
+              ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/rootssh
               PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
                           GROUP_EXECUTE GROUP_READ
                           WORLD_EXECUTE WORLD_READ

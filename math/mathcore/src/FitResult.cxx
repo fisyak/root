@@ -147,15 +147,16 @@ void FitResult::FillResult(const std::shared_ptr<ROOT::Math::Minimizer> & min, c
    }
    else {
       // when no fFitFunc is present take parameters from FitConfig
-      fParNames.reserve( npar );
+      fParNames.resize( npar );
       for (unsigned int i = 0; i < npar; ++i ) {
-         fParNames.push_back( fconfig.ParSettings(i).Name() );
+         fParNames[i] = fconfig.ParSettings(i).Name();
       }
    }
 
 
    // check for fixed or limited parameters
    unsigned int nfree = 0;
+   if (!fParamBounds.empty()) fParamBounds.clear();
    for (unsigned int ipar = 0; ipar < npar; ++ipar) {
       const ParameterSettings & par = fconfig.ParSettings(ipar);
       if (par.IsFixed() ) fFixedParams[ipar] = true;
@@ -187,6 +188,10 @@ void FitResult::FillResult(const std::shared_ptr<ROOT::Math::Minimizer> & min, c
 
    // fill error matrix
    // if minimizer provides error provides also error matrix
+   // clear in case of re-filling an existing result
+   if (!fCovMatrix.empty()) fCovMatrix.clear();
+   if (!fGlobalCC.empty())  fGlobalCC.clear();
+
    if (min->Errors() != 0) {
 
       fErrors = std::vector<double>(min->Errors(), min->Errors() + npar ) ;
@@ -209,61 +214,6 @@ void FitResult::FillResult(const std::shared_ptr<ROOT::Math::Minimizer> & min, c
       }
 
    }
-
-}
-
-FitResult::~FitResult() {
-   // destructor. FitResult manages the fit Function pointer
-   //if (fFitFunc) delete fFitFunc;
-}
-
-FitResult::FitResult(const FitResult &rhs) :
-   fFitFunc(0)
-{
-   // Implementation of copy constructor
-   (*this) = rhs;
-}
-
-FitResult & FitResult::operator = (const FitResult &rhs) {
-   // Implementation of assignment operator.
-   if (this == &rhs) return *this;  // time saving self-test
-
-   // Manages the fitted function
-   // if (fFitFunc) delete fFitFunc;
-   // fFitFunc = 0;
-   // if (rhs.fFitFunc != 0 ) {
-   //    fFitFunc = dynamic_cast<IModelFunction *>( (rhs.fFitFunc)->Clone() );
-   //    assert(fFitFunc != 0);
-   // }
-
-   // copy all other data members
-   fValid = rhs.fValid;
-   fNormalized = rhs.fNormalized;
-   fNFree = rhs.fNFree;
-   fNdf = rhs.fNdf;
-   fNCalls = rhs.fNCalls;
-   fCovStatus = rhs.fCovStatus;
-   fStatus = rhs.fStatus;
-   fVal = rhs.fVal;
-   fEdm = rhs.fEdm;
-   fChi2 = rhs.fChi2;
-   fMinimizer = rhs.fMinimizer;
-   fObjFunc = rhs.fObjFunc;
-   fFitFunc = rhs.fFitFunc;
-
-   fFixedParams = rhs.fFixedParams;
-   fBoundParams = rhs.fBoundParams;
-   fParamBounds = rhs.fParamBounds;
-   fParams = rhs.fParams;
-   fErrors = rhs.fErrors;
-   fCovMatrix = rhs.fCovMatrix;
-   fGlobalCC = rhs.fGlobalCC;
-   fMinosErrors = rhs.fMinosErrors;
-
-   fMinimType = rhs.fMinimType;
-   fParNames = rhs.fParNames;
-
-   return *this;
 
 }
 
@@ -562,7 +512,7 @@ void FitResult::GetConfidenceIntervals(unsigned int n, unsigned int stride1, uns
    if (norm)
       corrFactor = TMath::StudentQuantile(0.5 + cl/2, fNdf) * std::sqrt( fChi2/fNdf );
    else
-      // correction to apply to the errors given a CL different than 1 sigma (cl=0.683) 
+      // correction to apply to the errors given a CL different than 1 sigma (cl=0.683)
       corrFactor = ROOT::Math::normal_quantile(0.5 + cl/2, 1);
 
 

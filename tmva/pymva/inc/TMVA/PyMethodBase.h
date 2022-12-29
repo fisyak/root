@@ -53,6 +53,12 @@ namespace TMVA {
    class MethodBoost;
    class DataSetInfo;
 
+   /// Function to find current Python executable
+   /// used by ROOT
+   /// If Python2 is installed return "python"
+   /// Instead if "Python3" return "python3"
+   TString Python_Executable();
+
    class PyMethodBase : public MethodBase {
 
       friend class Factory;
@@ -92,7 +98,7 @@ namespace TMVA {
       // create ranking
       virtual const Ranking *CreateRanking() = 0;
 
-      virtual Double_t GetMvaValue(Double_t *errLower = 0, Double_t *errUpper = 0) = 0;
+      virtual Double_t GetMvaValue(Double_t *errLower = nullptr, Double_t *errUpper = nullptr) = 0;
 
       Bool_t HasAnalysisType(Types::EAnalysisType type, UInt_t numberClasses, UInt_t numberTargets) = 0;
    protected:
@@ -130,6 +136,11 @@ namespace TMVA {
       static PyObject *fGlobalNS; // global namesapace
       PyObject *fLocalNS; // local namesapace
 
+   public:
+      static void PyRunString(TString code, PyObject *globalNS, PyObject* localNS); // Overloaded static Python utlity function for running Python code
+      static const char* PyStringAsString(PyObject *string); // Python Utility function for converting a Python String object to const char*
+      static std::vector<size_t> GetDataFromTuple(PyObject *tupleObject);  // Function casts Python Tuple object into vector of size_t
+      static std::vector<size_t> GetDataFromList(PyObject *listObject);    // Function casts Python List object into vector of size_t
       ClassDef(PyMethodBase, 0) // Virtual base class for all TMVA method
 
    };
