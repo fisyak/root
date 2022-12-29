@@ -1,4 +1,4 @@
-# Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.
+ # Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.
 # All rights reserved.
 #
 # For the licensing terms see $ROOTSYS/LICENSE.
@@ -274,6 +274,7 @@ if(all)
  set(tmva-rmva_defvalue ON)
  set(unuran_defvalue ON)
  set(vc_defvalue ON)
+ set(vmc_defvalue ON)
  set(vdt_defvalue ON)
  set(veccore_defvalue ON)
  set(vecgeom_defvalue ON)
@@ -417,14 +418,14 @@ endif()
 
 #---Removed options------------------------------------------------------------
 foreach(opt afdsmgrd afs bonjour castor chirp geocad glite globus hdfs ios
-            krb5 ldap memstat qt qtgsi rfio ruby sapdb srp table python vmc)
+            krb5 ldap memstat qt qtgsi rfio ruby sapdb srp python)
   if(${opt})
     message(FATAL_ERROR ">>> Option '${opt}' is no longer supported in ROOT ${ROOT_VERSION}.")
   endif()
 endforeach()
 
 #---Deprecated options------------------------------------------------------------------------
-foreach(opt alien)
+foreach(opt alien vmc)
   if(${opt})
     message(DEPRECATION ">>> Option '${opt}' is deprecated and will be removed in the next release of ROOT. Please contact root-dev@cern.ch should you still need it.")
   endif()
