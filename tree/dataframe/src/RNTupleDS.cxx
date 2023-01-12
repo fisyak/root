@@ -37,7 +37,7 @@
 * \ingroup dataframe
 * \brief The RDataSource implementation for RNTuple. It lets RDataFrame read RNTuple data.
 *
-* An RDataFrame that reads RNTuple data can be constructed using MakeNTupleDataFrame().
+* An RDataFrame that reads RNTuple data can be constructed using FromRNTuple().
 *
 * For each column containing an array or a collection, a corresponding column `#colname` is available to access
 * `colname.size()` without reading and deserializing the collection values.
@@ -367,14 +367,4 @@ ROOT::RDataFrame ROOT::RDF::Experimental::FromRNTuple(ROOT::Experimental::RNTupl
 {
    ROOT::RDataFrame rdf(std::make_unique<ROOT::Experimental::RNTupleDS>(ntuple->MakePageSource()));
    return rdf;
-}
-
-ROOT::RDataFrame ROOT::Experimental::MakeNTupleDataFrame(std::string_view ntupleName, std::string_view fileName)
-{
-   return ROOT::RDF::Experimental::FromRNTuple(ntupleName, fileName);
-}
-
-ROOT::RDataFrame ROOT::Experimental::MakeNTupleDataFrame(RNTuple *ntuple)
-{
-   return ROOT::RDF::Experimental::FromRNTuple(ntuple);
 }

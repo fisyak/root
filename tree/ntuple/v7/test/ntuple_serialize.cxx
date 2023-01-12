@@ -486,6 +486,12 @@ TEST(RNTuple, SerializeHeader)
       .MakeDescriptor()
       .Unwrap());
    builder.AddField(RFieldDescriptorBuilder()
+                       .FieldId(24)
+                       .FieldName("ptAlias")
+                       .Structure(ENTupleStructure::kLeaf)
+                       .MakeDescriptor()
+                       .Unwrap());
+   builder.AddField(RFieldDescriptorBuilder()
       .FieldId(137)
       .FieldName("jet")
       .Structure(ENTupleStructure::kRecord)
@@ -498,11 +504,13 @@ TEST(RNTuple, SerializeHeader)
       .MakeDescriptor()
       .Unwrap());
    builder.AddFieldLink(0, 42);
+   builder.AddFieldLink(0, 24);
    builder.AddFieldLink(0, 137);
    builder.AddFieldLink(137, 13);
-   builder.AddColumn(23, 42, RColumnModel(EColumnType::kReal32, false), 0);
-   builder.AddColumn(17, 137, RColumnModel(EColumnType::kIndex, true), 0);
-   builder.AddColumn(40, 137, RColumnModel(EColumnType::kByte, true), 1);
+   builder.AddColumn(23, 23, 42, RColumnModel(EColumnType::kReal32, false), 0);
+   builder.AddColumn(100, 23, 24, RColumnModel(EColumnType::kReal32, false), 0);
+   builder.AddColumn(17, 17, 137, RColumnModel(EColumnType::kIndex, true), 0);
+   builder.AddColumn(40, 40, 137, RColumnModel(EColumnType::kByte, true), 1);
 
    auto desc = builder.MoveDescriptor();
    auto context = RNTupleSerializer::SerializeHeaderV1(nullptr, desc);
@@ -511,6 +519,13 @@ TEST(RNTuple, SerializeHeader)
    context = RNTupleSerializer::SerializeHeaderV1(buffer.get(), desc);
 
    RNTupleSerializer::DeserializeHeaderV1(buffer.get(), context.GetHeaderSize(), builder);
+
+   desc = builder.MoveDescriptor();
+   auto ptAliasFieldId = desc.FindFieldId("ptAlias");
+   auto colId = desc.FindLogicalColumnId(ptAliasFieldId, 0);
+   EXPECT_TRUE(desc.GetColumnDescriptor(colId).IsAliasColumn());
+   auto ptFieldId = desc.FindFieldId("pt");
+   EXPECT_EQ(desc.FindLogicalColumnId(ptFieldId, 0), desc.GetColumnDescriptor(colId).GetPhysicalId());
 }
 
 
@@ -531,13 +546,13 @@ TEST(RNTuple, SerializeFooter)
       .MakeDescriptor()
       .Unwrap());
    builder.AddFieldLink(0, 42);
-   builder.AddColumn(17, 42, RColumnModel(EColumnType::kIndex, true), 0);
+   builder.AddColumn(17, 17, 42, RColumnModel(EColumnType::kIndex, true), 0);
 
    ROOT::Experimental::RClusterDescriptor::RColumnRange columnRange;
    ROOT::Experimental::RClusterDescriptor::RPageRange::RPageInfo pageInfo;
    RClusterDescriptorBuilder clusterBuilder(84, 0, 100);
    ROOT::Experimental::RClusterDescriptor::RPageRange pageRange;
-   pageRange.fColumnId = 17;
+   pageRange.fPhysicalColumnId = 17;
    pageInfo.fNElements = 100;
    pageInfo.fLocator.fPosition = 7000U;
    pageRange.fPageInfos.emplace_back(pageInfo);

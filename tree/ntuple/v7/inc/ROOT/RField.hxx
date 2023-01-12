@@ -46,6 +46,9 @@
 class TClass;
 
 namespace ROOT {
+
+class TSchemaRule;
+
 namespace Experimental {
 
 class RCollectionField;
@@ -80,6 +83,7 @@ class RFieldBase {
    using ReadCallback_t = std::function<void(RFieldValue &)>;
 
 public:
+   static constexpr std::uint32_t kInvalidTypeVersion = -1U;
    /// No constructor needs to be called, i.e. any bit pattern in the allocated memory represents a valid type
    /// A trivially constructible field has a no-op GenerateValue() implementation
    static constexpr int kTraitTriviallyConstructible = 0x01;
@@ -124,6 +128,8 @@ protected:
    int fTraits = 0;
    /// List of functions to be called after reading a value
    std::vector<ReadCallback_t> fReadCallbacks;
+   /// C++ type version cached from the descriptor after a call to `ConnectPageSource()`
+   std::uint32_t fOnDiskTypeVersion = kInvalidTypeVersion;
 
    /// Creates the backing columns corresponsing to the field type for writing
    virtual void GenerateColumnsImpl() = 0;
@@ -153,6 +159,9 @@ protected:
    /// Returns an index that can be used to remove the callback.
    size_t AddReadCallback(ReadCallback_t func);
    void RemoveReadCallback(size_t idx);
+   /// Called by `ConnectPageSource()` only once connected; derived classes may override this
+   /// as appropriate
+   virtual void OnConnectPageSource() {}
 
 private:
    void InvokeReadCallbacks(RFieldValue &value)
@@ -283,6 +292,8 @@ public:
    void Attach(std::unique_ptr<Detail::RFieldBase> child);
 
    std::string GetName() const { return fName; }
+   /// Returns the field name and parent field names separated by dots ("grandparent.parent.child")
+   std::string GetQualifiedFieldName() const;
    std::string GetType() const { return fType; }
    ENTupleStructure GetStructure() const { return fStructure; }
    std::size_t GetNRepetitions() const { return fNRepetitions; }
@@ -306,6 +317,8 @@ public:
    virtual std::uint32_t GetFieldVersion() const { return 0; }
    /// Indicates an evolution of the C++ type itself
    virtual std::uint32_t GetTypeVersion() const { return 0; }
+   /// Return the C++ type version stored in the field descriptor; only valid after a call to `ConnectPageSource()`
+   std::uint32_t GetOnDiskTypeVersion() const { return fOnDiskTypeVersion; }
 
    RSchemaIterator begin();
    RSchemaIterator end();
@@ -357,12 +370,16 @@ private:
 private:
    RClassField(std::string_view fieldName, std::string_view className, TClass *classp);
    void Attach(std::unique_ptr<Detail::RFieldBase> child, RSubFieldInfo info);
+   /// Register post-read callbacks corresponding to a list of ROOT I/O customization rules. `classp` is used to
+   /// fill the `TVirtualObject` instance passed to the user function.
+   void AddReadCallbacksFromIORules(const std::span<const TSchemaRule *> rules, TClass *classp = nullptr);
 
 protected:
    std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const final;
    std::size_t AppendImpl(const Detail::RFieldValue& value) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, Detail::RFieldValue *value) final;
    void ReadInClusterImpl(const RClusterIndex &clusterIndex, Detail::RFieldValue *value) final;
+   void OnConnectPageSource() final;
 
 public:
    RClassField(std::string_view fieldName, std::string_view className);
@@ -379,6 +396,7 @@ public:
    std::vector<Detail::RFieldValue> SplitValue(const Detail::RFieldValue &value) const final;
    size_t GetValueSize() const override;
    size_t GetAlignment() const final { return fMaxAlignment; }
+   std::uint32_t GetTypeVersion() const final;
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const override;
 };
 

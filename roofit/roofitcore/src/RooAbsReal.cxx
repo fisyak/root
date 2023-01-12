@@ -63,8 +63,6 @@
 #include "RooProfileLL.h"
 #include "RooFunctor.h"
 #include "RooDerivative.h"
-#include "RooGenFunction.h"
-#include "RooMultiGenFunction.h"
 #include "RooXYChi2Var.h"
 #include "RooMinimizer.h"
 #include "RooChi2Var.h"
@@ -4180,26 +4178,6 @@ double RooAbsReal::findRoot(RooRealVar& x, double xmin, double xmax, double yval
 
 
 
-
-////////////////////////////////////////////////////////////////////////////////
-
-RooGenFunction* RooAbsReal::iGenFunction(RooRealVar& x, const RooArgSet& nset)
-{
-  return new RooGenFunction(*this,x,RooArgList(),nset.getSize()>0?nset:RooArgSet(x)) ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-
-RooMultiGenFunction* RooAbsReal::iGenFunction(const RooArgSet& observables, const RooArgSet& nset)
-{
-  return new RooMultiGenFunction(*this,observables,RooArgList(),nset.getSize()>0?nset:observables) ;
-}
-
-
-
-
 ////////////////////////////////////////////////////////////////////////////////
 /// Perform a \f$ \chi^2 \f$ fit to given histogram. By default the fit is executed through the MINUIT
 /// commands MIGRAD, HESSE in succession
@@ -4844,7 +4822,7 @@ void RooAbsReal::checkBatchComputation(const RooBatchCompute::RunContext& evalDa
   const double batchVal = batch.size() == 1 ? batch[0] : batch[evtNo];
   const double relDiff = value != 0. ? (value - batchVal)/value : value - batchVal;
 
-  if (fabs(relDiff) > relAccuracy && fabs(value) > 1.E-300) {
+  if (std::abs(relDiff) > relAccuracy && std::abs(value) > 1.E-300) {
     FormatPdfTree formatter;
     formatter << "--> (Batch computation wrong:)\n";
     printStream(formatter.stream(), kName | kClassName | kArgs | kExtras | kAddress, kInline);
