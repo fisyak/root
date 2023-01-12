@@ -632,7 +632,7 @@ RooAbsArg* RooVectorDataStore::addColumn(RooAbsArg& newVar, bool /*adjustRange*/
   const std::size_t numEvt = size();
 
   // Clone variable and attach to cloned tree
-  std::unique_ptr<RooAbsArg> newVarClone{newVar.cloneTree()};
+  RooAbsArg* newVarClone = newVar.cloneTree() ;
   newVarClone->recursiveRedirectServers(_vars,false) ;
 
   // Attach value place holder to this tree
@@ -656,13 +656,15 @@ RooAbsArg* RooVectorDataStore::addColumn(RooAbsArg& newVar, bool /*adjustRange*/
     get(i) ;
 
     newVarClone->syncCache(&_vars) ;
-    valHolder->copyCache(newVarClone.get()) ;
+    valHolder->copyCache(newVarClone) ;
 
     if (rv) rv->write(i) ;
     if (cv) cv->write(i) ;
   }
 
+  delete newVarClone ;
   return valHolder ;
+
 }
 
 
@@ -806,18 +808,17 @@ void RooVectorDataStore::cacheArgs(const RooAbsArg* owner, RooArgSet& newVarSet,
 
   checkInit() ;
 
-  std::vector<std::unique_ptr<RooArgSet>> vlist;
+  std::vector<RooArgSet*> vlist;
   RooArgList cloneSet;
 
   for (const auto var : orderedArgs) {
 
     // Clone variable and attach to cloned tree
-    auto newVarCloneList = std::make_unique<RooArgSet>();
-    RooArgSet(*var).snapshot(*newVarCloneList);
+    RooArgSet* newVarCloneList = (RooArgSet*) RooArgSet(*var).snapshot() ;
     RooAbsArg* newVarClone = newVarCloneList->find(var->GetName()) ;
     newVarClone->recursiveRedirectServers(_vars,false) ;
 
-    vlist.emplace_back(std::move(newVarCloneList));
+    vlist.push_back(newVarCloneList) ;
     cloneSet.add(*newVarClone) ;
   }
 
@@ -889,21 +890,24 @@ void RooVectorDataStore::cacheArgs(const RooAbsArg* owner, RooArgSet& newVarSet,
     // Activate change tracking mode, if requested
     if (!arg->getAttribute("ConstantExpression") && dynamic_cast<RooAbsReal*>(arg)) {
       RealVector* rv = newCache->addReal((RooAbsReal*)arg) ;
-      RooArgSet deps;
-      arg->getParameters(&_vars, deps);
-      rv->setDependents(deps) ;
+      RooArgSet* deps = arg->getParameters(_vars) ;
+      rv->setDependents(*deps) ;
 
       // WV lookup normalization set and associate with RealVector
       // find ordinal number of arg in original list
       Int_t idx = cloneSet.index(arg->GetName()) ;
 
-      coutI(Optimization) << "RooVectorDataStore::cacheArg() element " << arg->GetName() << " has change tracking enabled on parameters " << deps << endl ;
+      coutI(Optimization) << "RooVectorDataStore::cacheArg() element " << arg->GetName() << " has change tracking enabled on parameters " << *deps << endl ;
       rv->setNset(nsetList[idx]) ;
+      delete deps ;
     }
 
   }
 
 
+  for (auto set : vlist) {
+    delete set;
+  }
   for (auto set : argObsList) {
     delete set;
   }
@@ -946,13 +950,12 @@ void RooVectorDataStore::recalculateCache( const RooArgSet *projectedArgs, Int_t
 
 
   // Refill caches of elements that require recalculation
-  std::unique_ptr<RooArgSet> ownedNset;
-  RooArgSet* usedNset = nullptr;
-  if (projectedArgs && !projectedArgs->empty()) {
-    ownedNset = std::make_unique<RooArgSet>();
-    _vars.snapshot(*ownedNset, false) ;
+  RooArgSet* ownedNset = 0 ;
+  RooArgSet* usedNset = 0 ;
+  if (projectedArgs && projectedArgs->getSize()>0) {
+    ownedNset = (RooArgSet*) _vars.snapshot(false) ;
     ownedNset->remove(*projectedArgs,false,true);
-    usedNset = ownedNset.get();
+    usedNset = ownedNset ;
   } else {
     usedNset = &_vars ;
   }
@@ -973,6 +976,9 @@ void RooVectorDataStore::recalculateCache( const RooArgSet *projectedArgs, Int_t
   for (auto realVector : tv) {
      realVector->_nativeReal->setOperMode(RooAbsArg::AClean);
   }
+
+  delete ownedNset ;
+
 }
 
 

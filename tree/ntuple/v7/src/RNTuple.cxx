@@ -108,9 +108,6 @@ ROOT::Experimental::RNTupleReader::RNTupleReader(
    if (!fModel) {
       throw RException(R__FAIL("null model"));
    }
-   if (!fModel->GetProjectedFields().IsEmpty()) {
-      throw RException(R__FAIL("model has projected fields, which is incompatible with providing a read model"));
-   }
    fModel->Freeze();
    InitPageSource();
    ConnectModel(*fModel);

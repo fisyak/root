@@ -92,8 +92,10 @@ ROOT::Experimental::RFieldDescriptor::CreateField(const RNTupleDescriptor &ntplD
 
 bool ROOT::Experimental::RColumnDescriptor::operator==(const RColumnDescriptor &other) const
 {
-   return fLogicalColumnId == other.fLogicalColumnId && fPhysicalColumnId == other.fPhysicalColumnId &&
-          fModel == other.fModel && fFieldId == other.fFieldId && fIndex == other.fIndex;
+   return fColumnId == other.fColumnId &&
+          fModel == other.fModel &&
+          fFieldId == other.fFieldId &&
+          fIndex == other.fIndex;
 }
 
 
@@ -101,8 +103,7 @@ ROOT::Experimental::RColumnDescriptor
 ROOT::Experimental::RColumnDescriptor::Clone() const
 {
    RColumnDescriptor clone;
-   clone.fLogicalColumnId = fLogicalColumnId;
-   clone.fPhysicalColumnId = fPhysicalColumnId;
+   clone.fColumnId = fColumnId;
    clone.fModel = fModel;
    clone.fFieldId = fFieldId;
    clone.fIndex = fIndex;
@@ -151,10 +152,11 @@ std::unordered_set<ROOT::Experimental::DescriptorId_t> ROOT::Experimental::RClus
    return result;
 }
 
-bool ROOT::Experimental::RClusterDescriptor::ContainsColumn(DescriptorId_t physicalId) const
+
+bool ROOT::Experimental::RClusterDescriptor::ContainsColumn(DescriptorId_t columnId) const
 {
    EnsureHasPageLocations();
-   return fColumnRanges.find(physicalId) != fColumnRanges.end();
+   return fColumnRanges.find(columnId) != fColumnRanges.end();
 }
 
 
@@ -201,14 +203,14 @@ bool ROOT::Experimental::RNTupleDescriptor::operator==(const RNTupleDescriptor &
           fClusterDescriptors == other.fClusterDescriptors;
 }
 
-ROOT::Experimental::NTupleSize_t
-ROOT::Experimental::RNTupleDescriptor::GetNElements(DescriptorId_t physicalColumnId) const
+
+ROOT::Experimental::NTupleSize_t ROOT::Experimental::RNTupleDescriptor::GetNElements(DescriptorId_t columnId) const
 {
    NTupleSize_t result = 0;
    for (const auto &cd : fClusterDescriptors) {
-      if (!cd.second.ContainsColumn(physicalColumnId))
+      if (!cd.second.ContainsColumn(columnId))
          continue;
-      auto columnRange = cd.second.GetColumnRange(physicalColumnId);
+      auto columnRange = cd.second.GetColumnRange(columnId);
       result = std::max(result, columnRange.fFirstElementIndex + columnRange.fNElements);
    }
    return result;
@@ -259,33 +261,25 @@ ROOT::Experimental::RNTupleDescriptor::FindFieldId(std::string_view fieldName) c
    return FindFieldId(fieldName, GetFieldZeroId());
 }
 
+
 ROOT::Experimental::DescriptorId_t
-ROOT::Experimental::RNTupleDescriptor::FindLogicalColumnId(DescriptorId_t fieldId, std::uint32_t columnIndex) const
+ROOT::Experimental::RNTupleDescriptor::FindColumnId(DescriptorId_t fieldId, std::uint32_t columnIndex) const
 {
    for (const auto &cd : fColumnDescriptors) {
       if (cd.second.GetFieldId() == fieldId && cd.second.GetIndex() == columnIndex)
-         return cd.second.GetLogicalId();
+        return cd.second.GetId();
    }
    return kInvalidDescriptorId;
 }
 
 ROOT::Experimental::DescriptorId_t
-ROOT::Experimental::RNTupleDescriptor::FindPhysicalColumnId(DescriptorId_t fieldId, std::uint32_t columnIndex) const
-{
-   auto logicalId = FindLogicalColumnId(fieldId, columnIndex);
-   if (logicalId == kInvalidDescriptorId)
-      return kInvalidDescriptorId;
-   return GetColumnDescriptor(logicalId).GetPhysicalId();
-}
-
-ROOT::Experimental::DescriptorId_t
-ROOT::Experimental::RNTupleDescriptor::FindClusterId(DescriptorId_t physicalColumnId, NTupleSize_t index) const
+ROOT::Experimental::RNTupleDescriptor::FindClusterId(DescriptorId_t columnId, NTupleSize_t index) const
 {
    // TODO(jblomer): binary search?
    for (const auto &cd : fClusterDescriptors) {
-      if (!cd.second.ContainsColumn(physicalColumnId))
+      if (!cd.second.ContainsColumn(columnId))
          continue;
-      auto columnRange = cd.second.GetColumnRange(physicalColumnId);
+      auto columnRange = cd.second.GetColumnRange(columnId);
       if (columnRange.Contains(index))
          return cd.second.GetId();
    }
@@ -380,7 +374,7 @@ std::unique_ptr<ROOT::Experimental::RNTupleDescriptor> ROOT::Experimental::RNTup
 
 bool ROOT::Experimental::RColumnGroupDescriptor::operator==(const RColumnGroupDescriptor &other) const
 {
-   return fColumnGroupId == other.fColumnGroupId && fPhysicalColumnIds == other.fPhysicalColumnIds;
+   return fColumnGroupId == other.fColumnGroupId && fColumnIds == other.fColumnIds;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -403,22 +397,21 @@ ROOT::Experimental::RClusterGroupDescriptor ROOT::Experimental::RClusterGroupDes
 ////////////////////////////////////////////////////////////////////////////////
 
 ROOT::Experimental::RResult<void>
-ROOT::Experimental::RClusterDescriptorBuilder::CommitColumnRange(DescriptorId_t physicalId,
-                                                                 std::uint64_t firstElementIndex,
-                                                                 std::uint32_t compressionSettings,
-                                                                 const RClusterDescriptor::RPageRange &pageRange)
+ROOT::Experimental::RClusterDescriptorBuilder::CommitColumnRange(
+   DescriptorId_t columnId, std::uint64_t firstElementIndex, std::uint32_t compressionSettings,
+   const RClusterDescriptor::RPageRange &pageRange)
 {
-   if (physicalId != pageRange.fPhysicalColumnId)
+   if (columnId != pageRange.fColumnId)
       return R__FAIL("column ID mismatch");
-   if (fCluster.fPageRanges.count(physicalId) > 0)
+   if (fCluster.fPageRanges.count(columnId) > 0)
       return R__FAIL("column ID conflict");
-   RClusterDescriptor::RColumnRange columnRange{physicalId, firstElementIndex, RClusterSize(0)};
+   RClusterDescriptor::RColumnRange columnRange{columnId, firstElementIndex, RClusterSize(0)};
    columnRange.fCompressionSettings = compressionSettings;
    for (const auto &pi : pageRange.fPageInfos) {
       columnRange.fNElements += pi.fNElements;
    }
-   fCluster.fPageRanges[physicalId] = pageRange.Clone();
-   fCluster.fColumnRanges[physicalId] = columnRange;
+   fCluster.fPageRanges[columnId] = pageRange.Clone();
+   fCluster.fColumnRanges[columnId] = columnRange;
    return RResult<void>::Success();
 }
 
@@ -523,10 +516,8 @@ void ROOT::Experimental::RNTupleDescriptorBuilder::SetNTuple(const std::string_v
 ROOT::Experimental::RResult<ROOT::Experimental::RColumnDescriptor>
 ROOT::Experimental::RColumnDescriptorBuilder::MakeDescriptor() const
 {
-   if (fColumn.GetLogicalId() == kInvalidDescriptorId)
-      return R__FAIL("invalid logical column id");
-   if (fColumn.GetPhysicalId() == kInvalidDescriptorId)
-      return R__FAIL("invalid physical column id");
+   if (fColumn.GetId() == kInvalidDescriptorId)
+      return R__FAIL("invalid column id");
    if (fColumn.GetModel().GetType() == EColumnType::kUnknown)
       return R__FAIL("invalid column model");
    if (fColumn.GetFieldId() == kInvalidDescriptorId)
@@ -602,19 +593,15 @@ ROOT::Experimental::RNTupleDescriptorBuilder::AddFieldLink(DescriptorId_t fieldI
    return RResult<void>::Success();
 }
 
-void ROOT::Experimental::RNTupleDescriptorBuilder::AddColumn(DescriptorId_t logicalId, DescriptorId_t physicalId,
-                                                             DescriptorId_t fieldId, const RColumnModel &model,
-                                                             std::uint32_t index)
+void ROOT::Experimental::RNTupleDescriptorBuilder::AddColumn(DescriptorId_t columnId, DescriptorId_t fieldId,
+                                                             const RColumnModel &model, std::uint32_t index)
 {
    RColumnDescriptor c;
-   c.fLogicalColumnId = logicalId;
-   c.fPhysicalColumnId = physicalId;
+   c.fColumnId = columnId;
    c.fFieldId = fieldId;
    c.fModel = model;
    c.fIndex = index;
-   if (!c.IsAliasColumn())
-      fDescriptor.fNPhysicalColumns++;
-   fDescriptor.fColumnDescriptors.emplace(logicalId, std::move(c));
+   fDescriptor.fColumnDescriptors.emplace(columnId, std::move(c));
 }
 
 
@@ -627,22 +614,16 @@ ROOT::Experimental::RNTupleDescriptorBuilder::AddColumn(RColumnDescriptor &&colu
    auto fieldExists = EnsureFieldExists(fieldId);
    if (!fieldExists)
       return R__FORWARD_ERROR(fieldExists);
-   if (fDescriptor.FindLogicalColumnId(fieldId, index) != kInvalidDescriptorId) {
+   if (fDescriptor.FindColumnId(fieldId, index) != kInvalidDescriptorId) {
       return R__FAIL("column index clash");
    }
    if (index > 0) {
-      if (fDescriptor.FindLogicalColumnId(fieldId, index - 1) == kInvalidDescriptorId)
+      if (fDescriptor.FindColumnId(fieldId, index - 1) == kInvalidDescriptorId)
          return R__FAIL("out of bounds column index");
    }
-   if (columnDesc.IsAliasColumn()) {
-      if (columnDesc.GetModel() != fDescriptor.GetColumnDescriptor(columnDesc.GetPhysicalId()).GetModel())
-         return R__FAIL("alias column type mismatch");
-   }
 
-   auto logicalId = columnDesc.GetLogicalId();
-   if (!columnDesc.IsAliasColumn())
-      fDescriptor.fNPhysicalColumns++;
-   fDescriptor.fColumnDescriptors.emplace(logicalId, std::move(columnDesc));
+   auto columnId = columnDesc.GetId();
+   fDescriptor.fColumnDescriptors.emplace(columnId, std::move(columnDesc));
 
    return RResult<void>::Success();
 }

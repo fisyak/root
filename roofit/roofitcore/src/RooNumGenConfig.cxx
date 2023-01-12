@@ -116,8 +116,7 @@ RooNumGenConfig::RooNumGenConfig(const RooNumGenConfig& other) :
 {
   // Clone all configuration dat
   for (auto * set : static_range_cast<RooArgSet*>(other._configSets)) {
-    RooArgSet* setCopy = new RooArgSet;
-    set->snapshot(*setCopy) ;
+    RooArgSet* setCopy = (RooArgSet*) set->snapshot() ;
     setCopy->setName(set->GetName()) ;
    _configSets.Add(setCopy);
   }
@@ -155,8 +154,7 @@ RooNumGenConfig& RooNumGenConfig::operator=(const RooNumGenConfig& other)
 
   // Copy new integrator-specific data
   for(auto * set : static_range_cast<RooArgSet*>(other._configSets)) {
-    RooArgSet* setCopy = new RooArgSet;
-    set->snapshot(*setCopy);
+    RooArgSet* setCopy = (RooArgSet*) set->snapshot() ;
     setCopy->setName(set->GetName()) ;
    _configSets.Add(setCopy);
   }
@@ -263,8 +261,7 @@ bool RooNumGenConfig::addConfigSection(const RooAbsNumGenerator* proto, const Ro
   }
 
   // Store default configuration parameters
-  RooArgSet* config = new RooArgSet;
-  inDefaultConfig.snapshot(*config);
+  RooArgSet* config = (RooArgSet*) inDefaultConfig.snapshot() ;
   config->setName(name.c_str());
   _configSets.Add(config) ;
 

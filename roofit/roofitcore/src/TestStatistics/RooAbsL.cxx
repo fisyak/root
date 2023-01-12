@@ -124,8 +124,7 @@ void RooAbsL::initClones(RooAbsPdf &inpdf, RooAbsData &indata)
    pdf_->recursiveRedirectServers(*origParams);
 
    // Store normalization set
-   normSet_ = std::make_unique<RooArgSet>();
-   indata.get()->snapshot(*normSet_, false);
+   normSet_.reset((RooArgSet *)indata.get()->snapshot(false));
 
    // Expand list of observables with any observables used in parameterized ranges
    for (const auto realDep : *_funcObsSet) {

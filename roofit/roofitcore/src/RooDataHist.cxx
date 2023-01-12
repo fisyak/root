@@ -684,7 +684,7 @@ void RooDataHist::_adjustBinning(RooRealVar &theirVar, const TAxis &axis,
 
     theirVar.setBinning(xbins);
 
-    if (true || std::abs(xloAdj - xlo) > tolerance || std::abs(xhiAdj - xhi) > tolerance) {
+    if (true || fabs(xloAdj - xlo) > tolerance || fabs(xhiAdj - xhi) > tolerance) {
        coutI(DataHandling) << "RooDataHist::adjustBinning(" << ownName << "): fit range of variable " << ourVarName
                            << " expanded to nearest bin boundaries: [" << xlo << "," << xhi << "] --> [" << xloAdj
                            << "," << xhiAdj << "]"
@@ -708,7 +708,7 @@ void RooDataHist::_adjustBinning(RooRealVar &theirVar, const TAxis &axis,
     xbins.setRange(xloAdj, xhiAdj);
     theirVar.setRange(xloAdj, xhiAdj);
 
-    if (std::abs(xloAdj - xlo) > tolerance || std::abs(xhiAdj - xhi) > tolerance) {
+    if (fabs(xloAdj - xlo) > tolerance || fabs(xhiAdj - xhi) > tolerance) {
        coutI(DataHandling) << "RooDataHist::adjustBinning(" << ownName << "): fit range of variable " << ourVarName
                            << " expanded to nearest bin boundaries: [" << xlo << "," << xhi << "] --> [" << xloAdj
                            << "," << xhiAdj << "]"
@@ -918,12 +918,12 @@ RooAbsData* RooDataHist::reduceEng(const RooArgSet& varSubset, const RooFormulaV
   _vars.selectCommon(varSubset, myVarSubset);
   RooDataHist *rdh = new RooDataHist(GetName(), GetTitle(), myVarSubset);
 
-  RooFormulaVar* cloneVar = nullptr;
+  RooFormulaVar* cloneVar = 0;
   std::unique_ptr<RooArgSet> tmp;
   if (cutVar) {
-    tmp = std::make_unique<RooArgSet>();
     // Deep clone cutVar and attach clone to this dataset
-    if (RooArgSet(*cutVar).snapshot(*tmp)) {
+    tmp.reset(static_cast<RooArgSet*>(RooArgSet(*cutVar).snapshot()));
+    if (!tmp) {
       coutE(DataHandling) << "RooDataHist::reduceEng(" << GetName() << ") Couldn't deep-clone cut variable, abort," << endl ;
       return nullptr;
     }
@@ -1763,8 +1763,8 @@ void RooDataHist::add(const RooAbsData& dset, const RooFormulaVar* cutVar, doubl
   std::unique_ptr<RooArgSet> tmp;
   if (cutVar) {
     // Deep clone cutVar and attach clone to this dataset
-    tmp = std::make_unique<RooArgSet>();
-    if(RooArgSet(*cutVar).snapshot(*tmp)) {
+    tmp.reset(static_cast<RooArgSet*>(RooArgSet(*cutVar).snapshot()));
+    if (!tmp) {
       coutE(DataHandling) << "RooDataHist::add(" << GetName() << ") Couldn't deep-clone cut variable, abort," << endl ;
       return ;
     }
@@ -2228,7 +2228,7 @@ bool RooDataHist::isNonPoissonWeighted() const
   for (Int_t i=0; i < _arrSize; ++i) {
     const double wgt = _wgt[i];
     double intpart;
-    if (std::abs(std::modf(wgt, &intpart)) > 1.E-10)
+    if (fabs(std::modf(wgt, &intpart)) > 1.E-10)
       return true;
   }
 

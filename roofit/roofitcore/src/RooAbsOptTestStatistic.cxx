@@ -161,11 +161,7 @@ RooAbsOptTestStatistic::RooAbsOptTestStatistic(const RooAbsOptTestStatistic& oth
     _funcObsSet = 0 ;
     _funcCloneSet = 0 ;
     _funcClone = 0 ;
-    _normSet = nullptr;
-    if(other._normSet) {
-      _normSet = new RooArgSet;
-      other._normSet->snapshot(*_normSet);
-    }
+    _normSet = other._normSet ? ((RooArgSet*) other._normSet->snapshot()) : 0 ;
     _projDeps = 0 ;
     _origFunc = 0 ;
     _origData = 0 ;
@@ -225,8 +221,7 @@ void RooAbsOptTestStatistic::initSlave(RooAbsReal& real, RooAbsData& indata, con
   }
 
   // Store normalization set
-  _normSet = new RooArgSet;
-  indata.get()->snapshot(*_normSet, false);
+  _normSet = (RooArgSet*) indata.get()->snapshot(false) ;
 
   // Expand list of observables with any observables used in parameterized ranges.
   // This NEEDS to be a counting loop since we are inserting during the loop.
@@ -349,8 +344,7 @@ void RooAbsOptTestStatistic::initSlave(RooAbsReal& real, RooAbsData& indata, con
   // Remove projected dependents from normalization set
   if (projDeps.getSize()>0) {
 
-    _projDeps = new RooArgSet;
-    projDeps.snapshot(*_projDeps, false) ;
+    _projDeps = (RooArgSet*) projDeps.snapshot(false) ;
 
     //RooArgSet* tobedel = (RooArgSet*) _normSet->selectCommon(*_projDeps) ;
     _normSet->remove(*_projDeps,true,true) ;

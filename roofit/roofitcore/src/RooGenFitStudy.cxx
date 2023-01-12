@@ -166,8 +166,7 @@ bool RooGenFitStudy::initialize()
 
   _params = _fitPdf->getParameters(_genObs) ;
   RooArgSet modelParams(*_params) ;
-  _initParams = new RooArgSet;
-  _params->snapshot(*_initParams);
+  _initParams = (RooArgSet*) _params->snapshot() ;
   _params->add(*_nllVar) ;
   _params->add(*_ngenVar) ;
 

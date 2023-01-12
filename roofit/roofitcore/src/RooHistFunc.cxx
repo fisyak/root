@@ -238,8 +238,13 @@ void RooHistFunc::computeBatch(cudaStream_t*, double* output, size_t size, RooFi
 
 Int_t RooHistFunc::getMaxVal(const RooArgSet& vars) const
 {
-  std::unique_ptr<RooAbsCollection> common{_depList.selectCommon(vars)};
-  return common->size() == _depList.size() ? 1 : 0;
+  RooAbsCollection* common = _depList.selectCommon(vars) ;
+  if (common->size()==_depList.size()) {
+    delete common ;
+    return 1;
+  }
+  delete common ;
+  return 0 ;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -476,12 +481,12 @@ bool RooHistFunc::importWorkspaceHook(RooWorkspace& ws)
 
 bool RooHistFunc::areIdentical(const RooDataHist& dh1, const RooDataHist& dh2)
 {
-  if (std::abs(dh1.sumEntries()-dh2.sumEntries())>1e-8) return false ;
+  if (fabs(dh1.sumEntries()-dh2.sumEntries())>1e-8) return false ;
   if (dh1.numEntries() != dh2.numEntries()) return false ;
   for (int i=0 ; i < dh1.numEntries() ; i++) {
     dh1.get(i) ;
     dh2.get(i) ;
-    if (std::abs(dh1.weight()-dh2.weight())>1e-8) return false ;
+    if (fabs(dh1.weight()-dh2.weight())>1e-8) return false ;
   }
   using RooHelpers::getColonSeparatedNameString;
   if (getColonSeparatedNameString(*dh1.get()) != getColonSeparatedNameString(*dh2.get())) return false ;

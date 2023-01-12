@@ -70,7 +70,7 @@ enum class BatchModeOption { Off, Cpu, Cuda, Old };
 
 /// For setting the offset mode with the Offset() command argument to
 /// RooAbsPdf::fitTo()
-enum class OffsetMode { None, Initial, Bin };
+enum class OffsetMode { Off, Initial, Bin };
 
 namespace Experimental {
 

@@ -63,6 +63,8 @@
 #include "RooProfileLL.h"
 #include "RooFunctor.h"
 #include "RooDerivative.h"
+#include "RooGenFunction.h"
+#include "RooMultiGenFunction.h"
 #include "RooXYChi2Var.h"
 #include "RooMinimizer.h"
 #include "RooChi2Var.h"
@@ -905,8 +907,8 @@ const RooAbsReal *RooAbsReal::createPlotProjection(const RooArgSet &dependentVar
   if(0 != projectedVars) leafNodes.remove(*projectedVars,true);
 
   // Make a deep-clone of ourself so later operations do not disturb our original state
-  cloneSet = new RooArgSet;
-  if (RooArgSet(*this).snapshot(*cloneSet, true)) {
+  cloneSet= (RooArgSet*)RooArgSet(*this).snapshot(true);
+  if (!cloneSet) {
     coutE(Plotting) << "RooAbsPdf::createPlotProjection(" << GetName() << ") Couldn't deep-clone PDF, abort," << std::endl ;
     return 0 ;
   }
@@ -1174,9 +1176,8 @@ RooDataHist* RooAbsReal::fillDataHist(RooDataHist *hist, const RooArgSet* normSe
 
   // Make deep clone of self and attach to dataset observables
   //RooArgSet* origObs = getObservables(hist) ;
-  RooArgSet cloneSet;
-  RooArgSet(*this).snapshot(cloneSet, true);
-  RooAbsReal* theClone = static_cast<RooAbsReal*>(cloneSet.find(GetName()));
+  std::unique_ptr<RooArgSet> cloneSet{static_cast<RooArgSet*>(RooArgSet(*this).snapshot(true))};
+  RooAbsReal* theClone = (RooAbsReal*) cloneSet->find(GetName()) ;
   theClone->recursiveRedirectServers(*hist->get()) ;
   //const_cast<RooAbsReal*>(this)->recursiveRedirectServers(*hist->get()) ;
 
@@ -1374,7 +1375,7 @@ TH1* RooAbsReal::createHistogram(const char *name, const RooAbsRealLValue& xvar,
   const RooArgSet* compSet = pc.getSet("compSet");
   bool haveCompSel = ( (compSpec && strlen(compSpec)>0) || compSet) ;
 
-  std::unique_ptr<RooBinning> intBinning;
+  RooBinning* intBinning(0) ;
   if (doIntBinning>0) {
     // Given RooAbsPdf* pdf and RooRealVar* obs
     std::unique_ptr<std::list<double>> bl{binBoundaries(const_cast<RooAbsRealLValue&>(xvar),xvar.getMin(),xvar.getMax())};
@@ -1392,7 +1393,7 @@ TH1* RooAbsReal::createHistogram(const char *name, const RooAbsRealLValue& xvar,
       std::vector<double> ba(bl->size());
       int i=0 ;
       for (auto const& elem : *bl) { ba[i++] = elem ; }
-      intBinning = std::make_unique<RooBinning>(bl->size()-1,ba.data()) ;
+      intBinning = new RooBinning(bl->size()-1,ba.data()) ;
     }
   }
 
@@ -1404,6 +1405,7 @@ TH1* RooAbsReal::createHistogram(const char *name, const RooAbsRealLValue& xvar,
     RooCmdArg tmp = RooFit::Binning(*intBinning) ;
     argListCreate.Add(&tmp) ;
     histo = xvar.createHistogram(name,argListCreate) ;
+    delete intBinning ;
   } else {
     histo = xvar.createHistogram(name,argListCreate) ;
   }
@@ -4178,6 +4180,26 @@ double RooAbsReal::findRoot(RooRealVar& x, double xmin, double xmax, double yval
 
 
 
+
+////////////////////////////////////////////////////////////////////////////////
+
+RooGenFunction* RooAbsReal::iGenFunction(RooRealVar& x, const RooArgSet& nset)
+{
+  return new RooGenFunction(*this,x,RooArgList(),nset.getSize()>0?nset:RooArgSet(x)) ;
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+RooMultiGenFunction* RooAbsReal::iGenFunction(const RooArgSet& observables, const RooArgSet& nset)
+{
+  return new RooMultiGenFunction(*this,observables,RooArgList(),nset.getSize()>0?nset:observables) ;
+}
+
+
+
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Perform a \f$ \chi^2 \f$ fit to given histogram. By default the fit is executed through the MINUIT
 /// commands MIGRAD, HESSE in succession
@@ -4822,7 +4844,7 @@ void RooAbsReal::checkBatchComputation(const RooBatchCompute::RunContext& evalDa
   const double batchVal = batch.size() == 1 ? batch[0] : batch[evtNo];
   const double relDiff = value != 0. ? (value - batchVal)/value : value - batchVal;
 
-  if (std::abs(relDiff) > relAccuracy && std::abs(value) > 1.E-300) {
+  if (fabs(relDiff) > relAccuracy && fabs(value) > 1.E-300) {
     FormatPdfTree formatter;
     formatter << "--> (Batch computation wrong:)\n";
     printStream(formatter.stream(), kName | kClassName | kArgs | kExtras | kAddress, kInline);

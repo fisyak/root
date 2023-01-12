@@ -10,12 +10,15 @@
 #include <RooDataSet.h>
 #include <RooFitResult.h>
 #include <RooFormulaVar.h>
+#include <RooGaussian.h>
 #include <RooGenericPdf.h>
 #include <RooHelpers.h>
+#include <RooPoisson.h>
 #include <RooProdPdf.h>
 #include <RooProduct.h>
 #include <RooRealVar.h>
 #include <RooSimultaneous.h>
+#include <RooUniform.h>
 #include <RooWorkspace.h>
 
 #include <TClass.h>
@@ -30,7 +33,8 @@ TEST(RooAbsPdf, AsymptoticallyCorrectErrors)
 {
    using namespace RooFit;
 
-   RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
+   auto &msg = RooMsgService::instance();
+   msg.setGlobalKillBelow(RooFit::WARNING);
 
    RooRealVar x("x", "xxx", 0, 0, 10);
    RooRealVar a("a", "aaa", 2, 0, 10);
@@ -41,7 +45,8 @@ TEST(RooAbsPdf, AsymptoticallyCorrectErrors)
    std::unique_ptr<RooDataSet> data(pdf.generate(x, 5000));
    data->addColumn(formula);
    RooRealVar w("w", "weight", 1, 0, 20);
-   RooDataSet weightedData("weightedData", "weightedData", {x, w}, Import(*data), WeightVar(w));
+   RooDataSet weightedData("weightedData", "weightedData", {x, w}, Import(*data),
+                           WeightVar(w));
 
    ASSERT_TRUE(weightedData.isWeighted());
    weightedData.get(0);
@@ -93,7 +98,7 @@ TEST(RooAbsPdf, ConditionalFitBatchMode)
       for (int i = 0; i < 10000; i++) {
          double tmpy = gRandom->Gaus(3, 2);
          double tmpx = gRandom->Poisson(tmpy);
-         if (std::abs(tmpy) > 1 && std::abs(tmpy) < 5 && std::abs(tmpx) < 10) {
+         if (fabs(tmpy) > 1 && fabs(tmpy) < 5 && fabs(tmpx) < 10) {
             x = tmpx;
             y = tmpy;
             d->add(coord);
@@ -105,19 +110,18 @@ TEST(RooAbsPdf, ConditionalFitBatchMode)
 
    auto data = makeFakeDataXY();
 
-   RooWorkspace ws;
-   ws.factory("Product::mean1({factor[1.0, 0.0, 10.0], y[1.0, 5]})");
-   ws.factory("Product::mean2({factor})");
-   ws.factory("Poisson::model1(x[0, 10], mean1)");
-   ws.factory("Poisson::model2(x, mean2)");
+   RooRealVar x("x", "x", 0, 10);
+   RooRealVar y("y", "y", 1.0, 5);
 
-   RooRealVar &factor = *ws.var("factor");
-   RooRealVar &y = *ws.var("y");
+   RooRealVar factor("factor", "factor", 1.0, 0.0, 10.0);
 
+   std::vector<RooProduct> means{{"mean", "mean", {factor, y}}, {"mean", "mean", {factor}}};
    std::vector<bool> expectFastEvaluationsWarnings{true, false};
 
    int iMean = 0;
-   for (RooAbsPdf *model : {ws.pdf("model1"), ws.pdf("model2")}) {
+   for (auto &mean : means) {
+
+      RooPoisson model("model", "model", x, mean);
 
       std::vector<std::unique_ptr<RooFitResult>> fitResults;
 
@@ -127,10 +131,9 @@ TEST(RooAbsPdf, ConditionalFitBatchMode)
          factor.setVal(1.0);
          factor.setError(0.0);
          fitResults.emplace_back(
-            model->fitTo(*data, ConditionalObservables(y), Save(), PrintLevel(-1), BatchMode(batchMode)));
-         if (verbose) {
+            model.fitTo(*data, ConditionalObservables(y), Save(), PrintLevel(-1), BatchMode(batchMode)));
+         if (verbose)
             fitResults.back()->Print();
-         }
       }
 
       EXPECT_TRUE(fitResults[1]->isIdentical(*fitResults[0]));
@@ -145,28 +148,25 @@ TEST(RooAbsPdf, ConditionalFitBatchMode)
 TEST(RooAbsPdf, MultiRangeFit)
 {
    using namespace RooFit;
-   RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
+   auto &msg = RooMsgService::instance();
+   msg.setGlobalKillBelow(RooFit::WARNING);
 
-   RooWorkspace ws;
+   RooRealVar x("x", "x", -10, 10);
 
-   ws.factory("Gaussian::model_simple(x[-10., 10.], mean[-1, -10, 10], width[3, 0.1, 10])");
-   // model for extended fit
-   ws.factory("AddPdf::model_extended({model_simple}, {nsig[100, 0, 2000]})");
-
-   auto &x = *ws.var("x");
-   auto &mean = *ws.var("mean");
-   auto &width = *ws.var("width");
-   auto &nsig = *ws.var("nsig");
-
-   RooAbsPdf &modelSimple = *ws.pdf("model_simple");
-   RooAbsPdf &modelExtended = *ws.pdf("model_extended");
-
-   const double cut = -5;
+   double cut = -5;
    x.setRange("full", -10, 10);
    x.setRange("low", -10, cut);
    x.setRange("high", cut, 10);
 
-   const std::size_t nEvents = nsig.getVal();
+   RooRealVar mean("mean", "mean", -1, -10, 10);
+   RooRealVar width("width", "width", 3., 0.1, 10);
+   RooGaussian modelSimple("model_simple", "model_simple", x, mean, width);
+
+   std::size_t nEvents = 100;
+
+   // model for extended fit
+   RooRealVar nsig("nsig", "nsig", nEvents, 0., 2000);
+   RooAddPdf modelExtended("model_extended", "model_simple+a", RooArgList(modelSimple), RooArgList(nsig));
 
    auto resetValues = [&]() {
       mean.setVal(-1);
@@ -180,11 +180,11 @@ TEST(RooAbsPdf, MultiRangeFit)
    // loop over non-extended and extended fit
    for (auto *model : {static_cast<RooAbsPdf *>(&modelSimple), static_cast<RooAbsPdf *>(&modelExtended)}) {
 
-      std::unique_ptr<RooAbsData> dataSet{model->generate(x, nEvents)};
-      std::unique_ptr<RooAbsData> dataHist{static_cast<RooDataSet&>(*dataSet).binnedClone()};
+      std::unique_ptr<RooDataSet> dataSet{model->generate(x, nEvents)};
+      std::unique_ptr<RooDataHist> dataHist{dataSet->binnedClone()};
 
       // loop over binned fit and unbinned fit
-      for (auto *data : {dataSet.get(), dataHist.get()}) {
+      for (auto *data : {static_cast<RooAbsData *>(dataSet.get()), static_cast<RooAbsData *>(dataHist.get())}) {
          // full range
          resetValues();
          std::unique_ptr<RooFitResult> fitResultFull{model->fitTo(*data, Range("full"), Save(), PrintLevel(-1))};
@@ -203,7 +203,8 @@ TEST(RooAbsPdf, MultiRangeFit)
 TEST(RooAbsPdf, MultiRangeFit2D)
 {
    using namespace RooFit;
-   RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
+   auto &msg = RooMsgService::instance();
+   msg.setGlobalKillBelow(RooFit::WARNING);
 
    // model taken from the rf312_multirangefit.C tutorial
    RooWorkspace ws;
@@ -279,27 +280,35 @@ TEST(RooAbsPdf, ProblemsWith2DSimultaneousFit)
 {
    using namespace RooFit;
 
-   RooWorkspace ws;
-   ws.factory("Uniform::uniform1({x[1.0, 2.], y[1.0, 2.]})");
-   ws.factory("Uniform::uniform2({x, y})");
-   ws.factory("Gaussian::gauss1(x, mu1[2., 0., 5.], 0.1)");
-   ws.factory("Gaussian::gauss2(x, mu1[2., 0., 5.], 0.1)");
-   ws.factory("Gaussian::gauss3(x, mu1[2., 0., 5.], 0.1)");
-   ws.factory("AddPdf::gauss12(gauss1, gauss2, 0.1)");
-   ws.factory("AddPdf::sig_x(gauss3, gauss12, 0.1)");
-   ws.factory("Uniform::sig_y(y)");
-   ws.factory("ProdPdf::sig(sig_y, sig_x)");
+   RooRealVar x("x", "y", 1.0, 2.);
+   RooRealVar y("y", "y", 1.0, 2.);
+
+   RooRealVar mu1("mu1", "mu1", 2., 0, 5);
+
+   RooUniform uniform1("uniform1", "uniform1", {x, y});
+   RooUniform uniform2("uniform2", "uniform2", {x, y});
+
+   RooGaussian gauss1("gauss1", "gauss1", x, mu1, RooConst(0.1));
+   RooGaussian gauss2("gauss2", "gauss2", x, mu1, RooConst(0.1));
+   RooGaussian gauss3("gauss3", "gauss3", x, mu1, RooConst(0.1));
+
+   RooAddPdf gauss12("gauss12", "gauss12", gauss1, gauss2, RooConst(0.1));
+
+   RooAddPdf sig_x("sig_x", "sig_x", gauss3, gauss12, RooConst(0.1));
+
+   RooUniform sig_y("sig_y", "sig_y", y);
+   RooProdPdf sig("sig", "sig", sig_y, sig_x);
+
+   RooRealVar yield{"yield", "yield", 100};
 
    // Complete model
-   ws.factory("AddPdf::model({sig, sig_y, uniform2, uniform1}, {yield[100], yield, yield, yield})");
-
-   RooAbsPdf &model = *ws.pdf("model");
+   RooAddPdf model("model", "model", {sig, sig_y, uniform2, uniform1}, {yield, yield, yield, yield});
 
    // Define category to distinguish d0 and d0bar samples events
    RooCategory sample("sample", "sample", {{"cat0", 0}, {"cat1", 1}});
 
    // Construct a dummy dataset
-   RooDataSet data("data", "data", RooArgSet(sample, *ws.var("x"), *ws.var("y")));
+   RooDataSet data("data", "data", RooArgSet(sample, x, y));
 
    // Construct a simultaneous pdf using category sample as index
    RooSimultaneous simPdf("simPdf", "simultaneous pdf", sample);
@@ -315,12 +324,8 @@ TEST(RooAbsPdf, NormSetChange)
 {
    using namespace RooFit;
 
-   RooWorkspace ws;
-   ws.factory("Gaussian::gauss(x[0, -10, 10], 0., 2.)");
-
-   RooRealVar &x = *ws.var("x");
-   RooAbsPdf &gauss = *ws.pdf("gauss");
-
+   RooRealVar x("x", "x", 0, -10, 10);
+   RooGaussian gauss("gauss", "gauss", x, RooConst(0), RooConst(2));
    RooAddition add("add", "add", {gauss});
 
    double v1 = add.getVal();

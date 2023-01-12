@@ -18,7 +18,6 @@
 #include "RooWorkspace.h"
 #include "RooDataHist.h" // complete type in Binned test
 #include "RooCategory.h" // complete type in MultiBinnedConstraint test
-#include "RooHelpers.h"
 #include "RooMinimizer.h"
 #include "RooFitResult.h"
 #include "RooFit/TestStatistics/LikelihoodWrapper.h"
@@ -27,6 +26,7 @@
 #include "RooFit/TestStatistics/buildLikelihood.h"
 #include "RooFit/MultiProcess/JobManager.h"
 #include "RooFit/MultiProcess/Config.h"
+#include "RooStats/ModelConfig.h"
 
 #include "Math/Minimizer.h"
 
@@ -63,13 +63,9 @@ class Environment : public testing::Environment {
 public:
    void SetUp() override
    {
-      _changeMsgLvl = std::make_unique<RooHelpers::LocalChangeMsgLevel>(RooFit::ERROR);
+      RooMsgService::instance().setGlobalKillBelow(RooFit::ERROR);
       ROOT::Math::MinimizerOptions::SetDefaultMinimizer("Minuit2");
    }
-   void TearDown() override { _changeMsgLvl.reset(); }
-
-private:
-   std::unique_ptr<RooHelpers::LocalChangeMsgLevel> _changeMsgLvl;
 };
 
 // Previously, we just called AddGlobalTestEnvironment in global namespace, but this caused either a warning about an
@@ -421,8 +417,9 @@ TEST_P(SimBinnedConstrainedTest, ConstrainedAndOffset)
 
    RooFit::MultiProcess::Config::setDefaultNWorkers(NWorkers);
 
-   std::unique_ptr<RooAbsReal> likelihoodAbsReal{pdf->createNLL(
-      *data, Constrain(*w.var("alpha_bkg_obs_A")), GlobalObservables(*w.var("alpha_bkg_obs_B")), ModularL(true))};
+   std::unique_ptr<RooAbsReal> likelihoodAbsReal{pdf->createNLL(*data, Constrain(*w.var("alpha_bkg_obs_A")),
+                                                                GlobalObservables(*w.var("alpha_bkg_obs_B")),
+                                                                ModularL(true))};
 
    RooMinimizer::Config cfg1;
    cfg1.parallelize = -1;

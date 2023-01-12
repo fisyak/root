@@ -40,7 +40,6 @@ interpreted as a parameter.
 #include "RooArgList.h"
 #include "RooAbsBinning.h"
 #include "RooBinning.h"
-#include "RooNumber.h"
 #include "RooUniformBinning.h"
 #include "RooCmdConfig.h"
 #include "RooAbsData.h"
@@ -90,16 +89,7 @@ RooAbsRealLValue::~RooAbsRealLValue()
 ////////////////////////////////////////////////////////////////////////////////
 /// Return true if the input value is within our fit range. Otherwise, return
 /// false and write a clipped value into clippedValPtr if it is non-zero.
-///
-/// Implements the following check to see if the value x is in the range [a, b]:
-/// check if `[x - eps * x, x + eps * x]` overlaps with `[a, b]`, where the
-/// parameter `eps` is defined as:
-/// ```
-/// std::max(RooNumber::rangeEpsRel() * std::abs(x), RooNumber::rangeEpsAbs())
-/// ```
-/// By default, RooNumber::rangeEpsRel() and RooNumber::rangeEpsRel() are set to zero.
-/// You can change them with RooNumber::setRangeEpsRel(double) and RooNumber::setRangeEpsAbs(double),
-/// but this should be only done if there is no other solution.
+
 bool RooAbsRealLValue::inRange(double value, const char* rangeName, double* clippedValPtr) const
 {
   // double range = getMax() - getMin() ; // ok for +/-INIFINITY
@@ -110,15 +100,13 @@ bool RooAbsRealLValue::inRange(double value, const char* rangeName, double* clip
   double min = binning.lowBound() ;
   double max = binning.highBound() ;
 
-  const double epsilon = std::max(RooNumber::rangeEpsRel() * std::abs(value), RooNumber::rangeEpsAbs());
-
   // test this value against our upper fit limit
-  if(!RooNumber::isInfinite(max) && value > (max+epsilon)) {
+  if(!RooNumber::isInfinite(max) && value > (max+1e-6)) {
     clippedValue = max;
     isInRange = false ;
   }
   // test this value against our lower fit limit
-  if(!RooNumber::isInfinite(min) && value < min-epsilon) {
+  if(!RooNumber::isInfinite(min) && value < min-1e-6) {
     clippedValue = min ;
     isInRange = false ;
   }
@@ -129,8 +117,6 @@ bool RooAbsRealLValue::inRange(double value, const char* rangeName, double* clip
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
-/// Vectorized version of RooAbsRealLValue::inRange(double, const char*, double*).
 void RooAbsRealLValue::inRange(std::span<const double> values, std::string const& rangeName, std::vector<bool>& out) const {
   if(rangeName.empty()) {
     return;
@@ -139,16 +125,11 @@ void RooAbsRealLValue::inRange(std::span<const double> values, std::string const
   const RooAbsBinning& binning = getBinning(rangeName.c_str()) ;
   const double min = binning.lowBound() ;
   const double max = binning.highBound() ;
-
   const bool infiniteMin = RooNumber::isInfinite(min);
   const bool infiniteMax = RooNumber::isInfinite(max);
 
-  const double epsRel = RooNumber::rangeEpsRel();
-  const double epsAbs = RooNumber::rangeEpsAbs();
-
   for(std::size_t i = 0; i < values.size(); ++i) {
-    const double eps = std::max(epsRel * std::abs(values[i]), epsAbs);
-    out[i] = out[i] && ((infiniteMax | (values[i] <= (max+eps))) && (infiniteMin | (values[i] >= (min-eps))));
+    out[i] = out[i] && ((infiniteMax | (values[i] <= (max+1e-6))) && (infiniteMin | (values[i] >= (min-1e-6))));
   }
 
 }
@@ -509,20 +490,10 @@ bool RooAbsRealLValue::fitRangeOKForPlotting() const
 /// Check if current value is inside range with given name. Multiple comma-separated
 /// ranges can be passed. In this case, it will be checked if the value is in any of
 /// these ranges.
-///
-/// Implements the following check to see if the value x is in the range [a, b]:
-/// check if `[x - eps * x, x + eps * x]` overlaps with `[a, b]`, where the
-/// parameter `eps` is defined as:
-/// ```
-/// std::max(RooNumber::rangeEpsRel() * std::abs(x), RooNumber::rangeEpsAbs())
-/// ```
-/// By default, RooNumber::rangeEpsRel() and RooNumber::rangeEpsRel() are set to zero.
-/// You can change them with RooNumber::setRangeEpsRel(double) and RooNumber::setRangeEpsAbs(double),
-/// but this should be only done if there is no other solution.
 bool RooAbsRealLValue::inRange(const char* name) const
 {
   const double val = getVal() ;
-  const double epsilon = std::max(RooNumber::rangeEpsRel() * std::abs(val), RooNumber::rangeEpsAbs());
+  const double epsilon = 1e-8 * fabs(val) ;
   if (!name || name[0] == '\0') {
     const auto minMax = getRange(nullptr);
     return minMax.first - epsilon <= val && val <= minMax.second + epsilon;

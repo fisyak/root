@@ -765,13 +765,6 @@ void RooAbsPdf::getLogProbabilities(RooSpan<const double> pdfValues, double * ou
 /// \param[in] observedSumW2 The number of observed events when weighting with
 ///            squared weights. If non-zero, the weight-squared error
 ///            correction is applied to the extended term.
-/// \param[in] doOffset Offset the extended term by a counterterm where the
-///            expected number of events equals the observed number of events.
-///            This constant shift results in a term closer to zero that is
-///            approximately chi-square distributed. It is useful to do this
-///            also when summing multiple NLL terms to avoid numeric precision
-///            loss that happens if you sum multiple terms of different orders
-///            of magnitude.
 ///
 /// The weight-squared error correction works as follows:
 /// adjust poisson such that
@@ -796,26 +789,26 @@ void RooAbsPdf::getLogProbabilities(RooSpan<const double> pdfValues, double * ou
 ///
 ///  Since the weights are constants in the likelihood we can use \f$\log{N_\mathrm{expect}}\f$ instead of \f$\log{W_\mathrm{expect}}\f$.
 ///
-/// See also RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared, bool doOffset),
+/// See also RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared),
 /// which takes a dataset to extract \f$N_\mathrm{observed}\f$ and the
 /// normalization set.
-double RooAbsPdf::extendedTerm(double sumEntries, RooArgSet const* nset, double sumEntriesW2, bool doOffset) const
+double RooAbsPdf::extendedTerm(double sumEntries, RooArgSet const* nset, double sumEntriesW2) const
 {
-  return extendedTerm(sumEntries, expectedEvents(nset), sumEntriesW2, doOffset);
+  return extendedTerm(sumEntries, expectedEvents(nset), sumEntriesW2);
 }
 
-double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEntriesW2, bool doOffset) const
+double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEntriesW2) const
 {
   // check if this PDF supports extended maximum likelihood fits
   if(!canBeExtended()) {
-    coutE(InputArguments) << GetName() << ": this PDF does not support extended maximum likelihood"
-         << std::endl;
-    return 0.0;
+    coutE(InputArguments) << fName << ": this PDF does not support extended maximum likelihood"
+         << endl;
+    return 0;
   }
 
-  if(expected < 0.0) {
-    coutE(InputArguments) << GetName() << ": calculated negative expected events: " << expected
-         << std::endl;
+  if(expected < 0) {
+    coutE(InputArguments) << fName << ": calculated negative expected events: " << expected
+         << endl;
     logEvalError("extendedTerm #expected events is <0 return a  NaN");
     return TMath::QuietNaN();
   }
@@ -823,7 +816,7 @@ double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEnt
 
   // Explicitly handle case Nobs=Nexp=0
   if (std::abs(expected)<1e-10 && std::abs(sumEntries)<1e-10) {
-    return 0.0;
+    return 0 ;
   }
 
   // Check for errors in Nexpected
@@ -832,9 +825,7 @@ double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEnt
     return TMath::QuietNaN() ;
   }
 
-  double extra = doOffset
-      ? (expected - sumEntries) - sumEntries * (std::log(expected) - std::log(sumEntries))
-      : expected - sumEntries * std::log(expected);
+  double extra = expected - sumEntries*log(expected);
 
   if(sumEntriesW2 != 0.0) {
     extra *= sumEntriesW2 / sumEntries;
@@ -865,15 +856,14 @@ double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEnt
 ///            can be passed to RooAbsPdf::fitTo(RooAbsData&, const RooLinkedList&)
 ///            (see the documentation of said function to learn more about the
 ///            interpretation of fits with squared weights).
-/// \param[in] doOffset See RooAbsPdf::extendedTerm(double, RooArgSet const*, double bool).
 
-double RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared, bool doOffset) const {
+double RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared) const {
   double sumW = data.sumEntries();
   double sumW2 = 0.0;
   if (weightSquared) {
     sumW2 = data.sumEntriesW2();
   }
-  return extendedTerm(sumW, data.get(), sumW2, doOffset);
+  return extendedTerm(sumW, data.get(), sumW2);
 }
 
 
@@ -937,7 +927,7 @@ double RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared, bool 
 /// <tr><td> `Verbose(bool flag)`           <td> Controls RooFit informational messages in likelihood construction
 /// <tr><td> `CloneData(bool flag)`            <td> Use clone of dataset in NLL (default is true)
 /// <tr><td> `Offset(std::string const& mode)` <td> Likelihood offsetting mode. Can be either:
-///                                                 - `"none"` (default): no offsetting
+///                                                 - `"off"` (default): no offsetting
 ///                                                 - `"initial"`: Offset likelihood by initial value (so that starting value of FCN in minuit is zero).
 ///                                                    This can improve numeric stability in simultaneous fits with components with large likelihood values.
 ///                                                 - `"bin"`: Offset by the likelihood bin-by-bin with a template histogram model based on the obersved data.
@@ -1056,12 +1046,6 @@ RooAbsReal* RooAbsPdf::createNLL(RooAbsData& data, const RooLinkedList& cmdList)
   Int_t cloneData = pc.getInt("cloneData") ;
   auto offset = static_cast<RooFit::OffsetMode>(pc.getInt("doOffset"));
 
-  if(offset == RooFit::OffsetMode::Bin && dynamic_cast<RooDataSet*>(&data)) {
-    coutE(Minimization) << "The Offset(\"bin\") option doesn't suppot fits to RooDataSet yet, only to RooDataHist."
-                           " Falling back to no offsetting."  << endl;
-    offset = RooFit::OffsetMode::None;
-  }
-
   // If no explicit cloneData command is specified, cloneData is set to true if optimization is activated
   if (cloneData==2) {
     cloneData = optConst ;
@@ -1158,7 +1142,7 @@ RooAbsReal* RooAbsPdf::createNLL(RooAbsData& data, const RooLinkedList& cmdList)
   cfg.rangeName = rangeName ? rangeName : "";
   auto nllVar = std::make_unique<RooNLLVar>(baseName.c_str(),"-log(likelihood)",*this,data,projDeps, ext, cfg);
   nllVar->batchMode(batchMode == RooFit::BatchModeOption::Old);
-  nllVar->enableBinOffsetting(offset == RooFit::OffsetMode::Bin);
+  nllVar->templateRatioOffset(offset == RooFit::OffsetMode::Bin);
   nll = std::move(nllVar);
   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors) ;
 
@@ -2519,7 +2503,7 @@ RooDataHist *RooAbsPdf::generateBinned(const RooArgSet &whatVars, double nEvents
     // Second pass for regular mode - Trim/Extend dataset to exact number of entries
 
     // Calculate difference between what is generated so far and what is requested
-    Int_t nEvtExtra = std::abs(Int_t(nEvents)-histOutSum) ;
+    Int_t nEvtExtra = abs(Int_t(nEvents)-histOutSum) ;
     Int_t wgt = (histOutSum>nEvents) ? -1 : 1 ;
 
     // Perform simple binned accept/reject procedure to get to exact event count

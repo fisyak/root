@@ -375,12 +375,11 @@ void RooTreeDataStore::loadValues(const TTree *t, const RooFormulaVar* select, c
   tClone->SetDirectory(t->GetDirectory());
 
   // Clone list of variables
-  RooArgSet sourceArgSet;
-  _varsww.snapshot(sourceArgSet, false);
+  std::unique_ptr<RooArgSet> sourceArgSet( _varsww.snapshot(false) );
 
   // Check that we have the branches:
   bool missingBranches = false;
-  for (const auto var : sourceArgSet) {
+  for (const auto var : *sourceArgSet) {
      if (!tClone->GetBranch(var->GetName())) {
         missingBranches = true;
         coutE(InputArguments) << "Didn't find a branch in Tree '" << tClone->GetName() << "' to read variable '"
@@ -395,7 +394,7 @@ void RooTreeDataStore::loadValues(const TTree *t, const RooFormulaVar* select, c
   }
 
   // Attach args in cloned list to cloned source tree
-  for (const auto sourceArg : sourceArgSet) {
+  for (const auto sourceArg : *sourceArgSet) {
     sourceArg->attachToTree(*tClone,_defTreeBufSize) ;
   }
 
@@ -403,7 +402,7 @@ void RooTreeDataStore::loadValues(const TTree *t, const RooFormulaVar* select, c
   std::unique_ptr<RooFormulaVar> selectClone;
   if (select) {
     selectClone.reset( static_cast<RooFormulaVar*>(select->cloneTree()) );
-    selectClone->recursiveRedirectServers(sourceArgSet) ;
+    selectClone->recursiveRedirectServers(*sourceArgSet) ;
     selectClone->setOperMode(RooAbsArg::ADirty,true) ;
   }
 
@@ -417,9 +416,9 @@ void RooTreeDataStore::loadValues(const TTree *t, const RooFormulaVar* select, c
 
     // Copy from source to destination
     bool allOK(true) ;
-    for (unsigned int j=0; j < sourceArgSet.size(); ++j) {
+    for (unsigned int j=0; j < sourceArgSet->size(); ++j) {
       auto destArg = _varsww[j];
-      const auto sourceArg = sourceArgSet[j];
+      const auto sourceArg = (*sourceArgSet)[j];
 
       destArg->copyCache(sourceArg) ;
       sourceArg->copyCache(destArg) ;

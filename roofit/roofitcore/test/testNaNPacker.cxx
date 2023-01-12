@@ -3,7 +3,6 @@
 #include "RooNaNPacker.h"
 #include "RooRealVar.h"
 #include "RooGenericPdf.h"
-#include "RooHelpers.h"
 #include "RooMinimizer.h"
 #include "RooFitResult.h"
 #include "RooDataSet.h"
@@ -122,7 +121,7 @@ TEST(RooNaNPacker, FitSimpleLinear) {
 /// The minimiser needs to recover from that.
 /// Test also that when recovery with NaN packing is switched off, the minimiser fails to recover.
 TEST(RooNaNPacker, FitParabola) {
-  RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING); // We don't need integration messages
+  RooMsgService::instance().setGlobalKillBelow(RooFit::WARNING); // We don't need integration messages
 
   RooRealVar x("x", "x", -10, 10);
   RooRealVar a1("a1", "a1", 12., -10., 20.);

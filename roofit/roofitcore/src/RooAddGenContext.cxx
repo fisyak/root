@@ -56,8 +56,7 @@ RooAddGenContext::RooAddGenContext(const RooAddPdf &model, const RooArgSet &vars
   ccxcoutI(Generation) << std::endl;
 
   // Constructor. Build an array of generator contexts for each product component PDF
-  _pdfSet = std::make_unique<RooArgSet>();
-  RooArgSet(model).snapshot(*_pdfSet, true);
+  _pdfSet.reset(static_cast<RooArgSet*>(RooArgSet(model).snapshot(true)));
   _pdf = (RooAddPdf*) _pdfSet->find(model.GetName()) ;
   _pdf->setOperMode(RooAbsArg::ADirty,true) ;
 
@@ -71,8 +70,7 @@ RooAddGenContext::RooAddGenContext(const RooAddPdf &model, const RooArgSet &vars
 
   _nComp = model._pdfList.getSize() ;
   _coefThresh.resize(_nComp+1);
-  _vars = std::make_unique<RooArgSet>();
-  vars.snapshot(*_vars, false);
+  _vars.reset(static_cast<RooArgSet*>(vars.snapshot(false)));
 
   for (const auto arg : model._pdfList) {
     auto pdf = dynamic_cast<const RooAbsPdf *>(arg);
@@ -106,14 +104,12 @@ RooAddGenContext::RooAddGenContext(const RooAddModel &model, const RooArgSet &va
   ccxcoutI(Generation) << std::endl;
 
   // Constructor. Build an array of generator contexts for each product component PDF
-  _pdfSet = std::make_unique<RooArgSet>();
-  RooArgSet(model).snapshot(*_pdfSet, true);
+  _pdfSet.reset(static_cast<RooArgSet*>(RooArgSet(model).snapshot(true)));
   _pdf = (RooAbsPdf*) _pdfSet->find(model.GetName()) ;
 
   _nComp = model._pdfList.getSize() ;
   _coefThresh.resize(_nComp+1);
-  _vars = std::make_unique<RooArgSet>();
-  vars.snapshot(*_vars, false);
+  _vars.reset(static_cast<RooArgSet*>(vars.snapshot(false)));
 
   for (const auto obj : model._pdfList) {
     auto pdf = static_cast<RooAbsPdf*>(obj);

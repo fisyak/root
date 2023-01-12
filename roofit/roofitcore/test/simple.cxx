@@ -4,12 +4,13 @@
 
 #include "gtest/gtest.h"
 
+
 // Tests ROOT-6378
 TEST(RooRealVar, PrintDefaultConstructed)
 {
    std::stringstream s;
    RooRealVar v;
-   v.printStream(s, v.defaultPrintContents(""), v.defaultPrintStyle(""));
+   v.printStream(s, v.defaultPrintContents(""),v.defaultPrintStyle(""));
 
    auto resString = s.str();
    auto separatorPos = resString.find("+/-");

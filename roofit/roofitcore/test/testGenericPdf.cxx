@@ -4,7 +4,6 @@
 
 #include <RooRealVar.h>
 #include <RooGenericPdf.h>
-#include <RooHelpers.h>
 #include <RooWorkspace.h>
 
 #include <gtest/gtest.h>
@@ -36,10 +35,7 @@ TEST(GenericPdf, CrashWhenRunningJohnson)
 }
 
 // ROOT-10411
-TEST(GenericPdf, CrashWhenRenamingArguments)
-{
-  RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
-
+TEST(GenericPdf, CrashWhenRenamingArguments) {
   RooRealVar var("var", "var", 0.1, 0, 1);
   RooRealVar par("par", "par", 0.5, 0, 1);
   RooGenericPdf genPdf("genPdf", "var*(par + 1)", RooArgSet(var, par));
@@ -60,10 +56,7 @@ TEST(GenericPdf, CrashWhenRenamingArguments)
 }
 
 // ROOT-5101: Identity PDF affects normalization
-TEST(GenericPdf, IdentidyPdfNormalization)
-{
-  RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
-
+TEST(GenericPdf, IdentidyPdfNormalization) {
   RooWorkspace ws;
   ws.factory("Exponential::exp(x[0.0, 100.0], s[-0.5, -10.0,  0.0])");
 

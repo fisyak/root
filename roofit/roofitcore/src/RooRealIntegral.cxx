@@ -746,10 +746,7 @@ RooRealIntegral::RooRealIntegral(const RooRealIntegral& other, const char* name)
   _rangeName(other._rangeName),
   _cacheNum(false)
 {
- if(other._funcNormSet) {
-   _funcNormSet = std::make_unique<RooArgSet>();
-   other._funcNormSet->snapshot(*_funcNormSet, false);
- }
+ _funcNormSet.reset(other._funcNormSet ? static_cast<RooArgSet*>(other._funcNormSet->snapshot(false)) : nullptr);
 
  for (const auto arg : other._facList) {
    RooAbsArg* argClone = (RooAbsArg*) arg->Clone() ;
@@ -932,7 +929,7 @@ double RooRealIntegral::evaluate() const
       // Multiply by fit range for 'real' dependents
       if (arg->IsA()->InheritsFrom(RooAbsRealLValue::Class())) {
         RooAbsRealLValue* argLV = (RooAbsRealLValue*)arg ;
-        retVal *= (argLV->getMax(intRange()) - argLV->getMin(intRange())) ;
+        retVal *= (argLV->getMax() - argLV->getMin()) ;
       }
       // Multiply by number of states for category dependents
       if (arg->IsA()->InheritsFrom(RooAbsCategoryLValue::Class())) {
@@ -974,9 +971,9 @@ double RooRealIntegral::jacobianProduct() const
     jacProd *= arg->jacobian() ;
   }
 
-  // Take std::abs() here: if jacobian is negative, min and max are swapped and analytical integral
+  // Take fabs() here: if jacobian is negative, min and max are swapped and analytical integral
   // will be positive, so must multiply with positive jacobian.
-  return std::abs(jacProd) ;
+  return fabs(jacProd) ;
 }
 
 

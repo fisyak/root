@@ -114,8 +114,7 @@ RooNumIntConfig::RooNumIntConfig(const RooNumIntConfig& other) :
 {
   // Clone all configuration dat
   for(auto * set : static_range_cast<RooArgSet*>(other._configSets)) {
-    RooArgSet* setCopy = new RooArgSet;
-    set->snapshot(*setCopy);
+    RooArgSet* setCopy = (RooArgSet*) set->snapshot() ;
     setCopy->setName(set->GetName()) ;
    _configSets.Add(setCopy);
   }
@@ -147,8 +146,7 @@ RooNumIntConfig& RooNumIntConfig::operator=(const RooNumIntConfig& other)
 
   // Copy new integrator-specific data
   for(auto * set : static_range_cast<RooArgSet*>(other._configSets)) {
-    RooArgSet* setCopy = new RooArgSet;
-    set->snapshot(*setCopy);
+    RooArgSet* setCopy = (RooArgSet*) set->snapshot() ;
     setCopy->setName(set->GetName()) ;
    _configSets.Add(setCopy);
   }
@@ -190,8 +188,7 @@ bool RooNumIntConfig::addConfigSection(const RooAbsIntegrator* proto, const RooA
   }
 
   // Store default configuration parameters
-  RooArgSet* config = new RooArgSet;
-  inDefaultConfig.snapshot(*config);
+  RooArgSet* config = (RooArgSet*) inDefaultConfig.snapshot() ;
   config->setName(name.c_str());
   _configSets.Add(config) ;
 
@@ -226,7 +223,7 @@ const RooArgSet& RooNumIntConfig::getConfigSection(const char* name) const
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Set absolute convergence criteria (convergence if std::abs(Err)<newEpsAbs)
+/// Set absolute convergence criteria (convergence if abs(Err)<newEpsAbs)
 
 void RooNumIntConfig::setEpsAbs(double newEpsAbs)
 {
@@ -256,7 +253,7 @@ RooPrintable::StyleOption RooNumIntConfig::defaultPrintStyle(Option_t* opt) cons
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Set relative convergence criteria (convergence if std::abs(Err)/abs(Int)<newEpsRel)
+/// Set relative convergence criteria (convergence if abs(Err)/abs(Int)<newEpsRel)
 
 void RooNumIntConfig::setEpsRel(double newEpsRel)
 {

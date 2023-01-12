@@ -1,31 +1,33 @@
-// Tests for the RooJSONFactoryWSTool
-// Authors: Carsten D. Burgard, DESY/ATLAS, 12/2021
-//          Jonas Rembser, CERN 12/2022
+#include "RooRealVar.h"
+#include "RooConstVar.h"
+#include "RooWorkspace.h"
+
+#include "TROOT.h"
 
 #include <RooFitHS3/JSONIO.h>
 #include <RooFitHS3/RooJSONFactoryWSTool.h>
 
-#include <RooRealVar.h>
-#include <RooConstVar.h>
-#include <RooWorkspace.h>
-#include <RooGlobalFunc.h>
-#include <RooArgusBG.h>
-#include <RooGaussian.h>
-#include <RooAddPdf.h>
-#include <RooRealVar.h>
-#include <RooSimultaneous.h>
-#include <RooProdPdf.h>
-#include <RooCategory.h>
+#include "gtest/gtest.h"
 
-#include <TROOT.h>
+#include "RooGlobalFunc.h"
 
-#include <gtest/gtest.h>
+// includes for RooArgusBG
+#include "RooArgusBG.h"
+#include "RooGaussian.h"
+#include "RooAddPdf.h"
+
+// includes for SimultaneousGaussians
+#include "RooRealVar.h"
+#include "RooSimultaneous.h"
+#include "RooProdPdf.h"
+#include "RooCategory.h"
+
+using namespace RooFit;
 
 TEST(RooFitHS3, RooArgusBG)
 {
-   using namespace RooFit;
-
-   RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
+   auto &msg = RooMsgService::instance();
+   msg.setGlobalKillBelow(RooFit::WARNING);
 
    // --- Observable ---
    RooRealVar mes("mes", "m_{ES} (GeV)", 5.20, 5.30);

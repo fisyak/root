@@ -17,10 +17,9 @@
 #include <RooWorkspace.h>
 #include <RooAbsPdf.h>
 #include <RooAbsReal.h>
-#include <RooArgSet.h>
 #include <RooDataSet.h>
-#include <RooHelpers.h>
 #include <RooRealVar.h>
+#include <RooArgSet.h>
 #include <RooGlobalFunc.h>
 #include <RooFitResult.h>
 
@@ -37,19 +36,18 @@ TEST(Interface, createNLLRooAbsL)
 
    RooRandom::randomGenerator()->SetSeed(42);
    RooWorkspace w;
-   w.factory("Gaussian::g(x[-5,5],mu[0,-3,3],sigma[1, 0.01, 3])");
-   RooRealVar *x = w.var("x");
-   RooRealVar *sigma = w.var("sigma");
-   sigma->setConstant(true);
+   w.factory("Gaussian::g(x[-5,5],mu[0,-3,3],sigma[1])");
+   auto x = w.var("x");
    RooAbsPdf *pdf = w.pdf("g");
-   std::unique_ptr<RooDataSet> data{pdf->generate(*x, 10000)};
+   std::unique_ptr<RooDataSet> data{pdf->generate(RooArgSet(*x), 10000)};
    RooAbsReal *nll = pdf->createNLL(*data, RooFit::ModularL(true));
 
-   auto *nll_real = dynamic_cast<RooFit::TestStatistics::RooRealL *>(nll);
+   RooFit::TestStatistics::RooRealL *nll_real = dynamic_cast<RooFit::TestStatistics::RooRealL *>(nll);
 
    EXPECT_TRUE(nll_real != nullptr);
 
-   auto *nll_absL = dynamic_cast<RooFit::TestStatistics::RooAbsL *>(nll_real->getRooAbsL().get());
+   RooFit::TestStatistics::RooAbsL *nll_absL =
+      dynamic_cast<RooFit::TestStatistics::RooAbsL *>(nll_real->getRooAbsL().get());
 
    EXPECT_TRUE(nll_absL != nullptr);
 }
@@ -61,62 +59,44 @@ TEST(Interface, createNLLModularLAndOffset)
 
    RooRandom::randomGenerator()->SetSeed(42);
    RooWorkspace w;
-   w.factory("Gaussian::g(x[-5,5],mu[0,-3,3],sigma[1, 0.01, 3])");
-   RooRealVar *x = w.var("x");
-   RooRealVar *sigma = w.var("sigma");
-   sigma->setConstant(true);
+   w.factory("Gaussian::g(x[-5,5],mu[0,-3,3],sigma[1])");
+   auto x = w.var("x");
    RooAbsPdf *pdf = w.pdf("g");
-   std::unique_ptr<RooDataSet> data{pdf->generate(*x, 10000)};
-
-   RooHelpers::HijackMessageStream hijack(RooFit::ERROR, RooFit::InputArguments);
-
-   std::unique_ptr<RooAbsReal> nll{pdf->createNLL(*data, RooFit::Offset(true), RooFit::ModularL(true))};
-
-   EXPECT_NE(hijack.str().find("ERROR"), std::string::npos) << "Stream contents: " << hijack.str();
+   std::unique_ptr<RooDataSet> data{pdf->generate(RooArgSet(*x), 10000)};
+   RooAbsReal *nll = pdf->createNLL(*data, RooFit::Offset(true), RooFit::ModularL(true));
 
    EXPECT_TRUE(nll == nullptr);
 }
 
 // Verifies that the fitTo parallelize interface creates a valid minimization
-#ifdef R__HAS_ROOFIT_MULTIPROCESS
-TEST(Interface, fitTo)
-#else
 TEST(Interface, DISABLED_fitTo)
-#endif
 {
-   using namespace RooFit;
-
-   RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
-
    ROOT::Math::MinimizerOptions::SetDefaultMinimizer("Minuit2");
 
    RooRandom::randomGenerator()->SetSeed(42);
    RooWorkspace w;
-   w.factory("Gaussian::g(x[-5,5],mu[0,-3,3],sigma[1, 0.01, 3])");
+   w.factory("Gaussian::g(x[-5,5],mu[0,-3,3],sigma[1])");
    auto x = w.var("x");
-   RooRealVar *sigma = w.var("sigma");
-   sigma->setConstant(true);
    RooAbsPdf *pdf = w.pdf("g");
-   std::unique_ptr<RooDataSet> data{pdf->generate({*x}, 10000)};
+   std::unique_ptr<RooDataSet> data{pdf->generate(RooArgSet(*x), 10000)};
 
-   RooArgSet values;
-   pdf->getParameters(data->get(), values);
+   RooArgSet *values = pdf->getParameters(data.get());
 
-   values.add(*pdf);
+   values->add(*pdf);
 
-   RooArgSet savedValues;
-   values.snapshot(savedValues);
+   RooArgSet *savedValues = dynamic_cast<RooArgSet *>(values->snapshot());
+   if (savedValues == nullptr) {
+      throw std::runtime_error("params->snapshot() cannot be casted to RooArgSet!");
+   }
 
-   std::unique_ptr<RooFitResult> result1{pdf->fitTo(*data, Save(), PrintLevel(-1))};
+   std::unique_ptr<RooFitResult> result1{pdf->fitTo(*data, RooFit::Save())};
 
    double minNll_nominal = result1->minNll();
    double edm_nominal = result1->edm();
 
-   values.assign(savedValues);
+   *values = *savedValues;
 
-   std::unique_ptr<RooFitResult> result2{pdf->fitTo(*data, Save(), PrintLevel(-1), Parallelize(4),
-                                                    Experimental::ParallelGradientOptions(true),
-                                                    Experimental::ParallelDescentOptions(true))};
+   std::unique_ptr<RooFitResult> result2{pdf->fitTo(*data, RooFit::Save(), RooFit::Parallelize(4), RooFit::Experimental::ParallelGradientOptions(true), RooFit::Experimental::ParallelDescentOptions(true))};
 
    double minNll_GradientJob = result2->minNll();
    double edm_GradientJob = result2->edm();

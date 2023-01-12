@@ -2616,7 +2616,7 @@ TH1 *TH1::GetCumulative(Bool_t forward, const char* suffix) const
                hintegrated->AddBinContent(bin, sum);
                if (fSumw2.fN) {
                   esum += GetBinErrorSqUnchecked(bin);
-                  hintegrated->fSumw2.fArray[bin] = esum;
+                  fSumw2.fArray[bin] = esum;
                }
             }
          }
@@ -2630,7 +2630,7 @@ TH1 *TH1::GetCumulative(Bool_t forward, const char* suffix) const
                hintegrated->AddBinContent(bin, sum);
                if (fSumw2.fN) {
                   esum += GetBinErrorSqUnchecked(bin);
-                  hintegrated->fSumw2.fArray[bin] = esum;
+                  fSumw2.fArray[bin] = esum;
                }
             }
          }

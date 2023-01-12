@@ -120,15 +120,13 @@ TEST(RooDataSet, BinnedClone)
    RooRealVar mes("Mes", "Mes", 5.28, 5.24, 5.29);
    mes.setBin(40);
    RooRealVar weight("weight", "weight", 1, 0, 100);
+   RooDataSet *data = new RooDataSet("dataset", "dataset", &chain, RooArgSet(mes, weight), 0, weight.GetName());
+   RooDataHist *hist = data->binnedClone();
 
-   {
-      RooDataSet data{"dataset", "dataset", &chain, RooArgSet(mes, weight), 0, weight.GetName()};
-      std::unique_ptr<RooDataHist> hist{data.binnedClone()};
+   EXPECT_DOUBLE_EQ(hist->sumEntries(), sumW);
 
-      EXPECT_DOUBLE_EQ(hist->sumEntries(), sumW);
-
-      // the original crash happened when "hist" and "data" got destructed
-   }
+   delete hist; // invalid read here
+   delete data; // and here too
 
    gSystem->Unlink(filename[0]);
    gSystem->Unlink(filename[1]);
@@ -279,7 +277,8 @@ TEST(RooDataSet, CrashAfterImportFromTree)
 // root-project/root#6951: Broken weights after reducing RooDataSet created with RooAbsPdf::generate()
 TEST(RooDataSet, ReduceWithCompositeDataStore)
 {
-   RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
+   auto &msg = RooMsgService::instance();
+   msg.setGlobalKillBelow(RooFit::WARNING);
 
    RooWorkspace ws{};
    ws.factory("Gaussian::gauss(x[-10,10], mean[3,-10,10], sig    ma[1,0.1,10])");

@@ -204,8 +204,6 @@ public:
 
   static void fillItemsFromTList(Items & items, TList const& tlist);
 
-  void createInternalPlotVarClone();
-
 protected:
 
   RooPlot(const RooPlot& other) = delete; // cannot be copied

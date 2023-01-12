@@ -91,13 +91,11 @@ TEST(RooDataHist, UnWeightedEntries)
   ASSERT_EQ(dataHist.sumEntries(), 20 * targetBinContent);
 
   x.setVal(0.);
-  RooArgSet coordsAtZero;
-  dataHist.get(coordinates)->snapshot(coordsAtZero);
+  RooArgSet* coordsAtZero = dataHist.get(coordinates)->snapshot();
   x.setVal(0.9);
-  RooArgSet coordsAtPoint9;
-  dataHist.get(coordinates)->snapshot(coordsAtPoint9);
-  EXPECT_EQ(static_cast<RooRealVar*>(coordsAtZero.find(x))->getVal(),
-            static_cast<RooRealVar*>(coordsAtPoint9.find(x))->getVal());
+  RooArgSet* coordsAtPoint9 = dataHist.get(coordinates)->snapshot();
+  EXPECT_EQ(static_cast<RooRealVar*>(coordsAtZero->find(x))->getVal(),
+            static_cast<RooRealVar*>(coordsAtPoint9->find(x))->getVal());
 
   const double weight = dataHist.weight();
   EXPECT_EQ(weight, targetBinContent);
@@ -125,11 +123,10 @@ TEST(RooDataHist, UnWeightedEntries)
   }
 
 
-  RooArgSet coordsAt10;
-  dataHist.get(10)->snapshot(coordsAt10);
+  RooArgSet* coordsAt10 = dataHist.get(10)->snapshot();
   const double weightBin10 = dataHist.weight();
 
-  EXPECT_NEAR(static_cast<RooRealVar*>(coordsAt10.find(x))->getVal(), 0.5, 1.E-1);
+  EXPECT_NEAR(static_cast<RooRealVar*>(coordsAt10->find(x))->getVal(), 0.5, 1.E-1);
   EXPECT_EQ(weight, weightBin10);
 }
 
@@ -153,7 +150,7 @@ TEST(RooDataHist, WeightedEntries)
   EXPECT_EQ(dataHist.sumEntries(), 20 * targetBinContent);
 
   x.setVal(0.);
-  dataHist.get(coordinates);
+  dataHist.get(coordinates)->snapshot();
   const double weight = dataHist.weight();
   ASSERT_EQ(weight, targetBinContent);
 
@@ -183,11 +180,10 @@ TEST(RooDataHist, WeightedEntries)
   }
 
 
-  RooArgSet coordsAt10;
-  dataHist.get(10)->snapshot(coordsAt10);
+  RooArgSet* coordsAt10 = dataHist.get(10)->snapshot();
   const double weightBin10 = dataHist.weight();
 
-  EXPECT_NEAR(static_cast<RooRealVar*>(coordsAt10.find(x))->getVal(), 0.5, 1.E-1);
+  EXPECT_NEAR(static_cast<RooRealVar*>(coordsAt10->find(x))->getVal(), 0.5, 1.E-1);
   EXPECT_EQ(weight, weightBin10);
 }
 
@@ -197,16 +193,16 @@ public:
     TFile file(GetParam(), "READ");
     ASSERT_TRUE(file.IsOpen());
 
-    legacy = std::unique_ptr<RooDataHist>{file.Get<RooDataHist>("dataHist")};
+    file.GetObject("dataHist", legacy);
     ASSERT_NE(legacy, nullptr);
   }
 
   void TearDown() override {
-    legacy.reset();
+    delete legacy;
   }
 
 protected:
-  std::unique_ptr<RooDataHist> legacy;
+  RooDataHist* legacy{nullptr};
 };
 
 TEST_P(RooDataHistIO, ReadLegacy) {
@@ -215,17 +211,16 @@ TEST_P(RooDataHistIO, ReadLegacy) {
 
   constexpr double targetBinContent = 20.;
 
-  RooArgSet legacyVals;
-  dataHist.get(10)->snapshot(legacyVals);
-  EXPECT_EQ(static_cast<RooAbsReal*>(legacyVals.find("x"))->getVal(),
+  RooArgSet* legacyVals = dataHist.get(10)->snapshot();
+  EXPECT_EQ(static_cast<RooAbsReal*>(legacyVals->find("x"))->getVal(),
       static_cast<RooAbsReal*>(dataHist.get(10)->find("x"))->getVal());
 
 
   EXPECT_EQ(dataHist.numEntries(), 20);
   EXPECT_EQ(dataHist.sumEntries(), 20 * targetBinContent);
 
-  static_cast<RooRealVar*>(legacyVals.find("x"))->setVal(0.);
-  dataHist.get(legacyVals); // trigger side effect for weight below.
+  static_cast<RooRealVar*>(legacyVals->find("x"))->setVal(0.);
+  dataHist.get(*legacyVals); // trigger side effect for weight below.
   const double weight = dataHist.weight();
   ASSERT_EQ(weight, targetBinContent);
 
@@ -254,11 +249,10 @@ TEST_P(RooDataHistIO, ReadLegacy) {
   }
 
 
-  RooArgSet coordsAt10;
-  dataHist.get(10)->snapshot(coordsAt10);
+  RooArgSet* coordsAt10 = dataHist.get(10)->snapshot();
   const double weightBin10 = dataHist.weight();
 
-  EXPECT_NEAR(static_cast<RooRealVar*>(coordsAt10.find("x"))->getVal(), 0.5, 1.E-1);
+  EXPECT_NEAR(static_cast<RooRealVar*>(coordsAt10->find("x"))->getVal(), 0.5, 1.E-1);
   EXPECT_EQ(weight, weightBin10);
 }
 
@@ -766,12 +760,30 @@ TEST_P(WeightsTest, VectorizedWeights)
 }
 
 INSTANTIATE_TEST_SUITE_P(RooDataHist, WeightsTest,
-                         testing::Combine(
-                            testing::Values(0, 1, 2), // interpolation order
-                            testing::Values(false, true), // RooHistPdf or RooHistFunc?
-                            testing::Values(false, true), // CDF boundary mode
-                            testing::Values(false, true) // uniform bins or not
-                         ),
+                         testing::Values(WeightsTest::ParamType{0, false, false, false},
+                                         WeightsTest::ParamType{1, false, false, false},
+                                         WeightsTest::ParamType{2, false, false, false},
+                                         WeightsTest::ParamType{0, false, true, false},
+                                         WeightsTest::ParamType{1, false, true, false},
+                                         WeightsTest::ParamType{2, false, true, false},
+                                         WeightsTest::ParamType{0, true, false, false},
+                                         WeightsTest::ParamType{1, true, false, false},
+                                         WeightsTest::ParamType{2, true, false, false},
+                                         WeightsTest::ParamType{0, true, true, false},
+                                         WeightsTest::ParamType{1, true, true, false},
+                                         WeightsTest::ParamType{2, true, true, false},
+                                         WeightsTest::ParamType{0, false, false, true},
+                                         WeightsTest::ParamType{1, false, false, true},
+                                         WeightsTest::ParamType{2, false, false, true},
+                                         WeightsTest::ParamType{0, false, true, true},
+                                         WeightsTest::ParamType{1, false, true, true},
+                                         WeightsTest::ParamType{2, false, true, true},
+                                         WeightsTest::ParamType{0, true, false, true},
+                                         WeightsTest::ParamType{1, true, false, true},
+                                         WeightsTest::ParamType{2, true, false, true},
+                                         WeightsTest::ParamType{0, true, true, true},
+                                         WeightsTest::ParamType{1, true, true, true},
+                                         WeightsTest::ParamType{2, true, true, true}),
                          [](testing::TestParamInfo<WeightsTest::ParamType> const &paramInfo) {
                             std::stringstream ss;
                             ss << (std::get<1>(paramInfo.param) ? "RooHistFunc" : "RooHistPdf");

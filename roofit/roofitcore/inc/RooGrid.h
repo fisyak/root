@@ -16,21 +16,27 @@
 #ifndef ROO_GRID
 #define ROO_GRID
 
-#include <RtypesCore.h>
+#include "TObject.h"
+#include "RooPrintable.h"
 
-#include <ostream>
 #include <vector>
 
 class RooAbsFunc;
 
-// Utility class for RooMCIntegrator holding a multi-dimensional grid
-class RooGrid {
+class RooGrid : public TObject, public RooPrintable {
 public:
   RooGrid() {}
   RooGrid(const RooAbsFunc &function);
 
   // Printing interface
-  void print(std::ostream& os, bool verbose=false, std::string const& indent="") const;
+  void printName(std::ostream& os) const override ;
+  void printTitle(std::ostream& os) const override ;
+  void printClassName(std::ostream& os) const override ;
+  void printMultiline(std::ostream& os, Int_t contents, bool verbose=false, TString indent="") const override;
+
+  inline void Print(Option_t *options= nullptr) const override {
+    printStream(defaultPrintStream(),defaultPrintContents(options),defaultPrintStyle(options));
+  }
 
   inline bool isValid() const { return _valid; }
   inline UInt_t getDimension() const { return _dim; }
@@ -53,13 +59,15 @@ public:
   enum { maxBins = 50 }; // must be even
 
   // Accessor for the j-th normalized grid point along the i-th dimension
+public:
   inline double coord(Int_t i, Int_t j) const { return _xi[i*_dim + j]; }
   inline double value(Int_t i,Int_t j) const { return _d[i*_dim + j]; }
-
 protected:
   inline double& coord(Int_t i, Int_t j) { return _xi[i*_dim + j]; }
   inline double& value(Int_t i,Int_t j) { return _d[i*_dim + j]; }
   inline double& newCoord(Int_t i) { return _xin[i]; }
+
+protected:
 
   bool _valid = false;         ///< Is configuration valid
   UInt_t _dim = 0;             ///< Number of dimensions, bins and boxes
@@ -75,6 +83,7 @@ protected:
   std::vector<double> _xin;    ///<! Internal workspace
   std::vector<double> _weight; ///<! Internal workspace
 
+  ClassDefOverride(RooGrid,1) // Utility class for RooMCIntegrator holding a multi-dimensional grid
 };
 
 #endif

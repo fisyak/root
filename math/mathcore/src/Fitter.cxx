@@ -757,7 +757,9 @@ bool Fitter::DoInitMinimizer() {
                unsigned int nh = ndim * (ndim + 1) / 2;
                std::vector<double> h(nh);
                bool ret = fitGradFcn->Hessian(x.data(), h.data());
-               if (!ret) return false;
+               if (ret) {
+                  std::cout << "computing hessian " << x[0] << " -> " << h[0] << std::endl;
+               }
                for (unsigned int i = 0; i < ndim; i++) {
                   for (unsigned int j = 0; j <= i; j++) {
                      unsigned int index = j + i * (i + 1) / 2; // formula for j < i
@@ -766,7 +768,7 @@ bool Fitter::DoInitMinimizer() {
                         hess[ndim * j + i] = h[index];
                   }
                }
-               return true;
+               return ret;
             };
 
             fMinimizer->SetHessianFunction(hessFcn);

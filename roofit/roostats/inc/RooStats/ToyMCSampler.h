@@ -148,9 +148,7 @@ class ToyMCSampler: public TestStatSampler {
 
       /// Set the Pdf, add to the workspace if not already there
       void SetParametersForTestStat(const RooArgSet& nullpoi) override {
-         auto params = std::make_unique<RooArgSet>();
-         nullpoi.snapshot(*params);
-         fParametersForTestStat = std::move(params);
+         fParametersForTestStat.reset( nullpoi.snapshot() );
       }
 
       void SetPdf(RooAbsPdf& pdf) override { fPdf = &pdf; ClearCache(); }

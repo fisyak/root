@@ -256,11 +256,11 @@ ROOT::Experimental::Detail::RPageSinkDaos::CommitPageImpl(ColumnHandle_t columnH
    }
 
    fCounters->fSzZip.Add(page.GetNBytes());
-   return CommitSealedPageImpl(columnHandle.fPhysicalId, sealedPage);
+   return CommitSealedPageImpl(columnHandle.fId, sealedPage);
 }
 
 ROOT::Experimental::RNTupleLocator
-ROOT::Experimental::Detail::RPageSinkDaos::CommitSealedPageImpl(DescriptorId_t physicalColumnId,
+ROOT::Experimental::Detail::RPageSinkDaos::CommitSealedPageImpl(DescriptorId_t columnId,
                                                                 const RPageStorage::RSealedPage &sealedPage)
 {
    auto offsetData = fPageId.fetch_add(1);
@@ -268,7 +268,7 @@ ROOT::Experimental::Detail::RPageSinkDaos::CommitSealedPageImpl(DescriptorId_t p
 
    {
       RNTupleAtomicTimer timer(fCounters->fTimeWallWrite, fCounters->fTimeCpuWrite);
-      RDaosKey daosKey = GetPageDaosKey<kDefaultDaosMapping>(fNTupleIndex, clusterId, physicalColumnId, offsetData);
+      RDaosKey daosKey = GetPageDaosKey<kDefaultDaosMapping>(fNTupleIndex, clusterId, columnId, offsetData);
       fDaosContainer->WriteSingleAkey(sealedPage.fBuffer, sealedPage.fSize, daosKey.fOid, daosKey.fDkey, daosKey.fAkey);
    }
 
@@ -303,8 +303,7 @@ ROOT::Experimental::Detail::RPageSinkDaos::CommitSealedPageVImpl(std::span<RPage
          d_iov_set(&pageIov, const_cast<void *>(s.fBuffer), s.fSize);
          auto offsetData = fPageId.fetch_add(1);
 
-         RDaosKey daosKey =
-            GetPageDaosKey<kDefaultDaosMapping>(fNTupleIndex, clusterId, range.fPhysicalColumnId, offsetData);
+         RDaosKey daosKey = GetPageDaosKey<kDefaultDaosMapping>(fNTupleIndex, clusterId, range.fColumnId, offsetData);
          auto odPair = RDaosContainer::ROidDkeyPair{daosKey.fOid, daosKey.fDkey};
          auto [it, ret] = writeRequests.emplace(odPair, RDaosContainer::RWOperation(odPair));
          it->second.insert(daosKey.fAkey, pageIov);
@@ -400,7 +399,7 @@ ROOT::Experimental::Detail::RPageSinkDaos::ReservePage(ColumnHandle_t columnHand
    if (nElements == 0)
       throw RException(R__FAIL("invalid call: request empty page"));
    auto elementSize = columnHandle.fColumn->GetElement()->GetSize();
-   return fPageAllocator->NewPage(columnHandle.fPhysicalId, elementSize, nElements);
+   return fPageAllocator->NewPage(columnHandle.fId, elementSize, nElements);
 }
 
 void ROOT::Experimental::Detail::RPageSinkDaos::ReleasePage(RPage &page)
@@ -489,7 +488,7 @@ std::string ROOT::Experimental::Detail::RPageSourceDaos::GetObjectClass() const
    return fDaosContainer->GetDefaultObjectClass().ToString();
 }
 
-void ROOT::Experimental::Detail::RPageSourceDaos::LoadSealedPage(DescriptorId_t physicalColumnId,
+void ROOT::Experimental::Detail::RPageSourceDaos::LoadSealedPage(DescriptorId_t columnId,
                                                                  const RClusterIndex &clusterIndex,
                                                                  RSealedPage &sealedPage)
 {
@@ -499,14 +498,14 @@ void ROOT::Experimental::Detail::RPageSourceDaos::LoadSealedPage(DescriptorId_t 
    {
       auto descriptorGuard = GetSharedDescriptorGuard();
       const auto &clusterDescriptor = descriptorGuard->GetClusterDescriptor(clusterId);
-      pageInfo = clusterDescriptor.GetPageRange(physicalColumnId).Find(clusterIndex.GetIndex());
+      pageInfo = clusterDescriptor.GetPageRange(columnId).Find(clusterIndex.GetIndex());
    }
 
    const auto bytesOnStorage = pageInfo.fLocator.fBytesOnStorage;
    sealedPage.fSize = bytesOnStorage;
    sealedPage.fNElements = pageInfo.fNElements;
    if (sealedPage.fBuffer) {
-      RDaosKey daosKey = GetPageDaosKey<kDefaultDaosMapping>(fNTupleIndex, clusterId, physicalColumnId,
+      RDaosKey daosKey = GetPageDaosKey<kDefaultDaosMapping>(fNTupleIndex, clusterId, columnId,
                                                              pageInfo.fLocator.GetPosition<std::uint64_t>());
       fDaosContainer->ReadSingleAkey(const_cast<void *>(sealedPage.fBuffer), bytesOnStorage, daosKey.fOid,
                                      daosKey.fDkey, daosKey.fAkey);
@@ -518,7 +517,7 @@ ROOT::Experimental::Detail::RPageSourceDaos::PopulatePageFromCluster(ColumnHandl
                                                                      const RClusterInfo &clusterInfo,
                                                                      ClusterSize_t::ValueType idxInCluster)
 {
-   const auto columnId = columnHandle.fPhysicalId;
+   const auto columnId = columnHandle.fId;
    const auto clusterId = clusterInfo.fClusterId;
    const auto &pageInfo = clusterInfo.fPageInfo;
 
@@ -541,7 +540,7 @@ ROOT::Experimental::Detail::RPageSourceDaos::PopulatePageFromCluster(ColumnHandl
       sealedPageBuffer = directReadBuffer.get();
    } else {
       if (!fCurrentCluster || (fCurrentCluster->GetId() != clusterId) || !fCurrentCluster->ContainsColumn(columnId))
-         fCurrentCluster = fClusterPool->GetCluster(clusterId, fActivePhysicalColumns.ToColumnSet());
+         fCurrentCluster = fClusterPool->GetCluster(clusterId, fActiveColumns);
       R__ASSERT(fCurrentCluster->ContainsColumn(columnId));
 
       auto cachedPage = fPagePool->GetPage(columnId, RClusterIndex(clusterId, idxInCluster));
@@ -574,7 +573,7 @@ ROOT::Experimental::Detail::RPageSourceDaos::PopulatePageFromCluster(ColumnHandl
 ROOT::Experimental::Detail::RPage
 ROOT::Experimental::Detail::RPageSourceDaos::PopulatePage(ColumnHandle_t columnHandle, NTupleSize_t globalIndex)
 {
-   const auto columnId = columnHandle.fPhysicalId;
+   const auto columnId = columnHandle.fId;
    auto cachedPage = fPagePool->GetPage(columnId, globalIndex);
    if (!cachedPage.IsNull())
       return cachedPage;
@@ -601,7 +600,7 @@ ROOT::Experimental::Detail::RPageSourceDaos::PopulatePage(ColumnHandle_t columnH
 {
    const auto clusterId = clusterIndex.GetClusterId();
    const auto idxInCluster = clusterIndex.GetIndex();
-   const auto columnId = columnHandle.fPhysicalId;
+   const auto columnId = columnHandle.fId;
    auto cachedPage = fPagePool->GetPage(columnId, clusterIndex);
    if (!cachedPage.IsNull())
       return cachedPage;
@@ -669,12 +668,12 @@ ROOT::Experimental::Detail::RPageSourceDaos::LoadClusters(std::span<RCluster::RK
          const auto &clusterDesc = descriptorGuard->GetClusterDescriptor(clusterId);
 
          // Collect the necessary page meta-data and sum up the total size of the compressed and packed pages
-         for (auto physicalColumnId : clusterKey.fPhysicalColumnSet) {
-            const auto &pageRange = clusterDesc.GetPageRange(physicalColumnId);
+         for (auto columnId : clusterKey.fColumnSet) {
+            const auto &pageRange = clusterDesc.GetPageRange(columnId);
             NTupleSize_t columnPageCount = 0;
             for (const auto &pageInfo : pageRange.fPageInfos) {
                const auto &pageLocator = pageInfo.fLocator;
-               onDiskClusterPages.push_back(RDaosSealedPageLocator(clusterId, physicalColumnId, columnPageCount,
+               onDiskClusterPages.push_back(RDaosSealedPageLocator(clusterId, columnId, columnPageCount,
                                                                    pageLocator.GetPosition<std::uint64_t>(),
                                                                    pageLocator.fBytesOnStorage, clusterBufSz));
                ++columnPageCount;
@@ -719,7 +718,7 @@ ROOT::Experimental::Detail::RPageSourceDaos::LoadClusters(std::span<RCluster::RK
    for (unsigned i = 0; i < clusterKeys.size(); ++i) {
       auto cluster = std::make_unique<RCluster>(clusterKeys[i].fClusterId);
       cluster->Adopt(std::move(pageMaps[i]));
-      for (auto colId : clusterKeys[i].fPhysicalColumnSet)
+      for (auto colId : clusterKeys[i].fColumnSet)
          cluster->SetColumnAvailable(colId);
 
       result.emplace_back(std::move(cluster));
@@ -738,7 +737,7 @@ void ROOT::Experimental::Detail::RPageSourceDaos::UnzipClusterImpl(RCluster *clu
 
    std::vector<std::unique_ptr<RColumnElementBase>> allElements;
 
-   const auto &columnsInCluster = cluster->GetAvailPhysicalColumns();
+   const auto &columnsInCluster = cluster->GetAvailColumns();
    for (const auto columnId : columnsInCluster) {
       const auto &columnDesc = descriptorGuard->GetColumnDescriptor(columnId);
 

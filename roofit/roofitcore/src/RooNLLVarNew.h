@@ -56,15 +56,12 @@ public:
 
    void enableOffsetting(bool) override;
 
-   void enableBinOffsetting(bool on = true) { _doBinOffset = on; }
-
    void setSimCount(int simCount) { _simCount = simCount; }
 
 private:
    double evaluate() const override { return _value; }
    void resetWeightVarNames();
    double finalizeResult(ROOT::Math::KahanSum<double> &&result, double weightSum) const;
-   void fillBinWidthsFromPdfBoundaries(RooAbsReal const &pdf);
 
    RooTemplateProxy<RooAbsPdf> _pdf;
    RooArgSet _observables;
@@ -74,15 +71,13 @@ private:
    bool _weightSquared = false;
    bool _binnedL = false;
    bool _doOffset = false;
-   bool _doBinOffset = false;
    int _simCount = 1;
    std::string _prefix;
    RooTemplateProxy<RooAbsReal> _weightVar;
    RooTemplateProxy<RooAbsReal> _weightSquaredVar;
-   RooTemplateProxy<RooAbsReal> _binVolumeVar;
-   std::vector<double> _binw;
-   mutable std::vector<double> _logProbasBuffer;     ///<!
-   mutable ROOT::Math::KahanSum<double> _offset{0.}; ///<! Offset as KahanSum to avoid loss of precision
+   mutable std::vector<double> _binw;                  ///<!
+   mutable std::vector<double> _logProbasBuffer;       ///<!
+   mutable ROOT::Math::KahanSum<double> _offset {0.}; ///<! Offset as KahanSum to avoid loss of precision
 
 }; // end class RooNLLVar
 

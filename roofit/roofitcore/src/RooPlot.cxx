@@ -367,10 +367,7 @@ void RooPlot::SetDirectory(TDirectory *dir) {
 
 void RooPlot::updateNormVars(const RooArgSet &vars)
 {
-  if(_normVars == nullptr) {
-    _normVars = new RooArgSet;
-    vars.snapshot(*_normVars, true);
-  }
+  if(0 == _normVars) _normVars= (RooArgSet*) vars.snapshot(true);
 }
 
 
@@ -585,7 +582,7 @@ void RooPlot::updateFitRangeNorm(const RooPlotable* rp, bool refreshNorm)
     if (dynamic_cast<const RooHist*>(rp)) corFac = _normBinWidth/rp->getFitRangeBinW() ;
 
 
-    if (std::abs(rp->getFitRangeNEvt()/corFac-_normNumEvts)>1e-6) {
+    if (fabs(rp->getFitRangeNEvt()/corFac-_normNumEvts)>1e-6) {
       coutI(Plotting) << "RooPlot::updateFitRangeNorm: New event count of " << rp->getFitRangeNEvt()/corFac
             << " will supercede previous event count of " << _normNumEvts << " for normalization of PDF projections" << endl ;
     }
@@ -1439,18 +1436,4 @@ void RooPlot::fillItemsFromTList(RooPlot::Items & items, TList const& tlist) {
   for(TObject * obj : tlist) {
     items.emplace_back(obj, obj->GetOption());
   }
-}
-
-/// Replaces the pointer to the plot variable with a pointer to a clone of the
-/// plot variable that is owned by this RooPlot. The RooPlot references the
-/// plotted variable by non-owning pointer by default since ROOT 6.28, which
-/// resulted in a big speedup when plotting complicated pdfs that are expensive
-/// to clone. However, going back to an owned clone is useful in rare cases.
-/// For example in the RooUnitTest, where the registered plots need to live
-/// longer than the scope of the unit test.
-void RooPlot::createInternalPlotVarClone() {
-  // If the plot variable is already cloned, we don't need to do anything.
-  if(_plotVarSet) return;
-  _plotVarSet = static_cast<RooArgSet*>(RooArgSet(*_plotVar).snapshot());
-  _plotVar = static_cast<RooAbsRealLValue*>(_plotVarSet->find(_plotVar->GetName()));
 }

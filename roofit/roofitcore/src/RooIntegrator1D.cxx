@@ -298,10 +298,10 @@ double RooIntegrator1D::integral(const double *yvec)
         _extrapError = _s[j]-_s[j-1] ;
       }
 
-      if(std::abs(_extrapError) <= _epsRel*std::abs(_extrapValue)) {
+      if(fabs(_extrapError) <= _epsRel*fabs(_extrapValue)) {
         return _extrapValue;
       }
-      if(std::abs(_extrapError) <= _epsAbs) {
+      if(fabs(_extrapError) <= _epsAbs) {
         return _extrapValue ;
       }
 
@@ -395,9 +395,9 @@ void RooIntegrator1D::extrapolate(Int_t n)
   Int_t i,m,ns=1;
   double den,dif,dift,ho,hp,w;
 
-  dif=std::abs(xa[1]);
+  dif=fabs(xa[1]);
   for (i= 1; i <= _nPoints; i++) {
-    if ((dift=std::abs(xa[i])) < dif) {
+    if ((dift=fabs(xa[i])) < dif) {
       ns=i;
       dif=dift;
     }

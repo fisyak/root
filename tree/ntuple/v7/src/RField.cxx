@@ -31,11 +31,7 @@
 #include <TDataMember.h>
 #include <TError.h>
 #include <TList.h>
-#include <TObjString.h>
 #include <TRealData.h>
-#include <TSchemaRule.h>
-#include <TSchemaRuleSet.h>
-#include <TVirtualObject.h>
 
 #include <algorithm>
 #include <cctype> // for isspace
@@ -191,17 +187,6 @@ ROOT::Experimental::Detail::RFieldBase::RFieldBase(std::string_view name, std::s
 
 ROOT::Experimental::Detail::RFieldBase::~RFieldBase()
 {
-}
-
-std::string ROOT::Experimental::Detail::RFieldBase::GetQualifiedFieldName() const
-{
-   std::string result = GetName();
-   RFieldBase *parent = GetParent();
-   while (parent && !parent->GetName().empty()) {
-      result = parent->GetName() + "." + result;
-      parent = parent->GetParent();
-   }
-   return result;
 }
 
 ROOT::Experimental::RResult<std::unique_ptr<ROOT::Experimental::Detail::RFieldBase>>
@@ -391,13 +376,13 @@ ROOT::Experimental::EColumnType ROOT::Experimental::Detail::RFieldBase::EnsureCo
    const std::vector<EColumnType> &requestedTypes, unsigned int columnIndex, const RNTupleDescriptor &desc)
 {
    R__ASSERT(!requestedTypes.empty());
-   auto logicalId = desc.FindLogicalColumnId(fOnDiskId, columnIndex);
-   if (logicalId == kInvalidDescriptorId) {
+   auto columnId = desc.FindColumnId(fOnDiskId, columnIndex);
+   if (columnId == kInvalidDescriptorId) {
       throw RException(R__FAIL("Column missing: column #" + std::to_string(columnIndex) +
                                " for field " + fName));
    }
 
-   const auto &columnDesc = desc.GetColumnDescriptor(logicalId);
+   const auto &columnDesc = desc.GetColumnDescriptor(columnId);
    for (auto type : requestedTypes) {
       if (type == columnDesc.GetModel().GetType())
          return type;
@@ -448,16 +433,12 @@ void ROOT::Experimental::Detail::RFieldBase::ConnectPageSource(RPageSource &page
    R__ASSERT(fColumns.empty());
    {
       const auto descriptorGuard = pageSource.GetSharedDescriptorGuard();
-      const RNTupleDescriptor &desc = descriptorGuard.GetRef();
-      GenerateColumnsImpl(desc);
-      if (fOnDiskId != kInvalidDescriptorId)
-         fOnDiskTypeVersion = desc.GetFieldDescriptor(fOnDiskId).GetTypeVersion();
+      GenerateColumnsImpl(descriptorGuard.GetRef());
    }
    if (!fColumns.empty())
       fPrincipalColumn = fColumns[0].get();
    for (auto& column : fColumns)
       column->Connect(fOnDiskId, &pageSource);
-   OnConnectPageSource();
 }
 
 
@@ -923,26 +904,6 @@ void ROOT::Experimental::RClassField::Attach(std::unique_ptr<Detail::RFieldBase>
    RFieldBase::Attach(std::move(child));
 }
 
-void ROOT::Experimental::RClassField::AddReadCallbacksFromIORules(const std::span<const ROOT::TSchemaRule *> rules,
-                                                                  TClass *classp)
-{
-   for (const auto rule : rules) {
-      if (rule->GetRuleType() != ROOT::TSchemaRule::kReadRule) {
-         R__LOG_WARNING(NTupleLog()) << "ignoring I/O customization rule with unsupported type";
-         continue;
-      }
-      auto func = rule->GetReadFunctionPointer();
-      R__ASSERT(func != nullptr);
-      fReadCallbacks.emplace_back([func, classp](Detail::RFieldValue &value) {
-         TVirtualObject oldObj{nullptr};
-         oldObj.fClass = classp;
-         oldObj.fObject = value.GetRawPtr();
-         func(static_cast<char *>(value.GetRawPtr()), &oldObj);
-         oldObj.fClass = nullptr; // TVirtualObject does not own the value
-      });
-   }
-}
-
 std::unique_ptr<ROOT::Experimental::Detail::RFieldBase>
 ROOT::Experimental::RClassField::CloneImpl(std::string_view newName) const
 {
@@ -972,31 +933,6 @@ void ROOT::Experimental::RClassField::ReadInClusterImpl(const RClusterIndex &clu
       auto memberValue = fSubFields[i]->CaptureValue(value->Get<unsigned char>() + fSubFieldsInfo[i].fOffset);
       fSubFields[i]->Read(clusterIndex, &memberValue);
    }
-}
-
-void ROOT::Experimental::RClassField::OnConnectPageSource()
-{
-   // Add post-read callbacks for I/O customization rules; only rules that target transient members are allowed for now
-   // TODO(jalopezg): revise after supporting schema evolution
-   const auto ruleset = fClass->GetSchemaRules();
-   if (!ruleset)
-      return;
-   auto referencesNonTransientMembers = [klass = fClass](const ROOT::TSchemaRule *rule) {
-      R__ASSERT(rule->GetTarget() != nullptr);
-      for (auto target : ROOT::Detail::TRangeStaticCast<TObjString>(*rule->GetTarget())) {
-         const auto dataMember = klass->GetDataMember(target->GetString());
-         if (!dataMember || dataMember->IsPersistent()) {
-            R__LOG_WARNING(NTupleLog()) << "ignoring I/O customization rule with non-transient member: "
-                                        << dataMember->GetName();
-            return true;
-         }
-      }
-      return false;
-   };
-
-   auto rules = ruleset->FindRules(fClass->GetName(), static_cast<Int_t>(GetOnDiskTypeVersion()));
-   rules.erase(std::remove_if(rules.begin(), rules.end(), referencesNonTransientMembers), rules.end());
-   AddReadCallbacksFromIORules(rules, fClass);
 }
 
 void ROOT::Experimental::RClassField::GenerateColumnsImpl()
@@ -1040,11 +976,6 @@ ROOT::Experimental::RClassField::SplitValue(const Detail::RFieldValue &value) co
 size_t ROOT::Experimental::RClassField::GetValueSize() const
 {
    return fClass->GetClassSize();
-}
-
-std::uint32_t ROOT::Experimental::RClassField::GetTypeVersion() const
-{
-   return fClass->GetClassVersion();
 }
 
 void ROOT::Experimental::RClassField::AcceptVisitor(Detail::RFieldVisitor &visitor) const
