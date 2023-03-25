@@ -45,6 +45,7 @@
 #include "TGaxis.h"
 #include "TColor.h"
 #include "TPainter3dAlgorithms.h"
+#include "TGraph2D.h"
 #include "TGraph2DPainter.h"
 #include "TGraphDelaunay2D.h"
 #include "TView.h"
@@ -237,7 +238,7 @@ using `TH1::GetOption`:
 | "LEGO3"  | Draw a lego plot with hidden surface removal, like LEGO1 but the border lines of each lego-bar are not drawn.|
 | "LEGO4"  | Draw a lego plot with hidden surface removal, like LEGO1 but without the shadow effect on each lego-bar.|
 | "TEXT"   | Draw bin contents as text (format set via `gStyle->SetPaintTextFormat`).|
-| "TEXTnn" | Draw bin contents as text at angle nn (0 < nn < 90). |
+| "TEXTnn" | Draw bin contents as text at angle nn (0 < nn <= 90). |
 | "X+"     | The X-axis is drawn on the top side of the plot. |
 | "Y+"     | The Y-axis is drawn on the right side of the plot. |
 | "MIN0"   | Set minimum value for the Y axis to 0, equivalent to gStyle->SetHistMinimumZero(). |
@@ -1633,7 +1634,7 @@ By default the format `g` is used. This format can be redefined
 by calling `gStyle->SetPaintTextFormat()`.
 
 It is also possible to use `TEXTnn` in order to draw the text with
-the angle `nn` (`0 < nn < 90`).
+the angle `nn` (`0 < nn <= 90`).
 
 For 2D histograms the text is plotted in the center of each non empty cells.
 It is possible to plot empty cells by calling `gStyle->SetHistMinimumZero()`
@@ -1688,9 +1689,8 @@ Begin_Macro(source)
    htext4->SetMarkerSize(1.8);
    htext5->SetMarkerSize(1.8);
    htext5->SetMarkerColor(kRed);
-   htext3->Draw("COL");
    htext4->SetBarOffset(0.2);
-   htext4->Draw("TEXT SAME");
+   htext4->Draw("COL TEXT SAME");
    htext5->SetBarOffset(-0.2);
    htext5->Draw("TEXT SAME");
 }
@@ -2337,7 +2337,7 @@ The following options are supported:
 | "0"      | When used with any COL options, the empty bins are not drawn.|
 | "TEXT"   | Draw bin contents as text (format set via `gStyle->SetPaintTextFormat`).|
 | "TEXTN"  | Draw bin names as text.|
-| "TEXTnn" | Draw bin contents as text at angle nn (0 < nn < 90).|
+| "TEXTnn" | Draw bin contents as text at angle nn (0 < nn <= 90).|
 | "L"      | Draw the bins boundaries as lines. The lines attributes are the TGraphs ones.|
 | "P"      | Draw the bins boundaries as markers. The markers attributes are the TGraphs ones.|
 | "F"      | Draw the bins boundaries as filled polygons.  The filled polygons attributes are the TGraphs ones.|
@@ -4251,6 +4251,21 @@ Int_t THistPainter::MakeChopt(Option_t *choptin)
          Hoption.Hist = 1;
       }
    }
+   l = strstr(chopt,"TEXT");
+   if (l) {
+      Int_t angle;
+      if (sscanf(&l[4],"%d",&angle) > 0) {
+         if (angle < 0)  angle=0;
+         if (angle > 90) angle=90;
+         Hoption.Text = 1000+angle;
+      } else {
+         Hoption.Text = 1;
+      }
+      memcpy(l,"    ", 4);
+      l = strstr(chopt,"N");
+      if (l && fH->InheritsFrom(TH2Poly::Class())) Hoption.Text += 3000;
+      Hoption.Scat = 0;
+   }
    l = strstr(chopt,"COLZ");
    if (l) {
       memcpy(l,"    ",4);
@@ -4283,21 +4298,6 @@ Int_t THistPainter::MakeChopt(Option_t *choptin)
    l = strstr(chopt,"AXIS"); if (l) { Hoption.Axis   = 1; memcpy(l,"    ",4); }
    l = strstr(chopt,"AXIG"); if (l) { Hoption.Axis   = 2; memcpy(l,"    ",4); }
    l = strstr(chopt,"SCAT"); if (l) { Hoption.Scat   = 1; memcpy(l,"    ",4); }
-   l = strstr(chopt,"TEXT");
-   if (l) {
-      Int_t angle;
-      if (sscanf(&l[4],"%d",&angle) > 0) {
-         if (angle < 0)  angle=0;
-         if (angle > 90) angle=90;
-         Hoption.Text = 1000+angle;
-      } else {
-         Hoption.Text = 1;
-      }
-      memcpy(l,"    ", 4);
-      l = strstr(chopt,"N");
-      if (l && fH->InheritsFrom(TH2Poly::Class())) Hoption.Text += 3000;
-      Hoption.Scat = 0;
-   }
    l = strstr(chopt,"POL");  if (l) { Hoption.System = kPOLAR;       memcpy(l,"   ",3); }
    l = strstr(chopt,"CYL");  if (l) { Hoption.System = kCYLINDRICAL; memcpy(l,"   ",3); }
    l = strstr(chopt,"SPH");  if (l) { Hoption.System = kSPHERICAL;   memcpy(l,"   ",3); }
@@ -6892,18 +6892,16 @@ void THistPainter::PaintHist(Option_t *)
 
    //         Code option for GrapHist
 
-   if (Hoption.Line) chopth[0] = 'L';
-   if (Hoption.Star) chopth[1] = '*';
-   if (Hoption.Mark) chopth[2] = 'P';
+   if (Hoption.Line)       chopth[0] = 'L';
+   if (Hoption.Star)       chopth[1] = '*';
+   if (Hoption.Mark)       chopth[2] = 'P';
    if (Hoption.Mark == 10) chopth[3] = '0';
    if (Hoption.Line || Hoption.Curve || Hoption.Hist || Hoption.Bar) {
       if (Hoption.Curve)    chopth[3] = 'C';
       if (Hoption.Hist > 0) chopth[4] = 'H';
       else if (Hoption.Bar) chopth[5] = 'B';
+      if (Hoption.Logy) chopth[6] = '1';
       if (fH->GetFillColor() && htype) {
-         if (Hoption.Logy) {
-            chopth[6] = '1';
-         }
          if (Hoption.Hist > 0 || Hoption.Curve || Hoption.Line) {
             chopth[7] = 'F';
          }
@@ -7079,7 +7077,23 @@ Int_t THistPainter::PaintInit()
       }
       if (Hparam.xlowedge <=0 ) {
          if (Hoption.Same) {
-            Hparam.xlowedge = TMath::Power(10, gPad->GetUxmin());
+            TH1* h1 = nullptr;
+            TObject *obj;
+            TIter next(gPad->GetListOfPrimitives());
+            while ((obj = (TObject *)next())) {
+               if (obj->InheritsFrom(TH1::Class()))         { h1 = (TH1*)(obj)                          ; break; }
+               if (obj->InheritsFrom(THStack::Class()))     { h1 = ((THStack*)(obj))->GetHistogram()    ; break; }
+               if (obj->InheritsFrom(TGraph::Class()))      { h1 = ((TGraph*)(obj))->GetHistogram()     ; break; }
+               if (obj->InheritsFrom(TMultiGraph::Class())) { h1 = ((TMultiGraph*)(obj))->GetHistogram(); break; }
+               if (obj->InheritsFrom(TGraph2D::Class()))    { h1 = ((TGraph2D*)(obj))->GetHistogram(); break; }
+               if (obj->InheritsFrom(TF1::Class()))         { h1 = ((TF1*)(obj))->GetHistogram(); break; }
+            }
+            if (h1) {
+               Hparam.xlowedge = h1->GetXaxis()->GetBinLowEdge(h1->GetXaxis()->GetFirst());
+            } else {
+               Error(where, "undefined user's coordinates. Cannot use option SAME");
+               return 0;
+            }
          } else {
             for (i=first; i<=last; i++) {
                Double_t binLow = fXaxis->GetBinLowEdge(i);
@@ -8694,11 +8708,11 @@ void THistPainter::PaintStat(Int_t dostat, TF1 *fit)
    if (fit) {
       Int_t ndf = fit->GetNDF();
       tf.Form("#chi^{2} / ndf = %s%s / %d","%",stats->GetFitFormat(),ndf);
-      tt.Form(tf.Data(),(Float_t)fit->GetChisquare());
+      tt.Form(tf.Data(),fit->GetChisquare());
       if (print_fchi2) stats->AddText(tt.Data());
       if (print_fprob) {
          tf.Form("Prob  = %s%s","%",stats->GetFitFormat());
-         tt.Form(tf.Data(),(Float_t)TMath::Prob(fit->GetChisquare(),ndf));
+         tt.Form(tf.Data(),TMath::Prob(fit->GetChisquare(),ndf));
          stats->AddText(tt.Data());
       }
       if (print_fval || print_ferrors) {
@@ -8709,11 +8723,11 @@ void THistPainter::PaintStat(Int_t dostat, TF1 *fit)
             if (print_ferrors) {
                tf.Form("%-8s = %s%s #pm %s ", fit->GetParName(ipar), "%",stats->GetFitFormat(),
                        GetBestFormat(fit->GetParameter(ipar), fit->GetParError(ipar), stats->GetFitFormat()));
-               tt.Form(tf.Data(),(Float_t)fit->GetParameter(ipar)
-                               ,(Float_t)fit->GetParError(ipar));
+               tt.Form(tf.Data(),fit->GetParameter(ipar)
+                               ,fit->GetParError(ipar));
             } else {
                tf.Form("%-8s = %s%s ",fit->GetParName(ipar), "%",stats->GetFitFormat());
-               tt.Form(tf.Data(),(Float_t)fit->GetParameter(ipar));
+               tt.Form(tf.Data(),fit->GetParameter(ipar));
             }
             stats->AddText(tt.Data());
          }
@@ -8923,12 +8937,12 @@ void THistPainter::PaintStat2(Int_t dostat, TF1 *fit)
    // Draw Fit parameters
    if (fit) {
       Int_t ndf = fit->GetNDF();
-      tt.Form("#chi^{2} / ndf = %6.4g / %d",(Float_t)fit->GetChisquare(),ndf);
+      tt.Form("#chi^{2} / ndf = %6.4g / %d",fit->GetChisquare(),ndf);
       stats->AddText(tt.Data());
       for (Int_t ipar=0;ipar<fit->GetNpar();ipar++) {
          tt.Form("%-8s = %5.4g #pm %5.4g ",fit->GetParName(ipar)
-                                   ,(Float_t)fit->GetParameter(ipar)
-                                   ,(Float_t)fit->GetParError(ipar));
+                                   ,fit->GetParameter(ipar)
+                                   ,fit->GetParError(ipar));
          stats->AddText(tt.Data());
       }
    }
@@ -9137,12 +9151,12 @@ void THistPainter::PaintStat3(Int_t dostat, TF1 *fit)
    // Draw Fit parameters
    if (fit) {
       Int_t ndf = fit->GetNDF();
-      tt.Form("#chi^{2} / ndf = %6.4g / %d",(Float_t)fit->GetChisquare(),ndf);
+      tt.Form("#chi^{2} / ndf = %6.4g / %d",fit->GetChisquare(),ndf);
       stats->AddText(tt.Data());
       for (Int_t ipar=0;ipar<fit->GetNpar();ipar++) {
          tt.Form("%-8s = %5.4g #pm %5.4g ",fit->GetParName(ipar)
-                                   ,(Float_t)fit->GetParameter(ipar)
-                                   ,(Float_t)fit->GetParError(ipar));
+                                   ,fit->GetParameter(ipar)
+                                   ,fit->GetParError(ipar));
          stats->AddText(tt.Data());
       }
    }

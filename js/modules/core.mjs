@@ -1,11 +1,11 @@
 
 /** @summary version id
   * @desc For the JSROOT release the string in format 'major.minor.patch' like '7.0.0' */
-let version_id = '7.3.x';
+let version_id = 'dev';
 
 /** @summary version date
   * @desc Release date in format day/month/year like '14/04/2022' */
-let version_date = '19/12/2022';
+let version_date = '23/03/2023';
 
 /** @summary version id and date
   * @desc Produced by concatenation of {@link version_id} and {@link version_date}
@@ -361,7 +361,17 @@ let gStyle = {
    fLegendTextSize: 0,
    fLegendFillColor: 0,
    fHatchesLineWidth: 1,
-   fHatchesSpacing: 1
+   fHatchesSpacing: 1,
+   fCandleWhiskerRange: 1.0,
+   fCandleBoxRange: 0.5,
+   fCandleScaled: false,
+   fViolinScaled: true,
+   fXAxisExpXOffset: 0,
+   fXAxisExpYOffset: 0,
+   fYAxisExpXOffset: 0,
+   fYAxisExpYOffset: 0,
+   fAxisMaxDigits: 5,
+   fStripDecimals: true
 };
 
 /** @summary Method returns current document in use
@@ -974,8 +984,10 @@ const clTObject = 'TObject', clTNamed = 'TNamed',
       clTList = 'TList', clTHashList = 'THashList', clTMap = 'TMap', clTObjArray = 'TObjArray', clTClonesArray = 'TClonesArray',
       clTAttLine = 'TAttLine', clTAttFill = 'TAttFill', clTAttMarker = 'TAttMarker', clTAttText = 'TAttText',
       clTHStack = 'THStack', clTGraph = 'TGraph', clTMultiGraph = 'TMultiGraph', clTCutG = 'TCutG',
-      clTGraphPolargram = 'TGraphPolargram', clTGraphTime = 'TGraphTime',
-      clTPave = 'TPave', clTPaveText = 'TPaveText', clTPaveStats = 'TPaveStats',
+      clTGraph2DErrors = 'TGraph2DErrors', clTGraph2DAsymmErrors = 'TGraph2DAsymmErrors',
+      clTGraphPolar = 'TGraphPolar', clTGraphPolargram = 'TGraphPolargram', clTGraphTime = 'TGraphTime',
+      clTPave = 'TPave', clTPaveText = 'TPaveText', clTPaveStats = 'TPaveStats', clTPavesText = 'TPavesText',
+      clTPaveLabel = 'TPaveLabel', clTDiamond = 'TDiamond',
       clTLegend = 'TLegend', clTLegendEntry = 'TLegendEntry', clTPaletteAxis = 'TPaletteAxis',
       clTText = 'TText', clTLatex = 'TLatex', clTMathText = 'TMathText',
       clTColor = 'TColor', clTLine = 'TLine', clTBox = 'TBox', clTPolyLine = 'TPolyLine',
@@ -984,7 +996,8 @@ const clTObject = 'TObject', clTNamed = 'TNamed',
       clTGaxis = 'TGaxis', clTAttAxis = 'TAttAxis', clTAxis = 'TAxis', clTStyle = 'TStyle',
       clTH1 = 'TH1', clTH2 = 'TH2', clTH3 = 'TH3', clTF1 = 'TF1', clTF2 = 'TF2', clTProfile = 'TProfile', clTProfile2D = 'TProfile2D',
       clTGeoVolume = 'TGeoVolume', clTGeoNode = 'TGeoNode', clTGeoNodeMatrix = 'TGeoNodeMatrix',
-      kNoZoom = -1111;
+      nsREX = 'ROOT::Experimental::',
+      kNoZoom = -1111, kNoStats = BIT(9);
 
 
 /** @summary Create some ROOT classes
@@ -1402,7 +1415,7 @@ function getMethods(typename, obj) {
 
    // Due to binary I/O such TObject methods may not be set for derived classes
    // Therefore when methods requested for given object, check also that basic methods are there
-   if ((typename == clTObject) || (typename == clTNamed) || (obj && (obj.fBits !== undefined)))
+   if ((typename == clTObject) || (typename == clTNamed) || (obj?.fBits !== undefined))
       if (typeof m.TestBit === 'undefined') {
          m.TestBit = function (f) { return (this.fBits & f) != 0; };
          m.InvertBit = function (f) { this.fBits = this.fBits ^ (f & 0xffffff); };
@@ -1449,18 +1462,18 @@ function getMethods(typename, obj) {
       }
 
       m.GetParName = function(n) {
-         if (this.fParams && this.fParams.fParNames) return this.fParams.fParNames[n];
-         if (this.fFormula && this.fFormula.fParams) {
-            for (let k=0;k<this.fFormula.fParams.length;++k)
-               if(this.fFormula.fParams[k].second == n)
-                  return this.fFormula.fParams[k].first;
+         if (this.fParams?.fParNames)
+            return this.fParams.fParNames[n];
+         if (this.fFormula?.fParams) {
+            for (let k = 0, arr = this.fFormula.fParams; k < arr.length; ++k)
+               if(arr[k].second == n)
+                  return arr[k].first;
          }
-         if (this.fNames && this.fNames[n]) return this.fNames[n];
-         return 'p'+n;
+         return (this.fNames && this.fNames[n]) ? this.fNames[n] : 'p'+n;
       }
       m.GetParValue = function(n) {
-         if (this.fParams && this.fParams.fParameters) return this.fParams.fParameters[n];
-         if (this.fFormula && this.fFormula.fClingParameters) return this.fFormula.fClingParameters[n];
+         if (this.fParams?.fParameters) return this.fParams.fParameters[n];
+         if (this.fFormula?.fClingParameters) return this.fFormula.fClingParameters[n];
          if (this.fParams) return this.fParams[n];
          return undefined;
       }
@@ -1506,7 +1519,7 @@ function getMethods(typename, obj) {
          // Set bin content - only trivial case, without expansion
          this.fEntries++;
          this.fTsumw = 0;
-         if ((bin >= 0) && (bin<this.fArray.length))
+         if ((bin >= 0) && (bin < this.fArray.length))
             this.fArray[bin] = content;
       }
    }
@@ -1668,6 +1681,10 @@ function getMethods(typename, obj) {
    return m;
 }
 
+gStyle.fXaxis = create(clTAttAxis);
+gStyle.fYaxis = create(clTAttAxis);
+gStyle.fZaxis = create(clTAttAxis);
+
 /** @summary Add methods for specified type.
   * @desc Will be automatically applied when decoding JSON string
   * @private */
@@ -1685,7 +1702,6 @@ function isRootCollection(lst, typename) {
       if ((lst.$kind === clTList) || (lst.$kind === clTObjArray)) return true;
       if (!typename) typename = lst._typename;
    }
-   if (!typename) return false;
    return (typename === clTList) || (typename === clTHashList) || (typename === clTMap) ||
           (typename === clTObjArray) || (typename === clTClonesArray);
 }
@@ -1725,10 +1741,13 @@ export { version_id, version_date, version, source_dir, isNodeJs, isBatchMode, s
          browser, internals, constants, settings, gStyle, atob_func, btoa_func,
          clTObject, clTNamed, clTString, clTObjString, clTList, clTHashList, clTMap, clTObjArray, clTClonesArray,
          clTAttLine, clTAttFill, clTAttMarker, clTAttText,
-         clTPave, clTPaveText, clTPaveStats, clTLegend, clTLegendEntry, clTPaletteAxis, clTText, clTLatex, clTMathText, clTMultiGraph,
+         clTPave, clTPaveText, clTPavesText, clTPaveStats, clTPaveLabel, clTDiamond,
+         clTLegend, clTLegendEntry, clTPaletteAxis, clTText, clTLatex, clTMathText, clTMultiGraph,
          clTColor, clTLine, clTBox, clTPolyLine, clTPad, clTCanvas, clTAttCanvas, clTGaxis,
-         clTAxis, clTStyle, clTH1, clTH2, clTH3, clTF1, clTF2, clTProfile, clTProfile2D,
-         clTGraph, clTGraphPolargram, clTGraphTime, clTCutG, clTPolyLine3D, clTPolyMarker3D, clTGeoVolume, clTGeoNode, clTGeoNodeMatrix, kNoZoom,
+         clTAxis, clTStyle, clTH1, clTH2, clTH3, clTF1, clTF2, clTProfile, clTProfile2D, clTHStack,
+         clTGraph, clTGraph2DErrors, clTGraph2DAsymmErrors,
+         clTGraphPolar, clTGraphPolargram, clTGraphTime, clTCutG,
+         clTPolyLine3D, clTPolyMarker3D, clTGeoVolume, clTGeoNode, clTGeoNodeMatrix, nsREX, kNoZoom, kNoStats,
          isArrayProto, getDocument, BIT, clone, addMethods, parse, parseMulti, toJSON,
          decodeUrl, findFunction, createHttpRequest, httpRequest, loadScript, injectCode,
          create, createHistogram, createTPolyLine, createTGraph, createTHStack, createTMultiGraph,

@@ -240,7 +240,8 @@ RooGenContext::RooGenContext(const RooAbsPdf &model, const RooArgSet &vars,
       coutI(Generation) << "RooGenContext::ctor() prototype data provided, and "
                         << "model supports analytical maximum finding in the full phase space: "
                         << "can provide analytical pdf maximum to numeric generator" << endl ;
-      _maxVar = new RooRealVar("funcMax","function maximum",_pdfClone->maxVal(maxFindCode)) ;
+       double maxVal = _pdfClone->maxVal(maxFindCode) / _pdfClone->getNorm(&allVars);
+      _maxVar = new RooRealVar("funcMax", "function maximum", maxVal);
     } else {
       maxFindCode = _pdfClone->getMaxVal(_otherVars) ;
       if (maxFindCode != 0) {
@@ -264,7 +265,7 @@ RooGenContext::RooGenContext(const RooAbsPdf &model, const RooArgSet &vars,
 
       if (_otherVars.getSize()>0) {
 
-   cxcoutD(Generation) << "RooGenContext::ctor() prototype data provided, observables are generated numericaly no "
+   cxcoutD(Generation) << "RooGenContext::ctor() prototype data provided, observables are generated numerically no "
                << "analytical estimate of maximum function value provided by model, must determine maximum value through initial sampling space "
                << "of accept/reject observables plus prototype observables: " << otherAndProto << endl ;
 

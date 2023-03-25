@@ -34,7 +34,10 @@ The following people have contributed to this new version:
  Wouter Verkerke, NIKHEF/Atlas,
 
 ## Deprecation and Removal
-
+- The RDataFrame factory functions `MakeCsvDataFrame`, `MakeArrowDataFrame`, `MakeNTupleDataFrame` and `MakeSqliteDataFrame` that were deprecated in v6.28 have been removed. Use `FromCSV`, `FromArrow`, `FromRNTuple` or `FromSqlite` instead.
+- The TStorage reallocation routine without a size (`TStorage::ReAlloc(void *ovp, size_t size`) and heap
+related routines (`TStorage::AddToHeap`, `TStorage::IsOnHeap`, `TStorage::GetHeapBegin`, `TStorage::GetHeapEnd`)
+that were deprecated in v6.02/00.
 
 ## Core Libraries
 
@@ -50,9 +53,68 @@ The following people have contributed to this new version:
 
 ## Math Libraries
 
+### Behavior change of `TMath::AreEqualAbs()`
+
+The `TMath::AreEqualAbs()` compares two numbers for equality within a certain absolute range.
+So far, it would tell you that `inf != inf` if you define `inf` as `std::numeric_limits<double>::infinity()`, which is inconsistent with the regular `==` operator.
+
+This is unexpected, because one would expect that if two numbers are considered exactly equal, they would also be considered equal within any range.
+Therefore, the behavior of `TMath::AreEqualAbs()` was changed to return always `true` if the `==` comparision would return `true`.
 
 ## RooFit Libraries
 
+### Removal of the RooGenFunction and RooMultiGenFunction classes
+
+The `RooGenFunction` was only a lightweight adaptor that exports a RooAbsReal as a `ROOT::Math::IGenFunction`.
+The same can be easily achieved with the generic `ROOT::Math::Functor1D`, so in the spirit of not duplicating interfaces, the `RooGenFunction` is removed in this release.
+
+Here is an example that shows how to replace it in the unlikely case you were using it:
+
+```C++
+RooArgSet normSet{x}; // normalization set
+
+// Old way 1: create a RooGenFunction:
+RooGenFunction func1{pdf, x, {}, normSet};
+
+// Old way 2: use `RooAbsReal::iGenFunction()`:
+std::unique_ptr<ROOT::Math::IGenFunction> func2{
+    pdf.iGenFunction(x, normSet)
+};
+
+// How to do it now:
+RooFunctor functor{pdf, x, {}, normSet};
+ROOT::Math::Functor1D func3{functor};
+// Functor1D takes by reference, so the RooFunctor also needs to stay alive.
+```
+
+For the same reason, the `RooMultiGenFunction` class that implements a multidimensional `ROOT::Math::IMultiGenFunction` is removed too.
+It can easily be replaced by a `ROOT::Math::Functor`:
+
+```C++
+RooFunctor functor{pdf, observables, {}, normSet};
+ROOT::Math::Functor func4{functor, static_cast<unsigned int>(functor.nObs())};
+// Functor takes by reference, so the RooFunctor also needs to stay alive.
+```
+
+### Define infinity as `std::numeric_limits<double>::infinity()`
+
+RooFit has its internal representation of infinity in `RooNumber::infinity()`, which was `1e30` before.
+
+Now, it is defined as `std::numeric_limits<double>::infinity()`, to be consistent with the C++ standard library and other code.
+
+This change also affects the `RooNumber::isInfinite()` function.
+
+### Remove `add(row, weight, weightError)` from RooAbsData interface
+
+It was not good to have this signature in RooAbsData, because the
+implementations in the two derived classes RooDataHist and RooDataSet were
+inconsistent.
+
+The RooDataSet indeed took the weight error as the third argument, but
+the RooDataHist version instead took the sum of weights squared, which
+is equivalent to the squared weight error.
+
+Therefore, the virtual `RooAbsData::add(row, weight, weightError)` function was removed.
 
 ## 2D Graphics Libraries
 

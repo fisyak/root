@@ -24,6 +24,7 @@
 #include "RooAbsCache.h"
 #include "RooNameReg.h"
 #include "RooLinkedListIter.h"
+#include <RooFit/Detail/NormalizationHelpers.h>
 #include <RooStringView.h>
 
 #include <deque>
@@ -266,7 +267,9 @@ public:
 
   void addServer(RooAbsArg& server, bool valueProp=true, bool shapeProp=false, std::size_t refCount = 1);
   void addServerList(RooAbsCollection& serverList, bool valueProp=true, bool shapeProp=false) ;
-  void replaceServer(RooAbsArg& oldServer, RooAbsArg& newServer, bool valueProp, bool shapeProp) ;
+  void
+  R__SUGGEST_ALTERNATIVE("This interface is unsafe! Use RooAbsArg::redirectServers()")
+  replaceServer(RooAbsArg& oldServer, RooAbsArg& newServer, bool valueProp, bool shapeProp) ;
   void changeServer(RooAbsArg& server, bool valueProp, bool shapeProp) ;
   void removeServer(RooAbsArg& server, bool force=false) ;
   RooAbsArg *findNewServer(const RooAbsCollection &newSet, bool nameChange) const;
@@ -549,6 +552,7 @@ public:
   void setProhibitServerRedirect(bool flag) { _prohibitServerRedirect = flag ; }
 
   void setWorkspace(RooWorkspace &ws) { _myws = &ws; }
+  inline RooWorkspace* workspace() const { return _myws; }
 
   RooAbsProxy* getProxy(Int_t index) const ;
   Int_t numProxies() const ;
@@ -577,7 +581,7 @@ public:
 
   virtual void applyWeightSquared(bool flag);
 
-  virtual std::unique_ptr<RooArgSet> fillNormSetForServer(RooArgSet const& normSet, RooAbsArg const& server) const;
+  virtual std::unique_ptr<RooAbsArg> compileForNormSet(RooArgSet const &normSet, RooFit::Detail::CompileContext & ctx) const;
 
   virtual bool isCategory() const { return false; }
 
@@ -718,7 +722,7 @@ private:
 
   mutable bool _prohibitServerRedirect ; //! Prohibit server redirects -- Debugging tool
 
-  mutable RooExpensiveObjectCache* _eocache{nullptr}; // Pointer to global cache manager for any expensive components created by this object
+  mutable RooExpensiveObjectCache* _eocache{nullptr}; //! Pointer to global cache manager for any expensive components created by this object
 
   mutable const TNamed * _namePtr ; //! De-duplicated name pointer. This will be equal for all objects with the same name.
   bool _isConstant ; //! Cached isConstant status
@@ -742,7 +746,7 @@ private:
   static std::stack<RooAbsArg*> _ioReadStack ; // reading stack
   /// \endcond
 
-  ClassDefOverride(RooAbsArg,8) // Abstract variable
+  ClassDefOverride(RooAbsArg,9) // Abstract variable
 };
 
 std::ostream& operator<<(std::ostream& os, const RooAbsArg &arg);

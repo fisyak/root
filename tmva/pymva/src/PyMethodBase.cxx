@@ -26,8 +26,6 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 
-#include <cwchar>
-
 using namespace TMVA;
 
 namespace TMVA {
@@ -246,40 +244,6 @@ void PyMethodBase::PyFinalize()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-/// Set program name for Python interpeter
-///
-/// \param[in] name Program name
-
-void PyMethodBase::PySetProgramName(TString name)
-{
-   #if PY_MAJOR_VERSION < 3
-   Py_SetProgramName(const_cast<char*>(name.Data()));
-   #else
-   Py_SetProgramName((wchar_t *)name.Data());
-   #endif
-}
-
-
-///////////////////////////////////////////////////////////////////////////////
-
-size_t mystrlen(const char* s) { return strlen(s); }
-
-///////////////////////////////////////////////////////////////////////////////
-
-size_t mystrlen(const wchar_t* s) { return wcslen(s); }
-
-///////////////////////////////////////////////////////////////////////////////
-/// Get program name from Python interpreter
-///
-/// \return Program name
-
-TString PyMethodBase::Py_GetProgramName()
-{
-   auto progName = ::Py_GetProgramName();
-   return std::string(progName, progName + mystrlen(progName));
-}
-
-///////////////////////////////////////////////////////////////////////////////
 /// Check Python interpreter initialization status
 ///
 /// \return Boolean whether interpreter is initialized
@@ -431,3 +395,23 @@ std::vector<size_t> PyMethodBase::GetDataFromList(PyObject* listObject){
          }
    return listVec;
 }
+
+//////////////////////////////////////////////////////////////////////////////////
+/// \brief Utility function which checks if a given key is present in a Python 
+///        dictionary object and returns the associated value or throws runtime
+///        error. This is to replace PyDict_GetItemWithError in Python 2.
+///
+/// \param[in] listObject Python Dict object
+/// \return Associated value PyObject
+PyObject* PyMethodBase::GetValueFromDict(PyObject* dict, const char* key){
+   #if PY_MAJOR_VERSION >= 3   // using PyDict_GetItemWithError that is available only in Python3
+   return PyDict_GetItemWithError(dict,PyUnicode_FromString(key));
+   #else
+   if(!PyDict_Contains(dict, PyUnicode_FromString(key))){
+      throw std::runtime_error(std::string("Key ")+key+" does not exist in the dictionary.");
+   } else {
+      return PyDict_GetItemString(dict, key);
+   }
+   #endif
+}
+

@@ -98,7 +98,7 @@ public:
   virtual bool changeObservableName(const char* from, const char* to) ;
 
   // Add one ore more rows of data
-  virtual void add(const RooArgSet& row, double weight=1, double weightError=0.0) = 0 ; // DERIVED
+  virtual void add(const RooArgSet& row, double weight=1) = 0 ; // DERIVED
   virtual void fill() ;
 
   // Load a given row of data
@@ -321,6 +321,8 @@ protected:
   static StorageType defaultStorageType ;
 
   StorageType storageType;
+
+  void initializeVars(RooArgSet const& vars);
 
   double corrcov(const RooRealVar& x, const RooRealVar& y, const char* cutSpec, const char* cutRange, bool corr) const  ;
   TMatrixDSym* corrcovMatrix(const RooArgList& vars, const char* cutSpec, const char* cutRange, bool corr) const  ;

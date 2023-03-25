@@ -54,7 +54,7 @@ public:
   const RooArgSet& anaIntVars() const { return _anaList ; }
 
   RooArgSet intVars() const { RooArgSet tmp(_sumList) ; tmp.add(_intList) ; tmp.add(_anaList) ; tmp.add(_facList) ; return tmp ; }
-  const char* intRange() { return _rangeName ? _rangeName->GetName() : nullptr ; }
+  const char* intRange() const { return _rangeName ? _rangeName->GetName() : nullptr ; }
   const RooAbsReal& integrand() const { return *_function; }
 
   void setCacheNumeric(bool flag) {
@@ -80,8 +80,6 @@ public:
 
   void setAllowComponentSelection(bool allow);
   bool getAllowComponentSelection() const;
-
-  std::unique_ptr<RooArgSet> fillNormSetForServer(RooArgSet const& normSet, RooAbsArg const& server) const override;
 
 protected:
 

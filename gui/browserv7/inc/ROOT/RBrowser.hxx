@@ -67,7 +67,7 @@ protected:
    void CheckWidgtesModified();
 
 public:
-   RBrowser(bool use_rcanvas = true);
+   RBrowser(bool use_rcanvas = false);
    virtual ~RBrowser();
 
    bool GetUseRCanvas() const { return fUseRCanvas; }
@@ -91,6 +91,8 @@ public:
    bool GetCatchWindowShow() const { return fCatchWindowShow; }
 
    bool ActivateWidget(const std::string &title, const std::string &kind = "");
+
+   void ClearOnClose(const std::shared_ptr<void> &handle);
 
 };
 

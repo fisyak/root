@@ -83,15 +83,6 @@ public:
    virtual JSONNode &operator<<(std::string const &s) = 0;
    virtual JSONNode &operator<<(int i) = 0;
    virtual JSONNode &operator<<(double d) = 0;
-   template <class T>
-   JSONNode &operator<<(const std::vector<T> &v)
-   {
-      this->set_seq();
-      for (const auto &e : v) {
-         this->append_child() << e;
-      };
-      return *this;
-   }
    virtual const JSONNode &operator>>(std::string &v) const = 0;
    virtual JSONNode &operator[](std::string const &k) = 0;
    virtual JSONNode &operator[](size_t pos) = 0;
@@ -102,11 +93,12 @@ public:
    virtual bool is_seq() const = 0;
    virtual void set_map() = 0;
    virtual void set_seq() = 0;
+   virtual void clear() = 0;
 
    virtual std::string key() const = 0;
    virtual std::string val() const = 0;
    virtual int val_int() const { return atoi(this->val().c_str()); }
-   virtual float val_float() const { return atof(this->val().c_str()); }
+   virtual double val_double() const { return std::stod(this->val()); }
    virtual bool val_bool() const { return atoi(this->val().c_str()); }
    template <class T>
    T val_t() const;
@@ -123,6 +115,37 @@ public:
    virtual const_children_view children() const;
    virtual JSONNode &child(size_t pos) = 0;
    virtual const JSONNode &child(size_t pos) const = 0;
+
+   template <typename Collection>
+   void fill_seq(Collection const &coll)
+   {
+      set_seq();
+      for (auto const &item : coll) {
+         append_child() << item;
+      }
+   }
+
+   template <typename Collection, typename TransformationFunc>
+   void fill_seq(Collection const &coll, TransformationFunc func)
+   {
+      set_seq();
+      for (auto const &item : coll) {
+         append_child() << func(item);
+      }
+   }
+
+   template <typename Matrix>
+   void fill_mat(Matrix const &mat)
+   {
+      set_seq();
+      for (int i = 0; i < mat.GetNrows(); ++i) {
+         auto &row = append_child();
+         row.set_seq();
+         for (int j = 0; j < mat.GetNcols(); ++j) {
+            row.append_child() << mat(i, j);
+         }
+      }
+   }
 };
 
 class JSONTree {
@@ -133,18 +156,46 @@ public:
 
    static std::unique_ptr<JSONTree> create();
    static std::unique_ptr<JSONTree> create(std::istream &is);
+
+   static std::string getBackend();
+   static void setBackend(std::string const &name);
+
+   static bool hasBackend(std::string const &name);
+
+private:
+   // Internally, we store the backend type with an enum to be more memory efficient.
+   enum class Backend { NlohmannJson, Ryml };
+
+   static Backend &getBackendEnum();
 };
 
 std::ostream &operator<<(std::ostream &os, RooFit::Detail::JSONNode const &s);
+
+template <class T>
+std::vector<T> &operator<<(std::vector<T> &v, RooFit::Detail::JSONNode::children_view const &cv)
+{
+   for (const auto &e : cv) {
+      v.push_back(e.val_t<T>());
+   }
+   return v;
+}
+
+template <class T>
+std::vector<T> &operator<<(std::vector<T> &v, RooFit::Detail::JSONNode::const_children_view const &cv)
+{
+   for (const auto &e : cv) {
+      v.push_back(e.val_t<T>());
+   }
+   return v;
+}
+
 template <class T>
 std::vector<T> &operator<<(std::vector<T> &v, RooFit::Detail::JSONNode const &n)
 {
    if (!n.is_seq()) {
       throw std::runtime_error("node " + n.key() + " is not of sequence type!");
    }
-   for (const auto &e : n.children()) {
-      v.push_back(e.val_t<T>());
-   }
+   v << n.children();
    return v;
 }
 

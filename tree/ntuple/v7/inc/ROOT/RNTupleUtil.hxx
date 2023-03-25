@@ -47,9 +47,9 @@ enum ENTupleStructure {
 /// Integer type long enough to hold the maximum number of entries in a column
 using NTupleSize_t = std::uint64_t;
 constexpr NTupleSize_t kInvalidNTupleIndex = std::uint64_t(-1);
-/// Wrap the 32bit integer in a struct in order to avoid template specialization clash with std::uint32_t
+/// Wrap the integer in a struct in order to avoid template specialization clash with std::uint32_t
 struct RClusterSize {
-   using ValueType = std::uint32_t;
+   using ValueType = std::uint64_t;
 
    RClusterSize() : fValue(0) {}
    explicit constexpr RClusterSize(ValueType value) : fValue(value) {}
@@ -61,7 +61,23 @@ struct RClusterSize {
    ValueType fValue;
 };
 using ClusterSize_t = RClusterSize;
-constexpr ClusterSize_t kInvalidClusterIndex(std::uint32_t(-1));
+constexpr ClusterSize_t kInvalidClusterIndex(std::uint64_t(-1));
+
+/// Helper type to present an offset column as array of collection sizes. See RField<RNTupleCardinality> for details.
+struct RNTupleCardinality {
+   using ValueType = std::size_t;
+
+   RNTupleCardinality() : fValue(0) {}
+   explicit constexpr RNTupleCardinality(ValueType value) : fValue(value) {}
+   RNTupleCardinality &operator=(const ValueType value)
+   {
+      fValue = value;
+      return *this;
+   }
+   operator ValueType() const { return fValue; }
+
+   ValueType fValue;
+};
 
 /// Holds the index and the tag of a kSwitch column
 class RColumnSwitch {

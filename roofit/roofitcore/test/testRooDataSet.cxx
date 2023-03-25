@@ -9,6 +9,7 @@
 #include <RooHelpers.h>
 #include <RooCategory.h>
 #include <RooWorkspace.h>
+#include <RooVectorDataStore.h>
 
 #include <TFile.h>
 #include <TTree.h>
@@ -120,13 +121,15 @@ TEST(RooDataSet, BinnedClone)
    RooRealVar mes("Mes", "Mes", 5.28, 5.24, 5.29);
    mes.setBin(40);
    RooRealVar weight("weight", "weight", 1, 0, 100);
-   RooDataSet *data = new RooDataSet("dataset", "dataset", &chain, RooArgSet(mes, weight), 0, weight.GetName());
-   RooDataHist *hist = data->binnedClone();
 
-   EXPECT_DOUBLE_EQ(hist->sumEntries(), sumW);
+   {
+      RooDataSet data{"dataset", "dataset", &chain, RooArgSet(mes, weight), 0, weight.GetName()};
+      std::unique_ptr<RooDataHist> hist{data.binnedClone()};
 
-   delete hist; // invalid read here
-   delete data; // and here too
+      EXPECT_DOUBLE_EQ(hist->sumEntries(), sumW);
+
+      // the original crash happened when "hist" and "data" got destructed
+   }
 
    gSystem->Unlink(filename[0]);
    gSystem->Unlink(filename[1]);
@@ -277,11 +280,10 @@ TEST(RooDataSet, CrashAfterImportFromTree)
 // root-project/root#6951: Broken weights after reducing RooDataSet created with RooAbsPdf::generate()
 TEST(RooDataSet, ReduceWithCompositeDataStore)
 {
-   auto &msg = RooMsgService::instance();
-   msg.setGlobalKillBelow(RooFit::WARNING);
+   RooHelpers::LocalChangeMsgLevel changeMsgLvl(RooFit::WARNING);
 
    RooWorkspace ws{};
-   ws.factory("Gaussian::gauss(x[-10,10], mean[3,-10,10], sig    ma[1,0.1,10])");
+   ws.factory("Gaussian::gauss(x[-10,10], mean[3,-10,10], sigma[1,0.1,10])");
    auto &gauss = *ws.pdf("gauss");
    auto &x = *ws.var("x");
 
@@ -292,8 +294,7 @@ TEST(RooDataSet, ReduceWithCompositeDataStore)
    auto &dataSet = *dataSetPtr;
 
    // Generate a new dataset with weight column
-   RooRealVar weight("weight", "weight", 0.5, 0.0, 1.0);
-   RooDataSet dataSetWeighted("dataSetWeighted", "dataSetWeighted", {x, weight}, "weight");
+   RooDataSet dataSetWeighted("dataSetWeighted", "dataSetWeighted", x, RooFit::WeightVar());
    for (std::size_t i = 0; i < nEvents; ++i) {
       dataSetWeighted.add(*dataSet.get(), 0.5);
    }
@@ -302,7 +303,7 @@ TEST(RooDataSet, ReduceWithCompositeDataStore)
    RooCategory sample("sample", "sample");
    sample.defineType("physics");
    RooDataSet dataSetComposite("hmaster", "hmaster", x, RooFit::Index(sample),
-                               RooFit::Link({{"physic    s", &dataSetWeighted}}));
+                               RooFit::Link({{"physics", &dataSetWeighted}}));
 
    // Reduce the dataset with the RooCompositeDataStore
    std::unique_ptr<RooAbsData> dataSetReducedPtr{dataSetComposite.reduce("true")};
@@ -352,4 +353,114 @@ TEST(RooDataSet, ReduceWithSelectVarsAndCutRange)
    std::unique_ptr<RooAbsData> reduced{d.reduce(SelectVars(*ws.var("a")), CutRange("myRange"))};
 
    EXPECT_EQ(reduced->numEntries(), 1);
+}
+
+// Test that importing a RooDataHist to a RooDataSet works and that it gives
+// the right weight() and weightSquared().
+TEST(RooDataSet, ImportDataHist)
+{
+   RooRealVar x{"x", "x", 0, 3};
+   x.setBins(3);
+
+   RooDataHist dh{"dh", "dh", x};
+
+   dh.set(0, 10, 5);
+   dh.set(1, 20, 15);
+   dh.set(2, 30, 20);
+
+   RooDataSet ds{"ds", "ds", x, RooFit::Import(dh)};
+
+   for (int i = 0; i < x.numBins(); ++i) {
+      dh.get(i);
+      ds.get(i);
+      EXPECT_FLOAT_EQ(ds.weight(), dh.weight()) << "weight() is off in bin " << i;
+      EXPECT_FLOAT_EQ(ds.weightSquared(), dh.weightSquared()) << "weightSquared() is off in bin " << i;
+   }
+}
+
+// Test that splitting a RooDataSet by index category does preserve the weight
+// errors. Covers GitHub issue #12453.
+TEST(RooDataSet, SplitDataSetWithWeightErrors)
+{
+   using namespace RooFit;
+
+   RooRealVar x{"x", "x", 0, 10};
+   RooCategory cat{"cat", "cat", {{"sample_0", 0}}};
+   RooRealVar weight{"weight", "weight", 1.0};
+
+   RooDataSet data1{"data", "data", {x, cat, weight}, WeightVar(weight), StoreError(weight)};
+
+   data1.add({x, cat}, 2.0, 0.3);
+
+   std::unique_ptr<TList> dataList{data1.split(cat, true)};
+   auto &data2 = static_cast<RooDataSet &>(*dataList->At(0));
+
+   data1.Print();
+
+   data1.get(0);
+   data2.get(0);
+   EXPECT_DOUBLE_EQ(data2.weightError(), data1.weightError());
+}
+
+// The version number of the RooVectorDataStore::RealFullVector was increased
+// in the 6.30 development cycle. The RealFullVector is used to store columns
+// with errors, both symmetric and asymmetric.
+//
+// The reference file was created with the following code with ROOT 6.26.10:
+//
+// ```c++
+// using namespace RooFit;
+//
+// RooRealVar x{"x", "x", 0, 10};
+// RooRealVar y{"y", "y", 0, 10};
+//
+// RooDataSet data{"data", "data", {x, y}, StoreError(x), StoreAsymError(y)};
+//
+// x.setVal(5.0);
+// x.setError(2.0);
+// y.setVal(9.0);
+// y.setAsymError(-4.0, 3.0);
+//
+// data.add({x, y});
+//
+// x.setVal(7.0);
+// x.setError(3.0);
+// y.setVal(4.0);
+// y.setAsymError(-2.0, 1.0);
+//
+// data.add({x, y});
+//
+// std::unique_ptr<TFile> file{TFile::Open("dataSet_with_errors_6_26_10.root", "RECREATE")};
+//
+// file->WriteObject(&data, data.GetName());
+// ```
+TEST(RooDataSet, ReadDataSetWithErrors626)
+{
+   std::unique_ptr<TFile> file{TFile::Open("dataSet_with_errors_6_26_10.root", "READ")};
+
+   auto data = file->Get<RooDataSet>("data");
+
+   auto &x = static_cast<RooRealVar &>((*data->get())["x"]);
+   auto &y = static_cast<RooRealVar &>((*data->get())["y"]);
+
+   // Make sure the dataset is really using a RooVectorDataStore
+   EXPECT_TRUE(dynamic_cast<RooVectorDataStore const *>(data->store()));
+
+   data->get(0);
+
+   EXPECT_DOUBLE_EQ(x.getVal(), 5.0);
+   EXPECT_DOUBLE_EQ(x.getError(), 2.0);
+
+   EXPECT_DOUBLE_EQ(y.getVal(), 9.0);
+   EXPECT_DOUBLE_EQ(y.getAsymErrorLo(), -4.0);
+   EXPECT_DOUBLE_EQ(y.getAsymErrorHi(), 3.0);
+
+   data->get(1);
+
+   EXPECT_DOUBLE_EQ(x.getVal(), 7.0);
+   EXPECT_DOUBLE_EQ(x.getError(), 3.0);
+
+   EXPECT_DOUBLE_EQ(y.getVal(), 4.0);
+   EXPECT_DOUBLE_EQ(y.getAsymErrorLo(), -2.0);
+   EXPECT_DOUBLE_EQ(y.getAsymErrorHi(), 1.0);
 }

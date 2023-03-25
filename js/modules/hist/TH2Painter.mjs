@@ -1,9 +1,9 @@
-import { settings, gStyle, clTMultiGraph } from '../core.mjs';
+import { settings, gStyle, clTMultiGraph, kNoZoom } from '../core.mjs';
 import { Vector2, BufferGeometry, BufferAttribute, Mesh, MeshBasicMaterial, ShapeUtils } from '../three.mjs';
 import { assignFrame3DMethods, drawBinsLego, drawBinsError3D, drawBinsContour3D, drawBinsSurf3D } from './hist3d.mjs';
 import { TAxisPainter } from '../gpad/TAxisPainter.mjs';
 import { THistPainter } from '../hist2d/THistPainter.mjs';
-import { TH2Painter as TH2Painter2D  } from '../hist2d/TH2Painter.mjs';
+import { TH2Painter as TH2Painter2D } from '../hist2d/TH2Painter.mjs';
 
 
 /** @summary Draw TH2Poly histogram as lego
@@ -75,12 +75,12 @@ function drawTH2PolyLego(painter) {
 
             try {
                if (pnts.length > 2)
-                  faces = ShapeUtils.triangulateShape(pnts , []);
+                  faces = ShapeUtils.triangulateShape(pnts, []);
             } catch(e) {
                faces = null;
             }
 
-            if (faces && (faces.length>pnts.length-3)) break;
+            if (faces && (faces.length > pnts.length-3)) break;
          }
 
          if (faces && faces.length && pnts) {
@@ -88,7 +88,7 @@ function drawTH2PolyLego(painter) {
             all_faces.push(faces);
 
             nfaces += faces.length * 2;
-            if (z1>z0) nfaces += pnts.length*2;
+            if (z1 > z0) nfaces += pnts.length*2;
          }
       }
 
@@ -220,13 +220,15 @@ class TH2Painter extends TH2Painter2D {
       } else {
 
          let pad = this.getPadPainter().getRootPad(true),
-             zmult = 1 + 2*gStyle.fHistTopMargin;
+             zmult = 1;
 
-         if (this.draw_content || (this.gmaxbin != 0)) {
+         if (this.options.minimum !== kNoZoom && this.options.maximum !== kNoZoom) {
+            this.zmin = this.options.minimum;
+            this.zmax = this.options.maximum;
+         } else if (this.draw_content || (this.gmaxbin != 0)) {
             this.zmin = pad?.fLogz ? this.gminposbin * 0.3 : this.gminbin;
             this.zmax = this.gmaxbin;
-         } else {
-            zmult = 1;
+            zmult = 1 + 2*gStyle.fHistTopMargin;
          }
 
          if (pad?.fLogz && (this.zmin <= 0))
@@ -239,7 +241,8 @@ class TH2Painter extends TH2Painter2D {
             pr = main.create3DScene(this.options.Render3D, this.options.x3dscale, this.options.y3dscale).then(() => {
                main.setAxesRanges(histo.fXaxis, this.xmin, this.xmax, histo.fYaxis, this.ymin, this.ymax, histo.fZaxis, this.zmin, this.zmax, this);
                main.set3DOptions(this.options);
-               main.drawXYZ(main.toplevel, TAxisPainter, { zmult, zoom: settings.Zooming, ndim: 2, draw: this.options.Axis !== -1 });
+               main.drawXYZ(main.toplevel, TAxisPainter, { zmult, zoom: settings.Zooming, ndim: 2,
+                  draw: this.options.Axis !== -1, reverse_x: this.options.RevX, reverse_y: this.options.RevY });
             });
          }
 

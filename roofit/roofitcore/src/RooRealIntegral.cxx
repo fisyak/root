@@ -746,7 +746,10 @@ RooRealIntegral::RooRealIntegral(const RooRealIntegral& other, const char* name)
   _rangeName(other._rangeName),
   _cacheNum(false)
 {
- _funcNormSet.reset(other._funcNormSet ? static_cast<RooArgSet*>(other._funcNormSet->snapshot(false)) : nullptr);
+ if(other._funcNormSet) {
+   _funcNormSet = std::make_unique<RooArgSet>();
+   other._funcNormSet->snapshot(*_funcNormSet, false);
+ }
 
  for (const auto arg : other._facList) {
    RooAbsArg* argClone = (RooAbsArg*) arg->Clone() ;
@@ -817,9 +820,9 @@ double RooRealIntegral::getValV(const RooArgSet* nset) const
 //     return _value ;
 //   }
 
-  if (nset && nset!=_lastNSet) {
-    ((RooAbsReal*) this)->setProxyNormSet(nset) ;
-    _lastNSet = (RooArgSet*) nset ;
+  if (nset && nset->uniqueId().value() != _lastNormSetId) {
+    const_cast<RooRealIntegral*>(this)->setProxyNormSet(nset);
+    _lastNormSetId = nset->uniqueId().value();
   }
 
   if (isValueOrShapeDirtyAndClear()) {
@@ -929,7 +932,7 @@ double RooRealIntegral::evaluate() const
       // Multiply by fit range for 'real' dependents
       if (arg->IsA()->InheritsFrom(RooAbsRealLValue::Class())) {
         RooAbsRealLValue* argLV = (RooAbsRealLValue*)arg ;
-        retVal *= (argLV->getMax() - argLV->getMin()) ;
+        retVal *= (argLV->getMax(intRange()) - argLV->getMin(intRange())) ;
       }
       // Multiply by number of states for category dependents
       if (arg->IsA()->InheritsFrom(RooAbsCategoryLValue::Class())) {
@@ -942,7 +945,7 @@ double RooRealIntegral::evaluate() const
 
   if (dologD(Tracing)) {
     cxcoutD(Tracing) << "RooRealIntegral::evaluate(" << GetName() << ") anaInt = " << _anaList << " numInt = " << _intList << _sumList << " mode = " ;
-    switch(_mode) {
+    switch(_intOperMode) {
     case Hybrid: ccoutD(Tracing) << "Hybrid" ; break ;
     case Analytic: ccoutD(Tracing) << "Analytic" ; break ;
     case PassThrough: ccoutD(Tracing) << "PassThrough" ; break ;
@@ -971,9 +974,9 @@ double RooRealIntegral::jacobianProduct() const
     jacProd *= arg->jacobian() ;
   }
 
-  // Take fabs() here: if jacobian is negative, min and max are swapped and analytical integral
+  // Take std::abs() here: if jacobian is negative, min and max are swapped and analytical integral
   // will be positive, so must multiply with positive jacobian.
-  return fabs(jacProd) ;
+  return std::abs(jacProd) ;
 }
 
 
@@ -1158,10 +1161,4 @@ void RooRealIntegral::setCacheAllNumeric(Int_t ndim) {
 Int_t RooRealIntegral::getCacheAllNumeric()
 {
   return _cacheAllNDim ;
-}
-
-
-std::unique_ptr<RooArgSet> RooRealIntegral::fillNormSetForServer(RooArgSet const& /*normSet*/,
-                                                                 RooAbsArg const& /*server*/) const {
-  return _funcNormSet ? std::make_unique<RooArgSet>(*_funcNormSet) : nullptr;
 }

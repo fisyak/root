@@ -12,7 +12,6 @@
 #include "RooRealVar.h"
 #include "RooDataSet.h"
 #include "RooGaussian.h"
-#include "RooConstVar.h"
 #include "TCanvas.h"
 #include "TAxis.h"
 #include "RooPlot.h"
@@ -50,7 +49,7 @@ void rf901_numintconfig()
 
    // Construct pdf without support for analytical integrator for demonstration purposes
    RooRealVar x("x", "x", -10, 10);
-   RooLandau landau("landau", "landau", x, RooConst(0), RooConst(0.1));
+   RooLandau landau("landau", "landau", x, 0.0, 0.1);
 
    // Activate debug-level messages for topic integration to be able to follow actions below
    RooMsgService::instance().addStream(DEBUG, Topic(Integration));

@@ -1,6 +1,6 @@
 import { settings, create, isBatchMode } from '../core.mjs';
 import { scaleLinear, select as d3_select, pointer as d3_pointer } from '../d3.mjs';
-import { DrawOptions, buildSvgPath } from '../base/BasePainter.mjs';
+import { DrawOptions, buildSvgCurve, makeTranslate } from '../base/BasePainter.mjs';
 import { ObjectPainter, getElementMainPainter } from '../base/ObjectPainter.mjs';
 import { TAttLineHandler } from '../base/TAttLineHandler.mjs';
 import { ensureTCanvas } from '../gpad/TCanvasPainter.mjs';
@@ -36,8 +36,8 @@ class TGraphPolargramPainter extends ObjectPainter {
       if (!keep_float) {
          pos.x = Math.round(pos.x);
          pos.y = Math.round(pos.y);
-         pos.rx =  Math.round(pos.rx);
-         pos.ry =  Math.round(pos.ry);
+         pos.rx = Math.round(pos.rx);
+         pos.ry = Math.round(pos.ry);
       }
       return pos;
    }
@@ -88,7 +88,7 @@ class TGraphPolargramPainter extends ObjectPainter {
       rect.hint_delta_x = rect.szx;
       rect.hint_delta_y = rect.szy;
 
-      rect.transform = `translate(${rect.x},${rect.y})`;
+      rect.transform = makeTranslate(rect.x, rect.y) || '';
 
       return rect;
    }
@@ -117,7 +117,6 @@ class TGraphPolargramPainter extends ObjectPainter {
       this.processFrameTooltipEvent(null); // remove all tooltips
 
       let polar = this.getObject();
-
       if (!polar) return;
 
       let delta = evnt.wheelDelta ? -evnt.wheelDelta : (evnt.deltaY || evnt.detail);
@@ -148,7 +147,7 @@ class TGraphPolargramPainter extends ObjectPainter {
 
       this.createG();
 
-      this.draw_g.attr('transform', `translate(${Math.round(rect.x + rect.width/2)},${Math.round(rect.y + rect.height/2)})`);
+      this.draw_g.attr('transform', makeTranslate(Math.round(rect.x + rect.width/2), Math.round(rect.y + rect.height/2)));
       this.szx = rect.szx;
       this.szy = rect.szy;
 
@@ -377,9 +376,8 @@ class TGraphPolarPainter extends ObjectPainter {
 
          let pos = main.translate(graph.fX[n], graph.fY[n]);
 
-         if (this.options.mark) {
+         if (this.options.mark)
             mpath += this.markeratt.create(pos.x, pos.y);
-         }
 
          if (this.options.line || this.options.fill) {
             lpath += (lpath ? 'L' : 'M') + pos.x + ',' + pos.y;
@@ -405,14 +403,14 @@ class TGraphPolarPainter extends ObjectPainter {
 
       if (this.options.curve && bins.length)
          this.draw_g.append('svg:path')
-                 .attr('d', buildSvgPath('bezier', bins).path)
+                 .attr('d', buildSvgCurve(bins))
                  .style('fill', 'none')
                  .call(this.lineatt.func);
 
       if (epath)
          this.draw_g.append('svg:path')
              .attr('d', epath)
-             .style('fill','none')
+             .style('fill', 'none')
              .call(this.lineatt.func);
 
       if (mpath)
@@ -453,13 +451,13 @@ class TGraphPolarPainter extends ObjectPainter {
       }
 
       let match_distance = 5;
-      if (this.markeratt && this.markeratt.used) match_distance = this.markeratt.getFullSize();
+      if (this.markeratt?.used) match_distance = this.markeratt.getFullSize();
 
       if (Math.sqrt(best_dist2) > match_distance) return null;
 
       let res = { name: this.getObject().fName, title: this.getObject().fTitle,
                   x: bestpos.x, y: bestpos.y,
-                  color1: this.markeratt && this.markeratt.used ? this.markeratt.color : this.lineatt.color,
+                  color1: this.markeratt?.used ? this.markeratt.color : this.lineatt.color,
                   exact: Math.sqrt(best_dist2) < 4,
                   lines: [ this.getObjectHint() ],
                   binindx: bestindx,
@@ -467,14 +465,14 @@ class TGraphPolarPainter extends ObjectPainter {
                   radius: match_distance
                 };
 
-      res.lines.push('r = ' + main.axisAsText('r', graph.fY[bestindx]));
-      res.lines.push('phi = ' + main.axisAsText('phi',graph.fX[bestindx]));
+      res.lines.push(`r = ${main.axisAsText('r', graph.fY[bestindx])}`,
+                     `phi = ${main.axisAsText('phi', graph.fX[bestindx])}`);
 
       if (graph.fEY && graph.fEY[bestindx])
-         res.lines.push('error r = ' + main.axisAsText('r', graph.fEY[bestindx]));
+         res.lines.push(`error r = ${main.axisAsText('r', graph.fEY[bestindx])}`);
 
       if (graph.fEX && graph.fEX[bestindx])
-         res.lines.push('error phi = ' + main.axisAsText('phi', graph.fEX[bestindx]));
+         res.lines.push(`error phi = ${main.axisAsText('phi', graph.fEX[bestindx])}`);
 
       return res;
    }

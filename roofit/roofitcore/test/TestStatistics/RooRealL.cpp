@@ -58,7 +58,12 @@ TEST_P(RooRealL, getVal)
 
    auto nominal_result = nll->getVal();
 
+<<<<<<< HEAD:roofit/roofitcore/test/TestStatistics/RooRealL.cpp
    RooFit::TestStatistics::RooRealL nll_new("nll_new", "new style NLL", std::make_shared<RooFit::TestStatistics::RooUnbinnedL>(pdf, data.get()));
+=======
+   RooFit::TestStatistics::RooRealL nll_new("nll_new", "new style NLL",
+                                            std::make_unique<RooFit::TestStatistics::RooUnbinnedL>(pdf, data.get()));
+>>>>>>> master:roofit/roofitcore/test/TestStatistics/testRooRealL.cxx
 
    auto mp_result = nll_new.getVal();
 
@@ -201,7 +206,12 @@ TEST_P(RooRealL, setVal)
    std::unique_ptr<RooDataSet> data {pdf->generate(RooArgSet(*x), 10000)};
    std::unique_ptr<RooAbsReal> nll {pdf->createNLL(*data)};
 
+<<<<<<< HEAD:roofit/roofitcore/test/TestStatistics/RooRealL.cpp
    RooFit::TestStatistics::RooRealL nll_new("nll_new", "new style NLL", std::make_shared<RooFit::TestStatistics::RooUnbinnedL>(pdf, data.get()));
+=======
+   RooFit::TestStatistics::RooRealL nll_new("nll_new", "new style NLL",
+                                            std::make_unique<RooFit::TestStatistics::RooUnbinnedL>(pdf, data.get()));
+>>>>>>> master:roofit/roofitcore/test/TestStatistics/testRooRealL.cxx
 
    // calculate first results
    auto nominal_result1 = nll->getVal();
@@ -253,7 +263,12 @@ TEST_P(RealLVsMPFE, getVal)
 
    auto mpfe_result = nll_mpfe->getVal();
 
+<<<<<<< HEAD:roofit/roofitcore/test/TestStatistics/RooRealL.cpp
    RooFit::TestStatistics::RooRealL nll_new("nll_new", "new style NLL", std::make_shared<RooFit::TestStatistics::RooUnbinnedL>(pdf, data.get()));
+=======
+   RooFit::TestStatistics::RooRealL nll_new("nll_new", "new style NLL",
+                                            std::make_unique<RooFit::TestStatistics::RooUnbinnedL>(pdf, data.get()));
+>>>>>>> master:roofit/roofitcore/test/TestStatistics/testRooRealL.cxx
 
    auto mp_result = nll_new.getVal();
 
@@ -284,8 +299,18 @@ TEST_P(RealLVsMPFE, minimize)
    std::unique_ptr<RooDataSet> data {pdf->generate(RooArgSet(*x), 10000)};
    mu->setVal(-2.9);
 
+<<<<<<< HEAD:roofit/roofitcore/test/TestStatistics/RooRealL.cpp
    std::unique_ptr<RooAbsReal> nll_mpfe {pdf->createNLL(*data)};
    RooFit::TestStatistics::RooRealL nll_new("nll_new", "new style NLL", std::make_shared<RooFit::TestStatistics::RooUnbinnedL>(pdf, data.get()));
+=======
+   // If we don't set sigma constant, the fit is not stable as we start with mu
+   // so close to the boundary
+   sigma->setConstant(true);
+
+   std::unique_ptr<RooAbsReal> nll_mpfe{pdf->createNLL(*data)};
+   RooFit::TestStatistics::RooRealL nll_new("nll_new", "new style NLL",
+                                            std::make_unique<RooFit::TestStatistics::RooUnbinnedL>(pdf, data.get()));
+>>>>>>> master:roofit/roofitcore/test/TestStatistics/testRooRealL.cxx
 
    // save initial values for the start of all minimizations
    RooArgSet values = RooArgSet(*mu, *pdf);

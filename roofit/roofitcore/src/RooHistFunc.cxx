@@ -238,13 +238,8 @@ void RooHistFunc::computeBatch(cudaStream_t*, double* output, size_t size, RooFi
 
 Int_t RooHistFunc::getMaxVal(const RooArgSet& vars) const
 {
-  RooAbsCollection* common = _depList.selectCommon(vars) ;
-  if (common->size()==_depList.size()) {
-    delete common ;
-    return 1;
-  }
-  delete common ;
-  return 0 ;
+  std::unique_ptr<RooAbsCollection> common{_depList.selectCommon(vars)};
+  return common->size() == _depList.size() ? 1 : 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -261,6 +256,13 @@ double RooHistFunc::maxVal(Int_t code) const
   }
 
   return max*1.05 ;
+}
+
+RooDataHist* RooHistFunc::cloneAndOwnDataHist(const char* newname) {
+   if (_ownedDataHist) return _ownedDataHist.get();
+   _ownedDataHist.reset(static_cast<RooDataHist*>(_dataHist->Clone(newname)));
+   _dataHist = _ownedDataHist.get();
+   return _dataHist;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -310,6 +312,11 @@ Int_t RooHistFunc::getAnalyticalIntegral(RooArgSet& allVars, RooArgSet& analVars
 double RooHistFunc::analyticalIntegral(Int_t code, const char* rangeName) const
 {
     return RooHistPdf::analyticalIntegral(code, rangeName, _histObsList, _depList, *_dataHist, true);
+}
+
+bool RooHistFunc::forceAnalyticalInt(const RooAbsArg& dep) const
+{
+   return RooHistPdf::forceAnalyticalInt(_depList, dep);
 }
 
 
@@ -392,7 +399,7 @@ std::list<double>* RooHistFunc::binBoundaries(RooAbsRealLValue& obs, double xlo,
   }
 
   // Retrieve position of all bin boundaries
-  const RooAbsBinning* binning = lvarg->getBinningPtr(0) ;
+  const RooAbsBinning* binning = lvarg->getBinningPtr(nullptr);
   double* boundaries = binning->array() ;
 
   auto hint = new std::list<double> ;
@@ -481,12 +488,12 @@ bool RooHistFunc::importWorkspaceHook(RooWorkspace& ws)
 
 bool RooHistFunc::areIdentical(const RooDataHist& dh1, const RooDataHist& dh2)
 {
-  if (fabs(dh1.sumEntries()-dh2.sumEntries())>1e-8) return false ;
+  if (std::abs(dh1.sumEntries()-dh2.sumEntries())>1e-8) return false ;
   if (dh1.numEntries() != dh2.numEntries()) return false ;
   for (int i=0 ; i < dh1.numEntries() ; i++) {
     dh1.get(i) ;
     dh2.get(i) ;
-    if (fabs(dh1.weight()-dh2.weight())>1e-8) return false ;
+    if (std::abs(dh1.weight()-dh2.weight())>1e-8) return false ;
   }
   using RooHelpers::getColonSeparatedNameString;
   if (getColonSeparatedNameString(*dh1.get()) != getColonSeparatedNameString(*dh2.get())) return false ;

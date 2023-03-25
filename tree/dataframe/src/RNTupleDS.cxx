@@ -37,7 +37,7 @@
 * \ingroup dataframe
 * \brief The RDataSource implementation for RNTuple. It lets RDataFrame read RNTuple data.
 *
-* An RDataFrame that reads RNTuple data can be constructed using MakeNTupleDataFrame().
+* An RDataFrame that reads RNTuple data can be constructed using FromRNTuple().
 *
 * For each column containing an array or a collection, a corresponding column `#colname` is available to access
 * `colname.size()` without reading and deserializing the collection values.
@@ -71,15 +71,18 @@ public:
    RRDFCardinalityField &operator=(RRDFCardinalityField &&other) = default;
    ~RRDFCardinalityField() = default;
 
+   const RColumnRepresentations &GetColumnRepresentations() const final
+   {
+      static RColumnRepresentations representations({{EColumnType::kIndex32}}, {{}});
+      return representations;
+   }
    // Field is only used for reading
    void GenerateColumnsImpl() final { assert(false && "Cardinality fields must only be used for reading"); }
-
-   void GenerateColumnsImpl(const RNTupleDescriptor &) final
+   void GenerateColumnsImpl(const RNTupleDescriptor &desc) final
    {
-      RColumnModel model(EColumnType::kIndex, true /* isSorted*/);
-      fColumns.emplace_back(std::unique_ptr<ROOT::Experimental::Detail::RColumn>(
-         ROOT::Experimental::Detail::RColumn::Create<ClusterSize_t, EColumnType::kIndex>(model, 0)));
-      fPrincipalColumn = fColumns[0].get();
+      auto onDiskTypes = EnsureCompatibleColumnTypes(desc);
+      fColumns.emplace_back(
+         ROOT::Experimental::Detail::RColumn::Create<ClusterSize_t>(RColumnModel(onDiskTypes[0]), 0));
    }
 
    ROOT::Experimental::Detail::RFieldValue GenerateValue(void *where) final
@@ -91,6 +94,7 @@ public:
       return ROOT::Experimental::Detail::RFieldValue(true /* captureFlag */, this, where);
    }
    size_t GetValueSize() const final { return sizeof(std::size_t); }
+   size_t GetAlignment() const final { return alignof(std::size_t); }
 
    /// Get the number of elements of the collection identified by globalIndex
    void
@@ -367,14 +371,4 @@ ROOT::RDataFrame ROOT::RDF::Experimental::FromRNTuple(ROOT::Experimental::RNTupl
 {
    ROOT::RDataFrame rdf(std::make_unique<ROOT::Experimental::RNTupleDS>(ntuple->MakePageSource()));
    return rdf;
-}
-
-ROOT::RDataFrame ROOT::Experimental::MakeNTupleDataFrame(std::string_view ntupleName, std::string_view fileName)
-{
-   return ROOT::RDF::Experimental::FromRNTuple(ntupleName, fileName);
-}
-
-ROOT::RDataFrame ROOT::Experimental::MakeNTupleDataFrame(RNTuple *ntuple)
-{
-   return ROOT::RDF::Experimental::FromRNTuple(ntuple);
 }

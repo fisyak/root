@@ -51,6 +51,10 @@ public:
     return *_dataHist ;
   }
 
+  /// Replaces underlying RooDataHist with a clone, which is now owned, and returns the clone.
+  /// If the underlying RooDataHist is already owned, then that is returned instead of being cloned.
+  RooDataHist* cloneAndOwnDataHist(const char* newname="");
+
   /// Get total bin volume spanned by this hist function.
   /// In 1-d, this is e.g. the range spanned on the x-axis.
   double totVolume() const;
@@ -69,6 +73,8 @@ public:
 
   Int_t getAnalyticalIntegral(RooArgSet& allVars, RooArgSet& analVars, const char* rangeName=nullptr) const override ;
   double analyticalIntegral(Int_t code, const char* rangeName=nullptr) const override ;
+
+  bool forceAnalyticalInt(const RooAbsArg& dep) const override;
 
   /// Set use of special boundary conditions for c.d.f.s
   void setCdfBoundaries(bool flag) {

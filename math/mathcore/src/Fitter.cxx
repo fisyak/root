@@ -183,27 +183,12 @@ bool Fitter::SetFCN(const ROOT::Math::IMultiGenFunction &fcn, const IModelFuncti
    // set the objective function for the fit and a model function
    if (!SetFCN(fcn, params, dataSize, chi2fit) ) return false;
    // need to set fFunc afterwards because SetFCN could reset fFUnc
-   fFunc = std::shared_ptr<IModelFunction>(dynamic_cast<IModelFunction *>(func.Clone()));
-   return (fFunc != nullptr);
-}
-
-bool Fitter::SetFCN(const ROOT::Math::IMultiGradFunction &fcn, const double *params, unsigned int dataSize,
-                       bool chi2fit)
-{
-   // set the objective function for the fit
-   // if params is not NULL create the parameter settings
-   if (!SetFCN(static_cast<const ROOT::Math::IMultiGenFunction &>(fcn), params, dataSize, chi2fit))
-      return false;
-   fUseGradient = true;
-   return true;
-}
-
-bool Fitter::SetFCN(const ROOT::Math::IMultiGradFunction &fcn, const IModelFunction &func, const double *params,
-                    unsigned int dataSize, bool chi2fit)
-{
-   // set the objective function for the fit and a model function
-   if (!SetFCN(fcn, params, dataSize, chi2fit) ) return false;
-   fFunc = std::shared_ptr<IModelFunction>(dynamic_cast<IModelFunction *>(func.Clone()));
+   fFunc = std::unique_ptr<IModelFunction>(dynamic_cast<IModelFunction *>(func.Clone()));
+   if(fFunc) {
+      fUseGradient = fcn.HasGradient();
+      return true;
+   }
+   return false;
    return (fFunc != nullptr);
 }
 
@@ -235,15 +220,6 @@ bool Fitter::FitFCN(const BaseFunc &fcn, const double *params, unsigned int data
 {
    // fit a user provided FCN function
    // create fit parameter settings
-   if (!SetFCN(fcn, params, dataSize, chi2fit))
-      return false;
-   return FitFCN();
-}
-
-bool Fitter::FitFCN(const BaseGradFunc &fcn, const double *params, unsigned int dataSize, bool chi2fit)
-{
-   // fit a user provided FCN gradient function
-
    if (!SetFCN(fcn, params, dataSize, chi2fit))
       return false;
    return FitFCN();
@@ -757,9 +733,7 @@ bool Fitter::DoInitMinimizer() {
                unsigned int nh = ndim * (ndim + 1) / 2;
                std::vector<double> h(nh);
                bool ret = fitGradFcn->Hessian(x.data(), h.data());
-               if (ret) {
-                  std::cout << "computing hessian " << x[0] << " -> " << h[0] << std::endl;
-               }
+               if (!ret) return false;
                for (unsigned int i = 0; i < ndim; i++) {
                   for (unsigned int j = 0; j <= i; j++) {
                      unsigned int index = j + i * (i + 1) / 2; // formula for j < i
@@ -768,7 +742,7 @@ bool Fitter::DoInitMinimizer() {
                         hess[ndim * j + i] = h[index];
                   }
                }
-               return ret;
+               return true;
             };
 
             fMinimizer->SetHessianFunction(hessFcn);
@@ -829,7 +803,7 @@ bool Fitter::DoMinimization(const ROOT::Math::IMultiGenFunction * chi2func) {
 
    if (!fResult) fResult = std::make_shared<FitResult>();
 
-   fResult->FillResult(fMinimizer,fConfig, fFunc, isValid, fDataSize, fBinFit, chi2func );
+   fResult->FillResult(fMinimizer,fConfig, fFunc, isValid, fDataSize, fFitType, chi2func );
 
    // if requested run Minos after minimization
    if (isValid && fConfig.MinosErrors()) {

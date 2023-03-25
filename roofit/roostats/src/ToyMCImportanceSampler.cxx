@@ -56,7 +56,7 @@ RooDataSet* ToyMCImportanceSampler::GetSamplingDistributionsSingleWorker(RooArgS
    // remember original #toys, but overwrite it temporarily with the #toys per distribution
    Int_t allToys = fNToys;
 
-   // to keep track of which dataset entry comes form which density, define a roocategory as a label
+   // to keep track of which dataset entry comes from which density, define a roocategory as a label
    RooCategory densityLabel( "densityLabel", "densityLabel" );
    densityLabel.defineType( "null", -1 );
    for( unsigned int i=0; i < fImportanceDensities.size(); i++ )
@@ -104,13 +104,7 @@ RooDataSet* ToyMCImportanceSampler::GetSamplingDistributionsSingleWorker(RooArgS
       }
 
       if( !fullResult ) {
-         RooArgSet columns( *result->get() );
-         RooRealVar weightVar ( "weight", "weight", 1.0 );
-         columns.add( weightVar );
-//       cout << endl << endl << "Reweighted data columns: " << endl;
-//       columns.Print("v");
-//       cout << endl;
-         fullResult = new RooDataSet( result->GetName(), result->GetTitle(), columns, "weight" );
+         fullResult = new RooDataSet( result->GetName(), result->GetTitle(), *result->get(), RooFit::WeightVar());
       }
 
       for( int j=0; j < result->numEntries(); j++ ) {

@@ -149,14 +149,14 @@ RooArgSet* RooIntegralMorph::actualObservables(const RooArgSet& /*nset*/) const
 
 RooArgSet* RooIntegralMorph::actualParameters(const RooArgSet& /*nset*/) const
 {
-  RooArgSet* par1 = pdf1.arg().getParameters(RooArgSet()) ;
-  RooArgSet* par2 = pdf2.arg().getParameters(RooArgSet()) ;
-  par1->add(*par2,true) ;
+  RooArgSet* par1 = pdf1.arg().getParameters(static_cast<RooArgSet*>(nullptr));
+  RooArgSet par2;
+  pdf2.arg().getParameters(nullptr, par2);
+  par1->add(par2,true) ;
   par1->remove(x.arg(),true,true) ;
   if (!_cacheAlpha) {
     par1->add(alpha.arg()) ;
   }
-  delete par2 ;
   return par1 ;
 }
 
@@ -185,26 +185,23 @@ void RooIntegralMorph::fillCacheObject(PdfCacheElem& cache) const
 
   if (!_cacheAlpha) {
 
-    TIterator* dIter = cache.hist()->sliceIterator((RooAbsArg&)x.arg(),RooArgSet()) ;
-    mcache.calculate(dIter) ;
-    delete dIter ;
+    std::unique_ptr<TIterator> dIter{cache.hist()->sliceIterator(const_cast<RooAbsReal&>(x.arg()),RooArgSet())};
+    mcache.calculate(dIter.get());
 
   } else {
-    TIterator* slIter = cache.hist()->sliceIterator((RooAbsArg&)alpha.arg(),RooArgSet()) ;
+    std::unique_ptr<TIterator> slIter{cache.hist()->sliceIterator(const_cast<RooAbsReal&>(alpha.arg()),RooArgSet())};
 
     double alphaSave = alpha ;
     RooArgSet alphaSet(alpha.arg()) ;
     coutP(Eval) << "RooIntegralMorph::fillCacheObject(" << GetName() << ") filling multi-dimensional cache" ;
     while(slIter->Next()) {
       alphaSet.assign(*cache.hist()->get()) ;
-      TIterator* dIter = cache.hist()->sliceIterator((RooAbsArg&)x.arg(),RooArgSet(alpha.arg())) ;
-      mcache.calculate(dIter) ;
+      std::unique_ptr<TIterator> dIter{cache.hist()->sliceIterator(const_cast<RooAbsReal&>(x.arg()),RooArgSet(alpha.arg()))};
+      mcache.calculate(dIter.get());
       ccoutP(Eval) << "." << flush;
-      delete dIter ;
     }
-    ccoutP(Eval) << endl ;
+    ccoutP(Eval) << std::endl;
 
-    delete slIter ;
     const_cast<RooIntegralMorph*>(this)->alpha = alphaSave ;
   }
 }
@@ -244,19 +241,19 @@ RooIntegralMorph::MorphCacheElem::MorphCacheElem(RooIntegralMorph& self, const R
 {
   // Mark in base class that normalization of cached pdf is invariant under pdf parameters
   _x = (RooRealVar*)self.x.absArg() ;
-  _nset = new RooArgSet(*_x) ;
+  _nset = std::make_unique<RooArgSet>(*_x);
 
   _alpha = (RooAbsReal*)self.alpha.absArg() ;
   _pdf1 = (RooAbsPdf*)(self.pdf1.absArg()) ;
   _pdf2 = (RooAbsPdf*)(self.pdf2.absArg()) ;
   _c1 = _pdf1->createCdf(*_x);
   _c2 = _pdf2->createCdf(*_x) ;
-  _cb1 = _c1->bindVars(*_x,_nset) ;
-  _cb2 = _c2->bindVars(*_x,_nset) ;
+  _cb1 = _c1->bindVars(*_x,_nset.get());
+  _cb2 = _c2->bindVars(*_x,_nset.get());
   _self = &self ;
 
-  _rf1 = new RooBrentRootFinder(*_cb1) ;
-  _rf2 = new RooBrentRootFinder(*_cb2) ;
+  _rf1 = std::make_unique<RooBrentRootFinder>(*_cb1);
+  _rf2 = std::make_unique<RooBrentRootFinder>(*_cb2);
   _ccounter = 0 ;
 
   _rf1->setTol(1e-12) ;
@@ -278,10 +275,6 @@ RooIntegralMorph::MorphCacheElem::MorphCacheElem(RooIntegralMorph& self, const R
 
 RooIntegralMorph::MorphCacheElem::~MorphCacheElem()
 {
-  delete _rf1 ;
-  delete _rf2 ;
-  // delete[] _yatX ;
-  // delete[] _calcX ;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -389,7 +382,7 @@ void RooIntegralMorph::MorphCacheElem::calculate(TIterator* dIter)
     // Calculate additional offset to apply if bin ixlo does not have X value calculated at bin center
     double xBinC = xmin + (i+0.5)*binw ;
     double xOffset = xBinC-_calcX[i] ;
-    if (fabs(xOffset/binw)>1e-3) {
+    if (std::abs(xOffset/binw)>1e-3) {
       double slope = (_yatX[i+1]-_yatX[i-1])/(_calcX[i+1]-_calcX[i-1]) ;
       double newY = _yatX[i] + slope*xOffset ;
       //cout << "bin " << i << " needs to be re-centered " << xOffset/binw << " slope = " << slope << " origY = " << _yatX[i] << " newY = " << newY << endl ;
@@ -421,8 +414,10 @@ void RooIntegralMorph::MorphCacheElem::calculate(TIterator* dIter)
     _rf1->findRoot(x1,x1,xMax,y) ;
     _rf2->findRoot(x2,x2,xMax,y) ;
 
-    _x->setVal(x1) ; double f1x1 = _pdf1->getVal(_nset) ;
-    _x->setVal(x2) ; double f2x2 = _pdf2->getVal(_nset) ;
+    _x->setVal(x1);
+    double f1x1 = _pdf1->getVal(_nset.get());
+    _x->setVal(x2);
+    double f2x2 = _pdf2->getVal(_nset.get());
     double fbarX = f1x1*f2x2 / ( _alpha->getVal()*f2x2 + (1-_alpha->getVal())*f1x1 ) ;
 
     dIter->Next() ;
@@ -481,7 +476,7 @@ void RooIntegralMorph::MorphCacheElem::fillGap(Int_t ixlo, Int_t ixhi, double sp
 
 
   // Policy: If centration quality is better than 1% OR better than 1/10 of a bin, fill interval with linear interpolation
-  if (fabs(cq)<0.01 || fabs(cq*(ixhi-ixlo))<0.1 || ymid<_ycutoff ) {
+  if (std::abs(cq)<0.01 || std::abs(cq*(ixhi-ixlo))<0.1 || ymid<_ycutoff ) {
 
     // Fill remaining gaps on either side with linear interpolation
     if (iX-ixlo>1) {
@@ -584,7 +579,7 @@ void RooIntegralMorph::MorphCacheElem::findRange()
 
     // Terminate if value of X no longer moves by >0.1 bin size
     double X = _alpha->getVal()*x1 + (1-_alpha->getVal())*x2 ;
-    if (fabs(X-Xlast)/(xmax-xmin)<0.0001) {
+    if (std::abs(X-Xlast)/(xmax-xmin)<0.0001) {
       break ;
     }
     Xlast=X ;
@@ -621,7 +616,7 @@ void RooIntegralMorph::MorphCacheElem::findRange()
 
     // Terminate if value of X no longer moves by >0.1 bin size
     double X = _alpha->getVal()*x1 + (1-_alpha->getVal())*x2 ;
-    if (fabs(X-Xlast)/(xmax-xmin)<0.0001) {
+    if (std::abs(X-Xlast)/(xmax-xmin)<0.0001) {
       break ;
     }
     Xlast=X ;

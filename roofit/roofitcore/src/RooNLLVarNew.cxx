@@ -62,6 +62,11 @@ RooArgSet getObs(RooAbsArg const &arg, RooArgSet const &observables)
    return out;
 }
 
+RooRealVar *dummyVar(const char *name)
+{
+   return new RooRealVar(name, name, 1.0);
+}
+
 } // namespace
 
 /** Construct a RooNLLVarNew
@@ -72,41 +77,20 @@ RooArgSet getObs(RooAbsArg const &arg, RooArgSet const &observables)
 \param isExtended Set to true if this is an extended fit
 **/
 RooNLLVarNew::RooNLLVarNew(const char *name, const char *title, RooAbsPdf &pdf, RooArgSet const &observables,
-                           bool isExtended, RooFit::OffsetMode offsetMode, bool binnedL)
+                           bool isExtended, RooFit::OffsetMode offsetMode)
    : RooAbsReal(name, title), _pdf{"pdf", "pdf", this, pdf}, _observables{getObs(pdf, observables)},
-     _isExtended{isExtended}, _binnedL{binnedL},
-     _weightVar{"weightVar", "weightVar", this, *new RooRealVar(weightVarName, weightVarName, 1.0), true, false, true},
-     _weightSquaredVar{weightVarNameSumW2,
-                       weightVarNameSumW2,
-                       this,
-                       *new RooRealVar("weightSquardVar", "weightSquaredVar", 1.0),
-                       true,
-                       false,
-                       true}
+     _isExtended{isExtended}, _binnedL{pdf.getAttribute("BinnedLikelihoodActive")},
+     _weightVar{"weightVar", "weightVar", this, *dummyVar(weightVarName), true, false, true},
+     _weightSquaredVar{weightVarNameSumW2, weightVarNameSumW2, this, *dummyVar("weightSquardVar"), true, false, true},
+     _binVolumeVar{"binVolumeVar", "binVolumeVar", this, *dummyVar("_bin_volume"), true, false, true}
 {
    if (_binnedL) {
-      if (_observables.size() != 1) {
-         throw std::runtime_error("BinnedPdf optimization only works with a 1D pdf.");
-      } else {
-         auto *var = static_cast<RooRealVar *>(_observables.first());
-         std::list<double> *boundaries = pdf.binBoundaries(*var, var->getMin(), var->getMax());
-         std::list<double>::iterator biter = boundaries->begin();
-         _binw.resize(boundaries->size() - 1);
-         double lastBound = (*biter);
-         ++biter;
-         int ibin = 0;
-         while (biter != boundaries->end()) {
-            _binw[ibin] = (*biter) - lastBound;
-            lastBound = (*biter);
-            ibin++;
-            ++biter;
-         }
-      }
+      fillBinWidthsFromPdfBoundaries(pdf);
    }
 
    resetWeightVarNames();
    enableOffsetting(offsetMode == RooFit::OffsetMode::Initial);
-   // TODO: implement template offsetting mode as well
+   enableBinOffsetting(offsetMode == RooFit::OffsetMode::Bin);
 }
 
 RooNLLVarNew::RooNLLVarNew(const RooNLLVarNew &other, const char *name)
@@ -116,6 +100,32 @@ RooNLLVarNew::RooNLLVarNew(const RooNLLVarNew &other, const char *name)
      _weightVar{"weightVar", this, other._weightVar}, _weightSquaredVar{"weightSquaredVar", this,
                                                                         other._weightSquaredVar}
 {
+}
+
+void RooNLLVarNew::fillBinWidthsFromPdfBoundaries(RooAbsReal const &pdf)
+{
+   // Check if the bin widths were already filled
+   if (!_binw.empty()) {
+      return;
+   }
+
+   if (_observables.size() != 1) {
+      throw std::runtime_error("BinnedPdf optimization only works with a 1D pdf.");
+   } else {
+      auto *var = static_cast<RooRealVar *>(_observables.first());
+      std::list<double> *boundaries = pdf.binBoundaries(*var, var->getMin(), var->getMax());
+      std::list<double>::iterator biter = boundaries->begin();
+      _binw.resize(boundaries->size() - 1);
+      double lastBound = (*biter);
+      ++biter;
+      int ibin = 0;
+      while (biter != boundaries->end()) {
+         _binw[ibin] = (*biter) - lastBound;
+         lastBound = (*biter);
+         ibin++;
+         ++biter;
+      }
+   }
 }
 
 /** Compute multiple negative logs of propabilities
@@ -130,9 +140,10 @@ void RooNLLVarNew::computeBatch(cudaStream_t * /*stream*/, double *output, size_
 {
    std::size_t nEvents = dataMap.at(_pdf).size();
 
-   auto weights = dataMap.at(_weightVar);
-   auto weightsSumW2 = dataMap.at(_weightSquaredVar);
-   auto weightSpan = _weightSquared ? weightsSumW2 : weights;
+   RooSpan<const double> weights = dataMap.at(_weightVar);
+   RooSpan<const double> weightsSumW2 = dataMap.at(_weightSquaredVar);
+   RooSpan<const double> weightSpan = _weightSquared ? weightsSumW2 : weights;
+   RooSpan<const double> binVolumes = _doBinOffset ? dataMap.at(_binVolumeVar) : RooSpan<const double>{};
 
    if (_binnedL) {
       ROOT::Math::KahanSum<double> result{0.0};
@@ -175,6 +186,7 @@ void RooNLLVarNew::computeBatch(cudaStream_t * /*stream*/, double *output, size_
    (*_pdf).getLogProbabilities(probas, _logProbasBuffer.data());
 
    _sumWeight = weights.size() == 1 ? weights[0] * nEvents : kahanSum(weights);
+   const double logSumW = std::log(_sumWeight);
 
    if (_isExtended && _weightSquared && _sumWeight2 == 0.0) {
       _sumWeight2 = weights.size() == 1 ? weightsSumW2[0] * nEvents : kahanSum(weightsSumW2);
@@ -186,10 +198,17 @@ void RooNLLVarNew::computeBatch(cudaStream_t * /*stream*/, double *output, size_
    for (std::size_t i = 0; i < nEvents; ++i) {
 
       double eventWeight = weightSpan.size() > 1 ? weightSpan[i] : weightSpan[0];
+
       if (0. == eventWeight * eventWeight)
          continue;
 
-      const double term = -eventWeight * _logProbasBuffer[i];
+      double term = _logProbasBuffer[i];
+
+      if (_doBinOffset) {
+         term -= std::log(weights[i]) - std::log(binVolumes[i]) - logSumW;
+      }
+
+      term *= -eventWeight;
 
       kahanProb.Add(term);
       packedNaN.accumulate(term);
@@ -202,7 +221,7 @@ void RooNLLVarNew::computeBatch(cudaStream_t * /*stream*/, double *output, size_
 
    if (_isExtended) {
       double expected = _pdf->expectedEvents(&_observables);
-      kahanProb += _pdf->extendedTerm(_sumWeight, expected, _weightSquared ? _sumWeight2 : 0.0);
+      kahanProb += _pdf->extendedTerm(_sumWeight, expected, _weightSquared ? _sumWeight2 : 0.0, _doBinOffset);
    }
 
    output[0] = finalizeResult(std::move(kahanProb), _sumWeight);
@@ -210,54 +229,26 @@ void RooNLLVarNew::computeBatch(cudaStream_t * /*stream*/, double *output, size_
 
 void RooNLLVarNew::getParametersHook(const RooArgSet * /*nset*/, RooArgSet *params, bool /*stripDisconnected*/) const
 {
-   // strip away the observables and weights
-   params->remove(_observables, true, true);
-   params->remove(RooArgList{*_weightVar, *_weightSquaredVar}, true, true);
+   // strip away the special variables
+   params->remove(RooArgList{*_weightVar, *_weightSquaredVar, *_binVolumeVar}, true, true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Clones the PDF recursively and prefixes the names of all nodes, except for
-/// parameter nodes. Used for simultaneous fits.
-/// \return A RooArgSet with the new observable args.
+/// Sets the prefix for the special variables of this NLL, like weights or bin
+/// volumes.
 /// \param[in] prefix The prefix to add to the observables and weight names.
-RooArgSet RooNLLVarNew::prefixArgNames(std::string const &prefix)
+void RooNLLVarNew::setPrefix(std::string const &prefix)
 {
    _prefix = prefix;
 
-   std::unique_ptr<RooAbsReal> pdfClone = RooHelpers::cloneTreeWithSameParameters(*_pdf, &_observables);
-
-   redirectServers(RooArgList{*pdfClone});
-
-   RooArgSet parameters;
-   pdfClone->getParameters(&_observables, parameters);
-
-   _observables.clear();
-
-   RooArgSet nodes;
-   pdfClone->treeNodeServerList(&nodes);
-   for (RooAbsArg *arg : nodes) {
-      if (!parameters.find(*arg)) {
-         arg->SetName((prefix + arg->GetName()).c_str());
-         if (dynamic_cast<RooRealVar *>(arg)) {
-            // It's an observable
-            static_cast<RooRealVar *>(arg)->setConstant();
-            _observables.add(*arg);
-            arg->setAttribute("__obs__");
-         }
-      }
-   }
-
-   addOwnedComponents(std::move(pdfClone));
-
    resetWeightVarNames();
-
-   return _observables;
 }
 
 void RooNLLVarNew::resetWeightVarNames()
 {
    _weightVar->SetName((_prefix + weightVarName).c_str());
    _weightSquaredVar->SetName((_prefix + weightVarNameSumW2).c_str());
+   _binVolumeVar->SetName((_prefix + "_bin_volume").c_str());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -265,15 +256,6 @@ void RooNLLVarNew::resetWeightVarNames()
 void RooNLLVarNew::applyWeightSquared(bool flag)
 {
    _weightSquared = flag;
-}
-
-std::unique_ptr<RooArgSet>
-RooNLLVarNew::fillNormSetForServer(RooArgSet const & /*normSet*/, RooAbsArg const & /*server*/) const
-{
-   if (_binnedL) {
-      return std::make_unique<RooArgSet>();
-   }
-   return nullptr;
 }
 
 void RooNLLVarNew::enableOffsetting(bool flag)

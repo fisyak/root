@@ -16,11 +16,16 @@
 #include <utility> // std::pair
 #include <vector>
 
-#include <ROOT/RDF/RDatasetGroup.hxx>
+#include <ROOT/RDF/RSample.hxx>
 #include <ROOT/RFriendInfo.hxx>
 #include <RtypesCore.h> // Long64_t
 
 namespace ROOT {
+namespace Detail {
+namespace RDF {
+class RLoopManager;
+}
+} // namespace Detail
 namespace RDF {
 namespace Experimental {
 
@@ -29,6 +34,8 @@ namespace Experimental {
 \brief A dataset specification for RDataFrame.
 */
 class RDatasetSpec {
+   friend class ::ROOT::Detail::RDF::RLoopManager; // for MoveOutSamples
+
 public:
    struct REntryRange {
       Long64_t fBegin{0};
@@ -39,14 +46,16 @@ public:
    };
 
 private:
-   std::vector<RDatasetGroup> fDatasetGroups; ///< List of groups
+   std::vector<RSample> fSamples;             ///< List of samples
    ROOT::TreeUtils::RFriendInfo fFriendInfo;  ///< List of friends
    REntryRange fEntryRange; ///< Start (inclusive) and end (exclusive) entry for the dataset processing
+
+   std::vector<RSample> MoveOutSamples();
 
 public:
    RDatasetSpec() = default;
 
-   const std::vector<std::string> GetGroupNames() const;
+   const std::vector<std::string> GetSampleNames() const;
    const std::vector<std::string> GetTreeNames() const;
    const std::vector<std::string> GetFileNameGlobs() const;
    const std::vector<RMetaData> GetMetaData() const;
@@ -54,11 +63,7 @@ public:
    Long64_t GetEntryRangeBegin() const;
    Long64_t GetEntryRangeEnd() const;
 
-   /// \cond HIDDEN_SYMBOLS
-   const std::vector<RDatasetGroup> &GetDatasetGroups() const;
-   /// \endcond
-
-   RDatasetSpec &AddGroup(RDatasetGroup datasetGroup);
+   RDatasetSpec &AddSample(RSample sample);
 
    RDatasetSpec &
    WithGlobalFriends(const std::string &treeName, const std::string &fileNameGlob, const std::string &alias = "");

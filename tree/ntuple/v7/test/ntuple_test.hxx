@@ -34,6 +34,11 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+// Backward compatibility for gtest version < 1.10.0
+#ifndef TYPED_TEST_SUITE
+#define TYPED_TEST_SUITE TYPED_TEST_CASE
+#endif
+
 #include "CustomStruct.hxx"
 
 #include <array>
@@ -59,6 +64,7 @@ using RColumnModel = ROOT::Experimental::RColumnModel;
 using RClusterIndex = ROOT::Experimental::RClusterIndex;
 using RClusterDescriptorBuilder = ROOT::Experimental::RClusterDescriptorBuilder;
 using RClusterGroupDescriptorBuilder = ROOT::Experimental::RClusterGroupDescriptorBuilder;
+using RColumnDescriptorBuilder = ROOT::Experimental::RColumnDescriptorBuilder;
 using RFieldDescriptorBuilder = ROOT::Experimental::RFieldDescriptorBuilder;
 using RException = ROOT::Experimental::RException;
 template <class T>

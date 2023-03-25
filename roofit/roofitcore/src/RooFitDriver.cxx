@@ -42,8 +42,6 @@ RooAbsPdf::fitTo() is called and gets destroyed when the fitting ends.
 #include "RooFit/CUDAHelpers.h"
 #include <RooSimultaneous.h>
 
-#include "NormalizationHelpers.h"
-
 #include <TList.h>
 
 #include <iomanip>
@@ -116,13 +114,11 @@ struct NodeInfo {
 ///
 /// \param[in] absReal The RooAbsReal object that sits on top of the
 ///            computation graph that we want to evaluate.
-/// \param[in] normSet Normalization set for the evaluation
 /// \param[in] batchMode The computation mode, accepted values are
 ///            `RooBatchCompute::Cpu` and `RooBatchCompute::Cuda`.
-RooFitDriver::RooFitDriver(const RooAbsReal &absReal, RooArgSet const &normSet, RooFit::BatchModeOption batchMode)
-   : _batchMode{batchMode}
+RooFitDriver::RooFitDriver(const RooAbsReal &absReal, RooFit::BatchModeOption batchMode)
+   : _topNode{const_cast<RooAbsReal &>(absReal)}, _batchMode{batchMode}
 {
-   _integralUnfolder = std::make_unique<RooFit::NormalizationIntegralUnfolder>(absReal, normSet);
 
    // Initialize RooBatchCompute
    RooBatchCompute::init();
@@ -130,17 +126,8 @@ RooFitDriver::RooFitDriver(const RooAbsReal &absReal, RooArgSet const &normSet, 
    // Some checks and logging of used architectures
    RooFit::BatchModeHelpers::logArchitectureInfo(_batchMode);
 
-   // Get the set of nodes in the computation graph. Do the detour via
-   // RooArgList to avoid deduplication done after adding each element.
-   RooArgList serverList;
-   topNode().treeNodeServerList(&serverList, nullptr, true, true, false, true);
-   // If we fill the servers in reverse order, they are approximately in
-   // topological order so we save a bit of work in sortTopologically().
    RooArgSet serverSet;
-   serverSet.add(serverList.rbegin(), serverList.rend(), /*silent=*/true);
-   // Sort nodes topologically: the servers of any node will be before that
-   // node in the collection.
-   serverSet.sortTopologically();
+   RooHelpers::getSortedComputationGraph(topNode(), serverSet);
 
    _dataMapCPU.resize(serverSet.size());
    _dataMapCUDA.resize(serverSet.size());
@@ -196,10 +183,11 @@ RooFitDriver::RooFitDriver(const RooAbsReal &absReal, RooArgSet const &normSet, 
 }
 
 void RooFitDriver::setData(RooAbsData const &data, std::string const &rangeName, RooSimultaneous const *simPdf,
-                           bool splitRange, bool skipZeroWeights, bool takeGlobalObservablesFromData)
+                           bool skipZeroWeights, bool takeGlobalObservablesFromData)
 {
    std::vector<std::pair<std::string, RooAbsData const *>> datas;
    std::vector<bool> isBinnedL;
+   bool splitRange = false;
 
    if (simPdf) {
       _splittedDataSets.clear();
@@ -211,10 +199,11 @@ void RooFitDriver::setData(RooAbsData const &data, std::string const &rangeName,
             continue;
          }
          datas.emplace_back(std::string("_") + d->GetName() + "_", d);
-         isBinnedL.emplace_back(RooHelpers::getBinnedL(*simComponent).isBinnedL);
+         isBinnedL.emplace_back(simComponent->getAttribute("BinnedLikelihoodActive"));
          // The dataset need to be kept alive because the datamap points to their content
          _splittedDataSets.emplace_back(d);
       }
+      splitRange = simPdf->getAttribute("SplitRange");
    } else {
       datas.emplace_back("", &data);
       isBinnedL.emplace_back(false);
@@ -801,7 +790,7 @@ void RooFitDriver::setOperMode(RooAbsArg *arg, RooAbsArg::OperMode opMode)
 
 RooAbsReal &RooFitDriver::topNode() const
 {
-   return static_cast<RooAbsReal &>(_integralUnfolder->arg());
+   return _topNode;
 }
 
 void RooFitDriver::print(std::ostream &os) const

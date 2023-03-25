@@ -1,6 +1,6 @@
 import { BIT, isArrayProto, isRootCollection, isObject, isFunc, isStr, getMethods,
          create, createHistogram, createTGraph,
-         clTObject, clTObjString, clTHashList, clTPolyMarker3D, clTH1, clTH2, clTH3 } from './core.mjs';
+         clTObject, clTObjString, clTHashList, clTPolyMarker3D, clTH1, clTH2, clTH3, kNoStats } from './core.mjs';
 import { kChar, kShort, kInt, kFloat,
          kCharStar, kDouble, kDouble32,
          kUChar, kUShort, kUInt,
@@ -290,7 +290,7 @@ function getTreeBranch(tree, id) {
    if (!Number.isInteger(id)) return;
    let res, seq = 0;
    function scan(obj) {
-      if (obj && obj.fBranches)
+      if (obj?.fBranches)
          obj.fBranches.arr.forEach(br => {
             if (seq++ === id) res = br;
             if (!res) scan(br);
@@ -1050,7 +1050,7 @@ class TDrawSelector extends TSelector {
       res.k = res.nbins / (res.max - res.min);
 
       res.GetBin = function(value) {
-         const bin = this.lbls ? this.lbls.indexOf(value) : Math.floor((value - this.min) * this.k);
+         const bin = this.lbls?.indexOf(value) ?? Math.floor((value - this.min) * this.k);
          return (bin < 0) ? 0 : ((bin > this.nbins) ? this.nbins + 1 : bin + 1);
       };
 
@@ -1098,7 +1098,6 @@ class TDrawSelector extends TSelector {
          this.y = y;
          this.z = z;
       } else {
-         let kNoStats = BIT(9);
          hist.fBits = hist.fBits | kNoStats;
       }
 

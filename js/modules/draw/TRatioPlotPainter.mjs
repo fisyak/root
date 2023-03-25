@@ -1,7 +1,7 @@
 import { create, clTPad, clTLine, isFunc } from '../core.mjs';
 import { ObjectPainter } from '../base/ObjectPainter.mjs';
 import { ensureTCanvas } from '../gpad/TCanvasPainter.mjs';
-import { drawTLine } from './more.mjs';
+import { TLinePainter } from './TLinePainter.mjs';
 
 
 /**
@@ -65,9 +65,11 @@ class TRatioPlotPainter extends ObjectPainter {
             up_fp._ratio_painter = this;
 
             up_fp.zoom = function(xmin,xmax,ymin,ymax,zmin,zmax) {
-               this._ratio_painter.setGridsRange(xmin, xmax);
-               this._ratio_low_fp.o_zoom(xmin,xmax);
-               return this.o_zoom(xmin,xmax,ymin,ymax,zmin,zmax);
+               return this.o_zoom(xmin,xmax,ymin,ymax,zmin,zmax).then(res => {
+                  this._ratio_painter.setGridsRange(up_fp.scale_xmin, up_fp.scale_xmax);
+                  this._ratio_low_fp.o_zoom(up_fp.scale_xmin, up_fp.scale_xmax);
+                  return res;
+               });
             }
 
             up_fp.o_sizeChanged = up_fp.sizeChanged;
@@ -118,7 +120,7 @@ class TRatioPlotPainter extends ObjectPainter {
                   ratio.fGridlines.push(line);
                   if (currpad === undefined)
                      currpad = this.selectCurrentPad(ratio.fLowerPad.fName);
-                  arr.push(drawTLine(this.getDom(), line));
+                  arr.push(TLinePainter.draw(this.getDom(), line));
                }
             });
          }

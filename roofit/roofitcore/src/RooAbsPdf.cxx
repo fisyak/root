@@ -22,7 +22,7 @@
 
 RooAbsPdf is the abstract interface for all probability density
 functions. The class provides hybrid analytical/numerical
-normalization for its implementations, error tracing and a MC
+normalization for its implementations, error tracing, and a Monte Carlo
 generator interface.
 
 ### A Minimal PDF Implementation
@@ -37,31 +37,31 @@ return the PDF's value (which does not need to be normalised).
 Although the normalization of a PDF is an integral part of a
 probability density function, normalization is treated separately
 in RooAbsPdf. The reason is that a RooAbsPdf object is more than a
-PDF: it can be a building block for a more complex, composite PDF
+PDF: it can be a building block for a more complex composite PDF
 if any of its variables are functions instead of variables. In
-such cases the normalization of the composite may not be simply the
-integral over the dependents of the top level PDF as these are
+such cases, the normalization of the composite PDF may not simply be
+integral over the dependents of the top-level PDF: these are
 functions with potentially non-trivial Jacobian terms themselves.
 \note Therefore, no explicit attempt should be made to normalize the
 function output in evaluate(). In particular, normalisation constants
 can be omitted to speed up the function evaluations, and included later
-in the integration of the PDF (see below), which is called rarely in
+in the integration of the PDF (see below), which is rarely called in
 comparison to the `evaluate()` function.
 
 In addition, RooAbsPdf objects do not have a static concept of what
-variables are parameters and what variables are dependents (which
+variables are parameters, and what variables are dependents (which
 need to be integrated over for a correct PDF normalization).
 Instead, the choice of normalization is always specified each time a
 normalized value is requested from the PDF via the getVal()
 method.
 
 RooAbsPdf manages the entire normalization logic of each PDF with
-help of a RooRealIntegral object, which coordinates the integration
+the help of a RooRealIntegral object, which coordinates the integration
 of a given choice of normalization. By default, RooRealIntegral will
-perform a fully numeric integration of all dependents. However,
+perform an entirely numeric integration of all dependents. However,
 PDFs can advertise one or more (partial) analytical integrals of
 their function, and these will be used by RooRealIntegral, if it
-determines that this is safe (i.e. no hidden Jacobian terms,
+determines that this is safe (i.e., no hidden Jacobian terms,
 multiplication with other PDFs that have one or more dependents in
 commen etc).
 
@@ -75,7 +75,7 @@ should return the analytical integrals that are supported. `integSet`
 is the set of dependents for which integration is requested. The
 function should copy the subset of dependents it can analytically
 integrate to `anaIntSet`, and return a unique identification code for
-this integration configuration.  If no integration can be
+this integration configuration. If no integration can be
 performed, zero should be returned. Second,
 
 ```
@@ -89,8 +89,8 @@ codes returned by `getAnalyticalIntegral()`, except code zero.
 The integration range for each dependent to be integrated can
 be obtained from the dependent's proxy functions `min()` and
 `max()`. Never call these proxy functions for any proxy not known to
-be a dependent via the integration code.  Doing so may be
-ill-defined, e.g. in case the proxy holds a function, and will
+be a dependent via the integration code. Doing so may be
+ill-defined, e.g., in case the proxy holds a function, and will
 trigger an assert. Integrated category dependents should always be
 summed over all of their states.
 
@@ -119,7 +119,7 @@ function implements the actual generator for the advertised observables.
 The generated dependent values should be stored in the proxy
 objects. For this, the assignment operator can be used (i.e. `xProxy
 = 3.0` ). Never call assign to any proxy not known to be a dependent
-via the generation code.  Doing so may be ill-defined, e.g. in case
+via the generation code. Doing so may be ill-defined, e.g. in case
 the proxy holds a function, and will trigger an assert.
 
 
@@ -136,6 +136,7 @@ called for each data event.
 
 #include "RooAbsPdf.h"
 
+#include "RooNormalizedPdf.h"
 #include "RooMsgService.h"
 #include "RooDataSet.h"
 #include "RooArgSet.h"
@@ -427,11 +428,11 @@ double RooAbsPdf::getValV(const RooArgSet* nset) const
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Analytical integral with normalization (see RooAbsReal::analyticalIntegralWN() for further information)
+/// Analytical integral with normalization (see RooAbsReal::analyticalIntegralWN() for further information).
 ///
-/// This function applies the normalization specified by 'normSet' to the integral returned
+/// This function applies the normalization specified by `normSet` to the integral returned
 /// by RooAbsReal::analyticalIntegral(). The passthrough scenario (code=0) is also changed
-/// to return a normalized answer
+/// to return a normalized answer.
 
 double RooAbsPdf::analyticalIntegralWN(Int_t code, const RooArgSet* normSet, const char* rangeName) const
 {
@@ -765,6 +766,13 @@ void RooAbsPdf::getLogProbabilities(RooSpan<const double> pdfValues, double * ou
 /// \param[in] observedSumW2 The number of observed events when weighting with
 ///            squared weights. If non-zero, the weight-squared error
 ///            correction is applied to the extended term.
+/// \param[in] doOffset Offset the extended term by a counterterm where the
+///            expected number of events equals the observed number of events.
+///            This constant shift results in a term closer to zero that is
+///            approximately chi-square distributed. It is useful to do this
+///            also when summing multiple NLL terms to avoid numeric precision
+///            loss that happens if you sum multiple terms of different orders
+///            of magnitude.
 ///
 /// The weight-squared error correction works as follows:
 /// adjust poisson such that
@@ -789,26 +797,26 @@ void RooAbsPdf::getLogProbabilities(RooSpan<const double> pdfValues, double * ou
 ///
 ///  Since the weights are constants in the likelihood we can use \f$\log{N_\mathrm{expect}}\f$ instead of \f$\log{W_\mathrm{expect}}\f$.
 ///
-/// See also RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared),
+/// See also RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared, bool doOffset),
 /// which takes a dataset to extract \f$N_\mathrm{observed}\f$ and the
 /// normalization set.
-double RooAbsPdf::extendedTerm(double sumEntries, RooArgSet const* nset, double sumEntriesW2) const
+double RooAbsPdf::extendedTerm(double sumEntries, RooArgSet const* nset, double sumEntriesW2, bool doOffset) const
 {
-  return extendedTerm(sumEntries, expectedEvents(nset), sumEntriesW2);
+  return extendedTerm(sumEntries, expectedEvents(nset), sumEntriesW2, doOffset);
 }
 
-double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEntriesW2) const
+double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEntriesW2, bool doOffset) const
 {
   // check if this PDF supports extended maximum likelihood fits
   if(!canBeExtended()) {
-    coutE(InputArguments) << fName << ": this PDF does not support extended maximum likelihood"
-         << endl;
-    return 0;
+    coutE(InputArguments) << GetName() << ": this PDF does not support extended maximum likelihood"
+         << std::endl;
+    return 0.0;
   }
 
-  if(expected < 0) {
-    coutE(InputArguments) << fName << ": calculated negative expected events: " << expected
-         << endl;
+  if(expected < 0.0) {
+    coutE(InputArguments) << GetName() << ": calculated negative expected events: " << expected
+         << std::endl;
     logEvalError("extendedTerm #expected events is <0 return a  NaN");
     return TMath::QuietNaN();
   }
@@ -816,7 +824,7 @@ double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEnt
 
   // Explicitly handle case Nobs=Nexp=0
   if (std::abs(expected)<1e-10 && std::abs(sumEntries)<1e-10) {
-    return 0 ;
+    return 0.0;
   }
 
   // Check for errors in Nexpected
@@ -825,7 +833,9 @@ double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEnt
     return TMath::QuietNaN() ;
   }
 
-  double extra = expected - sumEntries*log(expected);
+  double extra = doOffset
+      ? (expected - sumEntries) - sumEntries * (std::log(expected) - std::log(sumEntries))
+      : expected - sumEntries * std::log(expected);
 
   if(sumEntriesW2 != 0.0) {
     extra *= sumEntriesW2 / sumEntries;
@@ -839,7 +849,7 @@ double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEnt
 /// of this PDF for the given number of observed events.
 ///
 /// This function is a wrapper around
-/// RooAbsPdf::extendedTerm(double observed, const RooArgSet* nset), where the
+/// RooAbsPdf::extendedTerm(double, const RooArgSet*, double, bool), where the
 /// number of observed events and observables to be used as the normalization
 /// set for the pdf is extracted from a RooAbsData.
 ///
@@ -856,14 +866,15 @@ double RooAbsPdf::extendedTerm(double sumEntries, double expected, double sumEnt
 ///            can be passed to RooAbsPdf::fitTo(RooAbsData&, const RooLinkedList&)
 ///            (see the documentation of said function to learn more about the
 ///            interpretation of fits with squared weights).
+/// \param[in] doOffset See RooAbsPdf::extendedTerm(double, RooArgSet const*, double bool).
 
-double RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared) const {
+double RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared, bool doOffset) const {
   double sumW = data.sumEntries();
   double sumW2 = 0.0;
   if (weightSquared) {
     sumW2 = data.sumEntriesW2();
   }
-  return extendedTerm(sumW, data.get(), sumW2);
+  return extendedTerm(sumW, data.get(), sumW2, doOffset);
 }
 
 
@@ -925,9 +936,10 @@ double RooAbsPdf::extendedTerm(RooAbsData const& data, bool weightSquared) const
 /// <tr><td> `GlobalObservablesTag(const char* tagName)` <td> Define the set of normalization observables to be used for the constraint terms by
 ///                                                         a string attribute associated with pdf observables that match the given tagName.
 /// <tr><td> `Verbose(bool flag)`           <td> Controls RooFit informational messages in likelihood construction
-/// <tr><td> `CloneData(bool flag)`            <td> Use clone of dataset in NLL (default is true)
+/// <tr><td> `CloneData(bool flag)`            <td> Use clone of dataset in NLL (default is true).
+///                                                 \warning Deprecated option that is ignored. It is up to the implementation of the NLL creation method if the data is cloned or not.
 /// <tr><td> `Offset(std::string const& mode)` <td> Likelihood offsetting mode. Can be either:
-///                                                 - `"off"` (default): no offsetting
+///                                                 - `"none"` (default): no offsetting
 ///                                                 - `"initial"`: Offset likelihood by initial value (so that starting value of FCN in minuit is zero).
 ///                                                    This can improve numeric stability in simultaneous fits with components with large likelihood values.
 ///                                                 - `"bin"`: Offset by the likelihood bin-by-bin with a template histogram model based on the obersved data.
@@ -1032,9 +1044,9 @@ RooAbsReal* RooAbsPdf::createNLL(RooAbsData& data, const RooLinkedList& cmdList)
   const bool ext = interpretExtendedCmdArg(*this, pc.getInt("ext")) ;
   Int_t numcpu   = pc.getInt("numcpu") ;
   Int_t numcpu_strategy = pc.getInt("interleave");
-  // strategy 3 works only for RooSimultaneus.
+  // strategy 3 works only for RooSimultaneous.
   if (numcpu_strategy==3 && !this->InheritsFrom("RooSimultaneous") ) {
-     coutW(Minimization) << "Cannot use a NumCpu Strategy = 3 when the pdf is not a RooSimultaneus, "
+     coutW(Minimization) << "Cannot use a NumCpu Strategy = 3 when the pdf is not a RooSimultaneous, "
                             "falling back to default strategy = 0"  << endl;
      numcpu_strategy = 0;
   }
@@ -1045,6 +1057,12 @@ RooAbsReal* RooAbsPdf::createNLL(RooAbsData& data, const RooLinkedList& cmdList)
   Int_t optConst = pc.getInt("optConst") ;
   Int_t cloneData = pc.getInt("cloneData") ;
   auto offset = static_cast<RooFit::OffsetMode>(pc.getInt("doOffset"));
+
+  if(offset == RooFit::OffsetMode::Bin && dynamic_cast<RooDataSet*>(&data)) {
+    coutE(Minimization) << "The Offset(\"bin\") option doesn't suppot fits to RooDataSet yet, only to RooDataHist."
+                           " Falling back to no offsetting."  << endl;
+    offset = RooFit::OffsetMode::None;
+  }
 
   // If no explicit cloneData command is specified, cloneData is set to true if optimization is activated
   if (cloneData==2) {
@@ -1105,7 +1123,28 @@ RooAbsReal* RooAbsPdf::createNLL(RooAbsData& data, const RooLinkedList& cmdList)
 
   // Construct BatchModeNLL if requested
   if (batchMode != RooFit::BatchModeOption::Off && batchMode != RooFit::BatchModeOption::Old) {
-    std::unique_ptr<RooAbsPdf> pdfClone = RooHelpers::cloneTreeWithSameParameters(*this, data.get());
+
+    // Set the normalization range. We need to do it now, because it will be
+    // considered in `compileForNormSet`.
+    TString oldNormRange = _normRange;
+    setNormRange(rangeName);
+
+    auto normSet = new RooArgSet; // INTENTIONAL LEAK FOR NOW!
+    getObservables(data.get(), *normSet);
+    normSet->remove(projDeps, true, true);
+
+    this->setAttribute("SplitRange", splitRange);
+    this->setStringAttribute("RangeName", rangeName);
+
+    std::unique_ptr<RooAbsPdf> pdfClone = RooFit::Detail::compileForNormSet(*this, *normSet);
+
+    // reset attributes
+    this->setAttribute("SplitRange", false);
+    this->setStringAttribute("RangeName", nullptr);
+
+    // Reset the normalization range
+    _normRange = oldNormRange;
+
     if (addCoefRangeName) {
        cxcoutI(Fitting) << "RooAbsPdf::fitTo(" << GetName()
                         << ") fixing interpretation of coefficients of any component to range "
@@ -1113,16 +1152,21 @@ RooAbsReal* RooAbsPdf::createNLL(RooAbsData& data, const RooLinkedList& cmdList)
        pdfClone->fixAddCoefRange(addCoefRangeName, false);
     }
 
+    std::unique_ptr<RooAbsReal> compiledConstr;
+    if(std::unique_ptr<RooAbsReal> constr = createConstr(*this)) {
+       compiledConstr = RooFit::Detail::compileForNormSet(*constr, *data.get());
+       compiledConstr->addOwnedComponents(std::move(constr));
+    }
+
     return RooFit::BatchModeHelpers::createNLL(std::move(pdfClone),
                                                data,
-                                               createConstr(*pdfClone, /*removeConstraintsFromPdf=*/true),
+                                               std::move(compiledConstr),
                                                rangeName ? rangeName : "",
                                                projDeps,
                                                ext,
                                                pc.getDouble("IntegrateBins"),
                                                batchMode,
                                                offset,
-                                               static_cast<bool>(splitRange),
                                                takeGlobalObservablesFromData).release();
   }
 
@@ -1142,7 +1186,7 @@ RooAbsReal* RooAbsPdf::createNLL(RooAbsData& data, const RooLinkedList& cmdList)
   cfg.rangeName = rangeName ? rangeName : "";
   auto nllVar = std::make_unique<RooNLLVar>(baseName.c_str(),"-log(likelihood)",*this,data,projDeps, ext, cfg);
   nllVar->batchMode(batchMode == RooFit::BatchModeOption::Old);
-  nllVar->templateRatioOffset(offset == RooFit::OffsetMode::Bin);
+  nllVar->enableBinOffsetting(offset == RooFit::OffsetMode::Bin);
   nll = std::move(nllVar);
   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors) ;
 
@@ -1367,6 +1411,7 @@ std::unique_ptr<RooFitResult> RooAbsPdf::minimizeNLL(RooAbsReal & nll,
   minimizerConfig.enableParallelDescent = cfg.enableParallelDescent;
   minimizerConfig.parallelize = cfg.parallelize;
   minimizerConfig.timingAnalysis = cfg.timingAnalysis;
+  minimizerConfig.offsetting = cfg.doOffset;
   RooMinimizer m(nll, minimizerConfig);
 
   m.setMinimizerType(cfg.minType.c_str());
@@ -1570,10 +1615,15 @@ RooFitResult* RooAbsPdf::fitTo(RooAbsData& data, const RooLinkedList& cmdList)
   RooCmdConfig pc(Form("RooAbsPdf::fitTo(%s)",GetName())) ;
 
   RooLinkedList fitCmdList(cmdList) ;
-  RooLinkedList nllCmdList = pc.filterCmdList(fitCmdList,"ProjectedObservables,Extended,Range,"
+  std::string nllCmdListString = "ProjectedObservables,Extended,Range,"
       "RangeWithName,SumCoefRange,NumCPU,SplitRange,Constrained,Constrain,ExternalConstraints,"
-      "CloneData,GlobalObservables,GlobalObservablesSource,GlobalObservablesTag,OffsetLikelihood,"
-      "BatchMode,IntegrateBins,ModularL");
+      "CloneData,GlobalObservables,GlobalObservablesSource,GlobalObservablesTag,"
+      "BatchMode,IntegrateBins,ModularL";
+
+  if (((RooCmdArg*)cmdList.FindObject("ModularL")) && !((RooCmdArg*)cmdList.FindObject("ModularL"))->getInt(0))
+    nllCmdListString += ",OffsetLikelihood";
+
+  RooLinkedList nllCmdList = pc.filterCmdList(fitCmdList, nllCmdListString.c_str());
 
   // Default-initialized instance of MinimizerConfig to get the default
   // minimizer parameter values.
@@ -1612,7 +1662,7 @@ RooFitResult* RooAbsPdf::fitTo(RooAbsData& data, const RooLinkedList& cmdList)
     return 0 ;
   }
 
-  // TimingAnalysis works only for RooSimultaneus.
+  // TimingAnalysis works only for RooSimultaneous.
   if (pc.getInt("timingAnalysis") && !this->InheritsFrom("RooSimultaneous") ) {
      coutW(Minimization) << "The timingAnalysis feature was built for minimization with RooSimulteneous "
                             "and is not implemented for other PDF's. Please create a RooSimultenous to "
@@ -1646,13 +1696,9 @@ RooFitResult* RooAbsPdf::fitTo(RooAbsData& data, const RooLinkedList& cmdList)
     }
     else {
       size_t step = data.numEntries()/nEvents;
-      RooArgSet tinyVars(*data.get());
-      RooRealVar weight("weight","weight",1);
 
-      if (data.isWeighted()) tinyVars.add(weight);
-
-      RooDataSet tiny("tiny", "tiny", tinyVars,
-          data.isWeighted() ? RooFit::WeightVar(weight) : RooCmdArg());
+      RooDataSet tiny("tiny", "tiny", *data.get(),
+          data.isWeighted() ? RooFit::WeightVar() : RooCmdArg());
 
       for (int i=0; i<data.numEntries(); i+=step)
       {
@@ -1700,6 +1746,7 @@ RooFitResult* RooAbsPdf::fitTo(RooAbsData& data, const RooLinkedList& cmdList)
   cfg.minosSet = pc.getSet("minosSet");
   cfg.minType = pc.getString("mintype","");
   cfg.minAlg = pc.getString("minalg","minuit");
+  cfg.doOffset = pc.getInt("doOffset");
   cfg.parallelize = pc.getInt("parallelize");
   cfg.enableParallelGradient = pc.getInt("enableParallelGradient");
   cfg.enableParallelDescent = pc.getInt("enableParallelDescent");
@@ -1849,9 +1896,9 @@ void RooAbsPdf::printValue(ostream& os) const
   getVal() ;
 
   if (_norm) {
-    os << evaluate() << "/" << _norm->getVal() ;
+    os << getVal() << "/" << _norm->getVal() ;
   } else {
-    os << evaluate() ;
+    os << getVal();
   }
 }
 
@@ -2356,8 +2403,7 @@ bool RooAbsPdf::isDirectGenSafe(const RooAbsArg& arg) const
 /// | `Name(const char* name)`  | Name of the output dataset
 /// | `Verbose(bool flag)`      | Print informational messages during event generation
 /// | `NumEvents(int nevt)`     | Generate specified number of events
-/// | `Extended()`              | The actual number of events generated will be sampled from a Poisson distribution with mu=nevt.
-/// This can be *much* faster for peaked PDFs, but the number of events is not exactly what was requested.
+/// | `Extended()`              | The actual number of events generated will be sampled from a Poisson distribution with mu=nevt. This can be *much* faster for peaked PDFs, but the number of events is not exactly what was requested.
 /// | `ExpectedData()`          | Return a binned dataset _without_ statistical fluctuations (also aliased as Asimov())
 ///
 
@@ -2503,7 +2549,7 @@ RooDataHist *RooAbsPdf::generateBinned(const RooArgSet &whatVars, double nEvents
     // Second pass for regular mode - Trim/Extend dataset to exact number of entries
 
     // Calculate difference between what is generated so far and what is requested
-    Int_t nEvtExtra = abs(Int_t(nEvents)-histOutSum) ;
+    Int_t nEvtExtra = std::abs(Int_t(nEvents)-histOutSum) ;
     Int_t wgt = (histOutSum>nEvents) ? -1 : 1 ;
 
     // Perform simple binned accept/reject procedure to get to exact event count
@@ -3584,4 +3630,26 @@ bool RooAbsPdf::redirectServersHook(const RooAbsCollection & newServerList, bool
   // the right observables anymore. We need to reset it.
   setActiveNormSet(nullptr);
   return RooAbsReal::redirectServersHook(newServerList, mustReplaceAll, nameChange, isRecursiveStep);
+}
+
+
+std::unique_ptr<RooAbsArg>
+RooAbsPdf::compileForNormSet(RooArgSet const &normSet, RooFit::Detail::CompileContext &ctx) const
+{
+   if (normSet.empty() || selfNormalized()) {
+      return RooAbsReal::compileForNormSet(normSet, ctx);
+   }
+   std::unique_ptr<RooAbsPdf> pdfClone(static_cast<RooAbsPdf *>(this->Clone()));
+   ctx.compileServers(*pdfClone, normSet);
+
+   auto newArg = std::make_unique<RooNormalizedPdf>(*pdfClone, normSet);
+
+   // The direct servers are this pdf and the normalization integral, which
+   // don't need to be compiled further.
+   for (RooAbsArg *server : newArg->servers()) {
+      server->setAttribute("_COMPILED");
+   }
+   newArg->setAttribute("_COMPILED");
+   newArg->addOwnedComponents(std::move(pdfClone));
+   return newArg;
 }

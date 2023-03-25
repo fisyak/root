@@ -167,11 +167,14 @@ namespace RooFit {
 
 
   // RooDataSet::ctor arguments
-  RooCmdArg WeightVar(const char* name, bool reinterpretAsWeight) { return RooCmdArg("WeightVarName",reinterpretAsWeight,0,0,0,name,0,0,0) ; }
+  RooCmdArg WeightVar(const char* name, bool reinterpretAsWeight) {
+      if(name == nullptr) return RooCmdArg::none(); // Passing a nullptr name means no weight variable
+      return RooCmdArg("WeightVarName",reinterpretAsWeight,0,0,0,name,0,0,0) ;
+  }
   RooCmdArg WeightVar(const RooRealVar& arg, bool reinterpretAsWeight)  { return RooCmdArg("WeightVar",reinterpretAsWeight,0,0,0,0,0,&arg,0) ; }
   RooCmdArg Link(const char* state, RooAbsData& data)   { return RooCmdArg("LinkDataSlice",0,0,0,0,state,0,&data,0) ;}
-  RooCmdArg Import(const char* state, RooDataSet& data) { return RooCmdArg("ImportDataSlice",0,0,0,0,state,0,&data,0) ; }
-  RooCmdArg Import(RooDataSet& data)                    { return RooCmdArg("ImportData",0,0,0,0,0,0,&data,0) ; }
+  RooCmdArg Import(const char* state, RooAbsData& data) { return RooCmdArg("ImportDataSlice",0,0,0,0,state,0,&data,0) ; }
+  RooCmdArg Import(RooAbsData& data)                    { return RooCmdArg("ImportData",0,0,0,0,0,0,&data,0) ; }
   RooCmdArg Import(TTree& tree)                         { return RooCmdArg("ImportTree",0,0,0,0,0,0,reinterpret_cast<TObject*>(&tree),0) ; }
   RooCmdArg ImportFromFile(const char* fname, const char* tname){ return RooCmdArg("ImportFromFile",0,0,0,0,fname,tname,0,0) ; }
   RooCmdArg StoreError(const RooArgSet& aset)           { return RooCmdArg("StoreError",0,0,0,0,0,0,0,0,0,0,&aset) ; }
@@ -275,15 +278,18 @@ namespace RooFit {
   RooCmdArg EvalErrorWall(bool flag)                   { return RooCmdArg("EvalErrorWall",flag,0,0,0,0,0,0,0) ; }
   RooCmdArg SumW2Error(bool flag)                      { return RooCmdArg("SumW2Error",flag,0,0,0,0,0,0,0) ; }
   RooCmdArg AsymptoticError(bool flag)                      { return RooCmdArg("AsymptoticError",flag,0,0,0,0,0,0,0) ; }
-  RooCmdArg CloneData(bool flag)                       { return RooCmdArg("CloneData",flag,0,0,0,0,0,0,0) ; }
+  RooCmdArg CloneData(bool flag)                       {
+      oocoutI(nullptr, InputArguments) << "The deprecated RooFit::CloneData(" << flag << ") option passed to createNLL() is ignored." << std::endl;
+      return RooCmdArg("CloneData",flag,0,0,0,0,0,0,0) ;
+  }
   RooCmdArg Integrate(bool flag)                       { return RooCmdArg("Integrate",flag,0,0,0,0,0,0,0) ; }
   RooCmdArg Minimizer(const char* type, const char* alg) { return RooCmdArg("Minimizer",0,0,0,0,type,alg,0,0) ; }
 
   RooCmdArg Offset(std::string const& mode) {
       std::string lower = mode;
       std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c){ return std::tolower(c); });
-      OffsetMode modeVal = OffsetMode::Off;
-      if(lower == "off") modeVal = OffsetMode::Off;
+      OffsetMode modeVal = OffsetMode::None;
+      if(lower == "none") modeVal = OffsetMode::None;
       else if(lower == "initial") modeVal = OffsetMode::Initial;
       else if(lower == "bin") modeVal = OffsetMode::Bin;
       return RooCmdArg("OffsetLikelihood", static_cast<int>(modeVal));

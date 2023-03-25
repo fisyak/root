@@ -105,7 +105,7 @@ public:
 
 
   ////////////////////////////////////////////////////////////////////////////////
-  /// As RooAbsPdf::generateBinned(const RooArgSet&, const RooCmdArg&,const RooCmdArg&, const RooCmdArg&,const RooCmdArg&, const RooCmdArg&,const RooCmdArg&)
+  /// As RooAbsPdf::generateBinned(const RooArgSet&, const RooCmdArg&,const RooCmdArg&, const RooCmdArg&,const RooCmdArg&, const RooCmdArg&,const RooCmdArg&) const.
   /// \param[in] whatVars set
   /// \param[in] nEvents How many events to generate
   /// \param arg1,arg2,arg3,arg4,arg5 ordered arguments
@@ -189,6 +189,7 @@ public:
       int doSumW2 = -1;
       int doAsymptotic = -1;
       int maxCalls = -1;
+      int doOffset = -1;
       int parallelize = 0;
       bool enableParallelGradient = true;
       bool enableParallelDescent = false;
@@ -299,9 +300,9 @@ public:
   static void verboseEval(Int_t stat) ;
   static int verboseEval() ;
 
-  double extendedTerm(double sumEntries, double expected, double sumEntriesW2=0.0) const;
-  double extendedTerm(double sumEntries, RooArgSet const* nset, double sumEntriesW2=0.0) const;
-  double extendedTerm(RooAbsData const& data, bool weightSquared) const;
+  double extendedTerm(double sumEntries, double expected, double sumEntriesW2=0.0, bool doOffset=false) const;
+  double extendedTerm(double sumEntries, RooArgSet const* nset, double sumEntriesW2=0.0, bool doOffset=false) const;
+  double extendedTerm(RooAbsData const& data, bool weightSquared, bool doOffset=false) const;
 
   void setNormRange(const char* rangeName) ;
   const char* normRange() const {
@@ -320,6 +321,8 @@ public:
 
   virtual RooAbsGenContext* autoGenContext(const RooArgSet &vars, const RooDataSet* prototype=nullptr, const RooArgSet* auxProto=nullptr,
                   bool verbose=false, bool autoBinned=true, const char* binnedTag="") const ;
+
+  std::unique_ptr<RooAbsArg> compileForNormSet(RooArgSet const &normSet, RooFit::Detail::CompileContext & ctx) const override;
 
 private:
 

@@ -15,11 +15,14 @@
 #include "cling/Utils/Output.h"
 #include "cling/Utils/Utils.h"
 
+#include <clang/Basic/TargetInfo.h>
 #include <clang/Basic/TargetOptions.h>
 #include <clang/Frontend/CompilerInstance.h>
 
 #include <llvm/ADT/Triple.h>
+#include <llvm/ExecutionEngine/JITLink/EHFrameSupport.h>
 #include <llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h>
+#include <llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h>
 #include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/IR/LLVMContext.h>
@@ -29,6 +32,7 @@
 #include <llvm/Target/TargetMachine.h>
 
 using namespace llvm;
+using namespace llvm::jitlink;
 using namespace llvm::orc;
 
 namespace {
@@ -185,6 +189,117 @@ namespace {
     bool needsToReserveAllocationSpace() override { return true; }
   };
 
+  /// A JITLinkMemoryManager for Cling that never frees its allocations.
+  class ClingJITLinkMemoryManager : public JITLinkMemoryManager {
+  public:
+    Expected<std::unique_ptr<Allocation>>
+    allocate(const JITLinkDylib* JD,
+             const SegmentsRequestMap& Request) override {
+      // A copy of InProcessMemoryManager::allocate with an empty implementation
+      // of IPMMAlloc::deallocate.
+
+      using AllocationMap = DenseMap<unsigned, sys::MemoryBlock>;
+
+      // Local class for allocation.
+      class IPMMAlloc : public Allocation {
+      public:
+        IPMMAlloc(AllocationMap SegBlocks) : SegBlocks(std::move(SegBlocks)) {}
+        MutableArrayRef<char> getWorkingMemory(ProtectionFlags Seg) override {
+          assert(SegBlocks.count(Seg) && "No allocation for segment");
+          return {static_cast<char*>(SegBlocks[Seg].base()),
+                  SegBlocks[Seg].allocatedSize()};
+        }
+        JITTargetAddress getTargetMemory(ProtectionFlags Seg) override {
+          assert(SegBlocks.count(Seg) && "No allocation for segment");
+          return pointerToJITTargetAddress(SegBlocks[Seg].base());
+        }
+        void finalizeAsync(FinalizeContinuation OnFinalize) override {
+          OnFinalize(applyProtections());
+        }
+        Error deallocate() override {
+          // Disabled until CallFunc is informed about unloading, and can
+          // re-generate the wrapper (if the decl is still available). See
+          // https://github.com/root-project/root/issues/10898
+          return Error::success();
+        }
+
+      private:
+        Error applyProtections() {
+          for (auto& KV : SegBlocks) {
+            auto& Prot = KV.first;
+            auto& Block = KV.second;
+            if (auto EC = sys::Memory::protectMappedMemory(Block, Prot))
+              return errorCodeToError(EC);
+            if (Prot & sys::Memory::MF_EXEC)
+              sys::Memory::InvalidateInstructionCache(Block.base(),
+                                                      Block.allocatedSize());
+          }
+          return Error::success();
+        }
+
+        AllocationMap SegBlocks;
+      };
+
+      if (!isPowerOf2_64((uint64_t)sys::Process::getPageSizeEstimate()))
+        return make_error<StringError>("Page size is not a power of 2",
+                                       inconvertibleErrorCode());
+
+      AllocationMap Blocks;
+      const sys::Memory::ProtectionFlags ReadWrite =
+          static_cast<sys::Memory::ProtectionFlags>(sys::Memory::MF_READ |
+                                                    sys::Memory::MF_WRITE);
+
+      // Compute the total number of pages to allocate.
+      size_t TotalSize = 0;
+      for (auto& KV : Request) {
+        const auto& Seg = KV.second;
+
+        if (Seg.getAlignment() > sys::Process::getPageSizeEstimate())
+          return make_error<StringError>("Cannot request higher than page "
+                                         "alignment",
+                                         inconvertibleErrorCode());
+
+        TotalSize = alignTo(TotalSize, sys::Process::getPageSizeEstimate());
+        TotalSize += Seg.getContentSize();
+        TotalSize += Seg.getZeroFillSize();
+      }
+
+      // Allocate one slab to cover all the segments.
+      std::error_code EC;
+      auto SlabRemaining =
+          sys::Memory::allocateMappedMemory(TotalSize, nullptr, ReadWrite, EC);
+
+      if (EC)
+        return errorCodeToError(EC);
+
+      // Allocate segment memory from the slab.
+      for (auto& KV : Request) {
+
+        const auto& Seg = KV.second;
+
+        uint64_t SegmentSize =
+            alignTo(Seg.getContentSize() + Seg.getZeroFillSize(),
+                    sys::Process::getPageSizeEstimate());
+        assert(SlabRemaining.allocatedSize() >= SegmentSize &&
+               "Mapping exceeds allocation");
+
+        sys::MemoryBlock SegMem(SlabRemaining.base(), SegmentSize);
+        SlabRemaining =
+            sys::MemoryBlock((char*)SlabRemaining.base() + SegmentSize,
+                             SlabRemaining.allocatedSize() - SegmentSize);
+
+        // Zero out the zero-fill memory.
+        memset(static_cast<char*>(SegMem.base()) + Seg.getContentSize(), 0,
+               Seg.getZeroFillSize());
+
+        // Record the block for this segment.
+        Blocks[KV.first] = std::move(SegMem);
+      }
+
+      return std::unique_ptr<InProcessMemoryManager::Allocation>(
+          new IPMMAlloc(std::move(Blocks)));
+    }
+  };
 
   /// A DynamicLibrarySearchGenerator that uses ResourceTracker to remember
   /// which symbols were resolved through dlsym during a transaction's reign.
@@ -262,8 +377,6 @@ Error RTDynamicLibrarySearchGenerator::tryToGenerate(
     JITDylibLookupFlags JDLookupFlags, const SymbolLookupSet &Symbols) {
   orc::SymbolMap NewSymbols;
 
-  bool HasGlobalPrefix = (GlobalPrefix != '\0');
-
   for (auto &KV : Symbols) {
     auto &Name = KV.first;
 
@@ -273,11 +386,10 @@ Error RTDynamicLibrarySearchGenerator::tryToGenerate(
     if (Allow && !Allow(Name))
       continue;
 
-    if (HasGlobalPrefix && (*Name).front() != GlobalPrefix)
-      continue;
+    bool StripGlobalPrefix = (GlobalPrefix != '\0' && (*Name).front() == GlobalPrefix);
 
-    std::string Tmp((*Name).data() + HasGlobalPrefix,
-                    (*Name).size() - HasGlobalPrefix);
+    std::string Tmp((*Name).data() + StripGlobalPrefix,
+                    (*Name).size() - StripGlobalPrefix);
     if (void *Addr = Dylib.getAddressOfSymbol(Tmp.c_str())) {
       NewSymbols[Name] = JITEvaluatedSymbol(
           static_cast<JITTargetAddress>(reinterpret_cast<uintptr_t>(Addr)),
@@ -291,67 +403,64 @@ Error RTDynamicLibrarySearchGenerator::tryToGenerate(
   return JD.define(absoluteSymbols(std::move(NewSymbols)), CurrentRT());
 }
 
-static std::unique_ptr<TargetMachine>
-CreateHostTargetMachine(const clang::CompilerInstance& CI) {
-  const clang::TargetOptions& TargetOpts = CI.getTargetOpts();
-  const clang::CodeGenOptions& CGOpt = CI.getCodeGenOpts();
-  const std::string& Triple = TargetOpts.Triple;
-
-  std::string Error;
-  const Target *TheTarget = TargetRegistry::lookupTarget(Triple, Error);
-  if (!TheTarget) {
-    cling::errs() << "cling::IncrementalExecutor: unable to find target:\n"
-                  << Error;
-    return std::unique_ptr<TargetMachine>();
+static bool UseJITLink(const Triple& TT) {
+  bool jitLink = false;
+  // Default to JITLink on macOS and RISC-V, as done in (recent) LLVM by
+  // LLJITBuilderState::prepareForConstruction.
+  if (TT.getArch() == Triple::riscv64 ||
+      (TT.isOSBinFormatMachO() &&
+       (TT.getArch() == Triple::aarch64 || TT.getArch() == Triple::x86_64))) {
+    jitLink = true;
   }
+  // Finally, honor the user's choice by setting an environment variable.
+  if (const char* clingJitLink = std::getenv("CLING_JITLINK")) {
+    jitLink = cling::utils::ConvertEnvValueToBool(clingJitLink);
+  }
+  return jitLink;
+}
 
+static std::unique_ptr<TargetMachine>
+CreateTargetMachine(const clang::CompilerInstance& CI, bool JITLink) {
   CodeGenOpt::Level OptLevel = CodeGenOpt::Default;
-  switch (CGOpt.OptimizationLevel) {
+  switch (CI.getCodeGenOpts().OptimizationLevel) {
     case 0: OptLevel = CodeGenOpt::None; break;
     case 1: OptLevel = CodeGenOpt::Less; break;
     case 2: OptLevel = CodeGenOpt::Default; break;
     case 3: OptLevel = CodeGenOpt::Aggressive; break;
     default: OptLevel = CodeGenOpt::Default;
   }
-  using namespace llvm::orc;
-  auto JTMB = JITTargetMachineBuilder::detectHost();
-  if (!JTMB)
-    logAllUnhandledErrors(JTMB.takeError(), llvm::errs(),
-                          "Error detecting host");
 
-  JTMB->setCodeGenOptLevel(OptLevel);
+  const Triple &TT = CI.getTarget().getTriple();
+
+  using namespace llvm::orc;
+  auto JTMB = JITTargetMachineBuilder(TT);
+  JTMB.addFeatures(CI.getTargetOpts().Features);
+  JTMB.getOptions().MCOptions.ABIName = CI.getTarget().getABI().str();
+
+  JTMB.setCodeGenOptLevel(OptLevel);
 #ifdef _WIN32
-  JTMB->getOptions().EmulatedTLS = false;
+  JTMB.getOptions().EmulatedTLS = false;
 #endif // _WIN32
 
 #if defined(__powerpc64__) || defined(__PPC64__)
   // We have to use large code model for PowerPC64 because TOC and text sections
   // can be more than 2GB apart.
-  JTMB->setCodeModel(CodeModel::Large);
+  JTMB.setCodeModel(CodeModel::Large);
 #endif
 
-  std::unique_ptr<TargetMachine> TM = cantFail(JTMB->createTargetMachine());
+  if (JITLink) {
+    // Set up the TargetMachine as otherwise done by
+    // LLJITBuilderState::prepareForConstruction.
+    JTMB.setRelocationModel(Reloc::PIC_);
+    // Set the small code except for macOS on AArch64 - it results in relocation
+    // targets that are out-of-range.
+    // TODO: Investigate / report upstream and re-evaluate after a future LLVM
+    // upgrade.
+    if (!(TT.isOSBinFormatMachO() && TT.getArch() == Triple::aarch64))
+      JTMB.setCodeModel(CodeModel::Small);
+  }
 
-  // Forcefully disable GlobalISel, it might be enabled on AArch64 without
-  // optimizations. In tests on an Apple M1 after the upgrade to LLVM 9, this
-  // new instruction selection framework emits branches / calls that expect all
-  // code to be reachable in +/- 128 MB. This cannot be guaranteed during JIT,
-  // which generates code into allocated pages on the heap and could span the
-  // entire address space of the process.
-  //
-  // TODO:
-  // 1. Try to reproduce the problem with vanilla lli of LLVM 9 to check that
-  //    this is not related to the way Cling incrementally JITs and executes.
-  // 2. Figure out exactly why GlobalISel emits different branch instructions,
-  //    and whether this is a problem in the framework or of the generated IR.
-  // 3. Verify if the same happens with LLVM 11/12 (whatever Cling will move to
-  //    next), and possibly fix the underlying issue in LLVM upstream's `main`.
-  //
-  // FIXME: Lift this restriction and allow the target to enable GlobalISel,
-  // if deemed ready by upstream developers.
-  TM->setGlobalISel(false);
-
-  return TM;
+  return cantFail(JTMB.createTargetMachine());
 }
 } // unnamed namespace
 
@@ -365,16 +474,31 @@ IncrementalJIT::IncrementalJIT(
     std::unique_ptr<llvm::orc::ExecutorProcessControl> EPC, Error& Err,
     void *ExtraLibHandle, bool Verbose)
     : SkipHostProcessLookup(false),
-      TM(CreateHostTargetMachine(CI)),
+      m_JITLink(UseJITLink(CI.getTarget().getTriple())),
+      m_TM(CreateTargetMachine(CI, m_JITLink)),
       SingleThreadedContext(std::make_unique<LLVMContext>()) {
   ErrorAsOutParameter _(&Err);
 
   LLJITBuilder Builder;
+  Builder.setDataLayout(m_TM->createDataLayout());
   Builder.setExecutorProcessControl(std::move(EPC));
 
   // Create ObjectLinkingLayer with our own MemoryManager.
   Builder.setObjectLinkingLayerCreator([&](ExecutionSession& ES,
-                                           const Triple& TT) {
+                                           const Triple& TT)
+                                           -> std::unique_ptr<ObjectLayer> {
+    if (m_JITLink) {
+      // For JITLink, we only need a custom memory manager to avoid freeing the
+      // memory segments; the default InProcessMemoryManager (which is mostly
+      // copied above) already does slab allocation to keep all segments
+      // together which is needed for exception handling support.
+      auto ObjLinkingLayer = std::make_unique<ObjectLinkingLayer>(
+          ES, std::make_unique<ClingJITLinkMemoryManager>());
+      ObjLinkingLayer->addPlugin(std::make_unique<EHFrameRegistrationPlugin>(
+          ES, std::make_unique<InProcessEHFrameRegistrar>()));
+      return ObjLinkingLayer;
+    }
+
     auto GetMemMgr = []() { return std::make_unique<ClingMemoryManager>(); };
     auto Layer =
         std::make_unique<RTDyldObjectLinkingLayer>(ES, std::move(GetMemMgr));
@@ -404,7 +528,7 @@ IncrementalJIT::IncrementalJIT(
 
   Builder.setCompileFunctionCreator([&](llvm::orc::JITTargetMachineBuilder)
   -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
-    return std::make_unique<SimpleCompiler>(*TM);
+    return std::make_unique<SimpleCompiler>(*m_TM);
   });
 
   if (Expected<std::unique_ptr<LLJIT>> JitInstance = Builder.create()) {
@@ -424,7 +548,7 @@ IncrementalJIT::IncrementalJIT(
       m_CompiledModules[Unsafe] = std::move(TSM);
     });
 
-  char LinkerPrefix = this->TM->createDataLayout().getGlobalPrefix();
+  char LinkerPrefix = this->m_TM->createDataLayout().getGlobalPrefix();
 
   // Process symbol resolution
   auto HostProcessLookup
@@ -483,7 +607,24 @@ void IncrementalJIT::addModule(Transaction& T) {
   ResourceTrackerSP RT = Jit->getMainJITDylib().createResourceTracker();
   m_ResourceTrackers[&T] = RT;
 
-  ThreadSafeModule TSM(T.takeModule(), SingleThreadedContext);
+  std::unique_ptr<Module> module = T.takeModule();
+
+  // Reset the sections of all functions so that they end up in the same text
+  // section. This is important for TCling on macOS to catch exceptions raised
+  // by constructors, which requires unwinding information. The addresses in
+  // the __eh_frame table are relocated against a single __text section when
+  // loading the MachO binary, which breaks if the call sites of constructors
+  // end up in a separate init section.
+  // (see clang::TargetInfo::getStaticInitSectionSpecifier())
+  for (auto &Fn : module->functions()) {
+    if (Fn.hasSection()) {
+      // dbgs() << "Resetting section '" << Fn.getSection() << "' of function "
+      //        << Fn.getName() << "\n";
+      Fn.setSection("");
+    }
+  }
+
+  ThreadSafeModule TSM(std::move(module), SingleThreadedContext);
 
   const Module *Unsafe = TSM.getModuleUnlocked();
   T.m_CompiledModule = Unsafe;
@@ -504,6 +645,10 @@ llvm::Error IncrementalJIT::removeModule(const Transaction& T) {
   m_ResourceTrackers.erase(&T);
   if (Error Err = RT->remove())
     return Err;
+  auto iMod = m_CompiledModules.find(T.m_CompiledModule);
+  if (iMod != m_CompiledModules.end())
+    m_CompiledModules.erase(iMod);
+
   return llvm::Error::success();
 }
 
@@ -518,7 +663,7 @@ IncrementalJIT::addOrReplaceDefinition(StringRef Name,
     return KnownAddr;
 
   llvm::SmallString<128> LinkerMangledName;
-  char LinkerPrefix = this->TM->createDataLayout().getGlobalPrefix();
+  char LinkerPrefix = this->m_TM->createDataLayout().getGlobalPrefix();
   bool HasLinkerPrefix = LinkerPrefix != '\0';
   if (HasLinkerPrefix && Name.front() == LinkerPrefix) {
     LinkerMangledName.assign(1, LinkerPrefix);
@@ -550,7 +695,7 @@ IncrementalJIT::addOrReplaceDefinition(StringRef Name,
   return KnownAddr;
 }
 
-void* IncrementalJIT::getSymbolAddress(StringRef Name, bool IncludeHostSymbols) {
+void* IncrementalJIT::getSymbolAddress(StringRef Name, bool IncludeHostSymbols){
   std::unique_lock<SharedAtomicFlag> G(SkipHostProcessLookup, std::defer_lock);
   if (!IncludeHostSymbols)
     G.lock();
@@ -575,6 +720,15 @@ void* IncrementalJIT::getSymbolAddress(StringRef Name, bool IncludeHostSymbols) 
   }
 
   return jitTargetAddressToPointer<void*>(Symbol->getAddress());
+}
+
+bool IncrementalJIT::doesSymbolAlreadyExist(StringRef UnmangledName) {
+  auto Name = Jit->mangle(UnmangledName);
+  for (auto &&M: m_CompiledModules) {
+    if (M.first->getNamedValue(Name))
+      return true;
+  }
+  return false;
 }
 
 } // namespace cling

@@ -55,8 +55,8 @@ RooBinnedGenContext::RooBinnedGenContext(const RooAbsPdf &model, const RooArgSet
   ccxcoutI(Generation) << endl ;
 
   // Constructor. Build an array of generator contexts for each product component PDF
-  _pdfSet = (RooArgSet*) RooArgSet(model).snapshot(true) ;
-  _pdf = (RooAbsPdf*) _pdfSet->find(model.GetName()) ;
+  RooArgSet(model).snapshot(_pdfSet, true);
+  _pdf = (RooAbsPdf*) _pdfSet.find(model.GetName()) ;
   _pdf->setOperMode(RooAbsArg::ADirty,true) ;
 
   // Fix normalization set of this RooAddPdf
@@ -92,7 +92,6 @@ RooBinnedGenContext::RooBinnedGenContext(const RooAbsPdf &model, const RooArgSet
 RooBinnedGenContext::~RooBinnedGenContext()
 {
   delete _vars ;
-  delete _pdfSet ;
   delete _hist ;
 }
 
@@ -156,10 +155,7 @@ RooDataSet *RooBinnedGenContext::generate(double nEvt, bool /*skipInit*/, bool e
   _pdf->fillDataHist(_hist,_vars,1,true) ;
 
   // Output container
-  RooRealVar weight("weight","weight",0,1e9) ;
-  RooArgSet tmp(*_vars) ;
-  tmp.add(weight) ;
-  RooDataSet* wudata = new RooDataSet("wu","wu",tmp,RooFit::WeightVar("weight")) ;
+  RooDataSet* wudata = new RooDataSet("wu","wu",*_vars,RooFit::WeightVar()) ;
 
   vector<int> histOut(_hist->numEntries()) ;
   double histMax(-1) ;
@@ -196,7 +192,7 @@ RooDataSet *RooBinnedGenContext::generate(double nEvt, bool /*skipInit*/, bool e
     // Second pass for regular mode - Trim/Extend dataset to exact number of entries
 
     // Calculate difference between what is generated so far and what is requested
-    Int_t nEvtExtra = abs(Int_t(nEvents)-histOutSum) ;
+    Int_t nEvtExtra = std::abs(Int_t(nEvents)-histOutSum) ;
     Int_t wgt = (histOutSum>nEvents) ? -1 : 1 ;
 
     // Perform simple binned accept/reject procedure to get to exact event count

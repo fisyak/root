@@ -250,8 +250,11 @@ Every field record frame of the list of fields has the following contents
 
 The field version and type version are used for schema evolution.
 
-If the flag 0x01 (_repetitive field_) is set, the field represents a fixed sized array.
-In this case, an additional 64bit integer specifies the size of the array.
+If `flags=0x0001` (_repetitive field_) is set, the field represents a fixed-size array.
+In this case, an additional 64bit integer follows immediately that specifies the size of the array.
+Typically, another (sub) field with `Parent Field ID` equal to the ID of this field
+is expected to be found, representing the array content
+(see Section "Mapping of C++ Types to Fields and Columns").
 
 The block of integers is followed by a list of strings:
 
@@ -270,7 +273,6 @@ The flags field can have one of the following bits set
 | Bit      | Meaning                                                                    |
 |----------|----------------------------------------------------------------------------|
 | 0x01     | Repetitive field, i.e. for every entry $n$ copies of the field are stored  |
-| 0x02     | Alias field, the columns referring to this field are alias columns         |
 
 The structural role of the field can have on of the following values
 
@@ -354,9 +356,10 @@ An alias column has the following format
 |                           Field ID                            |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
-
+Alias columns do not have associated data pages.  Instead, their data comes from another column referred to below as "physical column".
 The first 32bit integer references the physical column ID.
-The second 32bit integer references a field that needs to have the "alias field" flag set.
+The second 32bit integer references the associated "projected" field.
+A projected field is a field using alias columns to present available data by an alternative C++ type.
 The ID of the alias column itself is given implicitly by the serialization order.
 In particular, alias columns have larger IDs than physical columns.
 In the footer and page list envelopes, only physical column IDs must be referenced.
@@ -596,6 +599,7 @@ The following fundamental types are stored as `leaf` fields with a single column
 | double                           | SplitReal64            | Real64                |
 
 Possibly available `const` and `volatile` qualifiers of the C++ types are ignored for serialization.
+If the ntuple is stored uncompressed, the default changes from split encoding to non-split encoding where applicable.
 
 ### STL Types and Collections
 
@@ -622,8 +626,10 @@ They are stored as two fields:
 
 #### std::array<T, N> and array type of the form T[N]
 
-Fixed-sized arrays are stored as single repetitive fields of type `T`.
-The array size `N` is stored in the field meta-data.
+Fixed-sized arrays are stored as two fields:
+  - A repetitive field of type `std::array<T, N>` with no attached columns. The array size `N` is stored in the field meta-data.
+  - Child field of type `T`, which must be a type with RNTuple I/O support.
+
 Multi-dimensional arrays of the form `T[N][M]...` are currently not supported.
 
 #### std::variant<T1, T2, ..., Tn>
@@ -671,6 +677,14 @@ The on-disk representation is similar to a `std::vector<T>` where `T` is the val
   - Collection mother field of type SplitIndex32 or SplitIndex64
   - Child field of type `T`, which must by a type with RNTuple I/O support.
     The name of the child field is `_0`.
+
+### ROOT::Experimental::RNTupleCardinality
+
+A field whose type is `ROOT::Experimental::RNTupleCardinality` is associated to a single column of type (Split)Index32 or (Split)Index64.
+This field presents the offsets in the index column as lengths that correspond to the cardinality of the pointed-to collection.
+
+The value for the $i$-th element is computed by subtracting the $(i-1)$-th value from the $i$-th value in the index column.
+If $i == 0$, i.e. it falls on the start of a cluster, the $(i-1)$-th value in the index column is assumed to be 0, e.g. given the index column values `[1, 1, 3]`, the values yielded by `RNTupleCardinality` shall be `[1, 0, 2]`.
 
 ## Limits
 

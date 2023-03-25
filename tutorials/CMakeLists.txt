@@ -65,14 +65,16 @@ endfunction()
 
 #---Tutorials disabled depending on the build components-------------
 if(NOT ROOT_minuit2_FOUND)
-  set(minuit2_veto fit/fit2dHist.C fit/fit2dHist.C
-                   fit/fitCircle.C fit/minuit2FitBench2D.C
+  set(minuit2_veto fit/fit2dHist.C fit/fitCircle.C
                    fit/minuit2FitBench2D.C fit/minuit2FitBench.C
-                   fit/minuit2FitBench.C fit/minuit2GausFit.C
                    fit/minuit2GausFit.C fit/NumericalMinimization.C
                    fit/combinedFit.C fit/TestBinomial.C
                    fit/fitNormSum.C fit/vectorizedFit.C
                    tutorials/roostats/rs_bernsteinCorrection.C)
+endif()
+
+if(NOT clad)
+  set(clad_veto fit/minuit2GausFit.C)
 endif()
 
 if (NOT dataframe)
@@ -292,6 +294,7 @@ else()
     list(APPEND tmva_veto tmva/TMVA_SOFIE_RDataFrame.py)
     list(APPEND tmva_veto tmva/TMVA_SOFIE_RDataFrame_JIT.C)
     list(APPEND tmva_veto tmva/TMVA_SOFIE_Inference.py)
+    list(APPEND tmva_veto tmva/TMVA_SOFIE_RSofieReader.C)
   endif()
   if (NOT PY_TORCH_FOUND)
     list(APPEND tmva_veto tmva/TMVA_SOFIE_PyTorch.C)
@@ -318,6 +321,10 @@ else()
   if("$ENV{PYTHIA8DATA}" STREQUAL "" AND PYTHIA8_DATA)
     list(APPEND ROOT_environ PYTHIA8DATA=${PYTHIA8_DATA})
   endif()
+endif()
+
+if (NOT ROOT_vecgeom_FOUND)
+  set(vecgeom_veto geom/tessellatedNav.C)
 endif()
 
 if(root7)
@@ -396,6 +403,7 @@ if(MSVC AND ${LLVM_VERSION} VERSION_GREATER_EQUAL 13.0.0 AND NOT llvm13_broken_t
       fit/fit2dHist.C
       graphics/earth.C
       graphs/motorcycle.C
+      math/exampleFunction.py
       math/multidimSampling.C
       math/multivarGaus.C
       tree/basic.C
@@ -408,9 +416,6 @@ if(MSVC AND ${LLVM_VERSION} VERSION_GREATER_EQUAL 13.0.0 AND NOT llvm13_broken_t
       dataframe/df002_dataModel.py
       dataframe/df016_vecOps.py
       dataframe/df017_vecOpsHEP.py)
-  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    list(APPEND extra_veto math/exampleFunction.py)
-  endif()
 endif()
 
 set(all_veto hsimple.C
@@ -436,12 +441,14 @@ set(all_veto hsimple.C
              ${imt_veto}
              ${classic_veto}
              ${pythia_veto}
+             ${vecgeom_veto}
              ${root7_veto}
              ${xrootd_veto}
              ${mlp_veto}
              ${spectrum_veto}
              ${dataframe_veto}
              ${macm1_veto}
+             ${clad_veto}
              )
 
 file(GLOB_RECURSE tutorials RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.C)
@@ -538,17 +545,29 @@ set (tmva-TMVAClassificationCategoryApplication-depends tutorial-tmva-TMVAClassi
 set (tmva-TMVAMulticlass-depends tutorial-tmva-TMVAMultipleBackgroundExample)
 set (tmva-TMVAMulticlassApplication-depends tutorial-tmva-TMVAMulticlass)
 set (tmva-TMVARegressionApplication-depends tutorial-tmva-TMVARegression)
+set (tmva-TMVACrossValidationRegression-depends tutorial-tmva-TMVARegressionApplication)
+set (tmva-TMVACrossValidationApplication-depends tutorial-tmva-TMVACrossValidation)
 set (tmva-tmva101_Training-depends tutorial-tmva-tmva100_DataPreparation-py)
 set (tmva-tmva102_Testing-depends tutorial-tmva-tmva101_Training-py)
-set (tmva-pytorch-ApplicationClassificationPyTorch-depends tutorial-tmva-pytorch-ClassificationPyTorch-py)
-set (tmva-pytorch-ApplicationRegressionPyTorch-depends tutorial-tmva-pytorch-RegressionPyTorch-py)
+set (tmva-tmva003_RReader-depends tutorial-tmva-TMVAClassification)
+set (tmva-tmva004_RStandardScaler-depends tutorial-tmva-tmva003_RReader)
+if (PY_TORCH_FOUND)
+  set (tmva-pytorch-ApplicationClassificationPyTorch-depends tutorial-tmva-pytorch-ClassificationPyTorch-py)
+  set (tmva-pytorch-RegressionPyTorch-depends tutorial-tmva-pytorch-ApplicationClassificationPyTorch-py)
+  set (tmva-pytorch-ApplicationRegressionPyTorch-depends tutorial-tmva-pytorch-RegressionPyTorch-py)
+endif()
 if (PY_KERAS_FOUND)
-set (tmva-TMVA_SOFIE_Keras_HiggsModel-depends tutorial-tmva-TMVA_Higgs_Classification)
-set (tmva-TMVA_SOFIE_RDataFrame-depends tutorial-tmva-TMVA_SOFIE_Keras_HiggsModel)
-set (tmva-TMVA_SOFIE_RDataFrame_JIT-depends tutorial-tmva-TMVA_SOFIE_Keras_HiggsModel)
-set (tmva-TMVA_SOFIE_Inference-depends tutorial-tmva-TMVA_Higgs_Classification)
-set (tmva-keras-ApplicationRegressionKeras-depends tutorial-tmva-keras-RegressionKeras-py)
-set (tmva-keras-ApplicationClassificationKeras-depends tutorial-tmva-keras-ClassificationKeras-py)
+  set (tmva-TMVA_SOFIE_Keras_HiggsModel-depends tutorial-tmva-TMVA_Higgs_Classification)
+  set (tmva-TMVA_SOFIE_RDataFrame-depends tutorial-tmva-TMVA_SOFIE_Keras_HiggsModel)
+  set (tmva-TMVA_SOFIE_RDataFrame_JIT-depends tutorial-tmva-TMVA_SOFIE_Keras_HiggsModel)
+  set (tmva-TMVA_SOFIE_Inference-depends tutorial-tmva-TMVA_Higgs_Classification)
+  set (tmva-TMVA_SOFIE_RSofieReader-depends tutorial-tmva-TMVA_Higgs_Classification)
+  if (PY_TORCH_FOUND)
+    set (tmva-keras-RegressionKeras-depends tutorial-tmva-pytorch-RegressionPyTorch-py)
+    set (tmva-keras-ClassificationKeras-depends tutorial-tmva-pytorch-ClassificationPyTorch-py)
+  endif()
+  set (tmva-keras-ApplicationRegressionKeras-depends tutorial-tmva-keras-RegressionKeras-py)
+  set (tmva-keras-ApplicationClassificationKeras-depends tutorial-tmva-keras-ClassificationKeras-py)
 endif()
 
 #--List long-running tutorials to label them as "longtest"
@@ -560,8 +579,14 @@ file(GLOB long_running RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${long_running})
 set (multithreaded
      dataframe/df10[2-7]*
      multicore/mp103*
+     tmva/TMVAMulticlass.C
      tmva/TMVA_CNN_Classification.C
-     tmva/TMVA_RNN_Classification.C)
+     tmva/TMVA_Higgs_Classification.C
+     tmva/TMVA_RNN_Classification.C
+     tmva/TMVA_CNN_Classification.py
+     tmva/TMVA_Higgs_Classification.py
+     tmva/TMVA_RNN_Classification.py
+     )
 file(GLOB multithreaded RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${multithreaded})
 
 #---Loop over all tutorials and define the corresponding test---------
@@ -692,11 +717,10 @@ if(ROOT_pyroot_FOUND)
 
   # Rules specific to distributed RDataFrame
   # Disable distributed RDF tutorials if we didn't check dependencies in the environment first
-  # They are always disabled on Mac ARM, until #10061 is fixed
-  if(NOT test_distrdf_pyspark OR (APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES arm64))
+  if(NOT test_distrdf_pyspark)
     list(APPEND pyveto dataframe/distrdf001_spark_connection.py)
   endif()
-  if(NOT test_distrdf_dask OR (APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES arm64))
+  if(NOT test_distrdf_dask)
     list(APPEND pyveto dataframe/distrdf002_dask_connection.py)
   endif()
   # Use main Python executable to run in PySpark driver and executors
@@ -728,9 +752,6 @@ if(ROOT_pyroot_FOUND)
   if(NOT PY_KERAS_FOUND)
     file(GLOB tmva_veto_py RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} tmva/keras/*.py)
     list(APPEND pyveto ${tmva_veto_py})
-  else()
-  list(APPEND pyveto tmva/keras/RegressionKeras.py)
-  list(APPEND pyveto tmva/keras/ApplicationRegressionKeras.py)
   endif()
 
   find_python_module(torch QUIET)

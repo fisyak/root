@@ -1,4 +1,4 @@
-import { gStyle, internals, isStr, createTPolyLine, kNoZoom } from '../core.mjs';
+import { gStyle, isStr, createTPolyLine, kNoZoom } from '../core.mjs';
 import { rgb as d3_rgb } from '../d3.mjs';
 import { TAttLineHandler } from '../base/TAttLineHandler.mjs';
 import { floatToString, TRandom } from '../base/BasePainter.mjs';
@@ -33,20 +33,40 @@ class RH2Painter extends RHistPainter {
    /** @summary Toggle projection */
    toggleProjection(kind, width) {
 
-      if (kind == 'Projections') kind = '';
+      if ((kind == 'Projections') || (kind == 'Off'))
+         kind = '';
 
-      if (isStr(kind) && (kind.length > 1)) {
-          width = parseInt(kind.slice(1));
-          kind = kind[0];
+      let widthX = width, widthY = width;
+
+      if (isStr(kind) && (kind.indexOf('XY') == 0)) {
+         let ws = kind.length > 2 ? kind.slice(2) : '';
+         kind = 'XY';
+         widthX = widthY = parseInt(ws);
+      } else if (isStr(kind) && (kind.length > 1)) {
+         let ps = kind.indexOf('_');
+         if ((ps > 0) && (kind[0] == 'X') && (kind[ps+1] == 'Y')) {
+            widthX = parseInt(kind.slice(1, ps)) || 1;
+            widthY = parseInt(kind.slice(ps+2)) || 1;
+            kind = 'XY';
+         } else if ((ps > 0) && (kind[0] == 'Y') && (kind[ps+1] == 'X')) {
+            widthY = parseInt(kind.slice(1, ps)) || 1;
+            widthX = parseInt(kind.slice(ps+2)) || 1;
+            kind = 'XY';
+         } else {
+            widthX = widthY = parseInt(kind.slice(1)) || 1;
+            kind = kind[0];
+         }
       }
 
-      if (!width) width = 1;
+      if (!widthX && !widthY)
+         widthX = widthY = 1;
 
-      if (kind && (this.is_projection==kind)) {
-         if (this.projection_width === width) {
+      if (kind && (this.is_projection == kind)) {
+         if ((this.projection_widthX === widthX) && (this.projection_widthY === widthY)) {
             kind = '';
          } else {
-            this.projection_width = width;
+            this.projection_widthX = widthX;
+            this.projection_widthY = widthY;
             return;
          }
       }
@@ -54,14 +74,15 @@ class RH2Painter extends RHistPainter {
       delete this.proj_hist;
 
       let new_proj = (this.is_projection === kind) ? '' : kind;
-      this.is_projection = ''; // disable projection redraw until callback
-      this.projection_width = width;
+      this.projection_widthX = widthX;
+      this.projection_widthY = widthY;
+      this.is_projection = ''; // avoid projection handling until area is created
 
       this.provideSpecialDrawArea(new_proj).then(() => { this.is_projection = new_proj; return this.redrawProjection(); });
    }
 
    /** @summary Readraw projections */
-   redrawProjection(/* ii1, ii2 , jj1, jj2*/) {
+   redrawProjection(/* ii1, ii2, jj1, jj2 */) {
       // do nothing for the moment
 
       if (!this.is_projection) return;
@@ -81,10 +102,16 @@ class RH2Painter extends RHistPainter {
 
    /** @summary Fill histogram context menu */
    fillHistContextMenu(menu) {
-      menu.add('sub:Projections', () => this.toggleProjection());
       let kind = this.is_projection || '';
-      if (kind) kind += this.projection_width;
-      let kinds = ['X1', 'X2', 'X3', 'X5', 'X10', 'Y1', 'Y2', 'Y3', 'Y5', 'Y10'];
+      if (kind) kind += this.projection_widthX;
+      if ((this.projection_widthX != this.projection_widthY) && (this.is_projection == 'XY'))
+         kind = `X${this.projection_widthX}_Y${this.projection_widthY}`;
+
+      menu.add('sub:Projections', () => menu.input('Input projection kind X1 or XY2', kind, 'string').then(val => this.toggleProjection(val)));
+
+      let kinds = ['X1', 'X2', 'X3', 'X5', 'X10', 'Y1', 'Y2', 'Y3', 'Y5', 'Y10', 'XY1', 'XY2', 'XY3', 'XY5', 'XY10'];
+      if (kind) kinds.unshift('Off');
+
       for (let k = 0; k < kinds.length; ++k)
          menu.addchk(kind == kinds[k], kinds[k], kinds[k], arg => this.toggleProjection(arg));
       menu.add('endsub:');
@@ -654,16 +681,16 @@ class RH2Painter extends RHistPainter {
                pnt = { x: Math.round(xp[i]), y: Math.round(yp[i]) };
             }
             if (!cmd) {
-               cmd = 'M' + pnt.x + ',' + pnt.y; first = pnt;
+               cmd = `M${pnt.x},${pnt.y}`; first = pnt;
             } else if ((i == iplus) && first && (pnt.x == first.x) && (pnt.y == first.y)) {
                if (!isany) return ''; // all same points
                cmd += 'z'; do_close = false;
             } else if ((pnt.x != last.x) && (pnt.y != last.y)) {
-               cmd +=  'l' + (pnt.x - last.x) + ',' + (pnt.y - last.y); isany = true;
+               cmd += `l${pnt.x - last.x},${pnt.y - last.y}`; isany = true;
             } else if (pnt.x != last.x) {
-               cmd +=  'h' + (pnt.x - last.x); isany = true;
+               cmd += `h${pnt.x - last.x}`; isany = true;
             } else if (pnt.y != last.y) {
-               cmd +=  'v' + (pnt.y - last.y); isany = true;
+               cmd += `v${pnt.y - last.y}`; isany = true;
             }
             last = pnt;
          }
@@ -1031,7 +1058,7 @@ class RH2Painter extends RHistPainter {
                cell_w[colindx] = cw;
                cell_h[colindx] = ch;
             } else{
-               cmd2 = `m${handle.grx[i]-currx[colindx]},${handle.gry[j+dj] - curry[colindx]}`;
+               cmd2 = `m${handle.grx[i]-currx[colindx]},${handle.gry[j+dj]-curry[colindx]}`;
                colPaths[colindx] += (cmd2.length < cmd1.length) ? cmd2 : cmd1;
                cell_w[colindx] = Math.max(cell_w[colindx], cw);
                cell_h[colindx] = Math.max(cell_h[colindx], ch);
@@ -1055,12 +1082,11 @@ class RH2Painter extends RHistPainter {
 
       for (colindx = 0; colindx < colPaths.length; ++colindx)
         if ((colPaths[colindx] !== undefined) && (colindx<cntr.length)) {
-           let pattern_class = 'scatter_' + colindx,
-               pattern = defs.select('.' + pattern_class);
+           let pattern_id = (this.pad_name || 'canv') + `_scatter_${colindx}`,
+               pattern = defs.select(`#${pattern_id}`);
            if (pattern.empty())
               pattern = defs.append('svg:pattern')
-                            .attr('class', pattern_class)
-                            .attr('id', 'jsroot_scatter_pattern_' + internals.id_counter++)
+                            .attr('id', pattern_id)
                             .attr('patternUnits','userSpaceOnUse');
            else
               pattern.selectAll('*').remove();
@@ -1079,8 +1105,6 @@ class RH2Painter extends RHistPainter {
               }
            }
 
-           // arrx.sort();
-
            this.markeratt.resetPos();
 
            let path = '';
@@ -1097,7 +1121,7 @@ class RH2Painter extends RHistPainter {
            this.draw_g
                .append('svg:path')
                .attr('scatter-index', colindx)
-               .style('fill', `url(#${pattern.attr('id')})`)
+               .style('fill', `url(#${pattern_id})`)
                .attr('d', colPaths[colindx]);
         }
 
@@ -1160,11 +1184,10 @@ class RH2Painter extends RHistPainter {
          dj = histo.stepy || 1;
       }
 
-      lines.push(this.getObjectHint() || 'histo<2>');
-      lines.push('x = ' + this.getAxisBinTip('x', i, di),
-                 'y = ' + this.getAxisBinTip('y', j, dj));
-
-      lines.push(`bin = ${i+1}, ${j+1}`);
+      lines.push(this.getObjectHint() || 'histo<2>',
+                 'x = ' + this.getAxisBinTip('x', i, di),
+                 'y = ' + this.getAxisBinTip('y', j, dj),
+                 `bin = ${i+1}, ${j+1}`);
 
       if (histo.$baseh) binz -= histo.$baseh.getBinContent(i+1,j+1);
 
@@ -1229,18 +1252,19 @@ class RH2Painter extends RHistPainter {
 
       let res = { name: 'histo', title: histo.fTitle || 'title',
                   x: pnt.x, y: pnt.y,
-                  color1: this.lineatt ? this.lineatt.color : 'green',
-                  color2: this.fillatt ? this.fillatt.getFillColorAlt('blue') : 'blue',
+                  color1: this.lineatt?.color ?? 'green',
+                  color2: this.fillatt?.getFillColorAlt('blue') ?? 'blue',
                   lines: this.getBinTooltips(i, j), exact: true, menu: true };
 
-      if (this.options.Color) res.color2 = h.palette.getColor(colindx);
+      if (this.options.Color)
+         res.color2 = h.palette.getColor(colindx);
 
       if (pnt.disabled && !this.is_projection) {
          ttrect.remove();
          res.changed = true;
       } else {
          if (ttrect.empty())
-            ttrect = this.draw_g.append('svg:rect')
+            ttrect = this.draw_g.append('svg:path')
                                 .attr('class','tooltip_bin h1bin')
                                 .style('pointer-events','none');
 
@@ -1248,35 +1272,42 @@ class RH2Painter extends RHistPainter {
              j1 = j, j2 = j+1,
              x1 = h.grx[i1], x2 = h.grx[i2],
              y1 = h.gry[j2], y2 = h.gry[j1],
-             binid = i*10000 + j;
+             binid = i*10000 + j,
+             pmain = this.getFramePainter(),
+             path;
+
+         if (this.is_projection) {
+            let pwx = this.projection_widthX || 1, ddx = (pwx - 1) / 2;
+            if ((this.is_projection.indexOf('X')) >= 0 && (pwx > 1)) {
+               if (j2+ddx >= h.j2) { j2 = Math.min(Math.round(j2+ddx), h.j2); j1 = Math.max(j2-pwx, h.j1); }
+                              else { j1 = Math.max(Math.round(j1-ddx), h.j1); j2 = Math.min(j1+pwx, h.j2); }
+            }
+            let pwy = this.projection_widthY || 1, ddy = (pwy - 1) / 2;
+            if ((this.is_projection.indexOf('Y')) >= 0 && (pwy > 1)) {
+               if (i2+ddy >= h.i2) { i2 = Math.min(Math.round(i2+ddy), h.i2); i1 = Math.max(i2-pwy, h.i1); }
+                              else { i1 = Math.max(Math.round(i1-ddy), h.i1); i2 = Math.min(i1+pwy, h.i2); }
+            }
+         }
 
          if (this.is_projection == 'X') {
-            x1 = 0; x2 = this.getFramePainter().getFrameWidth();
-            if (this.projection_width > 1) {
-               let dd = (this.projection_width-1)/2;
-               if (j2+dd >= h.j2) { j2 = Math.min(Math.round(j2+dd), h.j2); j1 = Math.max(j2 - this.projection_width, h.j1); }
-                             else { j1 = Math.max(Math.round(j1-dd), h.j1); j2 = Math.min(j1 + this.projection_width, h.j2); }
-            }
+            x1 = 0; x2 = pmain.getFrameWidth();
             y1 = h.gry[j2]; y2 = h.gry[j1];
             binid = j1*777 + j2*333;
          } else if (this.is_projection == 'Y') {
-            y1 = 0; y2 = this.getFramePainter().getFrameHeight();
-            if (this.projection_width > 1) {
-               let dd = (this.projection_width-1)/2;
-               if (i2+dd >= h.i2) { i2 = Math.min(Math.round(i2+dd), h.i2); i1 = Math.max(i2 - this.projection_width, h.i1); }
-                             else { i1 = Math.max(Math.round(i1-dd), h.i1); i2 = Math.min(i1 + this.projection_width, h.i2); }
-            }
-            x1 = h.grx[i1], x2 = h.grx[i2],
+            y1 = 0; y2 = pmain.getFrameHeight();
+            x1 = h.grx[i1]; x2 = h.grx[i2];
             binid = i1*777 + i2*333;
+         } else if (this.is_projection == 'XY') {
+            y1 = h.gry[j2]; y2 = h.gry[j1];
+            x1 = h.grx[i1]; x2 = h.grx[i2];
+            binid = i1*789 + i2*653 + j1*12345 + j2*654321;
+            path = `M${x1},0H${x2}V${y1}H${pmain.getFrameWidth()}V${y2}H${x2}V${pmain.getFrameHeight()}H${x1}V${y2}H0V${y1}H${x1}Z`;
          }
 
          res.changed = ttrect.property('current_bin') !== binid;
 
          if (res.changed)
-            ttrect.attr('x', x1)
-                  .attr('width', x2 - x1)
-                  .attr('y', y1)
-                  .attr('height', y2 - y1)
+            ttrect.attr('d', path || `M${x1},${y1}H${x2}V${y2}H${x1}Z`)
                   .style('opacity', '0.7')
                   .property('current_bin', binid);
 

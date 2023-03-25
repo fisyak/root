@@ -306,6 +306,7 @@ RooArgList HistoToWorkspaceFactoryFast::createObservables(const TH1 *hist, RooWo
       // create observable
       auto obs = static_cast<RooRealVar*>(proto->factory(
           Form("%s[%f,%f]", fObsNameVec[idx].c_str(), xmin, xmax)));
+      if(strlen(axis->GetTitle())>0) obs->SetTitle(axis->GetTitle());
       obs->setBins(nbins);
       if (axis->IsVariableBinSize()) {
         RooBinning binning(nbins, axis->GetXbins()->GetArray());
@@ -686,7 +687,7 @@ RooArgList HistoToWorkspaceFactoryFast::createObservables(const TH1 *hist, RooWo
           name = name.substr(0, pos) + "shapes";
         }
 
-        RooProduct shapeProduct(name.c_str(), name.c_str(), RooArgSet(thisSampleHistFuncs.begin(), thisSampleHistFuncs.end()));
+        RooProduct shapeProduct(name.c_str(), thisSampleHistFuncs.front()->GetTitle(), RooArgSet(thisSampleHistFuncs.begin(), thisSampleHistFuncs.end()));
         proto->import(shapeProduct, RecycleConflictNodes());
         shapeList.add(*proto->function(name.c_str()));
       }
@@ -921,6 +922,8 @@ RooArgList HistoToWorkspaceFactoryFast::createObservables(const TH1 *hist, RooWo
         sampleHistFuncs.push_back( makeLinInterp(interpParams, nominalHistFunc, proto,
             sample.GetHistoSysList(), constraintPrefix, observables) );
       }
+
+      sampleHistFuncs.front()->SetTitle( (nominal && strlen(nominal->GetTitle())>0) ? nominal->GetTitle() : sample.GetName().c_str() );
 
       ////////////////////////////////////
       // Add StatErrors to this Channel //
@@ -1351,6 +1354,10 @@ RooArgList HistoToWorkspaceFactoryFast::createObservables(const TH1 *hist, RooWo
         ("model_"+channel_name).c_str(),    // MB : have changed this into conditional pdf. Much faster for toys!
         "product of Poissons accross bins for a single channel",
         constraintTerms, Conditional(likelihoodTerms,observables));
+    // can give channel a title by setting title of corresponding data histogram
+    if (channel.GetData().GetHisto() && strlen(channel.GetData().GetHisto()->GetTitle())>0) {
+       model->SetTitle(channel.GetData().GetHisto()->GetTitle());
+    }
     proto->import(*model,RecycleConflictNodes());
 
     proto_config->SetPdf(*model);
@@ -1365,10 +1372,6 @@ RooArgList HistoToWorkspaceFactoryFast::createObservables(const TH1 *hist, RooWo
     ///////////////////////////
     // make data sets
     // THis works and is natural, but the memory size of the simultaneous dataset grows exponentially with channels
-    const char* weightName="weightVar";
-    proto->factory(TString::Format("%s[0,-1e10,1e10]",weightName));
-    proto->defineSet("obsAndWeight",TString::Format("%s,%s",weightName,observablesStr.c_str()));
-
     // New Asimov Generation: Use the code in the Asymptotic calculator
     // Need to get the ModelConfig...
     int asymcalcPrintLevel = 0;
@@ -1382,7 +1385,7 @@ RooArgList HistoToWorkspaceFactoryFast::createObservables(const TH1 *hist, RooWo
     if(TH1 const* mnominal = channel.GetData().GetHisto()) {
       // This works and is natural, but the memory size of the simultaneous
       // dataset grows exponentially with channels.
-      RooDataSet dataset{"obsData","",*proto->set("obsAndWeight"),weightName};
+      RooDataSet dataset{"obsData","",*proto->set("observables"), RooFit::WeightVar("weightVar")};
       ConfigureHistFactoryDataset( dataset, *mnominal, *proto, fObsNameVec );
       proto->import(dataset);
     } // End: Has non-null 'data' entry
@@ -1404,7 +1407,7 @@ RooArgList HistoToWorkspaceFactoryFast::createObservables(const TH1 *hist, RooWo
       }
 
       // THis works and is natural, but the memory size of the simultaneous dataset grows exponentially with channels
-      RooDataSet dataset{dataName.c_str(), "", *proto->set("obsAndWeight"), weightName};
+      RooDataSet dataset{dataName.c_str(), "", *proto->set("observables"), RooFit::WeightVar("weightVar")};
       ConfigureHistFactoryDataset( dataset, *mnominal, *proto, fObsNameVec );
       proto->import(dataset);
 
@@ -1442,7 +1445,7 @@ RooArgList HistoToWorkspaceFactoryFast::createObservables(const TH1 *hist, RooWo
 
       if(obsNameVec.size()==1) {
    double fval = mnominal.GetBinContent(i);
-   obsDataUnbinned.add( *proto.set("obsAndWeight"), fval );
+   obsDataUnbinned.add( *proto.set("observables"), fval );
       } else { // 2 or more dimensions
 
    for(int j=1; j<=ay->GetNbins(); ++j) {
@@ -1451,14 +1454,14 @@ RooArgList HistoToWorkspaceFactoryFast::createObservables(const TH1 *hist, RooWo
 
      if(obsNameVec.size()==2) {
        double fval = mnominal.GetBinContent(i,j);
-       obsDataUnbinned.add( *proto.set("obsAndWeight"), fval );
+       obsDataUnbinned.add( *proto.set("observables"), fval );
      } else { // 3 dimensions
 
        for(int k=1; k<=az->GetNbins(); ++k) {
          double zval = az->GetBinCenter(k);
          proto.var( obsNameVec[2] )->setVal( zval );
          double fval = mnominal.GetBinContent(i,j,k);
-         obsDataUnbinned.add( *proto.set("obsAndWeight"), fval );
+         obsDataUnbinned.add( *proto.set("observables"), fval );
        }
      }
    }

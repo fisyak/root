@@ -1,7 +1,8 @@
-import { settings, create, parse, toJSON, loadScript, registerMethods, isBatchMode, isFunc, isStr } from '../core.mjs';
+import { settings, create, parse, toJSON, loadScript, registerMethods, isBatchMode, isFunc, isStr, nsREX } from '../core.mjs';
 import { select as d3_select, rgb as d3_rgb } from '../d3.mjs';
 import { closeCurrentWindow, showProgress, loadOpenui5, ToolbarIcons, getColorExec } from '../gui/utils.mjs';
 import { GridDisplay, getHPainter } from '../gui/display.mjs';
+import { makeTranslate, getElementRect } from '../base/BasePainter.mjs';
 import { selectActivePad, cleanup, resize, EAxisBits } from '../base/ObjectPainter.mjs';
 import { RObjectPainter } from '../base/RObjectPainter.mjs';
 import { RAxisPainter } from './RAxisPainter.mjs';
@@ -66,13 +67,16 @@ class RCanvasPainter extends RPadPainter {
 
       let origin = this.selectDom('origin'),
           sidebar = origin.select('.side_panel'),
-          main = this.selectDom(), lst = [];
+          sidebar2 = origin.select('.side_panel2'),
+          main = this.selectDom(), lst = [], force;
 
       while (main.node().firstChild)
          lst.push(main.node().removeChild(main.node().firstChild));
 
       if (!sidebar.empty())
          cleanup(sidebar.node());
+      if (!sidebar2.empty())
+         cleanup(sidebar2.node());
 
       this.setLayoutKind('simple'); // restore defaults
       origin.html(''); // cleanup origin
@@ -82,6 +86,7 @@ class RCanvasPainter extends RPadPainter {
          for (let k = 0; k < lst.length; ++k)
             main.node().appendChild(lst[k]);
          this.setLayoutKind(layout_kind);
+         force = true;
       } else {
          let grid = new GridDisplay(origin.node(), layout_kind);
 
@@ -89,10 +94,19 @@ class RCanvasPainter extends RPadPainter {
             mainid = (layout_kind.indexOf('vert') == 0) ? 0 : 1;
 
          main = d3_select(grid.getGridFrame(mainid));
-         sidebar = d3_select(grid.getGridFrame(1 - mainid));
-
          main.classed('central_panel', true).style('position', 'relative');
-         sidebar.classed('side_panel', true).style('position', 'relative');
+
+         if (mainid == 2) {
+            // left panel for Y
+            sidebar = d3_select(grid.getGridFrame(0));
+            sidebar.classed('side_panel2', true).style('position', 'relative');
+            // bottom panel for X
+            sidebar = d3_select(grid.getGridFrame(3));
+            sidebar.classed('side_panel', true).style('position', 'relative');
+         } else {
+            sidebar = d3_select(grid.getGridFrame(1 - mainid));
+            sidebar.classed('side_panel', true).style('position', 'relative');
+         }
 
          // now append all childs to the new main
          for (let k = 0; k < lst.length; ++k)
@@ -105,7 +119,7 @@ class RCanvasPainter extends RPadPainter {
       }
 
       // resize main drawing and let draw extras
-      resize(main.node());
+      resize(main.node(), force);
       return true;
    }
 
@@ -115,7 +129,7 @@ class RCanvasPainter extends RPadPainter {
    async toggleProjection(kind) {
       delete this.proj_painter;
 
-      if (kind) this.proj_painter = 1; // just indicator that drawing can be preformed
+      if (kind) this.proj_painter = { 'X': false, 'Y': false }; // just indicator that drawing can be preformed
 
       if (isFunc(this.showUI5ProjectionArea))
          return this.showUI5ProjectionArea(kind);
@@ -123,6 +137,7 @@ class RCanvasPainter extends RPadPainter {
       let layout = 'simple', mainid;
 
       switch(kind) {
+         case 'XY': layout = 'projxy'; mainid = 2; break;
          case 'X':
          case 'bottom': layout = 'vert2_31'; mainid = 0; break;
          case 'Y':
@@ -136,16 +151,17 @@ class RCanvasPainter extends RPadPainter {
 
    /** @summary Draw projection for specified histogram
      * @private */
-   async drawProjection( /*kind,hist*/) {
+   async drawProjection(/*kind,hist,hopt*/) {
       // dummy for the moment
       return false;
    }
 
    /** @summary Draw in side panel
      * @private */
-   async drawInSidePanel(canv, opt) {
-      let side = this.selectDom('origin').select('.side_panel');
-      return side.empty() ?  null : this.drawObject(side.node(), canv, opt);
+   async drawInSidePanel(canv, opt, kind) {
+      let sel = ((this.getLayoutKind() == 'projxy') && (kind == 'Y')) ? '.side_panel2' : '.side_panel',
+          side = this.selectDom('origin').select(sel);
+      return side.empty() ? null : this.drawObject(side.node(), canv, opt);
    }
 
    /** @summary Checks if canvas shown inside ui5 widget
@@ -169,7 +185,7 @@ class RCanvasPainter extends RPadPainter {
    saveCanvasAsFile(fname) {
       let pnt = fname.indexOf('.');
       this.createImage(fname.slice(pnt+1))
-          .then(res => { console.log('save', fname, res.length); this.sendWebsocket('SAVE:' + fname + ':' + res); });
+          .then(res => this.sendWebsocket(`SAVE:${fname}:${res}`));
    }
 
    /** @summary Send command to server to save canvas with specified name
@@ -210,6 +226,25 @@ class RCanvasPainter extends RPadPainter {
       this._websocket.connect();
    }
 
+   /** @summary set, test or reset timeout of specified name
+     * @desc Used to prevent overloading of websocket for specific function */
+   websocketTimeout(name, tm) {
+      if (!this._websocket)
+         return;
+      if (!this._websocket._tmouts)
+         this._websocket._tmouts = {};
+
+      let handle = this._websocket._tmouts[name];
+      if (tm === undefined)
+         return handle !== undefined;
+
+      if (tm == 'reset') {
+         if (handle) { clearTimeout(handle); delete this._websocket._tmouts[name]; }
+      } else if (!handle && Number.isInteger(tm)) {
+         this._websocket._tmouts[name] = setTimeout(() => { delete this._websocket._tmouts[name]; }, tm);
+      }
+   }
+
    /** @summary Hanler for websocket open event
      * @private */
    onWebsocketOpened(/*handle*/) {
@@ -225,7 +260,7 @@ class RCanvasPainter extends RPadPainter {
    /** @summary Hanler for websocket message
      * @private */
    onWebsocketMsg(handle, msg) {
-      console.log('GET_MSG ' + msg.slice(0,30));
+      // console.log('GET_MSG ' + msg.slice(0,30));
 
       if (msg == 'CLOSE') {
          this.onWebsocketClosed();
@@ -236,9 +271,10 @@ class RCanvasPainter extends RPadPainter {
              snapid = msg.slice(0,p1),
              snap = parse(msg.slice(p1+1));
          this.syncDraw(true)
+             .then(() => this.ensureBrowserSize(!this.snapid && snap?.fWinSize, snap.fWinSize[0], snap.fWinSize[1]))
              .then(() => this.redrawPadSnap(snap))
              .then(() => {
-                 handle.send('SNAPDONE:' + snapid); // send ready message back when drawing completed
+                 handle.send(`SNAPDONE:${snapid}`); // send ready message back when drawing completed
                  this.confirmDraw();
               });
       } else if (msg.slice(0,4) == 'JSON') {
@@ -252,7 +288,7 @@ class RCanvasPainter extends RPadPainter {
          let p1 = msg.indexOf(':'),
              cmdid = msg.slice(0,p1),
              cmd = msg.slice(p1+1),
-             reply = 'REPLY:' + cmdid + ':';
+             reply = `REPLY:${cmdid}:`;
          if ((cmd == 'SVG') || (cmd == 'PNG') || (cmd == 'JPEG')) {
             this.createImage(cmd.toLowerCase())
                 .then(res => handle.send(reply + res));
@@ -372,7 +408,7 @@ class RCanvasPainter extends RPadPainter {
    async submitMenuRequest(painter, menukind, reqid) {
       return new Promise(resolveFunc => {
          this.submitDrawableRequest('', {
-            _typename: 'ROOT::Experimental::RDrawableMenuRequest',
+            _typename: `${nsREX}RDrawableMenuRequest`,
             menukind: menukind || '',
             menureqid: reqid, // used to identify menu request
          }, painter, resolveFunc);
@@ -396,10 +432,7 @@ class RCanvasPainter extends RPadPainter {
             return console.log(`not recoginzed subelem ${subelem} in SubmitExec`);
        }
 
-      this.submitDrawableRequest('', {
-         _typename: 'ROOT::Experimental::RDrawableExecRequest',
-         exec: exec
-      }, painter);
+      this.submitDrawableRequest('', { _typename: `${nsREX}RDrawableExecRequest`, exec }, painter);
    }
 
    /** @summary Process reply from request to RDrawable */
@@ -615,11 +648,28 @@ class RCanvasPainter extends RPadPainter {
       return '';
    }
 
+   /** @summary resize browser window to get requested canvas sizes */
+   resizeBrowser(canvW, canvH) {
+      if (!isFunc(window?.resizeTo) || !canvW || !canvH || isBatchMode() || this.embed_canvas || this.batch_mode)
+         return;
+
+      let rect = getElementRect(this.selectDom('origin'));
+      if (!rect.width || !rect.height) return;
+
+      let fullW = window.innerWidth - rect.width + canvW,
+          fullH = window.innerHeight - rect.height + canvH;
+
+      if ((fullW > 0) && (fullH > 0) && ((rect.width != canvW) || (rect.height != canvH))) {
+         window.resizeTo(fullW, fullH);
+         return true;
+      }
+   }
+
    /** @summary draw RCanvas object */
    static async draw(dom, can /*, opt */) {
       let nocanvas = !can;
       if (nocanvas)
-         can = create('ROOT::Experimental::RCanvas');
+         can = create(`${nsREX}RCanvas`);
 
       let painter = new RCanvasPainter(dom, can);
       painter.normal_canvas = !nocanvas;
@@ -660,7 +710,7 @@ async function ensureRCanvas(painter, frame_kind) {
       return Promise.reject(Error('Painter not provided in ensureRCanvas'));
 
    // simple check - if canvas there, can use painter
-   let pr = painter.getCanvSvg().empty() ? RCanvasPainter.draw(painter.getDom(), null /* , noframe */) : Promise.resolve(true);
+   let pr = painter.getCanvSvg().empty() ? RCanvasPainter.draw(painter.getDom(), null /* noframe */) : Promise.resolve(true);
 
    return pr.then(() => {
       if ((frame_kind !== false) && painter.getFrameSvg().select('.main_layer').empty())
@@ -702,7 +752,7 @@ function drawRFrameTitle(reason, drag) {
 
    this.createG();
 
-   this.draw_g.attr('transform',`translate(${fx},${Math.round(fy-title_margin-title_height)})`);
+   this.draw_g.attr('transform', makeTranslate(fx, Math.round(fy-title_margin-title_height)));
 
    let arg = { x: title_width/2, y: title_height/2, text: title.fText, latex: 1 };
 
@@ -719,7 +769,7 @@ function drawRFrameTitle(reason, drag) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-registerMethods('ROOT::Experimental::RPalette', {
+registerMethods(`${nsREX}RPalette`, {
 
    extractRColor(rcolor) {
      return rcolor.fColor || 'black';

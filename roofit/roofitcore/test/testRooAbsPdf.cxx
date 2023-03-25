@@ -10,31 +10,48 @@
 #include <RooDataSet.h>
 #include <RooFitResult.h>
 #include <RooFormulaVar.h>
-#include <RooGaussian.h>
 #include <RooGenericPdf.h>
 #include <RooHelpers.h>
-#include <RooPoisson.h>
 #include <RooProdPdf.h>
 #include <RooProduct.h>
 #include <RooRealVar.h>
 #include <RooSimultaneous.h>
-#include <RooUniform.h>
 #include <RooWorkspace.h>
+#include <RooRandom.h>
 
 #include <TClass.h>
 #include <TRandom.h>
 
 #include <gtest/gtest.h>
 
+// Backward compatibility for gtest version < 1.10.0
+#ifndef INSTANTIATE_TEST_SUITE_P
+#define INSTANTIATE_TEST_SUITE_P INSTANTIATE_TEST_CASE_P
+#endif
+
 #include <memory>
 
+class FitTest : public testing::TestWithParam<std::tuple<std::string>> {
+   void SetUp() override
+   {
+      RooRandom::randomGenerator()->SetSeed(1337ul);
+      _batchMode = std::get<0>(GetParam());
+      _changeMsgLvl = std::make_unique<RooHelpers::LocalChangeMsgLevel>(RooFit::WARNING);
+   }
+
+   void TearDown() override { _changeMsgLvl.reset(); }
+
+protected:
+   std::string _batchMode;
+
+private:
+   std::unique_ptr<RooHelpers::LocalChangeMsgLevel> _changeMsgLvl;
+};
+
 // ROOT-10668: Asympt. correct errors don't work when title and name differ
-TEST(RooAbsPdf, AsymptoticallyCorrectErrors)
+TEST_P(FitTest, AsymptoticallyCorrectErrors)
 {
    using namespace RooFit;
-
-   auto &msg = RooMsgService::instance();
-   msg.setGlobalKillBelow(RooFit::WARNING);
 
    RooRealVar x("x", "xxx", 0, 0, 10);
    RooRealVar a("a", "aaa", 2, 0, 10);
@@ -45,17 +62,16 @@ TEST(RooAbsPdf, AsymptoticallyCorrectErrors)
    std::unique_ptr<RooDataSet> data(pdf.generate(x, 5000));
    data->addColumn(formula);
    RooRealVar w("w", "weight", 1, 0, 20);
-   RooDataSet weightedData("weightedData", "weightedData", {x, w}, Import(*data),
-                           WeightVar(w));
+   RooDataSet weightedData("weightedData", "weightedData", {x, w}, Import(*data), WeightVar(w));
 
    ASSERT_TRUE(weightedData.isWeighted());
    weightedData.get(0);
    ASSERT_NE(weightedData.weight(), 1);
 
    a = 1.2;
-   auto result = pdf.fitTo(weightedData, Save(), AsymptoticError(true), PrintLevel(-1));
+   auto result = pdf.fitTo(weightedData, Save(), AsymptoticError(true), PrintLevel(-1), BatchMode(_batchMode));
    a = 1.2;
-   auto result2 = pdf.fitTo(weightedData, Save(), SumW2Error(false), PrintLevel(-1));
+   auto result2 = pdf.fitTo(weightedData, Save(), SumW2Error(false), PrintLevel(-1), BatchMode(_batchMode));
 
    // Set relative tolerance for errors to large value to only check for values
    EXPECT_TRUE(result->isIdenticalNoCov(*result2, 1e-6, 10.0)) << "Fit results should be very similar.";
@@ -98,7 +114,7 @@ TEST(RooAbsPdf, ConditionalFitBatchMode)
       for (int i = 0; i < 10000; i++) {
          double tmpy = gRandom->Gaus(3, 2);
          double tmpx = gRandom->Poisson(tmpy);
-         if (fabs(tmpy) > 1 && fabs(tmpy) < 5 && fabs(tmpx) < 10) {
+         if (std::abs(tmpy) > 1 && std::abs(tmpy) < 5 && std::abs(tmpx) < 10) {
             x = tmpx;
             y = tmpy;
             d->add(coord);
@@ -110,18 +126,19 @@ TEST(RooAbsPdf, ConditionalFitBatchMode)
 
    auto data = makeFakeDataXY();
 
-   RooRealVar x("x", "x", 0, 10);
-   RooRealVar y("y", "y", 1.0, 5);
+   RooWorkspace ws;
+   ws.factory("Product::mean1({factor[1.0, 0.0, 10.0], y[1.0, 5]})");
+   ws.factory("Product::mean2({factor})");
+   ws.factory("Poisson::model1(x[0, 10], mean1)");
+   ws.factory("Poisson::model2(x, mean2)");
 
-   RooRealVar factor("factor", "factor", 1.0, 0.0, 10.0);
+   RooRealVar &factor = *ws.var("factor");
+   RooRealVar &y = *ws.var("y");
 
-   std::vector<RooProduct> means{{"mean", "mean", {factor, y}}, {"mean", "mean", {factor}}};
    std::vector<bool> expectFastEvaluationsWarnings{true, false};
 
    int iMean = 0;
-   for (auto &mean : means) {
-
-      RooPoisson model("model", "model", x, mean);
+   for (RooAbsPdf *model : {ws.pdf("model1"), ws.pdf("model2")}) {
 
       std::vector<std::unique_ptr<RooFitResult>> fitResults;
 
@@ -131,9 +148,10 @@ TEST(RooAbsPdf, ConditionalFitBatchMode)
          factor.setVal(1.0);
          factor.setError(0.0);
          fitResults.emplace_back(
-            model.fitTo(*data, ConditionalObservables(y), Save(), PrintLevel(-1), BatchMode(batchMode)));
-         if (verbose)
+            model->fitTo(*data, ConditionalObservables(y), Save(), PrintLevel(-1), BatchMode(batchMode)));
+         if (verbose) {
             fitResults.back()->Print();
+         }
       }
 
       EXPECT_TRUE(fitResults[1]->isIdentical(*fitResults[0]));
@@ -145,28 +163,30 @@ TEST(RooAbsPdf, ConditionalFitBatchMode)
 }
 
 // ROOT-9530: RooFit side-band fit inconsistent with fit to full range
-TEST(RooAbsPdf, MultiRangeFit)
+TEST_P(FitTest, MultiRangeFit)
 {
    using namespace RooFit;
-   auto &msg = RooMsgService::instance();
-   msg.setGlobalKillBelow(RooFit::WARNING);
 
-   RooRealVar x("x", "x", -10, 10);
+   RooWorkspace ws;
 
-   double cut = -5;
+   ws.factory("Gaussian::model_simple(x[-10., 10.], mean[-1, -10, 10], width[3, 0.1, 10])");
+   // model for extended fit
+   ws.factory("AddPdf::model_extended({model_simple}, {nsig[100, 0, 2000]})");
+
+   auto &x = *ws.var("x");
+   auto &mean = *ws.var("mean");
+   auto &width = *ws.var("width");
+   auto &nsig = *ws.var("nsig");
+
+   RooAbsPdf &modelSimple = *ws.pdf("model_simple");
+   RooAbsPdf &modelExtended = *ws.pdf("model_extended");
+
+   const double cut = -5;
    x.setRange("full", -10, 10);
    x.setRange("low", -10, cut);
    x.setRange("high", cut, 10);
 
-   RooRealVar mean("mean", "mean", -1, -10, 10);
-   RooRealVar width("width", "width", 3., 0.1, 10);
-   RooGaussian modelSimple("model_simple", "model_simple", x, mean, width);
-
-   std::size_t nEvents = 100;
-
-   // model for extended fit
-   RooRealVar nsig("nsig", "nsig", nEvents, 0., 2000);
-   RooAddPdf modelExtended("model_extended", "model_simple+a", RooArgList(modelSimple), RooArgList(nsig));
+   const std::size_t nEvents = nsig.getVal();
 
    auto resetValues = [&]() {
       mean.setVal(-1);
@@ -180,18 +200,20 @@ TEST(RooAbsPdf, MultiRangeFit)
    // loop over non-extended and extended fit
    for (auto *model : {static_cast<RooAbsPdf *>(&modelSimple), static_cast<RooAbsPdf *>(&modelExtended)}) {
 
-      std::unique_ptr<RooDataSet> dataSet{model->generate(x, nEvents)};
-      std::unique_ptr<RooDataHist> dataHist{dataSet->binnedClone()};
+      std::unique_ptr<RooAbsData> dataSet{model->generate(x, nEvents)};
+      std::unique_ptr<RooAbsData> dataHist{static_cast<RooDataSet &>(*dataSet).binnedClone()};
 
       // loop over binned fit and unbinned fit
-      for (auto *data : {static_cast<RooAbsData *>(dataSet.get()), static_cast<RooAbsData *>(dataHist.get())}) {
+      for (auto *data : {dataSet.get(), dataHist.get()}) {
          // full range
          resetValues();
-         std::unique_ptr<RooFitResult> fitResultFull{model->fitTo(*data, Range("full"), Save(), PrintLevel(-1))};
+         std::unique_ptr<RooFitResult> fitResultFull{
+            model->fitTo(*data, Range("full"), Save(), PrintLevel(-1), BatchMode(_batchMode))};
 
          // part (side band fit, but the union of the side bands is the full range)
          resetValues();
-         std::unique_ptr<RooFitResult> fitResultPart{model->fitTo(*data, Range("low,high"), Save(), PrintLevel(-1))};
+         std::unique_ptr<RooFitResult> fitResultPart{
+            model->fitTo(*data, Range("low,high"), Save(), PrintLevel(-1), BatchMode(_batchMode))};
 
          EXPECT_TRUE(fitResultPart->isIdentical(*fitResultFull))
             << "Results of fitting " << model->GetName() << " to a " << data->ClassName() << " should be very similar.";
@@ -200,11 +222,9 @@ TEST(RooAbsPdf, MultiRangeFit)
 }
 
 // ROOT-9530: RooFit side-band fit inconsistent with fit to full range (2D case)
-TEST(RooAbsPdf, MultiRangeFit2D)
+TEST_P(FitTest, MultiRangeFit2D)
 {
    using namespace RooFit;
-   auto &msg = RooMsgService::instance();
-   msg.setGlobalKillBelow(RooFit::WARNING);
 
    // model taken from the rf312_multirangefit.C tutorial
    RooWorkspace ws;
@@ -261,11 +281,13 @@ TEST(RooAbsPdf, MultiRangeFit2D)
    for (auto *data : {static_cast<RooAbsData *>(dataSet.get()), static_cast<RooAbsData *>(dataHist.get())}) {
       // full range
       resetValues();
-      std::unique_ptr<RooFitResult> fitResultFull{model.fitTo(*data, Range("FULL"), Save(), PrintLevel(-1))};
+      std::unique_ptr<RooFitResult> fitResultFull{
+         model.fitTo(*data, Range("FULL"), Save(), PrintLevel(-1), BatchMode(_batchMode))};
 
       // part (side band fit, but the union of the side bands is the full range)
       resetValues();
-      std::unique_ptr<RooFitResult> fitResultPart{model.fitTo(*data, Range("SB1,SB2,SIG"), Save(), PrintLevel(-1))};
+      std::unique_ptr<RooFitResult> fitResultPart{
+         model.fitTo(*data, Range("SB1,SB2,SIG"), Save(), PrintLevel(-1), BatchMode(_batchMode))};
 
       EXPECT_TRUE(fitResultPart->isIdentical(*fitResultFull))
          << "Results of fitting " << model.GetName() << " to a " << data->ClassName() << " should be very similar.";
@@ -276,46 +298,38 @@ TEST(RooAbsPdf, MultiRangeFit2D)
 // correctly after servers are redirected. This is a reduced version of a code
 // provided in the ROOT forum that originally unveiled this problem:
 // https://root-forum.cern.ch/t/problems-with-2d-simultaneous-fit/48249/4
-TEST(RooAbsPdf, ProblemsWith2DSimultaneousFit)
+TEST_P(FitTest, ProblemsWith2DSimultaneousFit)
 {
    using namespace RooFit;
 
-   RooRealVar x("x", "y", 1.0, 2.);
-   RooRealVar y("y", "y", 1.0, 2.);
-
-   RooRealVar mu1("mu1", "mu1", 2., 0, 5);
-
-   RooUniform uniform1("uniform1", "uniform1", {x, y});
-   RooUniform uniform2("uniform2", "uniform2", {x, y});
-
-   RooGaussian gauss1("gauss1", "gauss1", x, mu1, RooConst(0.1));
-   RooGaussian gauss2("gauss2", "gauss2", x, mu1, RooConst(0.1));
-   RooGaussian gauss3("gauss3", "gauss3", x, mu1, RooConst(0.1));
-
-   RooAddPdf gauss12("gauss12", "gauss12", gauss1, gauss2, RooConst(0.1));
-
-   RooAddPdf sig_x("sig_x", "sig_x", gauss3, gauss12, RooConst(0.1));
-
-   RooUniform sig_y("sig_y", "sig_y", y);
-   RooProdPdf sig("sig", "sig", sig_y, sig_x);
-
-   RooRealVar yield{"yield", "yield", 100};
+   RooWorkspace ws;
+   ws.factory("Uniform::uniform1({x[1.0, 2.], y[1.0, 2.]})");
+   ws.factory("Uniform::uniform2({x, y})");
+   ws.factory("Gaussian::gauss1(x, mu1[2., 0., 5.], 0.1)");
+   ws.factory("Gaussian::gauss2(x, mu1[2., 0., 5.], 0.1)");
+   ws.factory("Gaussian::gauss3(x, mu1[2., 0., 5.], 0.1)");
+   ws.factory("AddPdf::gauss12(gauss1, gauss2, 0.1)");
+   ws.factory("AddPdf::sig_x(gauss3, gauss12, 0.1)");
+   ws.factory("Uniform::sig_y(y)");
+   ws.factory("ProdPdf::sig(sig_y, sig_x)");
 
    // Complete model
-   RooAddPdf model("model", "model", {sig, sig_y, uniform2, uniform1}, {yield, yield, yield, yield});
+   ws.factory("AddPdf::model({sig, sig_y, uniform2, uniform1}, {yield[100], yield, yield, yield})");
+
+   RooAbsPdf &model = *ws.pdf("model");
 
    // Define category to distinguish d0 and d0bar samples events
    RooCategory sample("sample", "sample", {{"cat0", 0}, {"cat1", 1}});
 
    // Construct a dummy dataset
-   RooDataSet data("data", "data", RooArgSet(sample, x, y));
+   RooDataSet data("data", "data", RooArgSet(sample, *ws.var("x"), *ws.var("y")));
 
    // Construct a simultaneous pdf using category sample as index
    RooSimultaneous simPdf("simPdf", "simultaneous pdf", sample);
    simPdf.addPdf(model, "cat0");
    simPdf.addPdf(model, "cat1");
 
-   simPdf.fitTo(data, PrintLevel(-1));
+   simPdf.fitTo(data, PrintLevel(-1), BatchMode(_batchMode));
 }
 
 // Verifies that a server pdf gets correctly reevaluated when the normalization
@@ -324,8 +338,12 @@ TEST(RooAbsPdf, NormSetChange)
 {
    using namespace RooFit;
 
-   RooRealVar x("x", "x", 0, -10, 10);
-   RooGaussian gauss("gauss", "gauss", x, RooConst(0), RooConst(2));
+   RooWorkspace ws;
+   ws.factory("Gaussian::gauss(x[0, -10, 10], 0., 2.)");
+
+   RooRealVar &x = *ws.var("x");
+   RooAbsPdf &gauss = *ws.pdf("gauss");
+
    RooAddition add("add", "add", {gauss});
 
    double v1 = add.getVal();
@@ -335,3 +353,10 @@ TEST(RooAbsPdf, NormSetChange)
    // value, so val2 should be different from val1. }
    EXPECT_NE(v1, v2);
 }
+
+INSTANTIATE_TEST_SUITE_P(RooAbsPdf, FitTest, testing::Values("Off", "Cpu"),
+                         [](testing::TestParamInfo<FitTest::ParamType> const &paramInfo) {
+                            std::stringstream ss;
+                            ss << "BatchMode" << std::get<0>(paramInfo.param);
+                            return ss.str();
+                         });

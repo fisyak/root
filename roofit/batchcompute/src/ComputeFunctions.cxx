@@ -70,6 +70,21 @@ __rooglobal__ void computeArgusBG(BatchesHandle batches)
    }
 }
 
+__rooglobal__ void computeBMixDecay(BatchesHandle batches)
+{
+   Batch coef0 = batches[0];
+   Batch coef1 = batches[1];
+   Batch tagFlav = batches[2];
+   Batch delMistag = batches[3];
+   Batch mixState = batches[4];
+   Batch mistag = batches[5];
+
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      batches._output[i] =
+         coef0[i] * (1.0 - tagFlav[i] * delMistag[0]) + coef1[i] * (mixState[i] * (1.0 - 2.0 * mistag[0]));
+   }
+}
+
 __rooglobal__ void computeBernstein(BatchesHandle batches)
 {
    const int nCoef = batches.getNExtraArgs() - 2;
@@ -273,6 +288,13 @@ __rooglobal__ void computeChiSquare(BatchesHandle batches)
    }
 }
 
+__rooglobal__ void computeDeltaFunction(BatchesHandle batches)
+{
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      batches._output[i] = 0.0 + (batches[0][i] == 1.0);
+   }
+}
+
 __rooglobal__ void computeDstD0BG(BatchesHandle batches)
 {
    Batch DM = batches[0], DM0 = batches[1], C = batches[2], A = batches[3], B = batches[4];
@@ -326,6 +348,13 @@ __rooglobal__ void computeGaussian(BatchesHandle batches)
       const double arg = x[i] - mean[i];
       const double halfBySigmaSq = -0.5 / (sigma[i] * sigma[i]);
       batches._output[i] = fast_exp(arg * arg * halfBySigmaSq);
+   }
+}
+
+__rooglobal__ void computeIdentity(BatchesHandle batches)
+{
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      batches._output[i] = batches[0][i];
    }
 }
 
@@ -559,17 +588,116 @@ __rooglobal__ void computePolynomial(BatchesHandle batches)
 __rooglobal__ void computeProdPdf(BatchesHandle batches)
 {
    const int nPdfs = batches.extraArg(0);
-   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
       batches._output[i] = 1.;
-   for (int pdf = 0; pdf < nPdfs; pdf++)
-      for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
+   }
+   for (int pdf = 0; pdf < nPdfs; pdf++) {
+      for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
          batches._output[i] *= batches[pdf][i];
+      }
+   }
 }
 
 __rooglobal__ void computeRatio(BatchesHandle batches)
 {
-   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
       batches._output[i] = batches[0][i] / batches[1][i];
+   }
+}
+
+__rooglobal__ void computeTruthModelExpBasis(BatchesHandle batches)
+{
+
+   const bool isMinus = batches.extraArg(0) < 0.0;
+   const bool isPlus = batches.extraArg(0) > 0.0;
+   for (std::size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      double x = batches[0][i];
+      // Enforce sign compatibility
+      const bool isOutOfSign = (isMinus && x > 0.0) || (isPlus && x < 0.0);
+      batches._output[i] = isOutOfSign ? 0.0 : fast_exp(-std::abs(x) / batches[1][i]);
+   }
+}
+
+__rooglobal__ void computeTruthModelSinBasis(BatchesHandle batches)
+{
+   const bool isMinus = batches.extraArg(0) < 0.0;
+   const bool isPlus = batches.extraArg(0) > 0.0;
+   for (std::size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      double x = batches[0][i];
+      // Enforce sign compatibility
+      const bool isOutOfSign = (isMinus && x > 0.0) || (isPlus && x < 0.0);
+      batches._output[i] = isOutOfSign ? 0.0 : fast_exp(-std::abs(x) / batches[1][i]) * fast_sin(x * batches[2][i]);
+   }
+}
+
+__rooglobal__ void computeTruthModelCosBasis(BatchesHandle batches)
+{
+   const bool isMinus = batches.extraArg(0) < 0.0;
+   const bool isPlus = batches.extraArg(0) > 0.0;
+   for (std::size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      double x = batches[0][i];
+      // Enforce sign compatibility
+      const bool isOutOfSign = (isMinus && x > 0.0) || (isPlus && x < 0.0);
+      batches._output[i] = isOutOfSign ? 0.0 : fast_exp(-std::abs(x) / batches[1][i]) * fast_cos(x * batches[2][i]);
+   }
+}
+
+__rooglobal__ void computeTruthModelLinBasis(BatchesHandle batches)
+{
+   const bool isMinus = batches.extraArg(0) < 0.0;
+   const bool isPlus = batches.extraArg(0) > 0.0;
+   for (std::size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      double x = batches[0][i];
+      // Enforce sign compatibility
+      const bool isOutOfSign = (isMinus && x > 0.0) || (isPlus && x < 0.0);
+      if (isOutOfSign) {
+         batches._output[i] = 0.0;
+      } else {
+         const double tscaled = std::abs(x) / batches[1][i];
+         batches._output[i] = fast_exp(-tscaled) * tscaled;
+      }
+   }
+}
+
+__rooglobal__ void computeTruthModelQuadBasis(BatchesHandle batches)
+{
+   const bool isMinus = batches.extraArg(0) < 0.0;
+   const bool isPlus = batches.extraArg(0) > 0.0;
+   for (std::size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      double x = batches[0][i];
+      // Enforce sign compatibility
+      const bool isOutOfSign = (isMinus && x > 0.0) || (isPlus && x < 0.0);
+      if (isOutOfSign) {
+         batches._output[i] = 0.0;
+      } else {
+         const double tscaled = std::abs(x) / batches[1][i];
+         batches._output[i] = fast_exp(-tscaled) * tscaled * tscaled;
+      }
+   }
+}
+
+__rooglobal__ void computeTruthModelSinhBasis(BatchesHandle batches)
+{
+   const bool isMinus = batches.extraArg(0) < 0.0;
+   const bool isPlus = batches.extraArg(0) > 0.0;
+   for (std::size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      double x = batches[0][i];
+      // Enforce sign compatibility
+      const bool isOutOfSign = (isMinus && x > 0.0) || (isPlus && x < 0.0);
+      batches._output[i] = isOutOfSign ? 0.0 : fast_exp(-std::abs(x) / batches[1][i]) * sinh(x * batches[2][i] * 0.5);
+   }
+}
+
+__rooglobal__ void computeTruthModelCoshBasis(BatchesHandle batches)
+{
+   const bool isMinus = batches.extraArg(0) < 0.0;
+   const bool isPlus = batches.extraArg(0) > 0.0;
+   for (std::size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      double x = batches[0][i];
+      // Enforce sign compatibility
+      const bool isOutOfSign = (isMinus && x > 0.0) || (isPlus && x < 0.0);
+      batches._output[i] = isOutOfSign ? 0.0 : fast_exp(-std::abs(x) / batches[1][i]) * cosh(x * batches[2][i] * .5);
+   }
 }
 
 __rooglobal__ void computeVoigtian(BatchesHandle batches)
@@ -588,7 +716,7 @@ __rooglobal__ void computeVoigtian(BatchesHandle batches)
          batches._output[i] = invSqrt2 / S[i];
    }
 
-   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
       if (S[i] != 0.0 && W[i] != 0.0) {
          if (batches._output[i] < 0)
             batches._output[i] = -batches._output[i];
@@ -596,6 +724,7 @@ __rooglobal__ void computeVoigtian(BatchesHandle batches)
          std::complex<double> z(batches._output[i] * (X[i] - M[i]), factor * batches._output[i] * W[i]);
          batches._output[i] *= faddeeva_impl::faddeeva(z).real();
       }
+   }
 }
 
 /// Returns a std::vector of pointers to the compute functions in this file.
@@ -603,6 +732,7 @@ std::vector<void (*)(BatchesHandle)> getFunctions()
 {
    return {computeAddPdf,
            computeArgusBG,
+           computeBMixDecay,
            computeBernstein,
            computeBifurGauss,
            computeBreitWigner,
@@ -610,10 +740,12 @@ std::vector<void (*)(BatchesHandle)> getFunctions()
            computeCBShape,
            computeChebychev,
            computeChiSquare,
+           computeDeltaFunction,
            computeDstD0BG,
            computeExponential,
            computeGamma,
            computeGaussian,
+           computeIdentity,
            computeJohnson,
            computeLandau,
            computeLognormal,
@@ -623,6 +755,13 @@ std::vector<void (*)(BatchesHandle)> getFunctions()
            computePolynomial,
            computeProdPdf,
            computeRatio,
+           computeTruthModelExpBasis,
+           computeTruthModelSinBasis,
+           computeTruthModelCosBasis,
+           computeTruthModelLinBasis,
+           computeTruthModelQuadBasis,
+           computeTruthModelSinhBasis,
+           computeTruthModelCoshBasis,
            computeVoigtian};
 }
 } // End namespace RF_ARCH

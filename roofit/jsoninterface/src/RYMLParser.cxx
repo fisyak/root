@@ -121,6 +121,11 @@ void TRYMLTree::Node::set_seq()
    node->get() |= c4::yml::SEQ;
 }
 
+void TRYMLTree::Node::clear()
+{
+   throw std::logic_error("Function not yet implemented");
+}
+
 TRYMLTree::TRYMLTree(std::istream &is)
    : tree(std::make_unique<Impl>(is)){
         // constructor taking an istream (for reading)
@@ -171,7 +176,7 @@ TRYMLTree::Node &TRYMLTree::Node::operator<<(int i)
 
 TRYMLTree::Node &TRYMLTree::Node::operator<<(double d)
 {
-   // write an float to this node
+   // write a double to this node
    node->get() << d;
    return *this;
 }

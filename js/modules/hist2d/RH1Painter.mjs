@@ -1,6 +1,6 @@
 import { gStyle, settings, constants, isBatchMode } from '../core.mjs';
 import { rgb as d3_rgb } from '../d3.mjs';
-import { floatToString, DrawOptions, buildSvgPath } from '../base/BasePainter.mjs';
+import { floatToString, DrawOptions, buildSvgCurve } from '../base/BasePainter.mjs';
 import { RHistPainter } from './RHistPainter.mjs';
 import { ensureRCanvas } from '../gpad/RCanvasPainter.mjs';
 
@@ -67,7 +67,7 @@ class RH1Painter extends RHistPainter {
                first = false;
             }
 
-            err =  0;
+            err = 0;
 
             hmin = Math.min(hmin, value - err);
             hmax = Math.max(hmax, value + err);
@@ -108,7 +108,6 @@ class RH1Painter extends RHistPainter {
           right = this.getSelectIndex('x', 'right'),
           stat_sumw = 0, stat_sumwx = 0, stat_sumwx2 = 0, stat_sumwy = 0, stat_sumwy2 = 0,
           i, xx = 0, w = 0, xmax = null, wmax = null,
-          fp = this.getFramePainter(),
           res = { name: 'histo', meanx: 0, meany: 0, rmsx: 0, rmsy: 0, integral: 0, entries: this.stat_entries, xmax: 0, wmax: 0 };
 
       for (i = left; i < right; ++i) {
@@ -287,14 +286,13 @@ class RH1Painter extends RHistPainter {
          bins2.unshift({grx: grx, gry: gry2});
       }
 
-      let kind = (this.options.ErrorKind === 4) ? 'bezier' : 'line',
-          path1 = buildSvgPath(kind, bins1),
-          path2 = buildSvgPath('L'+kind, bins2);
+      let path1 = buildSvgCurve(bins1, { line: this.options.ErrorKind !== 4 }),
+          path2 = buildSvgCurve(bins2, { line: this.options.ErrorKind !== 4, cmd: 'L' });
 
       if (this.fillatt.empty()) this.fillatt.setSolidColor('blue');
 
       this.draw_g.append('svg:path')
-                 .attr('d', path1.path + path2.path + 'Z')
+                 .attr('d', path1 + path2 + 'Z')
                  .call(this.fillatt.func);
 
       return true;
@@ -605,15 +603,14 @@ class RH1Painter extends RHistPainter {
       if (name) tips.push(name);
 
       if (this.options.Error || this.options.Mark) {
-         tips.push('x = ' + xlbl, 'y = ' + pmain.axisAsText('y', cont));
+         tips.push(`x = ${xlbl}`, `y = ${pmain.axisAsText('y', cont)}`);
          if (this.options.Error) {
             if (xlbl[0] == '[') tips.push('error x = ' + ((x2 - x1) / 2).toPrecision(4));
             tips.push('error y = ' + histo.getBinError(bin + 1).toPrecision(4));
          }
       } else {
-         tips.push(`bin = ${bin+1}`);
-         tips.push('x = ' + xlbl);
-         if (histo['$baseh']) cont -= histo['$baseh'].getBinContent(bin+1);
+         tips.push(`bin = ${bin+1}`, `x = ${xlbl}`);
+         if (histo.$baseh) cont -= histo.$baseh.getBinContent(bin+1);
          let lbl = 'entries = ' + (di > 1 ? '~' : '');
          if (cont === Math.round(cont))
             tips.push(lbl + cont);
@@ -795,8 +792,8 @@ class RH1Painter extends RHistPainter {
 
       let res = { name: 'histo', title: histo.fTitle,
                   x: midx, y: midy, exact: true,
-                  color1: this.lineatt ? this.lineatt.color : 'green',
-                  color2: this.fillatt ? this.fillatt.getFillColorAlt('blue') : 'blue',
+                  color1: this.lineatt?.color ?? 'green',
+                  color2: this.fillatt?.getFillColorAlt('blue') ?? 'blue',
                   lines: this.getBinTooltips(findbin) };
 
       if (pnt.disabled) {
@@ -872,7 +869,7 @@ class RH1Painter extends RHistPainter {
 
          this.decodeOptions(arg); // obsolete, should be implemented differently
 
-         if (this.options.need_fillcol && this.fillatt && this.fillatt.empty())
+         if (this.options.need_fillcol && this.fillatt?.empty())
             this.fillatt.change(5,1001);
 
          // redraw all objects

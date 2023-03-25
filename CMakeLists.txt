@@ -22,7 +22,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
     " Please see README/INSTALL for more information.")
 endif()
 
-set(policy_new CMP0072 CMP0077)
+set(policy_new CMP0072 CMP0076 CMP0077 CMP0079)
 foreach(policy ${policy_new})
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
@@ -521,14 +521,25 @@ endif()
 if(runtime_cxxmodules)
   ROOT_GET_LIBRARY_OUTPUT_DIR(library_output_dir)
   get_property(modules_idx_deps GLOBAL PROPERTY modules_idx_deps_property)
-  add_custom_command(OUTPUT ${library_output_dir}/modules.idx
-                     COMMAND ${CMAKE_COMMAND} -E remove -f modules.idx modules.timestamp
-                     COMMAND ${ld_library_path}=${library_output_dir}:$ENV{${ld_library_path}}
-                             ROOTIGNOREPREFIX=1 ROOT_HIST=0
-                             $<TARGET_FILE:root.exe> -l -q -b
-                     WORKING_DIRECTORY ${library_output_dir}
-                     DEPENDS $<TARGET_FILE:root.exe> Cling Hist Tree Gpad Graf HistPainter move_artifacts
-                             ${modules_idx_deps})
+  if(WIN32)
+    add_custom_command(OUTPUT ${library_output_dir}/modules.idx
+                       COMMAND ${CMAKE_COMMAND} -E remove -f modules.idx modules.timestamp
+                       COMMAND set PATH=${library_output_dir} &&
+                               set ROOTIGNOREPREFIX=1 && set ROOT_HIST=0 &&
+                               $<TARGET_FILE:root.exe> -l -q -b
+                       WORKING_DIRECTORY ${library_output_dir}
+                       DEPENDS $<TARGET_FILE:root.exe> Cling Hist Tree Gpad Graf HistPainter move_artifacts
+                               ${modules_idx_deps})
+  else()
+    add_custom_command(OUTPUT ${library_output_dir}/modules.idx
+                       COMMAND ${CMAKE_COMMAND} -E remove -f modules.idx modules.timestamp
+                       COMMAND ${ld_library_path}=${library_output_dir}:$ENV{${ld_library_path}}
+                               ROOTIGNOREPREFIX=1 ROOT_HIST=0
+                               $<TARGET_FILE:root.exe> -l -q -b
+                       WORKING_DIRECTORY ${library_output_dir}
+                       DEPENDS $<TARGET_FILE:root.exe> Cling Hist Tree Gpad Graf HistPainter move_artifacts
+                               ${modules_idx_deps})
+  endif()
   add_custom_target(modules_idx ALL DEPENDS ${library_output_dir}/modules.idx)
   add_dependencies(modules_idx ${modules_idx_deps})
   set_property(TARGET modules_idx PROPERTY modules_idx_file ${library_output_dir}/modules.idx)
@@ -580,7 +591,14 @@ if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_INSTALL_PREFIX)
   else()
     install(DIRECTORY README DESTINATION ${CMAKE_INSTALL_DOCDIR})
   endif()
+  set(ETC_PATT_EXCL)
+  if(NOT roofit)
+    list(APPEND ETC_PATT_EXCL PATTERN HistFactorySchema.dtd EXCLUDE)
+    list(APPEND ETC_PATT_EXCL PATTERN RooFitHS3_wsexportkeys.json EXCLUDE)
+    list(APPEND ETC_PATT_EXCL PATTERN RooFitHS3_wsfactoryexpressions.json EXCLUDE)
+  endif()
   install(DIRECTORY etc/ DESTINATION ${CMAKE_INSTALL_SYSCONFDIR} USE_SOURCE_PERMISSIONS
+                         ${ETC_PATT_EXCL}
                          PATTERN "system.rootrc" EXCLUDE
                          PATTERN "system.rootauthrc" EXCLUDE
                          PATTERN "system.rootdaemonrc" EXCLUDE
@@ -601,8 +619,11 @@ if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_INSTALL_PREFIX)
      set(MAN_PATT_EXCL PATTERN xproofd.1 EXCLUDE)
   endif()
   if(NOT fortran OR NOT CMAKE_Fortran_COMPILER)
-    set(MAN_PATT_EXCL ${MAN_PATT_EXCL} PATTERN h2root.1 EXCLUDE)
-    set(MAN_PATT_EXCL ${MAN_PATT_EXCL} PATTERN g2root.1 EXCLUDE)
+    list(APPEND MAN_PATT_EXCL PATTERN h2root.1 EXCLUDE)
+    list(APPEND MAN_PATT_EXCL PATTERN g2root.1 EXCLUDE)
+  endif()
+  if(NOT roofit)
+    list(APPEND MAN_PATT_EXCL PATTERN prepareHistFactory.1 EXCLUDE)
   endif()
   install(DIRECTORY man/    DESTINATION ${CMAKE_INSTALL_MANDIR} ${MAN_PATT_EXCL})
   install(DIRECTORY tutorials/ DESTINATION ${CMAKE_INSTALL_TUTDIR} COMPONENT tests)

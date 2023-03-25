@@ -86,6 +86,15 @@ template <typename Proxied, typename DataSource>
 class RInterface;
 
 using RNode = RInterface<::ROOT::Detail::RDF::RNodeBase, void>;
+} // namespace RDF
+
+namespace Internal {
+namespace RDF {
+void ChangeEmptyEntryRange(const ROOT::RDF::RNode &node, std::pair<ULong64_t, ULong64_t> &&newRange);
+} // namespace RDF
+} // namespace Internal
+
+namespace RDF {
 
 // clang-format off
 /**
@@ -112,6 +121,7 @@ class RInterface : public RInterfaceBase {
    friend class RInterface;
 
    friend void RDFInternal::TriggerRun(RNode &node);
+   friend void RDFInternal::ChangeEmptyEntryRange(const RNode &node, std::pair<ULong64_t, ULong64_t> &&newRange);
 
    std::shared_ptr<Proxied> fProxiedPtr; ///< Smart pointer to the graph node encapsulated by this RInterface.
 
@@ -666,6 +676,15 @@ public:
    /// hx["nominal"].Draw();
    /// hx["pt:down"].Draw("SAME");
    /// ~~~
+   /// RDataFrame computes all variations as part of a single loop over the data.
+   /// In particular, this means that I/O and computation of values shared
+   /// among variations only happen once for all variations. Thus, the event loop
+   /// run-time typically scales much better than linearly with the number of
+   /// variations.
+   ///
+   /// RDataFrame lazily computes the varied values required to produce the
+   /// outputs of VariationsFor(). If VariationsFor() was not called for a result,
+   /// the computations run are only for the nominal case.
    template <typename F>
    RInterface<Proxied, DS_t> Vary(std::string_view colName, F &&expression, const ColumnNames_t &inputColumns,
                                   const std::vector<std::string> &variationTags, std::string_view variationName = "")

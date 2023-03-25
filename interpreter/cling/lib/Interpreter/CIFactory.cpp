@@ -1254,6 +1254,13 @@ namespace {
 #if __APPLE__ && __arm64__
     argvCompile.push_back("--target=arm64-apple-darwin20.3.0");
 #endif
+#if __aarch64__
+    // Disable outline-atomics on AArch64; the routines __aarch64_* are defined
+    // in the static library libgcc.a and not necessarily included in libCling
+    // or otherwise present in the process, so the interpreter has a hard time
+    // finding them.
+    argvCompile.push_back("-mno-outline-atomics");
+#endif
 
     // Variables for storing the memory of the C-string arguments.
     // FIXME: We shouldn't use C-strings in the first place, but just use
@@ -1389,10 +1396,6 @@ namespace {
     }
 
     llvm::Triple TheTriple(llvm::sys::getProcessTriple());
-#ifdef _WIN32
-    // COFF format currently needs a few changes in LLVM to function properly.
-    TheTriple.setObjectFormat(llvm::Triple::COFF);
-#endif
     clang::driver::Driver Drvr(argv[0], TheTriple.getTriple(), *Diags);
     //Drvr.setWarnMissingInput(false);
     Drvr.setCheckInputsExist(false); // think foo.C(12)

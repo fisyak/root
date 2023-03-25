@@ -115,9 +115,10 @@ RooMinimizer::RooMinimizer(RooAbsReal &function, Config const &cfg) : _cfg(cfg)
                                   << "also setting parallel gradient calculation mode." << std::endl;
             _cfg.enableParallelGradient = 1;
          }
-         // If _cfg.parallelize is larger than zero set the number of workers to that value. Otherwise do not do anything and let 
-         // RooFit::MultiProcess handle the number of workers
-         if (_cfg.parallelize > 0) RooFit::MultiProcess::Config::setDefaultNWorkers(_cfg.parallelize);
+         // If _cfg.parallelize is larger than zero set the number of workers to that value. Otherwise do not do
+         // anything and let RooFit::MultiProcess handle the number of workers
+         if (_cfg.parallelize > 0)
+            RooFit::MultiProcess::Config::setDefaultNWorkers(_cfg.parallelize);
          RooFit::MultiProcess::Config::setTimingAnalysis(_cfg.timingAnalysis);
 
          _fcn = std::make_unique<RooFit::TestStatistics::MinuitFcnGrad>(
@@ -131,14 +132,14 @@ RooMinimizer::RooMinimizer(RooAbsReal &function, Config const &cfg) : _cfg(cfg)
             "please recompile with -Droofit_multiprocess=ON for parallel evaluation");
 #endif
       } else { // modular test statistic non parallel
-         coutW(InputArguments) << "Requested modular likelihood without gradient parallelization, some features such as offsetting "
-                               << "may not work yet. Non-modular likelihoods are more reliable without parallelization." 
-                               << std::endl;
-         // The RooRealL that is used in the case where the modular likelihood is being passed to a RooMinimizerFcn does not have
-         // offsetting implemented. Therefore, offsetting will not work in this case. Other features might also not work since the 
-         // RooRealL was not intended for minimization. Further development is required to make the MinuitFcnGrad also handle serial gradient
-         // minimization. The MinuitFcnGrad accepts a RooAbsL and has offsetting implemented, thus omitting the need for RooRealL
-         // minimization altogether.
+         coutW(InputArguments)
+            << "Requested modular likelihood without gradient parallelization, some features such as offsetting "
+            << "may not work yet. Non-modular likelihoods are more reliable without parallelization." << std::endl;
+         // The RooRealL that is used in the case where the modular likelihood is being passed to a RooMinimizerFcn does
+         // not have offsetting implemented. Therefore, offsetting will not work in this case. Other features might also
+         // not work since the RooRealL was not intended for minimization. Further development is required to make the
+         // MinuitFcnGrad also handle serial gradient minimization. The MinuitFcnGrad accepts a RooAbsL and has
+         // offsetting implemented, thus omitting the need for RooRealL minimization altogether.
          _fcn = std::make_unique<RooMinimizerFcn>(&function, this);
       }
    } else {
@@ -297,7 +298,7 @@ ROOT::Fit::Fitter const *RooMinimizer::fitter() const
 
 bool RooMinimizer::fitFcn() const
 {
-   return _fcn->fit(*_theFitter);
+   return _theFitter->FitFCN(*_fcn->getMultiGenFcn());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -310,28 +311,27 @@ bool RooMinimizer::fitFcn() const
 /// \param[in] alg  Fit algorithm to use. (Optional)
 int RooMinimizer::minimize(const char *type, const char *alg)
 {
-   if (_cfg.timingAnalysis) 
+   if (_cfg.timingAnalysis) {
 #ifdef R__HAS_ROOFIT_MULTIPROCESS
       addParamsToProcessTimer();
 #else
-      throw std::logic_error(
-            "ProcessTimer, but ROOT was not compiled with multiprocessing enabled, "
-            "please recompile with -Droofit_multiprocess=ON for logging with the "
-            "ProcessTimer.");
+      throw std::logic_error("ProcessTimer, but ROOT was not compiled with multiprocessing enabled, "
+                             "please recompile with -Droofit_multiprocess=ON for logging with the "
+                             "ProcessTimer.");
 #endif
+   }
    _fcn->Synchronize(_theFitter->Config().ParamsSettings());
 
    setMinimizerType(type);
    _theFitter->Config().SetMinimizer(type, alg);
 
    profileStart();
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::CollectErrors);
-   RooAbsReal::clearEvalErrorLog();
+   {
+      auto ctx = makeEvalErrorContext();
 
-   bool ret = fitFcn();
-   _status = ((ret) ? _theFitter->Result().Status() : -1);
-
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors);
+      bool ret = fitFcn();
+      _status = ((ret) ? _theFitter->Result().Status() : -1);
+   }
    profileStop();
    _fcn->BackProp(_theFitter->Result());
 
@@ -350,14 +350,13 @@ int RooMinimizer::migrad()
 {
    _fcn->Synchronize(_theFitter->Config().ParamsSettings());
    profileStart();
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::CollectErrors);
-   RooAbsReal::clearEvalErrorLog();
+   {
+      auto ctx = makeEvalErrorContext();
 
-   _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str(), "migrad");
-   bool ret = fitFcn();
-   _status = ((ret) ? _theFitter->Result().Status() : -1);
-
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors);
+      _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str(), "migrad");
+      bool ret = fitFcn();
+      _status = ((ret) ? _theFitter->Result().Status() : -1);
+   }
    profileStop();
    _fcn->BackProp(_theFitter->Result());
 
@@ -381,14 +380,13 @@ int RooMinimizer::hesse()
 
       _fcn->Synchronize(_theFitter->Config().ParamsSettings());
       profileStart();
-      RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::CollectErrors);
-      RooAbsReal::clearEvalErrorLog();
+      {
+         auto ctx = makeEvalErrorContext();
 
-      _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str());
-      bool ret = _theFitter->CalculateHessErrors();
-      _status = ((ret) ? _theFitter->Result().Status() : -1);
-
-      RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors);
+         _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str());
+         bool ret = _theFitter->CalculateHessErrors();
+         _status = ((ret) ? _theFitter->Result().Status() : -1);
+      }
       profileStop();
       _fcn->BackProp(_theFitter->Result());
 
@@ -413,14 +411,14 @@ int RooMinimizer::minos()
 
       _fcn->Synchronize(_theFitter->Config().ParamsSettings());
       profileStart();
-      RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::CollectErrors);
-      RooAbsReal::clearEvalErrorLog();
+      {
+         auto ctx = makeEvalErrorContext();
 
-      _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str());
-      bool ret = _theFitter->CalculateMinosErrors();
-      _status = ((ret) ? _theFitter->Result().Status() : -1);
+         _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str());
+         bool ret = _theFitter->CalculateMinosErrors();
+         _status = ((ret) ? _theFitter->Result().Status() : -1);
+      }
 
-      RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors);
       profileStop();
       _fcn->BackProp(_theFitter->Result());
 
@@ -445,31 +443,30 @@ int RooMinimizer::minos(const RooArgSet &minosParamList)
 
       _fcn->Synchronize(_theFitter->Config().ParamsSettings());
       profileStart();
-      RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::CollectErrors);
-      RooAbsReal::clearEvalErrorLog();
+      {
+         auto ctx = makeEvalErrorContext();
 
-      // get list of parameters for Minos
-      std::vector<unsigned int> paramInd;
-      for (RooAbsArg *arg : minosParamList) {
-         RooAbsArg *par = _fcn->GetFloatParamList()->find(arg->GetName());
-         if (par && !par->isConstant()) {
-            int index = _fcn->GetFloatParamList()->index(par);
-            paramInd.push_back(index);
+         // get list of parameters for Minos
+         std::vector<unsigned int> paramInd;
+         for (RooAbsArg *arg : minosParamList) {
+            RooAbsArg *par = _fcn->GetFloatParamList()->find(arg->GetName());
+            if (par && !par->isConstant()) {
+               int index = _fcn->GetFloatParamList()->index(par);
+               paramInd.push_back(index);
+            }
+         }
+
+         if (paramInd.size()) {
+            // set the parameter indeces
+            _theFitter->Config().SetMinosErrors(paramInd);
+
+            _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str());
+            bool ret = _theFitter->CalculateMinosErrors();
+            _status = ((ret) ? _theFitter->Result().Status() : -1);
+            // to avoid that following minimization computes automatically the Minos errors
+            _theFitter->Config().SetMinosErrors(false);
          }
       }
-
-      if (paramInd.size()) {
-         // set the parameter indeces
-         _theFitter->Config().SetMinosErrors(paramInd);
-
-         _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str());
-         bool ret = _theFitter->CalculateMinosErrors();
-         _status = ((ret) ? _theFitter->Result().Status() : -1);
-         // to avoid that following minimization computes automatically the Minos errors
-         _theFitter->Config().SetMinosErrors(false);
-      }
-
-      RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors);
       profileStop();
       _fcn->BackProp(_theFitter->Result());
 
@@ -489,14 +486,13 @@ int RooMinimizer::seek()
 {
    _fcn->Synchronize(_theFitter->Config().ParamsSettings());
    profileStart();
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::CollectErrors);
-   RooAbsReal::clearEvalErrorLog();
+   {
+      auto ctx = makeEvalErrorContext();
 
-   _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str(), "seek");
-   bool ret = fitFcn();
-   _status = ((ret) ? _theFitter->Result().Status() : -1);
-
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors);
+      _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str(), "seek");
+      bool ret = fitFcn();
+      _status = ((ret) ? _theFitter->Result().Status() : -1);
+   }
    profileStop();
    _fcn->BackProp(_theFitter->Result());
 
@@ -515,14 +511,13 @@ int RooMinimizer::simplex()
 {
    _fcn->Synchronize(_theFitter->Config().ParamsSettings());
    profileStart();
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::CollectErrors);
-   RooAbsReal::clearEvalErrorLog();
+   {
+      auto ctx = makeEvalErrorContext();
 
-   _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str(), "simplex");
-   bool ret = fitFcn();
-   _status = ((ret) ? _theFitter->Result().Status() : -1);
-
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors);
+      _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str(), "simplex");
+      bool ret = fitFcn();
+      _status = ((ret) ? _theFitter->Result().Status() : -1);
+   }
    profileStop();
    _fcn->BackProp(_theFitter->Result());
 
@@ -541,14 +536,13 @@ int RooMinimizer::improve()
 {
    _fcn->Synchronize(_theFitter->Config().ParamsSettings());
    profileStart();
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::CollectErrors);
-   RooAbsReal::clearEvalErrorLog();
+   {
+      auto ctx = makeEvalErrorContext();
 
-   _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str(), "migradimproved");
-   bool ret = fitFcn();
-   _status = ((ret) ? _theFitter->Result().Status() : -1);
-
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors);
+      _theFitter->Config().SetMinimizer(_cfg.minimizerType.c_str(), "migradimproved");
+      bool ret = fitFcn();
+      _status = ((ret) ? _theFitter->Result().Status() : -1);
+   }
    profileStop();
    _fcn->BackProp(_theFitter->Result());
 
@@ -619,13 +613,9 @@ RooFitResult *RooMinimizer::save(const char *userName, const char *userTitle)
    fitRes->setConstParList(saveConstList);
    fitRes->setInitParList(saveFloatInitList);
 
-   // The fitter often clones the function. We therefore have to ask it for its copy.
-   const auto fitFcn = dynamic_cast<const RooAbsMinimizerFcn *>(_theFitter->GetFCN());
    double removeOffset = 0.;
-   if (fitFcn) {
-      fitRes->setNumInvalidNLL(fitFcn->GetNumInvalidNLL());
-      removeOffset = -fitFcn->getOffset();
-   }
+   fitRes->setNumInvalidNLL(_fcn->GetNumInvalidNLL());
+   removeOffset = -_fcn->getOffset();
 
    fitRes->setStatus(_status);
    fitRes->setCovQual(_theFitter->GetMinimizer()->CovMatrixStatus());
@@ -673,7 +663,8 @@ RooPlot *RooMinimizer::contour(RooRealVar &var1, RooRealVar &var2, double n1, do
                                double n5, double n6, unsigned int npoints)
 {
    RooArgList *params = _fcn->GetFloatParamList();
-   std::unique_ptr<RooArgList> paramSave{static_cast<RooArgList *>(params->snapshot())};
+   RooArgList paramSave;
+   params->snapshot(paramSave);
 
    // Verify that both variables are floating parameters of PDF
    int index1 = _fcn->GetFloatParamList()->index(&var1);
@@ -747,7 +738,7 @@ RooPlot *RooMinimizer::contour(RooRealVar &var1, RooRealVar &var2, double n1, do
    _theFitter->GetMinimizer()->SetErrorDef(errdef);
 
    // restore parameter values
-   params->assign(*paramSave);
+   params->assign(paramSave);
 
    return frame;
 }
@@ -758,15 +749,15 @@ RooPlot *RooMinimizer::contour(RooRealVar &var1, RooRealVar &var2, double n1, do
 void RooMinimizer::addParamsToProcessTimer()
 {
 #ifdef R__HAS_ROOFIT_MULTIPROCESS
-  // parameter indices for use in timing heat matrix
-  std::vector<std::string> parameter_names;
-  for (auto && parameter : *_fcn->GetFloatParamList()) {
-    parameter_names.push_back(parameter->GetName());
-    if (_cfg.verbose) {
-      coutI(Minimization) << "parameter name: " << parameter_names.back() << std::endl;
-    }
-  }
-  RooFit::MultiProcess::ProcessTimer::add_metadata(parameter_names);
+   // parameter indices for use in timing heat matrix
+   std::vector<std::string> parameter_names;
+   for (auto &&parameter : *_fcn->GetFloatParamList()) {
+      parameter_names.push_back(parameter->GetName());
+      if (_cfg.verbose) {
+         coutI(Minimization) << "parameter name: " << parameter_names.back() << std::endl;
+      }
+   }
+   RooFit::MultiProcess::ProcessTimer::add_metadata(parameter_names);
 #else
    coutI(Minimization) << "Not adding parameters to processtimer because multiprocessing "
                        << "is not enabled." << std::endl;
@@ -972,4 +963,14 @@ int RooMinimizer::Config::getDefaultWorkers()
 #else
    return 0;
 #endif
+}
+
+std::unique_ptr<RooAbsReal::EvalErrorContext> RooMinimizer::makeEvalErrorContext() const
+{
+   RooAbsReal::clearEvalErrorLog();
+   // If evaluation error printing is disabled, we don't need to collect the
+   // errors and only need to count them. This significantly reduces the
+   // performance overhead when having evaluation errors.
+   auto m = _cfg.printEvalErrors < 0 ? RooAbsReal::CountErrors : RooAbsReal::CollectErrors;
+   return std::make_unique<RooAbsReal::EvalErrorContext>(m);
 }

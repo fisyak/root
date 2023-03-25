@@ -77,9 +77,9 @@ RooFormulaVar::RooFormulaVar(const char *name, const char *title, const char* in
   _actualVars.add(dependents) ;
 
   if (_actualVars.empty()) {
-    _value = traceEval(0);
+    _value = traceEval(nullptr);
   } else {
-    _formula.reset(new RooFormula(GetName(), _formExpr, _actualVars, checkVariables));
+    _formula = std::make_unique<RooFormula>(GetName(), _formExpr, _actualVars, checkVariables);
     _formExpr = _formula->formulaString().c_str();
   }
 }
@@ -103,7 +103,7 @@ RooFormulaVar::RooFormulaVar(const char *name, const char *title, const RooArgLi
   if (_actualVars.empty()) {
     _value = traceEval(0);
   } else {
-    _formula.reset(new RooFormula(GetName(), _formExpr, _actualVars, checkVariables));
+    _formula = std::make_unique<RooFormula>(GetName(), _formExpr, _actualVars, checkVariables);
     _formExpr = _formula->formulaString().c_str();
   }
 }
@@ -148,24 +148,6 @@ RooFormula& RooFormulaVar::getFormula() const
 double RooFormulaVar::evaluate() const
 {
   return getFormula().eval(_actualVars.nset());
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Evaluate the formula for all entries of our servers found in `inputData`.
-RooSpan<double> RooFormulaVar::evaluateSpan(RooBatchCompute::RunContext& inputData, const RooArgSet* normSet) const {
-  if (normSet != _lastNSet) {
-    // TODO: Remove dependence on _lastNSet
-    // See also comment in RooAbsReal::getValBatch().
-    std::cerr << "Formula " << GetName() << " " << GetTitle() << "\n\tBeing evaluated with normSet " << normSet << "\n";
-    normSet->Print("V");
-    std::cerr << "\tHowever, _lastNSet = " << _lastNSet << "\n";
-    if (_lastNSet) _lastNSet->Print("V");
-
-    throw std::logic_error("Got conflicting norm sets. This shouldn't happen.");
-  }
-
-  return formula().evaluateSpan(this, inputData, normSet);
 }
 
 

@@ -311,7 +311,9 @@ class EmptySourceHeadNode(HeadNode):
             """
             Builds an RDataFrame instance for a distributed mapper.
             """
-            return TaskObjects(ROOT.RDataFrame(nentries).Range(current_range.start, current_range.end), None)
+            rdf = ROOT.RDataFrame(nentries)
+            ROOT.Internal.RDF.ChangeEmptyEntryRange(ROOT.RDF.AsRNode(rdf), (current_range.start, current_range.end))
+            return TaskObjects(rdf, None)
 
         return build_rdf_from_range
 
@@ -377,6 +379,15 @@ class TreeHeadNode(HeadNode):
         if isinstance(args[0], ROOT.TTree):
             # RDataFrame(tree, defaultBranches = {})
             self.tree = args[0]
+            # TTreeIndex is not supported in distributed RDataFrame
+            list_of_friends = self.tree.GetListOfFriends()
+            if list_of_friends and list_of_friends.GetEntries() > 0:
+                for friend_element in list_of_friends:
+                    if friend_element.GetTree().GetTreeIndex():
+                        raise ValueError(
+                            f"Friend tree '{friend_element.GetName()}' has a TTreeIndex. "
+                            "This is not supported in distributed mode."
+                        )
             # Retrieve information about friend trees when user passes a TTree
             # or TChain object.
             fi = ROOT.Internal.TreeUtils.GetFriendInfo(args[0])
@@ -483,8 +494,8 @@ class TreeHeadNode(HeadNode):
                 return TaskObjects(None, entries_in_trees)
 
             ds = ROOT.RDF.Experimental.RDatasetSpec()
-            # add a group with no name to represent the whole dataset
-            ds.AddGroup(("", clustered_range.treenames, clustered_range.filenames))
+            # add a sample with no name to represent the whole dataset
+            ds.AddSample(("", clustered_range.treenames, clustered_range.filenames))
             ds.WithGlobalRange((clustered_range.globalstart, clustered_range.globalend))
 
             attach_friend_info_if_present(clustered_range, ds)

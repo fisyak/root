@@ -380,7 +380,7 @@ RooAbsArg* RooFactoryWSTool::createArg(const char* className, const char* objNam
     Int_t i(0) ;
     list<string>::iterator ti = ca.first.begin() ; ++ti ; ++ti ;
     for (vector<string>::iterator ai = _args.begin() ; ai != _args.end() ; ++ai,++ti,++i) {
-      if ((*ti)=="RooAbsReal&" || (*ti)=="const RooAbsReal&") {
+      if ((*ti)=="RooAbsReal&" || (*ti)=="const RooAbsReal&" || (*ti)=="RooAbsReal::Ref") {
    RooFactoryWSTool::as_FUNC(i) ;
    cintExpr += Form(",RooFactoryWSTool::as_FUNC(%d)",i) ;
       } else if ((*ti)=="RooAbsArg&" || (*ti)=="const RooAbsArg&") {
@@ -2062,7 +2062,7 @@ std::string RooFactoryWSTool::SpecialsIFace::create(RooFactoryWSTool& ft, const 
       throw string(
         Form("taylorexpand::%s, requires max. 6 arguments, has %d arguments", instName, (Int_t)pargv.size()));
 
-    auto taylor = RooPolyFunc::taylorExpand(instName, instName, func, observables, observablesValue, order, eps1, eps2);
+    auto taylor = RooPolyFunc::taylorExpand(instName, instName, func, observables, order, {observablesValue}, eps1, eps2);
     if (ft.ws().import(*taylor, Silence())) ft.logError();
 
    } else if (cl=="nconv") {

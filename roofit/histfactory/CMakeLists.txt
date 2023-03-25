@@ -17,6 +17,11 @@ if (xml)
     set(HISTFACTORY_XML_LIBRARIES XMLParser)
 endif()
 
+set (EXTRA_DICT_OPTS)
+if (runtime_cxxmodules AND WIN32)
+  set (EXTRA_DICT_OPTS NO_CXXMODULE)
+endif()
+
 ROOT_STANDARD_LIBRARY_PACKAGE(HistFactory
   HEADERS
     RooStats/HistFactory/Asimov.h
@@ -73,6 +78,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(HistFactory
     Graf
     Gpad
     RooStats
+  ${EXTRA_DICT_OPTS}
 )
 
 # For recent clang, this can facilitate auto-vectorisation.
@@ -95,11 +101,12 @@ if(xml)
 endif()
 
 if(MSVC)
-  file(COPY config/prepareHistFactory.bat DESTINATION  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+  set(prepareHistFactory_script prepareHistFactory.bat)
 else()
-  file(COPY config/prepareHistFactory DESTINATION  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+  set(prepareHistFactory_script prepareHistFactory)
 endif()
-install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/prepareHistFactory
+file(COPY config/${prepareHistFactory_script} DESTINATION  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${prepareHistFactory_script}
                 PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
                             GROUP_EXECUTE GROUP_READ
                             WORLD_EXECUTE WORLD_READ

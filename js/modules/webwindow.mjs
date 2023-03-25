@@ -213,6 +213,7 @@ class FileDumpSocket {
       // when file request running - just ignore
       if (this.wait_for_file) return;
       let fname = this.protocol[this.cnt];
+
       if (!fname) return;
       if (fname == 'send') return; // waiting for send
       this.wait_for_file = true;
@@ -220,8 +221,11 @@ class FileDumpSocket {
       httpRequest(fname, (fname.indexOf('.bin') > 0 ? 'buf' : 'text')).then(res => {
          this.wait_for_file = false;
          if (!res) return;
-         if (this.receiver.provideData)
-            this.receiver.provideData(1, res, 0);
+         let chid = 1, p = fname.indexOf('_ch');
+         if (p > 0)
+            chid = Number.parseInt(fname.slice(p+3, fname.indexOf('.', p)));
+         if (isFunc(this.receiver.provideData))
+            this.receiver.provideData(chid, res, 0);
          setTimeout(() => this.nextOperation(), 10);
       });
    }
@@ -289,27 +293,28 @@ class WebWindowHandle {
 
    /** @summary Provide data for receiver. When no queue - do it directly.
     * @private */
-   provideData(chid, _msg, _len) {
+   provideData(chid, msg, len) {
       if (this.wait_first_recv) {
+         // here dummy first recv like EMBED_DONE is handled
          delete this.wait_first_recv;
+         this.state = 1;
          return this.invokeReceiver(false, 'onWebsocketOpened');
       }
 
       if ((chid > 1) && this.channels) {
          const channel = this.channels[chid];
          if (channel)
-            return channel.provideData(1, _msg, _len);
+            return channel.provideData(1, msg, len);
       }
 
-      const force_queue = _len && (_len < 0);
-
+      const force_queue = len && (len < 0);
       if (!force_queue && (!this.msgqueue || !this.msgqueue.length))
-         return this.invokeReceiver(false, 'onWebsocketMsg', _msg, _len);
+         return this.invokeReceiver(false, 'onWebsocketMsg', msg, len);
 
       if (!this.msgqueue) this.msgqueue = [];
-      if (force_queue) _len = undefined;
+      if (force_queue) len = undefined;
 
-      this.msgqueue.push({ ready: true, msg: _msg, len: _len });
+      this.msgqueue.push({ ready: true, msg, len });
    }
 
    /** @summary Reserve entry in queue for data, which is not yet decoded.
@@ -347,7 +352,7 @@ class WebWindowHandle {
    /** @summary Close connection */
    close(force) {
       if (this.master) {
-         this.master.send('CLOSECH=' + this.channelid, 0);
+         this.master.send(`CLOSECH=${this.channelid}`, 0);
          delete this.master.channels[this.channelid];
          delete this.master;
          return;
@@ -401,6 +406,18 @@ class WebWindowHandle {
       return true;
    }
 
+   /** @summary Send only last message of specified kind during defined time interval.
+     * @desc Idea is to prvent sending multiple messages of similar kind and overload connection
+     * Instead timeout is started after which only last specified message will be send
+     * @private */
+   sendLast(kind, tmout, msg) {
+      let d = this._delayed;
+      if (!d) d = this._delayed = {};
+      d[kind] = msg;
+      if (!d[`${kind}_handler`])
+         d[`${kind}_handler`] = setTimeout(() => { delete d[`${kind}_handler`]; this.send(d[kind]); }, tmout);
+   }
+
    /** @summary Inject message(s) into input queue, for debug purposes only
      * @private */
    inject(msg, chid, immediate) {
@@ -450,6 +467,9 @@ class WebWindowHandle {
       // now server-side entity should be initialized and init message send from server side!
       return channel;
    }
+
+   /** @summary Returns true if socket connected */
+   isConnected() { return this.state > 0; }
 
    /** @summary Returns used channel ID, 1 by default */
    getChannelId() { return this.channelid && this.master ? this.channelid : 1; }
@@ -537,7 +557,7 @@ class WebWindowHandle {
 
             let key = this.key || '';
 
-            this.send('READY=' + key, 0); // need to confirm connection
+            this.send(`READY=${key}`, 0); // need to confirm connection
             this.invokeReceiver(false, 'onWebsocketOpened');
          };
 
@@ -673,11 +693,17 @@ async function connectWebWindow(arg) {
    else if (!isObject(arg))
       arg = {};
 
-   let d = decodeUrl();
+   let d = decodeUrl(), new_key;
+
+   if (typeof sessionStorage !== 'undefined') {
+      new_key = sessionStorage.getItem('RWebWindow_Key');
+      sessionStorage.removeItem('RWebWindow_Key');
+      if (new_key) console.log(`Use key ${new_key} from session storage`);
+   }
 
    // special holder script, prevents headless chrome browser from too early exit
    if (d.has('headless') && d.get('key') && (browser.isChromeHeadless || browser.isChrome) && !arg.ignore_chrome_batch_holder)
-      loadScript('root_batch_holder.js?key=' + d.get('key'));
+      loadScript('root_batch_holder.js?key=' + (new_key || d.get('key')));
 
    if (!arg.platform)
       arg.platform = d.get('platform');
@@ -704,6 +730,12 @@ async function connectWebWindow(arg) {
          arg.socket_kind = 'websocket';
    }
 
+   if (!new_key && arg.winW && arg.winH && !isBatchMode() && isFunc(window?.resizeTo))
+      window.resizeTo(arg.winW, arg.winH);
+
+   if (!new_key && arg.winX && arg.winY && !isBatchMode() && isFunc(window?.moveTo))
+      window.moveTo(arg.winX, arg.winY);
+
    // only for debug purposes
    // arg.socket_kind = 'longpoll';
 
@@ -717,17 +749,8 @@ async function connectWebWindow(arg) {
          if (browser.qt5) window.onqt5unload = window.onbeforeunload;
       }
 
-      handle.key = d.get('key');
+      handle.key = new_key || d.get('key');
       handle.token = d.get('token');
-
-      if (typeof sessionStorage !== 'undefined') {
-         let new_key = sessionStorage.getItem('RWebWindow_Key');
-         sessionStorage.removeItem('RWebWindow_Key');
-         if (new_key) {
-            console.log(`Use key ${new_key} from session storage`);
-            handle.key = new_key;
-         }
-      }
 
       if (arg.receiver) {
          // when receiver exists, it handles itself callbacks

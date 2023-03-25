@@ -78,6 +78,10 @@ public:
   /// should include symbols from the host process (via dlsym) or not.
   void* getSymbolAddress(llvm::StringRef Name, bool IncludeHostSymbols);
 
+  /// @brief Check whether the JIT already has emitted or knows how to emit
+  /// a symbol based on its IR name (as coming from clang's mangler).
+  bool doesSymbolAlreadyExist(llvm::StringRef UnmangledName);
+
   /// Inject a symbol with a known address. Name is not linker mangled, i.e.
   /// as known by the IR.
   llvm::JITTargetAddress addOrReplaceDefinition(llvm::StringRef Name,
@@ -89,7 +93,7 @@ public:
 
   /// @brief Get the TargetMachine used by the JIT.
   /// Non-const because BackendPasses need to update OptLevel.
-  llvm::TargetMachine &getTargetMachine() { return *TM; }
+  llvm::TargetMachine &getTargetMachine() { return *m_TM; }
 
 private:
   std::unique_ptr<llvm::orc::LLJIT> Jit;
@@ -105,8 +109,9 @@ private:
   std::map<const Transaction*, llvm::orc::ResourceTrackerSP> m_ResourceTrackers;
   std::map<const llvm::Module *, llvm::orc::ThreadSafeModule> m_CompiledModules;
 
+  bool m_JITLink;
   // FIXME: Move TargetMachine ownership to BackendPasses
-  std::unique_ptr<llvm::TargetMachine> TM;
+  std::unique_ptr<llvm::TargetMachine> m_TM;
 
   // TODO: We only need the context for materialization. Instead of defining it
   // here we might want to pass one in on a per-module basis.

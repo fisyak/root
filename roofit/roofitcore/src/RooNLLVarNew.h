@@ -35,7 +35,7 @@ public:
 
    RooNLLVarNew(){};
    RooNLLVarNew(const char *name, const char *title, RooAbsPdf &pdf, RooArgSet const &observables, bool isExtended,
-                RooFit::OffsetMode offsetMode, bool binnedL = false);
+                RooFit::OffsetMode offsetMode);
    RooNLLVarNew(const RooNLLVarNew &other, const char *name = nullptr);
    TObject *clone(const char *newname) const override { return new RooNLLVarNew(*this, newname); }
 
@@ -48,13 +48,13 @@ public:
    void computeBatch(cudaStream_t *, double *output, size_t nOut, RooFit::Detail::DataMap const &) const override;
    inline bool isReducerNode() const override { return true; }
 
-   RooArgSet prefixArgNames(std::string const &prefix);
+   void setPrefix(std::string const &prefix);
 
    void applyWeightSquared(bool flag) override;
 
-   std::unique_ptr<RooArgSet> fillNormSetForServer(RooArgSet const &normSet, RooAbsArg const &server) const override;
-
    void enableOffsetting(bool) override;
+
+   void enableBinOffsetting(bool on = true) { _doBinOffset = on; }
 
    void setSimCount(int simCount) { _simCount = simCount; }
 
@@ -62,6 +62,7 @@ private:
    double evaluate() const override { return _value; }
    void resetWeightVarNames();
    double finalizeResult(ROOT::Math::KahanSum<double> &&result, double weightSum) const;
+   void fillBinWidthsFromPdfBoundaries(RooAbsReal const &pdf);
 
    RooTemplateProxy<RooAbsPdf> _pdf;
    RooArgSet _observables;
@@ -71,13 +72,15 @@ private:
    bool _weightSquared = false;
    bool _binnedL = false;
    bool _doOffset = false;
+   bool _doBinOffset = false;
    int _simCount = 1;
    std::string _prefix;
    RooTemplateProxy<RooAbsReal> _weightVar;
    RooTemplateProxy<RooAbsReal> _weightSquaredVar;
-   mutable std::vector<double> _binw;                  ///<!
-   mutable std::vector<double> _logProbasBuffer;       ///<!
-   mutable ROOT::Math::KahanSum<double> _offset {0.}; ///<! Offset as KahanSum to avoid loss of precision
+   RooTemplateProxy<RooAbsReal> _binVolumeVar;
+   std::vector<double> _binw;
+   mutable std::vector<double> _logProbasBuffer;     ///<!
+   mutable ROOT::Math::KahanSum<double> _offset{0.}; ///<! Offset as KahanSum to avoid loss of precision
 
 }; // end class RooNLLVar
 

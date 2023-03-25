@@ -1643,8 +1643,8 @@ void AsmPrinter::emitGlobalIndirectSymbol(Module &M,
     OutStreamer->emitSymbolAttribute(Name, MCSA_Global);
   else if (GIS.hasWeakLinkage() || GIS.hasLinkOnceLinkage())
     OutStreamer->emitSymbolAttribute(Name, MCSA_WeakReference);
-  // else
-  //   assert(GIS.hasLocalLinkage() && "Invalid alias or ifunc linkage");
+  else
+    assert(GIS.hasLocalLinkage() && "Invalid alias or ifunc linkage");
 
   // Set the symbol type to function if the alias has a function type.
   // This affects codegen when the aliasee is not a function.
@@ -1850,6 +1850,8 @@ bool AsmPrinter::doFinalization(Module &M) {
   SmallVector<const GlobalAlias *, 16> AliasStack;
   SmallPtrSet<const GlobalAlias *, 16> AliasVisited;
   for (const auto &Alias : M.aliases()) {
+    if (Alias.hasAvailableExternallyLinkage())
+      continue;
     for (const GlobalAlias *Cur = &Alias; Cur;
          Cur = dyn_cast<GlobalAlias>(Cur->getAliasee())) {
       if (!AliasVisited.insert(Cur).second)

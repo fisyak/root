@@ -86,15 +86,16 @@ public:
   bool renameSet(const char* name, const char* newName) ;
   bool removeSet(const char* name) ;
   const RooArgSet* set(const char* name) ;
+  inline const std::map<std::string,RooArgSet>& sets() const { return _namedSets; }
 
   // Import, load and save parameter value snapshots
-  bool saveSnapshot(const char* name, const char* paramNames) ;
-  bool saveSnapshot(const char* name, const RooArgSet& params, bool importValues=false) ;
+  bool saveSnapshot(RooStringView, const char* paramNames) ;
+  bool saveSnapshot(RooStringView, const RooArgSet& params, bool importValues=false) ;
   bool loadSnapshot(const char* name) ;
   const RooArgSet* getSnapshot(const char* name) const ;
 
   // Retrieve list of parameter snapshots
-  RooLinkedList getSnapshots(){ return _snapshots; }
+  RooLinkedList const& getSnapshots() const { return _snapshots; }
 
   void merge(const RooWorkspace& /*other*/) {} ;
 

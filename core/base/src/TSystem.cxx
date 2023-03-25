@@ -3760,7 +3760,7 @@ int TSystem::CompileMacro(const char *filename, Option_t *opt,
       TString cmdAllowUnresolved = cmd;
 #ifdef R__MACOSX
       // Allow linking to succeed despite the missing symbols.
-      cmdAllowUnresolved.ReplaceAll("-dynamiclib", "-dynamiclib -Wl,-flat_namespace -Wl,-undefined,suppress");
+      cmdAllowUnresolved.ReplaceAll("-dynamiclib", "-dynamiclib -Wl,-w -Wl,-undefined,dynamic_lookup");
 #endif
       if (verboseLevel > 3 && withInfo) {
          ::Info("ACLiC","compiling the dictionary and script files");
@@ -4037,9 +4037,9 @@ void TSystem::SetBuildDir(const char *build_dir, Bool_t isflat)
 {
    fBuildDir = build_dir;
    if (isflat)
-      fAclicProperties |= (kFlatBuildDir & kBitMask);
+      fAclicProperties |= kFlatBuildDir;
    else
-      fAclicProperties &= ~(kFlatBuildDir & kBitMask);
+      fAclicProperties &= ~kFlatBuildDir;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

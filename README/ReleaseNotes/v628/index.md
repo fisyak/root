@@ -12,29 +12,48 @@ For more information, see:
 
 The following people have contributed to this new version:
 
+ Rahul Balasubramanian, NIKHEF/ATLAS,\
  Bertrand Bellenot, CERN/SFT,\
  Jakob Blomer, CERN/SFT,\
+ Patrick Bos, Netherlands eScience Center,\
  Rene Brun, CERN/SFT,\
- Will Buttinger, RAL/Atlas,\
+ Carsten D. Burgard, TU Dortmund University/ATLAS,\
+ Will Buttinger, RAL/ATLAS,\
  Philippe Canal, FNAL,\
  Olivier Couet, CERN/SFT,\
+ Michel De Cian, EPFL/LHCb,\
+ Mattias Ellert, Uppsala University,\
  Gerri Ganis, CERN/SFT,\
  Andrei Gheata, CERN/SFT,\
+ Konstantin Gizdov, University of Edinburgh/LHCb,\
+ Max Goblirsch, CERN/ATLAS,\
  Enrico Guiraud, CERN/SFT,\
+ Stephan Hageboeck, CERN/IT,\
+ Jonas Hahnfeld, CERN/SFT,\
+ Ahmat Mahamat Hamdan, CERN/SFT,\
+ Fernando Hueso-González, University of Valencia,\
+ Subham Jyoti, ITER Bhubaneswar,\
  Sergey Linev, GSI,\
  Javier Lopez-Gomez, CERN/SFT,\
+ Enrico Lusiani, INFN/CMS,\
  Pere Mato, CERN/SFT,\
  Lorenzo Moneta, CERN/SFT,\
+ Nicolas Morange, CNRS/ATLAS,\
  Axel Naumann, CERN/SFT,\
+ Hanna Olvhammar, CERN/SFT,\
  Vincenzo Eduardo Padulano, CERN/SFT and UPV,\
  Danilo Piparo, CERN/SFT,\
  Fons Rademakers, CERN/SFT,\
  Jonas Rembser, CERN/SFT,\
  Enric Tejedor Saavedra, CERN/SFT,\
+ Neel Shah, GSOC,\
+ Sanjiban Sengupta, CERN/SFT,\
+ Harshal Shende, GSOC,\
  Garima Singh, Princeton/SFT,\
  Matevz Tadel, UCSD/CMS,\
  Vassil Vassilev, Princeton/CMS,\
- Wouter Verkerke, NIKHEF/Atlas,\
+ Wouter Verkerke, NIKHEF/ATLAS,\
+ Zef Wolffs, NIKHEF/ATLAS,\
  Ivan Kabadzhov, CERN/SFT,\
  David Poulton, Wits/SFT
 
@@ -163,12 +182,48 @@ RNTuple is still experimental and is scheduled to become production grade in 202
 ### New features
 
 - Add [`GraphAsymmErrors`](https://root.cern/doc/master/classROOT_1_1RDF_1_1RInterface.html#acea30792eef607489d498bf6547a00a6) action that fills a TGraphAsymmErrors object.
+- Introduce [`RDatasetSpec`](https://root.cern/doc/master/classROOT_1_1RDF_1_1Experimental_1_1RDatasetSpec.html) as an
+experimental class to specify the input dataset to an RDataFrame.
+- Arbitrary metadata can be associated to the samples in the dataset specified via `RDatasetSpect`. The metadata of each
+sample can then be retrieved during the execution by calling `DefinePerSample`.
+- Users can create an RDataFrame with a dataset specification written in a JSON file via the factory function
+[ROOT::RDF::Experimental::FromSpec](https://root.cern/doc/master/namespaceROOT_1_1RDF_1_1Experimental.html#a7193987f3c1b65c649399656cc6acce8).
 
 ### Notable bug fixes and improvements
 
 - Fix the node counter of [`SaveGraph`](https://root.cern/doc/master/namespaceROOT_1_1RDF.html#ac06a36e745255fb8744b1e0a563074c9), where previously `cling` was getting wrong static initialization.
 - Fix [`Graph`](https://root.cern/doc/master/classROOT_1_1RDF_1_1RInterface.html#a1ca9a94bece4767cac82968910afa02e) action (that fills a TGraph object) to properly handle containers and non-container types.
 - The [`RCsvDS`](https://root.cern.ch/doc/master/classROOT_1_1RDF_1_1RCsvDS.html) class now allows users to specify column types, and can properly read empty entries of csv files.
+- Fixed a bug where the `Display` operation would not show the correct amount of entries requested by the user if called
+together with other operations ([PR](https://github.com/root-project/root/pull/11398)).
+- Requesting variations for `Stats` results with `VariationsFor` is now supported.
+- Factory functions for RDataFrames reading CSV files, RNTuples, Arrow tables, etc. have been renamed in order to
+increase consistency, e.g. `MakeCsvDataFrame` is now `FromCSV`. The old wording is still available but deprecated.
+- The precision of `Sum`s and `Mean`s of single-precision floating point values has been greatly improved by employing
+Kahan summations.
+- The content of [execution logs](https://root.cern/doc/master/classROOT_1_1RDataFrame.html#rdf-logging) from RDataFrame
+has been streamlined in order to make them more useful.
+
+### Distributed RDataFrame
+
+- Add support for systematic variations (e.g. `Vary` and `VariationsFor` operations) in distributed mode.
+- If an instant action (e.g. `Snapshot`) is purposely made lazy by the user, distributed RDataFrame now respects this
+and avoids triggering the computations right away.
+- The algorithm for automatic splitting of the input dataset has been reworked, bringing the startup time cost of
+distributed RDataFrame close to zero.
+- A histogram model (name, title, binning) for the `Histo*D` actions is now required in distributed mode. See the
+[relative PR](https://github.com/root-project/root/pull/10368) for more discussion.
+- The performance of distributed RDataFrame for large computation graphs (>1000 operations) has been greatly improved.
+- If the `npartitions` argument is not set by the user, the default number of tasks created by a distributed RDataFrame
+is equal to the number of cores specified by the user when connecting to the cluster.
+- C++ exceptions (i.e. instances of `std::exception` and derived) are now correctly propagated from the processes of the
+computing nodes to the user side.
+- The minimum `dask` version required to support distributed RDataFrame is 2022.8.1, since a series of critical bugs
+present before that version were hindering the normal execution of the tool. Consequently, the minimum Python version
+needed to include distributed RDataFrame in the ROOT build is Python 3.8. More information in the relative
+[github issue](https://github.com/root-project/root/issues/11515).
+- `Stats` and `StdDev` operations are now available in distributed mode.
+- `GetColumnNames` operation is now available in distributed mode.
 
 ## Histogram Libraries
 
@@ -177,6 +232,42 @@ RNTuple is still experimental and is scheduled to become production grade in 202
 
 ## Math Libraries
 
+### Fitter class
+
+Some improvements and small fixes to the internal object memory management have been applied to the `ROOT::Fit::Fitter` class.
+- When setting an external FCN (objective function) to the Fitter, the function object is not cloned anymore.
+- A memory leak has been fixed, when using the `GSLMultiFit` class.
+- A bug has been resolved in setting fixed variables when using the linear fitter (via the `TLinearMinimizer` class).
+
+Support for providing the second derivatives (Hessian matrix) from the model function is added to the `Fitter` class and the corresponding function interfaces. The functionality it is then propagated in the implementation of the `FitMethod` classes and it is also added to the `Minimizer` classes for providing a user computed Hessian of the objective functions to the minimizers. Only Minuit2 (see below) has the capabilities of using this external Hessian.
+
+The `GradFunctor` class has been improved by providing a new constructor taking an `std::function` implementing the full gradient calculations instead of the single partial derivative.
+
+The specialized methods for least-square/likelihood functions such as Fumili, Fumili2 and GSLMultiFit have been improved in case of binned likelihood fits, where a better approximation is used than before. This makes these method work better (conerging with less number of function calls) for these types of fits.
+
+### Minuit2
+
+The support for using an External Hessian calculator has been added. The external Hessian can be used for both the initial seeding, using only the diagonal part, if the strategy is equal to 1 (the default value) and in `MnHesse`, after the minimization, to compute the covariance and correlation matrices.
+
+The print log of Minuit2 has been improved, especially when printing vector and matrices with large number of parameters (when the print level = 3).
+
+
+### KahanSum updates
+
+The `ROOT::Math::KahanSum` class was slightly modified:
+- The behavior of `operator-=` and `operator+=` on a `KahanSum` were not symmetric, leading to slight bit-wise inaccuracies. In fits, where such operations are done a lot of times (e.g. through the offsetting mechanism in RooFit which subtracts a constant `KahanSum` term after each likelihood evaluation), this can add up to significant numerical divergence. An improved algorithm was implemented, based on an algorithm for combining Kahan sums and carry terms (Tian et al. 2012). (PR #11940)
+- The auto-conversion to type `T` and implicit type `T` constructor in `KahanSum` made it hard to debug `KahanSum`, because it is easy to overlook implicit conversions in code, especially in lines where the type of the return value is `auto`. These auto-conversions were removed. Where necessary, they should be replaced with an explicit construction or explicit conversion to double via `Sum()`. (PR #11941)
+- Binary addition and subtraction operators were added, as well as a unary negation operator. (PR #11940)
+- Comparison operators `operator==` and `operator!=` were added.
+
+### Foam
+
+The usage of `TRef` in the `TFoamCell` class has ben replaced with array indices. This avoids, when generating a large number of toys requiring a re-initialization of `TFoam` an increase in the memory usage caused by `TRef`.
+
+### RVec
+
+- a number of new helper functions have been added to [RVec](https://root.cern/doc/master/classROOT_1_1VecOps_1_1RVec.html): [Range](https://root.cern/doc/master/group__vecops.html#ga59cc6e477803f2bfd7dae29e56048cc1), [Product](https://root.cern/doc/master/group__vecops.html#ga25e4c2cf5c82fe56dd6bbc86b2386b69) and Enumerate
+- the [Take](https://root.cern/doc/master/group__vecops.html#gac719439afb1ec9d32a28acdc7aee5948) helper function now allows passing a default value that will be used to fill the output array in case it's longer than the input
 
 ## RooFit Libraries
 
@@ -281,6 +372,92 @@ In the unlikely case that this causes any problem for you, please open a GitHub 
 The `RooAbsBinning` interface for bin index lookups was changed to enable vectorized implementations.
 Instead of having the override `RooAbsBinning::binNumber()`, the binning implementations now have to override the `RooAbsBinning::binNumbers()` function to evaluate the bin indices of multiple values in one function call.
 
+### Disable relative and absolute epsilon in `RooAbsRealLValue::inRange()`
+
+So far, the `RooAbsRealLValue::inRange()` function used the following
+undocumented convention to check whether a value `x` is in the range with
+limits `a` and `b`: test if `[x - eps * x, x + eps * x]` overlaps with `[a, b]`, where the
+parameter `eps` is defined as `max(epsRel * x, epsAbs)`.
+
+The values of the relative and absolute epsilons were inconsistent among the overloads:
+
+* [RooAbsRealLValue::inRange(const char* rangeName)](https://root.cern.ch/doc/v626/classRooAbsRealLValue.html#ab6050a0c3e5583b9d755a38fd7fb82f7): `epsRel = 1e-8, epsAbs = 0`
+* [RooAbsRealLValue::inRange(double value, const char* rangeName, double* clippedValPtr)](https://root.cern.ch/doc/v626/classRooAbsRealLValue.html#afc2a8818f433a9a4ec0c437cbdad4e8a): `epsRel = 0, epsAbs = 1e-6`
+* [RooAbsRealLValue::inRange(std::span<const double> values, std::string const& rangeName, std::vector<bool>& out)](https://root.cern.ch/doc/v626/classRooAbsRealLValue.html#af9217abd0afe34364562ad0c194f5d2c): `epsRel = 0, epsAbs = 1e-6`
+
+
+With this release, the default absolute and relative epsilon is zero to avoid confusion.
+You can change them with `RooNumber::setRangeEpsRel(epsRel)` and `RooNumber::setRangeEpsAbs(epsAbs)`.
+
+## TMVA
+
+### SOFIE : Code generation for fast inference of Deep Learning models
+
+A large number of new features have been added in the TMVA SOFIE library. The list of all operators supported in the `RModel` class is the one provided below for the ONNX parser.
+
+The interface of `RModel::Generate` has been changed to
+```
+RModel::Generate(Options options = Options::kDefault, int batchsize = 1)`
+```
+where `Options` is a new enumeration having 3 different values:
+- `kDefault = 0x0` : default case, a session class is generated and the weights are stored in a separate `.dat` file (in text format).
+- `kNoSession = 0x1` : no session class is generated and the internal intermediate tensors are declared in the global namespace `TMVA_SOFIE_$ModelName`.
+- `kNoWeightFile = 0x2` the weight values are not written in a separate `.dat` file, but they are included in the generated header file.
+
+In addition, the `RModel::Generate` function takes as an additional optional argument the batch size (default is = 1) and the inference code can then be generated for the desired batch size.
+
+#### SOFIE ONNX Parser
+
+The ONNX parser supports now several new ONNX operators. The list of the current supported ONNX operator is the following:
+- Gemm
+- Conv (in 1D,2D and 3D)
+- RNN, GRU, LSTM
+- Relu, Selu, Sigmoid, Softmax, Tanh, LeakyRelu
+- BatchNormalization
+- MaxPool, AveragePool, GlobalAverage
+- ConvTranspose
+- Gather
+- Expand, Reduce
+- Neg, Exp, Sqrt, Reciprocal
+- Add, Sum, Mul, Div
+- Reshape, Flatten, Transpose
+- Squeeze, Unsqueeze, Slice
+- Concat, Reduce
+- Identity
+- Shape
+
+In addition a Custom (user defined) operator is supported. An example of using a Custom operator is the program `tmva/pymva/test/EmitCustomModel.cxx`.
+
+The ONNX parser supports also the fusing of the operators MatMul + Add in a Gemm operator and fusing Conv + Add and ConvTranspose + Add.
+
+#### SOFIE Keras Parser
+
+The Keras parser supports now model with input batch size not defined (e.g `bathsize=-1`), and by default the model is generated with `batchsize=1`.
+The Keras parser supports now in addition to the Dense layer the Conv2D layer, several activation functions (Relu, Selu, Sigmoid, Softmax, Tanh, LeakyRelu) and these other layers: BatchNormalization, Reshape, Convatenate, Add, Subtract, Multiply.
+Models with Dropout layers are supported in case the Dropout is used only during training and not inference.
+
+For model having operators not yet supported in the Keras parser it is then reccomended to convert the Keras model to `ONNX` using the python `tf2onnx` tool.
+
+#### SOFIE PyTorch Parser
+
+If using PyTorch it is recommended to save the model directly in `ONNX` format instad of the native `.pt` format by using the `torch.onnx.export` function of PyTorch. The support for parsing directly `.pt` files is limited to the Gemm, Conv, Relu, Selu, Sigmoid and Transpose operators.
+
+#### SOFIE RDataFrame Integration
+
+The SOFIE inference is now integrated with RDataFrame, where a model can be evaluated on the columns of an input `TTree` with `RDataFrame` using the adapter functor class `SofieFunctor`.
+Examples of using SOFIE with `RDataFrame` are the new tutorials  (in the `tutorials/tmva` directory) `TMVA_SOFIE_RDataFrame.C` or `TMVA_SOFIE_RDataFrame.py`. `TMVA_SOFIE_RDataFrame_JIT.C` is an example where the SOFIE model is generated and compiled at runtime using ROOT Cling and evaluated using RDataFrame.
+
+#### RSofieReader
+
+`RSofieReader` is a new class, which takes as input a model file (in ONNX, Keras, PyTorch or ROOT format) and generates and compiles the C++ code for the inference at run time using the ROOT JITing capabilities of CLING. An example of using this class is the tutorial `TMVA_SOFIE_RSofieReader.C`.
+
+### TMVA Pythonizations
+
+New Pythonizations are available for TMVA allowing to replace the option string passed to several `TMVA` functions such as the `TMVA::Factory` constructor, the `DataLoader::PrepareTrainingAndTestTree` and `Factory::BookMethod` using Python function arguments.
+For example instead of writing an option string `"NTrees=500:BoostType=AdaBoost"` one can use in Python `NTrees=500,BoostType='AdaBoost'`.
+The new tmva tutorials `TMVA_Higgs_Classification.py`, `TMVA_CNN_Classificaion.py` and `TMVA_RNN_Classificaton.py` provide examples of using these new pythonizations.
+
+
 ## 2D Graphics Libraries
 
 - Implement the option "File": The current file name is painted on the bottom right of each plot
@@ -363,6 +540,10 @@ accessing widget via configured ssh tunnel.
 
 ## Tutorials
 
+- Several new tutorials have been added in both C++ and Python in the `tutorial/tmva` directory.
+  Tutorials like `TMVA_Higgs_Classification.py` shows the new pythonizations available in TMVA and
+  new `TMVA_SOFIE_...` tutorials show th eusage of SOFIE in both C++ or Python.
+
 
 ## Class Reference Guide
 
@@ -370,3 +551,25 @@ accessing widget via configured ssh tunnel.
 ## Build, Configuration and Testing Infrastructure
 
 - Building external applications that use ROOT oftentimes fail if there is a mismatch in the C++ standard between ROOT and the application. As of v6.28, suchs builds will issue a warning if the C++ standard does not match ROOT's, i.e. if there is a mismatch in the value of the `__cplusplus` preprocessor macro w.r.t. when ROOT was configured.
+
+## PyROOT
+
+- A `.rootlogon.py` file will be searched both in the current working directory and in the user's home directory. This
+file is the Python equivalent of `rootlogon.C` and can be used to tweak ROOT settings when using PyROOT.
+- A new pythonization for `TFile` now enables its usage as a Python context manager:
+```python
+from ROOT import TFile
+with TFile("file1.root", "recreate") as outfile:
+    hout = ROOT.TH1F(...)
+    outfile.WriteObject(hout, "myhisto")
+```
+- A new pythonization for `TDirectory::TContext` now enables its usage as a Python context manager:
+```python
+with TDirectory.TContext():
+    # Open some file here
+    file = ROOT.TFile(...)
+    # Retrieve contents from the file
+    histo = file.Get("myhisto")
+ 
+# After the 'with' statement, the current directory is restored to ROOT.gROOT
+```

@@ -118,21 +118,19 @@ TLinearMinimizer & TLinearMinimizer::operator = (const TLinearMinimizer &rhs)
 }
 
 
-void TLinearMinimizer::SetFunction(const  ROOT::Math::IMultiGenFunction & ) {
-   // Set function to be minimized. Flag an error since only support Gradient objective functions
-
-   Error("TLinearMinimizer::SetFunction(IMultiGenFunction)","Wrong type of function used for Linear fitter");
-}
-
-
-void TLinearMinimizer::SetFunction(const  ROOT::Math::IMultiGradFunction & objfunc) {
+void TLinearMinimizer::SetFunction(const  ROOT::Math::IMultiGenFunction & objfunc) {
    // Set the function to be minimized. The function must be a Chi2 gradient function
    // When performing a linear fit we need the basis functions, which are the partial derivatives with respect to the parameters of the model function.
+
+   if(!objfunc.HasGradient()) {
+      // Set function to be minimized. Flag an error since only support Gradient objective functions
+      Error("TLinearMinimizer::SetFunction(IMultiGenFunction)","Wrong type of function used for Linear fitter");
+   }
 
    typedef ROOT::Fit::Chi2FCN<ROOT::Math::IMultiGradFunction> Chi2Func;
    const Chi2Func * chi2func = dynamic_cast<const Chi2Func *>(&objfunc);
    if (chi2func ==0) {
-      Error("TLinearMinimizer::SetFunction(IMultiGradFunction)","Wrong type of function used for Linear fitter");
+      Error("TLinearMinimizer::SetFunction(IMultiGenFunction)","Wrong type of function used for Linear fitter");
       return;
    }
    fObjFunc = chi2func;
@@ -143,7 +141,7 @@ void TLinearMinimizer::SetFunction(const  ROOT::Math::IMultiGradFunction & objfu
    assert(modfunc != 0);
 
    fDim = chi2func->NDim(); // number of parameters
-   fNFree = fDim;
+   fNFree = fDim;  // in case of no fixed parameters
    // get the basis functions (derivatives of the modelfunc)
    TObjArray flist(fDim);
    flist.SetOwner(kFALSE);  // we do not want to own the list - it will be owned by the TLinearFitter class
@@ -196,6 +194,8 @@ bool TLinearMinimizer::Minimize() {
    // solving the linear equation. Use  TVirtualFitter::Eval.
 
    if (fFitter == 0 || fObjFunc == 0) return false;
+
+   fNFree = fFitter->GetNumberFreeParameters();
 
    int iret = 0;
    if (!fRobust)

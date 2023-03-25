@@ -75,13 +75,12 @@ Most RNTuple fields have a type identical to the corresponding TTree input branc
       _collection0 (untyped collection)
       |- float jet_pt
       |- float jet_eta
-      std::uint64_t njets (projected from _collection0 without subfields)
+      std::size_t (RNTupleCardinality) njets (projected from _collection0 without subfields)
       ROOT::RVec<float> jet_pt (projected from _collection0.jet_pt)
       ROOT::RVec<float> jet_eta (projected from _collection0.jet_eta)
     These projections are meta-data only operations and don't involve duplicating the data.
 
 Current limitations of the importer:
-  - Adding projected fields where necessary is pending the implementation of the core functionality in RNTuple
   - Importing collection proxies is untested
   - No support for trees containing TObject (or derived classes) or TClonesArray collections
   - Due to RNTuple currently storing data fully split, "don't split" markers are ignored
@@ -125,8 +124,11 @@ private:
       }
       RImportField(const RImportField &other) = delete;
       RImportField(RImportField &&other)
-         : fField(other.fField), fFieldBuffer(other.fFieldBuffer), fOwnsFieldBuffer(other.fOwnsFieldBuffer),
-           fIsInUntypedCollection(other.fIsInUntypedCollection), fIsClass(other.fIsClass)
+         : fField(other.fField),
+           fFieldBuffer(other.fFieldBuffer),
+           fOwnsFieldBuffer(other.fOwnsFieldBuffer),
+           fIsInUntypedCollection(other.fIsInUntypedCollection),
+           fIsClass(other.fIsClass)
       {
          other.fOwnsFieldBuffer = false;
       }
@@ -207,14 +209,17 @@ private:
    RNTupleImporter() = default;
 
    std::unique_ptr<TFile> fSourceFile;
-   std::unique_ptr<TTree> fSourceTree;
+   TTree *fSourceTree;
 
    std::string fDestFileName;
    std::string fNTupleName;
    std::unique_ptr<TFile> fDestFile;
    RNTupleWriteOptions fWriteOptions;
 
-   /// No standard output, conversely if set to false, schema information and progress is printed
+   /// The maximum number of entries to import. When this value is -1 (default), import all entries.
+   std::int64_t fMaxEntries = -1;
+
+   /// No standard output, conversely if set to false, schema information and progress is printed.
    bool fIsQuiet = false;
    std::unique_ptr<RProgressCallback> fProgressCallback;
 
@@ -226,6 +231,8 @@ private:
    std::vector<std::unique_ptr<RImportTransformation>> fImportTransformations;
    std::unique_ptr<RNTupleModel> fModel;
    std::unique_ptr<REntry> fEntry;
+
+   ROOT::Experimental::RResult<void> InitDestination(std::string_view destFileName);
 
    void ResetSchema();
    /// Sets up the connection from TTree branches to RNTuple fields, including initialization of the memory
@@ -242,11 +249,15 @@ public:
 
    /// Opens the input file for reading and the output file for writing (update).
    static RResult<std::unique_ptr<RNTupleImporter>>
-   Create(std::string_view sourceFile, std::string_view treeName, std::string_view destFile);
+   Create(std::string_view sourceFileName, std::string_view treeName, std::string_view destFileName);
+
+   /// Directly uses the provided tree and opens the output file for writing (update).
+   static RResult<std::unique_ptr<RNTupleImporter>> Create(TTree *sourceTree, std::string_view destFileName);
 
    RNTupleWriteOptions GetWriteOptions() const { return fWriteOptions; }
    void SetWriteOptions(RNTupleWriteOptions options) { fWriteOptions = options; }
    void SetNTupleName(const std::string &name) { fNTupleName = name; }
+   void SetMaxEntries(std::uint64_t maxEntries) { fMaxEntries = maxEntries; };
 
    /// Whether or not information and progress is printed to stdout.
    void SetIsQuiet(bool value) { fIsQuiet = value; }

@@ -169,6 +169,8 @@ public:
 
    bool AddPanel(std::shared_ptr<RWebWindow>) final;
 
+   void SetClearOnClose(const std::shared_ptr<void> &) final;
+
    /** \class CanvasPainterGenerator
           Creates RCanvasPainter objects.
         */
@@ -580,8 +582,13 @@ void RCanvasPainter::ProcessData(unsigned connid, const std::string &arg)
       } else {
          R__LOG_ERROR(CanvasPainerLog()) << "Fail to parse RDrawableRequest";
       }
+   } else if (check_header("RESIZED:")) {
+      auto sz = TBufferJSON::FromJSON<std::vector<int>>(cdata);
+      if (sz && sz->size() == 2) {
+         fCanvas.SetWidth(sz->at(0));
+         fCanvas.SetHeight(sz->at(1));
+      }
    } else if (check_header("CLEAR")) {
-
       fCanvas.Wipe();
       fCanvas.Modified();
    } else {
@@ -701,6 +708,15 @@ bool RCanvasPainter::AddPanel(std::shared_ptr<RWebWindow> win)
    DoWhenReady(cmd, "AddPanel", true, nullptr);
 
    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Set handle to window which will be cleared when connection is closed
+
+void RCanvasPainter::SetClearOnClose(const std::shared_ptr<void> &handle)
+{
+   if (fWindow)
+      fWindow->SetClearOnClose(handle);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

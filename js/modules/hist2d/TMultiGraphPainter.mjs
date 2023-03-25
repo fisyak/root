@@ -1,7 +1,7 @@
 import { create, isFunc, clTObjString, clTHashList, kNoZoom } from '../core.mjs';
 import { DrawOptions } from '../base/BasePainter.mjs';
 import { ObjectPainter } from '../base/ObjectPainter.mjs';
-import { TH1Painter } from './TH1Painter.mjs';
+import { TH1Painter, PadDrawOptions } from './TH1Painter.mjs';
 import { TGraphPainter } from './TGraphPainter.mjs';
 
 /**
@@ -66,7 +66,7 @@ class TMultiGraphPainter extends ObjectPainter {
       let mgraph = this.getObject(),
           maximum, minimum, logx = false, logy = false,
           time_display = false, time_format = '',
-          rw = {  xmin: 0, xmax: 0, ymin: 0, ymax: 0, first: true };
+          rw = { xmin: 0, xmax: 0, ymin: 0, ymax: 0, first: true };
 
       if (pad) {
          logx = pad.fLogx;
@@ -211,10 +211,8 @@ class TMultiGraphPainter extends ObjectPainter {
       if (!mgraph.fFunctions || (indx >= mgraph.fFunctions.arr.length))
          return this;
 
-      let pp = this.getPadPainter()
-
-      return pp.drawObject(this.getDom(), mgraph.fFunctions.arr[indx], mgraph.fFunctions.opt[indx])
-               .then(() => this.drawNextFunction(indx+1));
+      return this.getPadPainter().drawObject(this.getDom(), mgraph.fFunctions.arr[indx], mgraph.fFunctions.opt[indx])
+                                 .then(() => this.drawNextFunction(indx+1));
    }
 
    /** @summary Draw graph  */
@@ -225,7 +223,7 @@ class TMultiGraphPainter extends ObjectPainter {
    /** @summary method draws next graph  */
    async drawNextGraph(indx, opt) {
 
-      let graphs = this.getObject().fGraphs;
+      let graphs = this.getObject().fGraphs, exec = '';
 
       // at the end of graphs drawing draw functions (if any)
       if (indx >= graphs.arr.length) {
@@ -233,21 +231,24 @@ class TMultiGraphPainter extends ObjectPainter {
          return this.drawNextFunction(0);
       }
 
+      let gr = graphs.arr[indx], o = graphs.opt[indx] || opt || '';
+
       // if there is auto colors assignment, try to provide it
       if (this._pfc || this._plc || this._pmc) {
          let mp = this.getMainPainter();
          if (isFunc(mp?.createAutoColor)) {
             let icolor = mp.createAutoColor(graphs.arr.length);
-            if (this._pfc) graphs.arr[indx].fFillColor = icolor;
-            if (this._plc) graphs.arr[indx].fLineColor = icolor;
-            if (this._pmc) graphs.arr[indx].fMarkerColor = icolor;
+            if (this._pfc) { gr.fFillColor = icolor; exec += `SetFillColor(${icolor});;`; }
+            if (this._plc) { gr.fLineColor = icolor; exec += `SetLineColor(${icolor});;`; }
+            if (this._pmc) { gr.fMarkerColor = icolor; exec += `SetMarkerColor(${icolor});;`; }
          }
       }
 
-      let o = graphs.opt[indx] || opt || '';
-
-      return this.drawGraph(graphs.arr[indx], o, graphs.arr.length - indx).then(subp => {
-         if (subp) this.painters.push(subp);
+      return this.drawGraph(gr, o, graphs.arr.length - indx).then(subp => {
+         if (subp) {
+            this.painters.push(subp);
+            subp._auto_exec = exec;
+         }
 
          return this.drawNextGraph(indx+1, opt);
       });
@@ -264,14 +265,13 @@ class TMultiGraphPainter extends ObjectPainter {
       painter._plc = d.check('PLC');
       painter._pmc = d.check('PMC');
 
-      let hopt = '', checkhopt = ['USE_PAD_TITLE', 'LOGXY', 'LOGX', 'LOGY', 'LOGZ', 'GRIDXY', 'GRIDX', 'GRIDY', 'TICKXY', 'TICKX', 'TICKY', 'FB'];
-      checkhopt.forEach(name => { if (d.check(name)) hopt += ';' + name; });
+      let hopt = '';
+      PadDrawOptions.forEach(name => { if (d.check(name)) hopt += ';' + name; });
 
       let promise = Promise.resolve(true);
       if (d.check('A') || !painter.getMainPainter()) {
           let mgraph = painter.getObject(),
-              pp = painter.getPadPainter(),
-              histo = painter.scanGraphsRange(mgraph.fGraphs, mgraph.fHistogram, pp?.getRootPad(true));
+              histo = painter.scanGraphsRange(mgraph.fGraphs, mgraph.fHistogram, painter.getPadPainter()?.getRootPad(true));
 
          promise = painter.drawAxisHist(histo, hopt).then(ap => {
             painter.firstpainter = ap;

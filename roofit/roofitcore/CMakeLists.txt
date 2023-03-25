@@ -13,9 +13,16 @@ if (roofit_multiprocess)
   set(RooFitMPTestStatisticsSources src/TestStatistics/LikelihoodJob.cxx src/TestStatistics/LikelihoodGradientJob.cxx)
 endif()
 
+set (EXTRA_DICT_OPTS)
+if (runtime_cxxmodules AND WIN32)
+  set (EXTRA_DICT_OPTS NO_CXXMODULE)
+endif()
+
 ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
   HEADERS
+    RooFit/Detail/AnalyticalIntegrals.h
     RooFit/Detail/DataMap.h
+    RooFit/Detail/NormalizationHelpers.h
     RooFit/Floats.h
     Roo1DTable.h
     RooAbsAnaConvPdf.h
@@ -109,10 +116,10 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooFormulaVar.h
     RooFracRemainder.h
     RooFunctor.h
+    RooFuncWrapper.h
     RooGenContext.h
     RooGenericPdf.h
     RooGenFitStudy.h
-    RooGenFunction.h
     RooGenProdProj.h
     RooGlobalFunc.h
     RooGrid.h
@@ -141,7 +148,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooMoment.h
     RooMsgService.h
     RooMultiCategory.h
-    RooMultiGenFunction.h
     RooMultiVarGaussian.h
     RooNameReg.h
     RooNLLVar.h
@@ -339,10 +345,10 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/RooFormulaVar.cxx
     src/RooFracRemainder.cxx
     src/RooFunctor.cxx
+    src/RooFuncWrapper.cxx
     src/RooGenContext.cxx
     src/RooGenericPdf.cxx
     src/RooGenFitStudy.cxx
-    src/RooGenFunction.cxx
     src/RooGenProdProj.cxx
     src/RooGlobalFunc.cxx
     src/RooGrid.cxx
@@ -370,7 +376,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/RooMoment.cxx
     src/RooMsgService.cxx
     src/RooMultiCategory.cxx
-    src/RooMultiGenFunction.cxx
     src/RooMultiVarGaussian.cxx
     src/RooNameReg.cxx
     src/RooFitDriver.cxx
@@ -485,6 +490,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     Smatrix
   LINKDEF
     inc/LinkDef.h
+  ${EXTRA_DICT_OPTS}
 )
 
 if (roofit_multiprocess)

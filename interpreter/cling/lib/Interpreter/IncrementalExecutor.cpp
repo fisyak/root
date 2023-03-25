@@ -55,7 +55,7 @@ IncrementalExecutor::IncrementalExecutor(clang::DiagnosticsEngine& /*diags*/,
     llvm_unreachable("Propagate this error and exit gracefully");
   }
 
-  m_BackendPasses.reset(new BackendPasses(CI.getCodeGenOpts(), m_JIT->getTargetMachine()));
+  m_BackendPasses.reset(new BackendPasses(CI.getCodeGenOpts(), *m_JIT, m_JIT->getTargetMachine()));
 }
 
 IncrementalExecutor::~IncrementalExecutor() {}
@@ -277,7 +277,7 @@ IncrementalExecutor::getPointerToGlobalFromJIT(llvm::StringRef name) const {
   void* addr = m_JIT->getSymbolAddress(name, false /*no dlsym*/);
 
   if (diagnoseUnresolvedSymbols(name, "symbol"))
-    return 0;
+    return nullptr;
   return addr;
 }
 

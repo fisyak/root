@@ -157,7 +157,7 @@ if(builtin_freetype)
       URL ${CMAKE_SOURCE_DIR}/graf2d/freetype/src/freetype-${freetype_version}.tar.gz
       URL_HASH SHA256=efe71fd4b8246f1b0b1b9bfca13cfff1c9ad85930340c27df469733bbb620938
       INSTALL_DIR ${CMAKE_BINARY_DIR}
-      CMAKE_ARGS -G ${CMAKE_GENERATOR} -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+      CMAKE_ARGS -G ${CMAKE_GENERATOR} -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX} -DFT_DISABLE_BZIP2=TRUE
       BUILD_COMMAND ${CMAKE_COMMAND} --build . --config ${freetypebuild}
       INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different ${freetypebuild}/freetype.lib ${FREETYPE_LIBRARY}
       LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 BUILD_IN_SOURCE 0
@@ -1037,6 +1037,16 @@ if(xrootd AND XROOTD_VERSIONNUM VERSION_LESS 500000000)
   set(netx ON)
 else()
   set(netx OFF)
+endif()
+
+#---make sure non-builtin xrootd is not using builtin_openssl-----------
+if(xrootd AND NOT builtin_xrootd AND builtin_openssl)
+  if(fail-on-missing)
+    message(FATAL_ERROR "Non-builtin XROOTD must not be used with builtin OpenSSL. If you want to use non-builtin XROOTD, please use the system OpenSSL")
+  else()
+    message(STATUS "Non-builtin XROOTD must not be used with builtin OpenSSL. Disabling the 'xrootd' option.")
+    set(xrootd OFF CACHE BOOL "Disabled because non-builtin xrootd cannot be used with builtin OpenSSL" FORCE)
+  endif()
 endif()
 
 #---Alien support----------------------------------------------------------------
@@ -2034,7 +2044,6 @@ if (builtin_gtest)
     GIT_SHALLOW 1
     GIT_TAG release-1.12.1
     UPDATE_COMMAND ""
-    # TIMEOUT 10
     # # Force separate output paths for debug and release builds to allow easy
     # # identification of correct lib in subsequent TARGET_LINK_LIBRARIES commands
     # CMAKE_ARGS -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG:PATH=DebugLibs
@@ -2081,18 +2090,11 @@ if (builtin_gtest)
     add_dependencies(${lib} googletest)
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND
         ${CMAKE_CXX_COMPILER_VERSION} VERSION_GREATER_EQUAL 9)
-      # TODO cmake 3.11
-      #target_compile_options(${lib} INTERFACE -Wno-deprecated-copy)
-      SET_PROPERTY(TARGET ${lib} APPEND PROPERTY INTERFACE_COMPILE_OPTIONS "-Wno-deprecated-copy")
+      target_compile_options(${lib} INTERFACE -Wno-deprecated-copy)
     endif()
   endforeach()
-  # Once we require at least cmake 3.11, target_include_directories will work for imported targets
-  # Because of https://gitlab.kitware.com/cmake/cmake/-/merge_requests/1264
-  # We need this workaround:
-  SET_PROPERTY(TARGET gtest APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${GTEST_INCLUDE_DIR})
-  SET_PROPERTY(TARGET gmock APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${GMOCK_INCLUDE_DIR})
-  #target_include_directories(gtest INTERFACE ${GTEST_INCLUDE_DIR})
-  #target_include_directories(gmock INTERFACE ${GMOCK_INCLUDE_DIR})
+  target_include_directories(gtest INTERFACE ${GTEST_INCLUDE_DIR})
+  target_include_directories(gmock INTERFACE ${GMOCK_INCLUDE_DIR})
 
   set_property(TARGET gtest PROPERTY IMPORTED_LOCATION ${_G_LIBRARY_PATH}/${CMAKE_STATIC_LIBRARY_PREFIX}gtest${CMAKE_STATIC_LIBRARY_SUFFIX})
   set_property(TARGET gtest_main PROPERTY IMPORTED_LOCATION ${_G_LIBRARY_PATH}/${CMAKE_STATIC_LIBRARY_PREFIX}gtest_main${CMAKE_STATIC_LIBRARY_SUFFIX})

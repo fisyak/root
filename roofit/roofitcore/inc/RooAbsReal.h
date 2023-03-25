@@ -35,8 +35,6 @@ class RooLinkedList ;
 class RooNumIntConfig ;
 class RooDataHist ;
 class RooFunctor ;
-class RooGenFunction ;
-class RooMultiGenFunction ;
 class RooFitResult ;
 class RooAbsMoment ;
 class RooDerivative ;
@@ -62,6 +60,21 @@ class TH3F;
 class RooAbsReal : public RooAbsArg {
 public:
   using value_type = double;
+
+  /// A RooAbsReal::Ref can be constructed from a `RooAbsReal&` or a `double`
+  /// that will be implicitly converted to a RooConstVar&. The RooAbsReal::Ref
+  /// can be used as a replacement for `RooAbsReal&`. With this type
+  /// definition, you can write RooFit interfaces that accept both RooAbsReal,
+  /// or simply a number that will be implicitly converted to a RooConstVar&.
+  class Ref {
+  public:
+     inline Ref(RooAbsReal &ref) : _ref{ref} {}
+     Ref(double val);
+     inline operator RooAbsReal &() const { return _ref; }
+
+  private:
+     RooAbsReal &_ref;
+  };
 
   // Constructors, assignment etc
   RooAbsReal() ;
@@ -290,7 +303,7 @@ public:
            const RooArgSet* condObs=nullptr, bool setError=true) const;
 
   // Create 1,2, and 3D histograms from and fill it
-  TH1 *createHistogram(const char* varNameList, Int_t xbins=0, Int_t ybins=0, Int_t zbins=0) const ;
+  TH1 *createHistogram(RooStringView varNameList, Int_t xbins=0, Int_t ybins=0, Int_t zbins=0) const ;
   TH1* createHistogram(const char *name, const RooAbsRealLValue& xvar, RooLinkedList& argList) const ;
   TH1 *createHistogram(const char *name, const RooAbsRealLValue& xvar,
                        const RooCmdArg& arg1=RooCmdArg::none(), const RooCmdArg& arg2=RooCmdArg::none(),
@@ -324,6 +337,22 @@ public:
   } ;
 
   enum ErrorLoggingMode { PrintErrors, CollectErrors, CountErrors, Ignore } ;
+
+  /// Context to temporarily change the error logging mode as long as the context is alive.
+  class EvalErrorContext {
+  public:
+     EvalErrorContext(ErrorLoggingMode m) : _old{evalErrorLoggingMode()} { setEvalErrorLoggingMode(m); }
+
+     EvalErrorContext(EvalErrorContext const&) = delete;
+     EvalErrorContext(EvalErrorContext &&) = delete;
+     EvalErrorContext& operator=(EvalErrorContext const&) = delete;
+     EvalErrorContext& operator=(EvalErrorContext &&) = delete;
+
+     ~EvalErrorContext() { setEvalErrorLoggingMode(_old); }
+  private:
+     ErrorLoggingMode _old;
+  };
+
   static ErrorLoggingMode evalErrorLoggingMode() ;
   static void setEvalErrorLoggingMode(ErrorLoggingMode m) ;
   void logEvalError(const char* message, const char* serverValueString=nullptr) const ;
@@ -342,9 +371,6 @@ public:
   virtual bool isBinnedDistribution(const RooArgSet& /*obs*/) const { return false ; }
   virtual std::list<double>* binBoundaries(RooAbsRealLValue& obs, double xlo, double xhi) const;
   virtual std::list<double>* plotSamplingHint(RooAbsRealLValue& obs, double xlo, double xhi) const;
-
-  RooGenFunction* iGenFunction(RooRealVar& x, const RooArgSet& nset=RooArgSet()) ;
-  RooMultiGenFunction* iGenFunction(const RooArgSet& observables, const RooArgSet& nset=RooArgSet()) ;
 
   RooFunctor* functor(const RooArgList& obs, const RooArgList& pars=RooArgList(), const RooArgSet& nset=RooArgSet()) const ;
   TF1* asTF(const RooArgList& obs, const RooArgList& pars=RooArgList(), const RooArgSet& nset=RooArgSet()) const ;
@@ -385,10 +411,16 @@ protected:
   TString integralNameSuffix(const RooArgSet& iset, const RooArgSet* nset=nullptr, const char* rangeName=nullptr, bool omitEmpty=false) const ;
 
 
-  bool isSelectedComp() const ;
+
 
 
  public:
+  bool isSelectedComp() const ;
+  void selectComp(bool flag) {
+     // If flag is true, only selected component will be included in evaluates of RooAddPdf components
+     _selectComp = flag ;
+  }
+
   const RooAbsReal* createPlotProjection(const RooArgSet& depVars, const RooArgSet& projVars, RooArgSet*& cloneSet) const ;
   const RooAbsReal *createPlotProjection(const RooArgSet &dependentVars, const RooArgSet *projectedVars,
                      RooArgSet *&cloneSet, const char* rangeName=nullptr, const RooArgSet* condObs=nullptr) const;
@@ -474,15 +506,15 @@ protected:
   void fillTreeBranch(TTree& t) override ;
 
   friend class RooRealBinding ;
-  double _plotMin ;       ///< Minimum of plot range
-  double _plotMax ;       ///< Maximum of plot range
-  Int_t    _plotBins ;      ///< Number of plot bins
-  mutable double _value ; ///< Cache for current value of object
-  TString  _unit ;          ///< Unit for objects value
-  TString  _label ;         ///< Plot label for objects value
-  bool   _forceNumInt ;   ///< Force numerical integration if flag set
+  double _plotMin = 0.0;       ///< Minimum of plot range
+  double _plotMax = 0.0;       ///< Maximum of plot range
+  Int_t _plotBins = 100;       ///< Number of plot bins
+  mutable double _value = 0.0; ///< Cache for current value of object
+  TString _unit ;              ///< Unit for objects value
+  TString _label ;             ///< Plot label for objects value
+  bool _forceNumInt = false;   ///< Force numerical integration if flag set
 
-  RooNumIntConfig* _specIntegratorConfig ; // Numeric integrator configuration specific for this object
+  std::unique_ptr<RooNumIntConfig> _specIntegratorConfig; // Numeric integrator configuration specific for this object
 
   struct PlotOpt {
    PlotOpt() : drawOptions("L"), scaleFactor(1.0), stype(Relative), projData(nullptr), binProjData(false), projSet(nullptr), precision(1e-3),
@@ -550,12 +582,9 @@ protected:
   friend class RooAddHelpers ;
   friend class RooAddPdf ;
   friend class RooAddModel ;
-  void selectComp(bool flag) {
-    // If flag is true, only selected component will be included in evaluates of RooAddPdf components
-    _selectComp = flag ;
-  }
+
   static void globalSelectComp(bool flag) ;
-  bool _selectComp ;               //! Component selection flag for RooAbsPdf::plotCompOn
+  bool _selectComp = true;         //! Component selection flag for RooAbsPdf::plotCompOn
   static bool _globalSelectComp ;  // Global activation switch for component selection
   // This struct can be used to flip the global switch to select components.
   // Doing this with RAII prevents forgetting to reset the state.
@@ -575,10 +604,10 @@ protected:
   };
 
 
-  mutable RooArgSet* _lastNSet ; ///<!
+  mutable RooFit::UniqueId<RooArgSet>::Value_t _lastNormSetId = RooFit::UniqueId<RooArgSet>::nullval; ///<!
   static bool _hideOffset ;    ///< Offset hiding flag
 
-  ClassDefOverride(RooAbsReal,2) // Abstract real-valued variable
+  ClassDefOverride(RooAbsReal,3) // Abstract real-valued variable
 };
 
 

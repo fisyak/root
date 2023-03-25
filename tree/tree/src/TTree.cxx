@@ -89,7 +89,7 @@ It is strongly recommended to persistify those as objects rather than lists of l
   assumed of type F by default. The list of currently supported
   types is given below:
    - `C` : a character string terminated by the 0 character
-   - `B` : an 8 bit signed integer (`Char_t`)
+   - `B` : an 8 bit signed integer (`Char_t`); Treated as a character when in an array.
    - `b` : an 8 bit unsigned integer (`UChar_t`)
    - `S` : a 16 bit signed integer (`Short_t`)
    - `s` : a 16 bit unsigned integer (`UShort_t`)
@@ -110,6 +110,7 @@ It is strongly recommended to persistify those as objects rather than lists of l
    - A float array with fixed size: "myArrfloat[42]/F"
    - An double array with variable size, held by the `myvar` column: "myArrdouble[myvar]/D"
    - An Double32_t array with variable size, held by the `myvar` column , with values between 0 and 16: "myArr[myvar]/d[0,10]"
+   - The `myvar` column, which holds the variable size, **MUST** be an `Int_t` (/I).
 
 - If the address points to a single numerical variable, the leaflist is optional:
 ~~~ {.cpp}
@@ -124,8 +125,8 @@ It is strongly recommended to persistify those as objects rather than lists of l
 - In case of the truncated floating point types (Float16_t and Double32_t) you can
   furthermore specify the range in the style [xmin,xmax] or [xmin,xmax,nbits] after
   the type character. For example, for storing a variable size array `myArr` of
-  `Double32_t` with values within a range of `[0, 2*pi]` and the size of which is
-  stored in a branch called `myArrSize`, the syntax for the `leaflist` string would
+  `Double32_t` with values within a range of `[0, 2*pi]` and the size of which is stored
+  in an `Int_t` (/I) branch called `myArrSize`, the syntax for the `leaflist` string would
   be: `myArr[myArrSize]/d[0,twopi]`. Of course the number of bits could be specified,
   the standard rules of opaque typedefs annotation are valid. For example, if only
   18 bits were sufficient, the syntax would become: `myArr[myArrSize]/d[0,twopi,18]`
@@ -1938,7 +1939,7 @@ Int_t TTree::Branch(const char* foldername, Int_t bufsize /* = 32000 */, Int_t s
 ///      variable. If the first variable does not have a type, it is assumed
 ///      of type F by default. The list of currently supported types is given below:
 ///         - `C` : a character string terminated by the 0 character
-///         - `B` : an 8 bit signed integer (`Char_t`)
+///         - `B` : an 8 bit signed integer (`Char_t`); Treated as a character when in an array.
 ///         - `b` : an 8 bit unsigned integer (`UChar_t`)
 ///         - `S` : a 16 bit signed integer (`Short_t`)
 ///         - `s` : a 16 bit unsigned integer (`UShort_t`)
@@ -1958,6 +1959,7 @@ Int_t TTree::Branch(const char* foldername, Int_t bufsize /* = 32000 */, Int_t s
 ///         - If leaf name has the form var[nelem], where nelem is alphanumeric, then
 ///           if nelem is a leaf name, it is used as the variable size of the array,
 ///           otherwise return 0.
+///           The leaf referred to by nelem **MUST** be an int (/I),
 ///         - If leaf name has the form var[nelem], where nelem is a non-negative integer, then
 ///           it is used as the fixed size of the array.
 ///         - If leaf name has the form of a multi-dimensional array (e.g. var[nelem][nelem2])
@@ -3841,7 +3843,7 @@ Long64_t TTree::Draw(const char* varexp, const TCut& selection, Option_t* option
 ///  - "e1:e2"        produces an unbinned 2-d scatter-plot (TGraph) of "e1"
 ///                   on the y-axis versus "e2" on the x-axis
 ///  - "e1:e2:e3"     produces an unbinned 3-d scatter-plot (TPolyMarker3D) of "e1"
-///                   vs "e2" vs "e3" on the x-, y-, z-axis, respectively.
+///                   vs "e2" vs "e3" on the z-, y-, x-axis, respectively
 ///  - "e1:e2:e3:e4"  produces an unbinned 3-d scatter-plot (TPolyMarker3D) of "e1"
 ///                   vs "e2" vs "e3" and "e4" mapped on the current color palette.
 ///                   (to create histograms in the 2, 3, and 4 dimensional case,

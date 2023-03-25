@@ -93,6 +93,7 @@ observable snapshots are stored in the dataset.
 #include "RooVectorDataStore.h"
 #include "RooTreeDataStore.h"
 #include "RooDataHist.h"
+#include "RooDataSet.h"
 #include "RooCompositeDataStore.h"
 #include "RooCategory.h"
 #include "RooTrace.h"
@@ -177,6 +178,30 @@ RooAbsData::RooAbsData()
   RooTrace::create(this) ;
 }
 
+void RooAbsData::initializeVars(RooArgSet const& vars)
+{
+   if(!_vars.empty()) {
+      throw std::runtime_error("RooAbsData::initializeVars(): the variables are already initialized!");
+   }
+
+   // clone the fundamentals of the given data set into internal buffer
+   for (const auto var : vars) {
+      if (!var->isFundamental()) {
+         coutE(InputArguments) << "RooAbsDataStore::initialize(" << GetName()
+                               << "): Data set cannot contain non-fundamental types, ignoring " << var->GetName()
+                               << endl;
+         throw std::invalid_argument(std::string("Only fundamental variables can be placed into datasets. This is violated for ") + var->GetName());
+      } else {
+         _vars.addClone(*var);
+      }
+   }
+
+   // reconnect any parameterized ranges to internal dataset observables
+   for (auto var : _vars) {
+      var->attachArgs(_vars);
+   }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor from a set of variables. Only fundamental elements of vars
 /// (RooRealVar,RooCategory etc) are stored as part of the dataset
@@ -197,22 +222,7 @@ RooAbsData::RooAbsData(RooStringView name, RooStringView title, const RooArgSet&
    // cout << "created dataset " << this << endl ;
    claimVars(this);
 
-   // clone the fundamentals of the given data set into internal buffer
-   for (const auto var : vars) {
-      if (!var->isFundamental()) {
-         coutE(InputArguments) << "RooAbsDataStore::initialize(" << GetName()
-                               << "): Data set cannot contain non-fundamental types, ignoring " << var->GetName()
-                               << endl;
-         throw std::invalid_argument(std::string("Only fundamental variables can be placed into datasets. This is violated for ") + var->GetName());
-      } else {
-         _vars.addClone(*var);
-      }
-   }
-
-   // reconnect any parameterized ranges to internal dataset observables
-   for (auto var : _vars) {
-      var->attachArgs(_vars);
-   }
+   initializeVars(vars);
 
    _namePtr = RooNameReg::instance().constPtr(GetName()) ;
 
@@ -811,8 +821,7 @@ Roo1DTable* RooAbsData::table(const RooArgSet& catSet, const char* cuts, const c
   string prodName("(") ;
   for(auto * arg : catSet) {
     if (dynamic_cast<RooAbsCategory*>(arg)) {
-      RooAbsCategory* varsArg = dynamic_cast<RooAbsCategory*>(_vars.find(arg->GetName())) ;
-      if (varsArg != 0) catSet2.add(*varsArg) ;
+      if (auto varsArg = dynamic_cast<RooAbsCategory*>(_vars.find(arg->GetName()))) catSet2.add(*varsArg) ;
       else catSet2.add(*arg) ;
       if (prodName.length()>1) {
    prodName += " x " ;
@@ -933,7 +942,7 @@ double RooAbsData::moment(const RooRealVar& var, double order, double offset, co
   // Setup RooFormulaVar for cutSpec if it is present
   std::unique_ptr<RooFormula> select;
   if (cutSpec) {
-    select.reset(new RooFormula("select",cutSpec,*get()));
+    select = std::make_unique<RooFormula>("select",cutSpec,*get());
   }
 
 
@@ -1336,7 +1345,7 @@ TH1 *RooAbsData::fillHistogram(TH1 *hist, const RooArgList &plotVars, const char
   for(std::size_t index= 0; index < plotVars.size(); index++) {
     const RooAbsArg *var= plotVars.at(index);
     const RooAbsReal *realVar= dynamic_cast<const RooAbsReal*>(var);
-    if(0 == realVar) {
+    if(realVar == nullptr) {
       coutE(InputArguments) << ClassName() << "::" << GetName() << ":fillHistogram: cannot plot variable \"" << var->GetName()
       << "\" of type " << var->ClassName() << endl;
       return nullptr;
@@ -1528,12 +1537,7 @@ SplittingSetup initSplit(RooAbsData const &data, RooAbsCategory const &splitCat)
 
    // Add weight variable explicitly if dataset has weights, but no top-level weight
    // variable exists (can happen with composite datastores)
-   if (data.isWeighted() && !data.IsA()->InheritsFrom(RooDataHist::Class())) {
-      auto newweight = std::make_unique<RooRealVar>("weight", "weight", -1e9, 1e9);
-      setup.subsetVars.add(*newweight);
-      setup.addWeightVar = true;
-      setup.ownedSet.addOwned(std::move(newweight));
-   }
+   setup.addWeightVar = data.isWeighted();
 
    return setup;
 }
@@ -1546,21 +1550,28 @@ TList *splitImpl(RooAbsData const &data, const RooAbsCategory &cloneCat, bool cr
    // If createEmptyDataSets is true, prepopulate with empty sets corresponding to all states
    if (createEmptyDataSets) {
       for (const auto &nameIdx : cloneCat) {
-         RooAbsData *subset = createEmptyData(nameIdx.first.c_str());
-         dsetList->Add((RooAbsArg *)subset);
+         dsetList->Add(createEmptyData(nameIdx.first.c_str()));
       }
    }
 
+   bool isDataHist = dynamic_cast<RooDataHist const*>(&data);
+
    // Loop over dataset and copy event to matching subset
-   const bool propWeightSquared = data.isWeighted();
    for (Int_t i = 0; i < data.numEntries(); ++i) {
       const RooArgSet *row = data.get(i);
-      RooAbsData *subset = (RooAbsData *)dsetList->FindObject(cloneCat.getCurrentLabel());
+      auto subset = static_cast<RooAbsData *>(dsetList->FindObject(cloneCat.getCurrentLabel()));
       if (!subset) {
          subset = createEmptyData(cloneCat.getCurrentLabel());
-         dsetList->Add((RooAbsArg *)subset);
+         dsetList->Add(subset);
       }
-      subset->add(*row, data.weight(), propWeightSquared ? data.weightSquared() : 0.0);
+
+      // For datasets with weight errors or sumW2, the interface to fill
+      // RooDataHist and RooDataSet is not the same.
+      if (isDataHist) {
+         static_cast<RooDataHist*>(subset)->add(*row, data.weight(), data.weightSquared());
+      } else {
+         static_cast<RooDataSet*>(subset)->add(*row, data.weight(), data.weightError());
+      }
    }
 
    return dsetList;
@@ -2165,8 +2176,8 @@ Roo1DTable* RooAbsData::table(const RooAbsCategory& cat, const char* cuts, const
     }
 
     // Clone derived variable
-    tableSet.reset(static_cast<RooArgSet*>(RooArgSet(cat).snapshot(true)));
-    if (!tableSet) {
+    tableSet = std::make_unique<RooArgSet>();
+    if (RooArgSet(cat).snapshot(*tableSet, true)) {
       coutE(Plotting) << "RooTreeData::table(" << GetName() << ") Couldn't deep-clone table category, abort." << std::endl;
       return nullptr;
     }

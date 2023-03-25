@@ -1,42 +1,20 @@
-#include "gtest/gtest.h"
-
-#include <ROOT/RNTuple.hxx>
 #include <ROOT/RNTupleImporter.hxx>
 
 #include <TFile.h>
 #include <TTree.h>
+#include <TChain.h>
 
 #include <cstdio>
 #include <string>
 #include <tuple>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "CustomStructUtil.hxx"
+#include "ntupleutil_test.hxx"
 
 using ROOT::Experimental::RNTupleImporter;
 using ROOT::Experimental::RNTupleReader;
-
-/**
- * An RAII wrapper around an open temporary file on disk. It cleans up the guarded file when the wrapper object
- * goes out of scope.
- */
-class FileRaii {
-private:
-   static constexpr bool kDebug = false; // if true, don't delete the file on destruction
-   std::string fPath;
-
-public:
-   explicit FileRaii(const std::string &path) : fPath(path) {}
-   FileRaii(const FileRaii &) = delete;
-   FileRaii &operator=(const FileRaii &) = delete;
-   ~FileRaii()
-   {
-      if (!kDebug)
-         std::remove(fPath.c_str());
-   }
-   std::string GetPath() const { return fPath; }
-};
 
 TEST(RNTupleImporter, Empty)
 {
@@ -54,6 +32,72 @@ TEST(RNTupleImporter, Empty)
    importer->Import();
    auto reader = RNTupleReader::Open("ntuple", fileGuard.GetPath());
    EXPECT_EQ(0U, reader->GetNEntries());
+   EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
+}
+
+TEST(RNTupleImporter, CreateFromTree)
+{
+   FileRaii fileGuard("test_ntuple_importer_empty.root");
+   {
+      std::unique_ptr<TFile> file(TFile::Open(fileGuard.GetPath().c_str(), "RECREATE"));
+      auto tree = std::make_unique<TTree>("tree", "");
+      tree->Write();
+   }
+
+   std::unique_ptr<TFile> file(TFile::Open(fileGuard.GetPath().c_str()));
+   auto tree = file->Get<TTree>("tree");
+
+   auto importer = RNTupleImporter::Create(tree, fileGuard.GetPath()).Unwrap();
+   importer->SetIsQuiet(true);
+   EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
+   importer->SetNTupleName("ntuple");
+   importer->Import();
+   auto reader = RNTupleReader::Open("ntuple", fileGuard.GetPath());
+   EXPECT_EQ(0U, reader->GetNEntries());
+   EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
+}
+
+TEST(RNTupleImporter, CreateFromChain)
+{
+   FileRaii fileGuard1("test_ntuple_create_from_chain_1.root");
+   {
+      std::unique_ptr<TFile> file(TFile::Open(fileGuard1.GetPath().c_str(), "RECREATE"));
+      auto tree = std::make_unique<TTree>("tree", "");
+      Int_t a = 42;
+      // For single-leaf branches, use branch name, not leaf name
+      tree->Branch("a", &a);
+      tree->Fill();
+      tree->Write();
+   }
+
+   FileRaii fileGuard2("test_ntuple_create_from_chain_2.root");
+   {
+      std::unique_ptr<TFile> file(TFile::Open(fileGuard2.GetPath().c_str(), "RECREATE"));
+      auto tree = std::make_unique<TTree>("tree", "");
+      Int_t a = 43;
+      // For single-leaf branches, use branch name, not leaf name
+      tree->Branch("a", &a);
+      tree->Fill();
+      tree->Write();
+   }
+
+   TChain *chain = new TChain("tree");
+   chain->Add(fileGuard1.GetPath().c_str());
+   chain->Add(fileGuard2.GetPath().c_str());
+
+   auto importer = RNTupleImporter::Create(chain, fileGuard1.GetPath()).Unwrap();
+   importer->SetIsQuiet(true);
+   EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
+   importer->SetNTupleName("ntuple");
+   importer->Import();
+
+   auto reader = RNTupleReader::Open("ntuple", fileGuard1.GetPath());
+   auto viewA = reader->GetView<std::int32_t>("a");
+
+   EXPECT_EQ(2U, reader->GetNEntries());
+   EXPECT_EQ(42, viewA(0));
+   EXPECT_EQ(43, viewA(1));
+
    EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
 }
 
@@ -303,6 +347,11 @@ TEST(RNTupleImporter, LeafCountArray)
    auto viewJetEta = viewJets.GetView<float>("jet_eta");
    auto viewMuons = reader->GetViewCollection("_collection1");
    auto viewMuonPt = viewMuons.GetView<float>("muon_pt");
+   auto viewProjectedNjets = reader->GetView<ROOT::Experimental::RNTupleCardinality>("njets");
+   auto viewProjectedJetPt = reader->GetView<ROOT::RVec<float>>("jet_pt");
+   auto viewProjectedJetEta = reader->GetView<ROOT::RVec<float>>("jet_eta");
+   auto viewProjectedNmuons = reader->GetView<ROOT::Experimental::RNTupleCardinality>("nmuons");
+   auto viewProjectedMuonPt = reader->GetView<ROOT::RVec<float>>("muon_pt");
 
    // Entry 0: 1 jet, 1 muon
    EXPECT_EQ(1, viewJets(0));
@@ -310,11 +359,25 @@ TEST(RNTupleImporter, LeafCountArray)
    EXPECT_FLOAT_EQ(2.0, viewJetEta(0));
    EXPECT_EQ(1, viewMuons(0));
    EXPECT_FLOAT_EQ(10.0, viewMuonPt(0));
+   EXPECT_EQ(1U, viewProjectedNjets(0));
+   EXPECT_EQ(1U, viewProjectedJetPt(0).size());
+   EXPECT_FLOAT_EQ(1.0, viewProjectedJetPt(0).at(0));
+   EXPECT_EQ(1U, viewProjectedJetEta(0).size());
+   EXPECT_FLOAT_EQ(2.0, viewProjectedJetEta(0).at(0));
+   EXPECT_EQ(1U, viewProjectedNmuons(0));
+   EXPECT_EQ(1U, viewProjectedMuonPt(0).size());
+   EXPECT_FLOAT_EQ(10.0, viewProjectedMuonPt(0).at(0));
 
    // Entry 1: 0 jets, 1 muon
    EXPECT_EQ(0, viewJets(1));
    EXPECT_EQ(1, viewMuons(1));
    EXPECT_FLOAT_EQ(11.0, viewMuonPt(1));
+   EXPECT_EQ(0U, viewProjectedNjets(1));
+   EXPECT_EQ(0U, viewProjectedJetPt(1).size());
+   EXPECT_EQ(0U, viewProjectedJetEta(1).size());
+   EXPECT_EQ(1U, viewProjectedNmuons(1));
+   EXPECT_EQ(1U, viewProjectedMuonPt(1).size());
+   EXPECT_FLOAT_EQ(11.0, viewProjectedMuonPt(1).at(0));
 
    // Entry 2: 2 jets, 1 muon
    EXPECT_EQ(2, viewJets(2));
@@ -324,6 +387,16 @@ TEST(RNTupleImporter, LeafCountArray)
    EXPECT_FLOAT_EQ(6.0, viewJetEta(2));
    EXPECT_EQ(1, viewMuons(2));
    EXPECT_FLOAT_EQ(12.0, viewMuonPt(2));
+   EXPECT_EQ(2U, viewProjectedNjets(2));
+   EXPECT_EQ(2U, viewProjectedJetPt(2).size());
+   EXPECT_FLOAT_EQ(3.0, viewProjectedJetPt(2).at(0));
+   EXPECT_FLOAT_EQ(5.0, viewProjectedJetPt(2).at(1));
+   EXPECT_EQ(2U, viewProjectedJetEta(2).size());
+   EXPECT_FLOAT_EQ(4.0, viewProjectedJetEta(2).at(0));
+   EXPECT_FLOAT_EQ(6.0, viewProjectedJetEta(2).at(1));
+   EXPECT_EQ(1U, viewProjectedNmuons(2));
+   EXPECT_EQ(1U, viewProjectedMuonPt(2).size());
+   EXPECT_FLOAT_EQ(12.0, viewProjectedMuonPt(2).at(0));
 }
 
 TEST(RNTupleImporter, STL)
@@ -448,4 +521,95 @@ TEST(RNTupleImporter, ComplexClass)
       reference.Init3();
       EXPECT_EQ(reference, *object);
    }
+}
+
+TEST(RNTupleImporter, CollectionProxyClass)
+{
+   int splitlevels[] = {0, 1, 99};
+   for (auto lvl : splitlevels) {
+      FileRaii fileGuard("test_ntuple_importer_collection_proxy_class.root");
+      {
+         std::unique_ptr<TFile> file(TFile::Open(fileGuard.GetPath().c_str(), "RECREATE"));
+         auto tree = std::make_unique<TTree>("tree", "");
+         std::vector<BaseUtil> objectVec;
+         tree->Branch("objectVec", &objectVec, 32000, lvl);
+
+         for (int i = 0; i < 3; ++i) {
+            BaseUtil b;
+            b.base = i;
+            objectVec.emplace_back(b);
+         }
+
+         tree->Fill();
+         tree->Write();
+      }
+
+      auto importer = RNTupleImporter::Create(fileGuard.GetPath(), "tree", fileGuard.GetPath()).Unwrap();
+      importer->SetIsQuiet(true);
+      importer->SetNTupleName("ntuple");
+      importer->Import();
+
+      auto reader = RNTupleReader::Open("ntuple", fileGuard.GetPath());
+      EXPECT_EQ(1U, reader->GetNEntries());
+      auto objectVec = reader->GetModel()->Get<std::vector<BaseUtil>>("objectVec");
+
+      reader->LoadEntry(0);
+      EXPECT_EQ(3, objectVec->size());
+
+      for (int i = 0; i < 3; ++i) {
+         EXPECT_EQ(i, objectVec->at(i).base);
+      }
+   }
+}
+
+TEST(RNTUpleImporter, MaxEntries)
+{
+   FileRaii fileGuard("test_ntuple_importer_max_entries.root");
+   {
+      std::unique_ptr<TFile> file(TFile::Open(fileGuard.GetPath().c_str(), "RECREATE"));
+      auto tree = std::make_unique<TTree>("tree", "");
+      Int_t a = 42;
+      // For single-leaf branches, use branch name, not leaf name
+      tree->Branch("a", &a);
+
+      for (int i = 0; i < 5; ++i) {
+         tree->Fill();
+      }
+
+      tree->Write();
+   }
+
+   auto importer = RNTupleImporter::Create(fileGuard.GetPath(), "tree", fileGuard.GetPath()).Unwrap();
+
+   // Base case, we don't do anything with `SetMaxEntries`.
+   importer->SetIsQuiet(true);
+   importer->SetNTupleName("ntuple1");
+   importer->Import();
+
+   auto reader = RNTupleReader::Open("ntuple1", fileGuard.GetPath());
+   EXPECT_EQ(5U, reader->GetNEntries());
+
+   // We only want to import 3 entries, which should happen.
+   importer->SetMaxEntries(3);
+   importer->SetNTupleName("ntuple2");
+   importer->Import();
+
+   reader = RNTupleReader::Open("ntuple2", fileGuard.GetPath());
+   EXPECT_EQ(3U, reader->GetNEntries());
+
+   // Now we want to import 15 entries, while the original tree only has 5 entries.
+   importer->SetMaxEntries(15);
+   importer->SetNTupleName("ntuple3");
+   importer->Import();
+
+   reader = RNTupleReader::Open("ntuple3", fileGuard.GetPath());
+   EXPECT_EQ(5U, reader->GetNEntries());
+
+   // Negative fMaxEntry values should be ignored.
+   importer->SetMaxEntries(-15);
+   importer->SetNTupleName("ntuple4");
+   importer->Import();
+
+   reader = RNTupleReader::Open("ntuple4", fileGuard.GetPath());
+   EXPECT_EQ(5U, reader->GetNEntries());
 }

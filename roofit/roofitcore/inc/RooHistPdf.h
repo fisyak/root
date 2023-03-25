@@ -49,6 +49,10 @@ public:
     return *_dataHist ;
   }
 
+  /// Replaces underlying RooDataHist with a clone, which is now owned, and returns the clone.
+  /// If the underlying RooDataHist is already owned, then that is returned instead of being cloned.
+  RooDataHist* cloneAndOwnDataHist(const char* newname="");
+
   void setInterpolationOrder(Int_t order) {
     // Set histogram interpolation order
     _intOrder = order ;
@@ -60,6 +64,8 @@ public:
 
   Int_t getAnalyticalIntegral(RooArgSet& allVars, RooArgSet& analVars, const char* rangeName=nullptr) const override ;
   double analyticalIntegral(Int_t code, const char* rangeName=nullptr) const override ;
+
+  bool forceAnalyticalInt(const RooAbsArg& dep) const override;
 
   void setCdfBoundaries(bool flag) {
     // Set use of special boundary conditions for c.d.f.s
@@ -115,17 +121,19 @@ private:
 
   friend class RooHistFunc;
 
+  static bool forceAnalyticalInt(RooArgSet const& pdfObsList, RooAbsArg const& dep);
+
   static Int_t getAnalyticalIntegral(RooArgSet& allVars,
                                      RooArgSet& analVars,
                                      const char* rangeName,
                                      RooArgSet const& histObsList,
-                                     RooSetProxy const& pdfObsList,
+                                     RooArgSet const& pdfObsList,
                                      Int_t intOrder) ;
 
   static double analyticalIntegral(Int_t code,
                                    const char* rangeName,
                                    RooArgSet const& histObsList,
-                                   RooSetProxy const& pdfObsList,
+                                   RooArgSet const& pdfObsList,
                                    RooDataHist& dataHist,
                                    bool histFuncMode) ;
 

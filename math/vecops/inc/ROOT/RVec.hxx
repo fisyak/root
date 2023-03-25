@@ -1247,17 +1247,19 @@ public:
          throw std::runtime_error(std::move(msg));
       }
 
+      size_type n_true = 0ull;
+      for (auto c : conds)
+         n_true += c; // relies on bool -> int conversion, faster than branching
+
       RVecN ret;
-      ret.reserve(n);
+      ret.reserve(n_true);
       size_type j = 0u;
       for (size_type i = 0u; i < n; ++i) {
          if (conds[i]) {
-            // the begin() is to go around the R__ASSERT in operator[]
-            ret.begin()[j] = this->operator[](i);
+            ret.push_back(this->operator[](i));
             ++j;
          }
       }
-      ret.set_size(j);
       return ret;
    }
 
@@ -1968,13 +1970,13 @@ R Mean(const RVec<T> &v, const R zero)
 /// Get the greatest element of an RVec
 ///
 /// Example code, at the ROOT prompt:
-/// ~~~~{.cpp}
+/// ~~~{.cpp}
 /// using namespace ROOT::VecOps;
 /// RVecF v {1.f, 2.f, 4.f};
 /// auto v_max = Max(v);
 /// v_max
 /// (float) 4.00000f
-/// ~~~~
+/// ~~~
 template <typename T>
 T Max(const RVec<T> &v)
 {
@@ -1984,13 +1986,13 @@ T Max(const RVec<T> &v)
 /// Get the smallest element of an RVec
 ///
 /// Example code, at the ROOT prompt:
-/// ~~~~{.cpp}
+/// ~~~{.cpp}
 /// using namespace ROOT::VecOps;
 /// RVecF v {1.f, 2.f, 4.f};
 /// auto v_min = Min(v);
 /// v_min
 /// (float) 1.00000f
-/// ~~~~
+/// ~~~
 template <typename T>
 T Min(const RVec<T> &v)
 {
@@ -2002,13 +2004,13 @@ T Min(const RVec<T> &v)
 /// the index corresponding to the first occurrence is returned.
 ///
 /// Example code, at the ROOT prompt:
-/// ~~~~{.cpp}
+/// ~~~{.cpp}
 /// using namespace ROOT::VecOps;
 /// RVecF v {1.f, 2.f, 4.f};
 /// auto v_argmax = ArgMax(v);
 /// v_argmax
 /// // (unsigned long) 2
-/// ~~~~
+/// ~~~
 template <typename T>
 std::size_t ArgMax(const RVec<T> &v)
 {
@@ -2020,13 +2022,13 @@ std::size_t ArgMax(const RVec<T> &v)
 /// the index corresponding to the first occurrence is returned.
 ///
 /// Example code, at the ROOT prompt:
-/// ~~~~{.cpp}
+/// ~~~{.cpp}
 /// using namespace ROOT::VecOps;
 /// RVecF v {1.f, 2.f, 4.f};
 /// auto v_argmin = ArgMin(v);
 /// v_argmin
 /// // (unsigned long) 0
-/// ~~~~
+/// ~~~
 template <typename T>
 std::size_t ArgMin(const RVec<T> &v)
 {
@@ -3039,6 +3041,7 @@ RVec<T> Construct(const RVec<Args_t> &... args)
 /// RVecF v = {1., 2., 3.};
 /// cout << Enumerate(v1) << "\n";
 /// // { 0, 1, 2 }
+/// ~~~
 template <typename T>
 RVec<typename RVec<T>::size_type> Enumerate(const RVec<T> &v)
 {
@@ -3057,6 +3060,7 @@ RVec<typename RVec<T>::size_type> Enumerate(const RVec<T> &v)
 /// using namespace ROOT::VecOps;
 /// cout << Range(3) << "\n";
 /// // { 0, 1, 2 }
+/// ~~~
 inline RVec<std::size_t> Range(std::size_t length)
 {
    RVec<std::size_t> ret;
