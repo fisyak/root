@@ -21,11 +21,6 @@
 
 #include <Math/Util.h>
 
-#include "RooBatchComputeTypes.h"
-
-namespace ROOT {
-namespace Experimental {
-
 class RooNLLVarNew : public RooAbsReal {
 
 public:
@@ -33,7 +28,6 @@ public:
    static constexpr const char *weightVarName = "_weight";
    static constexpr const char *weightVarNameSumW2 = "_weight_sumW2";
 
-   RooNLLVarNew(){};
    RooNLLVarNew(const char *name, const char *title, RooAbsPdf &pdf, RooArgSet const &observables, bool isExtended,
                 RooFit::OffsetMode offsetMode);
    RooNLLVarNew(const RooNLLVarNew &other, const char *name = nullptr);
@@ -44,9 +38,9 @@ public:
    /// Return default level for MINUIT error analysis.
    double defaultErrorLevel() const override { return 0.5; }
 
-   inline RooAbsPdf *getPdf() const { return &*_pdf; }
-   void computeBatch(cudaStream_t *, double *output, size_t nOut, RooFit::Detail::DataMap const &) const override;
-   inline bool isReducerNode() const override { return true; }
+   void computeBatch(double *output, size_t nOut, RooFit::Detail::DataMap const &) const override;
+   bool canComputeBatchWithCuda() const override { return !_binnedL; }
+   bool isReducerNode() const override { return true; }
 
    void setPrefix(std::string const &prefix);
 
@@ -58,33 +52,31 @@ public:
 
    void setSimCount(int simCount) { _simCount = simCount; }
 
+   void translate(RooFit::Detail::CodeSquashContext &ctx) const override;
+
 private:
    double evaluate() const override { return _value; }
    void resetWeightVarNames();
-   double finalizeResult(ROOT::Math::KahanSum<double> &&result, double weightSum) const;
-   void fillBinWidthsFromPdfBoundaries(RooAbsReal const &pdf);
+   double finalizeResult(ROOT::Math::KahanSum<double> result, double weightSum) const;
+   void fillBinWidthsFromPdfBoundaries(RooAbsReal const &pdf, RooArgSet const &observables);
+   double computeBatchBinnedL(std::span<const double> preds, std::span<const double> weights) const;
 
    RooTemplateProxy<RooAbsPdf> _pdf;
-   RooArgSet _observables;
+   RooTemplateProxy<RooAbsReal> _weightVar;
+   RooTemplateProxy<RooAbsReal> _weightSquaredVar;
+   std::unique_ptr<RooTemplateProxy<RooAbsReal>> _expectedEvents;
+   std::unique_ptr<RooTemplateProxy<RooAbsPdf>> _offsetPdf;
    mutable double _sumWeight = 0.0;  //!
    mutable double _sumWeight2 = 0.0; //!
-   bool _isExtended;
    bool _weightSquared = false;
    bool _binnedL = false;
    bool _doOffset = false;
    bool _doBinOffset = false;
    int _simCount = 1;
    std::string _prefix;
-   RooTemplateProxy<RooAbsReal> _weightVar;
-   RooTemplateProxy<RooAbsReal> _weightSquaredVar;
-   RooTemplateProxy<RooAbsReal> _binVolumeVar;
    std::vector<double> _binw;
-   mutable std::vector<double> _logProbasBuffer;     ///<!
    mutable ROOT::Math::KahanSum<double> _offset{0.}; ///<! Offset as KahanSum to avoid loss of precision
 
 }; // end class RooNLLVar
-
-} // end namespace Experimental
-} // end namespace ROOT
 
 #endif

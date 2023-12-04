@@ -34,7 +34,6 @@ public:
         RooAbsReal::Ref _m, RooAbsReal::Ref _m0, RooAbsReal::Ref _c, RooAbsReal::Ref _p=0.5);
   RooArgusBG(const RooArgusBG& other,const char* name=nullptr) ;
   TObject* clone(const char* newname) const override { return new RooArgusBG(*this,newname); }
-  inline ~RooArgusBG() override { }
 
   Int_t getAnalyticalIntegral(RooArgSet& allVars, RooArgSet& analVars, const char* rangeName=nullptr) const override ;
   double analyticalIntegral(Int_t code, const char* rangeName=nullptr) const override ;
@@ -46,7 +45,7 @@ protected:
   RooRealProxy p ;
 
   double evaluate() const override ;
-  void computeBatch(cudaStream_t*, double* output, size_t size, RooFit::Detail::DataMap const&) const override;
+  void computeBatch(double* output, size_t size, RooFit::Detail::DataMap const&) const override;
   inline bool canComputeBatchWithCuda() const override { return true; }
 
 

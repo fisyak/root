@@ -28,17 +28,32 @@
 #include "RooArgList.h"
 #include <map>
 #include <string>
+
 class RooAbsCategoryLValue ;
 class RooFitResult ;
 class RooPlot ;
 class RooAbsData ;
 class RooLinkedList ;
+class RooSuperCategory ;
 
 class RooSimultaneous : public RooAbsPdf {
 public:
 
+  /// Internal struct used for initialization.
+  struct InitializationOutput {
+
+     ~InitializationOutput();
+
+     void addPdf(const RooAbsPdf &pdf, std::string const &catLabel);
+
+     std::vector<RooAbsPdf const *> finalPdfs;
+     std::vector<std::string> finalCatLabels;
+     RooAbsCategoryLValue *indexCat = nullptr;
+     std::unique_ptr<RooSuperCategory> superIndex;
+  };
+
   // Constructors, assignment etc
-  inline RooSimultaneous() : _plotCoefNormRange(nullptr), _partIntMgr(this,10) {}
+  inline RooSimultaneous() : _partIntMgr(this,10) {}
   RooSimultaneous(const char *name, const char *title, RooAbsCategoryLValue& indexCat) ;
   RooSimultaneous(const char *name, const char *title, std::map<std::string,RooAbsPdf*> pdfMap, RooAbsCategoryLValue& inIndexCat) ;
   RooSimultaneous(const char *name, const char *title, const RooArgList& pdfList, RooAbsCategoryLValue& indexCat) ;
@@ -60,26 +75,20 @@ public:
 
   using RooAbsPdf::plotOn ;
   RooPlot* plotOn(RooPlot* frame,
-           const RooCmdArg& arg1            , const RooCmdArg& arg2=RooCmdArg(),
-           const RooCmdArg& arg3=RooCmdArg(), const RooCmdArg& arg4=RooCmdArg(),
-           const RooCmdArg& arg5=RooCmdArg(), const RooCmdArg& arg6=RooCmdArg(),
-           const RooCmdArg& arg7=RooCmdArg(), const RooCmdArg& arg8=RooCmdArg(),
-           const RooCmdArg& arg9=RooCmdArg(), const RooCmdArg& arg10=RooCmdArg()) const override {
+           const RooCmdArg& arg1            , const RooCmdArg& arg2={},
+           const RooCmdArg& arg3={}, const RooCmdArg& arg4={},
+           const RooCmdArg& arg5={}, const RooCmdArg& arg6={},
+           const RooCmdArg& arg7={}, const RooCmdArg& arg8={},
+           const RooCmdArg& arg9={}, const RooCmdArg& arg10={}) const override {
     return RooAbsReal::plotOn(frame,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10) ;
   }
   RooPlot* plotOn(RooPlot* frame, RooLinkedList& cmdList) const override ;
-
-  // Backward compatibility function
-  virtual RooPlot *plotOn(RooPlot *frame, Option_t* drawOptions, double scaleFactor=1.0,
-           ScaleType stype=Relative, const RooAbsData* projData=nullptr, const RooArgSet* projSet=nullptr,
-           double precision=1e-3, bool shiftToZero=false, const RooArgSet* projDataSet=nullptr,
-           double rangeLo=0.0, double rangeHi=0.0, RooCurve::WingMode wmode=RooCurve::Extended) const;
 
   RooAbsPdf* getPdf(RooStringView catName) const ;
   const RooAbsCategoryLValue& indexCat() const { return (RooAbsCategoryLValue&) _indexCat.arg() ; }
 
 
-  RooDataSet* generateSimGlobal(const RooArgSet& whatVars, Int_t nEvents) override ;
+  RooFit::OwningPtr<RooDataSet> generateSimGlobal(const RooArgSet& whatVars, Int_t nEvents) override ;
 
   virtual RooDataHist* fillDataHist(RooDataHist *hist, const RooArgSet* nset, double scaleFactor,
                 bool correctForBinVolume=false, bool showProgress=false) const ;
@@ -98,8 +107,6 @@ public:
 
 protected:
 
-  void initialize(RooAbsCategoryLValue& inIndexCat, std::map<std::string,RooAbsPdf*> pdfMap) ;
-
   void selectNormalization(const RooArgSet* depSet=nullptr, bool force=false) override ;
   void selectNormalizationRange(const char* rangeName=nullptr, bool force=false) override ;
 
@@ -110,7 +117,6 @@ protected:
 
   class CacheElem : public RooAbsCacheElement {
   public:
-    ~CacheElem() override {} ;
     RooArgList containedArgs(Action) override { return RooArgList(_partIntList) ; }
     RooArgList _partIntList ;
   } ;
@@ -123,7 +129,16 @@ protected:
   RooCategoryProxy _indexCat ; ///< Index category
   TList    _pdfProxyList ;     ///< List of PDF proxies (named after applicable category state)
   Int_t    _numPdf = 0;        ///< Number of registered PDFs
+
 private:
+
+  /// Private internal constructor.
+  RooSimultaneous(const char *name, const char *title, InitializationOutput && initInfo);
+
+  static std::unique_ptr<RooSimultaneous::InitializationOutput>
+  initialize(std::string const& name, RooAbsCategoryLValue &inIndexCat,
+             std::map<std::string, RooAbsPdf *> const &pdfMap);
+
   mutable std::unique_ptr<RooArgSet> _indexCatSet ; ///<! Index category wrapped in a RooArgSet if needed internally
 
   ClassDefOverride(RooSimultaneous,3)  // Simultaneous operator p.d.f, functions like C++  'switch()' on input p.d.fs operating on index category5A

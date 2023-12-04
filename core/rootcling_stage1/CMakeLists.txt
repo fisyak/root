@@ -17,7 +17,9 @@ else()
   endif()
 endif()
 
-if(NOT builtin_clang)
+if(builtin_clang)
+  set(CLING_LIBRARIES "clingMetaProcessor")
+else()
   list(APPEND CLING_LIBRARIES ${CLING_DEPEND_LIBS})
   link_directories("${LLVM_LIBRARY_DIR}")
 endif()
@@ -35,6 +37,9 @@ target_include_directories(rootcling_stage1 PRIVATE
    ${CMAKE_SOURCE_DIR}/core/dictgen/res # for rootcling_impl.h
    ${CMAKE_BINARY_DIR}/ginclude         # for RConfigure.h
 )
+if (CMAKE_SYSTEM_NAME MATCHES FreeBSD)
+  target_link_libraries(rootcling_stage1 util procstat)
+endif()
 
 set_target_properties(rootcling_stage1 PROPERTIES RUNTIME_OUTPUT_DIRECTORY src)
 add_dependencies(rootcling_stage1 ClingUtils)

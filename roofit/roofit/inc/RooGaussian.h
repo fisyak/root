@@ -34,7 +34,6 @@ public:
   TObject* clone(const char* newname) const override {
     return new RooGaussian(*this,newname);
   }
-  inline ~RooGaussian() override { }
 
   Int_t getAnalyticalIntegral(RooArgSet& allVars, RooArgSet& analVars, const char* rangeName=nullptr) const override;
   double analyticalIntegral(Int_t code, const char* rangeName=nullptr) const override;
@@ -51,6 +50,10 @@ public:
   /// Get the sigma parameter.
   RooAbsReal const& getSigma() const { return sigma.arg(); }
 
+  void translate(RooFit::Detail::CodeSquashContext &ctx) const override;
+  std::string
+  buildCallToAnalyticIntegral(Int_t code, const char *rangeName, RooFit::Detail::CodeSquashContext &ctx) const override;
+
 protected:
 
   RooRealProxy x ;
@@ -58,7 +61,7 @@ protected:
   RooRealProxy sigma ;
 
   double evaluate() const override;
-  void computeBatch(cudaStream_t*, double* output, size_t size, RooFit::Detail::DataMap const&) const override;
+  void computeBatch(double* output, size_t size, RooFit::Detail::DataMap const&) const override;
   inline bool canComputeBatchWithCuda() const override { return true; }
 
 private:

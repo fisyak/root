@@ -609,6 +609,7 @@ void TStyle::Copy(TObject &obj) const
    ((TStyle&)obj).fOptLogy          = fOptLogy;
    ((TStyle&)obj).fOptLogz          = fOptLogz;
    ((TStyle&)obj).fOptDate          = fOptDate;
+   ((TStyle&)obj).fOptFile          = fOptFile;
    ((TStyle&)obj).fOptFit           = fOptFit;
    ((TStyle&)obj).fOptStat          = fOptStat;
    ((TStyle&)obj).fOptTitle         = fOptTitle;
@@ -662,6 +663,19 @@ void TStyle::Copy(TObject &obj) const
    ((TStyle&)obj).fColorModelPS   = fColorModelPS;
    ((TStyle&)obj).fTimeOffset     = fTimeOffset;
    ((TStyle&)obj).fImageScaling   = fImageScaling;
+
+   ((TStyle&)obj).fCandleWhiskerRange = fCandleWhiskerRange;
+   ((TStyle&)obj).fCandleBoxRange     = fCandleBoxRange;
+   ((TStyle&)obj).fCandleScaled       = fCandleScaled;
+   ((TStyle&)obj).fViolinScaled       = fViolinScaled;
+
+   ((TStyle&)obj).fOrthoCamera        = fOrthoCamera;
+
+   ((TStyle&)obj).fXAxisExpXOffset    = fXAxisExpXOffset;
+   ((TStyle&)obj).fXAxisExpYOffset    = fXAxisExpYOffset;
+   ((TStyle&)obj).fYAxisExpXOffset    = fYAxisExpXOffset;
+   ((TStyle&)obj).fYAxisExpYOffset    = fYAxisExpYOffset;
+   ((TStyle&)obj).fAxisMaxDigits      = fAxisMaxDigits;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -813,6 +827,9 @@ void TStyle::Reset(Option_t *opt)
    fCandleBoxRange      = 0.5;
    fCandleScaled = kFALSE;
    fViolinScaled = kTRUE;
+
+   fOrthoCamera = kFALSE;
+
    fXAxisExpXOffset = 0;
    fXAxisExpYOffset = 0;
    fYAxisExpXOffset = 0;
@@ -2121,6 +2138,12 @@ void TStyle::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
    out<<pre<<"tmpStyle->SetPadGridY("        <<asBool(GetPadGridY())<<");" <<std::endl;
    out<<pre<<"tmpStyle->SetPadTickX("        <<GetPadTickX()         <<");"<<std::endl;
    out<<pre<<"tmpStyle->SetPadTickY("        <<GetPadTickY()         <<");"<<std::endl;
+   out<<pre<<"tmpStyle->SetOrthoCamera("     <<asBool(GetOrthoCamera())<<");" <<std::endl;
+
+   out<<pre<<"tmpStyle->SetCandleWhiskerRange("<<GetCandleWhiskerRange()<<");" <<std::endl;
+   out<<pre<<"tmpStyle->SetCandleBoxRange("  <<GetCandleBoxRange()<<");" <<std::endl;
+   out<<pre<<"tmpStyle->SetCandleScaled("    <<asBool(GetCandleScaled())<<");" <<std::endl;
+   out<<pre<<"tmpStyle->SetViolinScaled("    <<asBool(GetViolinScaled())<<");" <<std::endl;
 
    // fPaperSizeX, fPaperSizeY
    out<<pre<<"tmpStyle->SetPaperSize("      <<fPaperSizeX<<", "<<fPaperSizeY<<");"<<std::endl;

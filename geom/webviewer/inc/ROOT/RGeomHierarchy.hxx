@@ -20,7 +20,6 @@ class TGeoManager;
 class TGeoVolume;
 
 namespace ROOT {
-namespace Experimental {
 
 class RWebWindow;
 
@@ -37,7 +36,7 @@ protected:
 
 public:
 
-   RGeomHierarchy(RGeomDescription &desc);
+   RGeomHierarchy(RGeomDescription &desc, bool use_server_threads = false);
    virtual ~RGeomHierarchy();
 
    void Show(const RWebDisplayArgs &args = "");
@@ -51,7 +50,6 @@ public:
    void ClearOnClose(const std::shared_ptr<void> &handle);
 };
 
-} // namespace Experimental
 } // namespace ROOT
 
 #endif

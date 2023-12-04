@@ -1,3 +1,5 @@
+/// \cond ROOFIT_INTERNAL
+
 /*
  * Project: RooFit
  * Authors:
@@ -13,11 +15,12 @@
 #ifndef RooFit_BatchModeDataHelpers_h
 #define RooFit_BatchModeDataHelpers_h
 
-#include <RooSpan.h>
 #include <RooFit/Detail/DataMap.h>
 
+#include <ROOT/RSpan.hxx>
 #include <ROOT/RStringView.hxx>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <stack>
@@ -25,16 +28,24 @@
 
 class RooAbsCategory;
 class RooAbsData;
+class RooSimultaneous;
+
 class TNamed;
 
 namespace RooFit {
 namespace BatchModeDataHelpers {
 
-std::map<RooFit::Detail::DataKey, RooSpan<const double>>
-getDataSpans(RooAbsData const &data, std::string_view rangeName, std::string const &prefix,
-             std::stack<std::vector<double>> &buffers, bool skipZeroWeights);
+std::map<RooFit::Detail::DataKey, std::span<const double>>
+getDataSpans(RooAbsData const &data, std::string const &rangeName, RooSimultaneous const *simPdf, bool skipZeroWeights,
+             bool takeGlobalObservablesFromData, std::stack<std::vector<double>> &buffers);
+
+std::map<RooFit::Detail::DataKey, std::size_t>
+determineOutputSizes(RooAbsArg const &topNode,
+                     std::function<std::size_t(RooFit::Detail::DataKey)> const &inputSizeFunc);
 
 } // namespace BatchModeDataHelpers
 } // namespace RooFit
 
 #endif
+
+/// \endcond

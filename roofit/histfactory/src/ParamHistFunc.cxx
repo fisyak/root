@@ -46,7 +46,6 @@
 #include "RooRealVar.h"
 #include "RooArgList.h"
 #include "RooWorkspace.h"
-#include "RunContext.h"
 
 #include "TH1.h"
 
@@ -479,10 +478,10 @@ RooArgList ParamHistFunc::createParamSet(const std::string& Prefix, Int_t numBin
     VarNameStream << Prefix << "_bin_" << i;
     std::string VarName = VarNameStream.str();
 
-    RooRealVar* gamma = new RooRealVar( VarName.c_str(), VarName.c_str(),
-               gamma_nominal, gamma_min, gamma_max );
+    auto gamma = std::make_unique<RooRealVar>(VarName.c_str(), VarName.c_str(),
+               gamma_nominal, gamma_min, gamma_max);
     gamma->setConstant( false );
-    paramSet.add( *gamma );
+    paramSet.addOwned(std::move(gamma));
 
   }
 
@@ -587,13 +586,27 @@ double ParamHistFunc::evaluate() const
   return getParameter().getVal();
 }
 
+void ParamHistFunc::translate(RooFit::Detail::CodeSquashContext &ctx) const
+{
+   auto const &n = _numBinsPerDim;
+
+   // check if _numBins needs to be filled
+   if (n.x == 0) {
+      _numBinsPerDim = getNumBinsPerDim(_dataVars);
+   }
+
+   std::string const &idx = _dataSet.calculateTreeIndexForCodeSquash(this, ctx, _dataVars, true);
+   std::string const &paramNames = ctx.buildArg(_paramSet);
+
+   ctx.addResult(this, paramNames + "[" + idx + "]");
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Find all bins corresponding to the values of the observables in `evalData`, and evaluate
 /// the associated parameters.
 /// \param[in,out] evalData Input/output data for evaluating the ParamHistFunc.
 /// \param[in] normSet Normalisation set passed on to objects that are serving values to us.
-void ParamHistFunc::computeBatch(cudaStream_t*, double* output, size_t size, RooFit::Detail::DataMap const& dataMap) const {
+void ParamHistFunc::computeBatch(double* output, size_t size, RooFit::Detail::DataMap const& dataMap) const {
 
   auto const& n = _numBinsPerDim;
   // check if _numBins needs to be filled
@@ -642,7 +655,7 @@ Int_t ParamHistFunc::getAnalyticalIntegralWN(RooArgSet& allVars, RooArgSet& anal
 
   // Check if this configuration was created before
   Int_t sterileIdx(-1) ;
-  CacheElem* cache = (CacheElem*) _normIntMgr.getObj(normSet,&analVars,&sterileIdx,(const char*)0) ;
+  CacheElem* cache = (CacheElem*) _normIntMgr.getObj(normSet,&analVars,&sterileIdx,(const char*)nullptr) ;
   if (cache) {
     return _normIntMgr.lastIndex()+1 ;
   }
@@ -651,7 +664,7 @@ Int_t ParamHistFunc::getAnalyticalIntegralWN(RooArgSet& allVars, RooArgSet& anal
   cache = new CacheElem ;
 
   // Store cache element
-  Int_t code = _normIntMgr.setObj(normSet,&analVars,(RooAbsCacheElement*)cache,0) ;
+  Int_t code = _normIntMgr.setObj(normSet,&analVars,cache,nullptr) ;
 
   return code+1 ;
 
@@ -674,7 +687,6 @@ double ParamHistFunc::analyticalIntegralWN(Int_t /*code*/, const RooArgSet* /*no
 
   for (unsigned int i=0; i < _paramSet.size(); ++i) {
     const auto& param = static_cast<const RooAbsReal&>(_paramSet[i]);
-    assert(static_cast<Int_t>(i) == _dataSet.getIndex(param)); // We assume that each parameter i belongs to bin i
 
     // Get the gamma's value
     const double paramVal = param.getVal();
@@ -706,7 +718,7 @@ std::list<double>* ParamHistFunc::plotSamplingHint(RooAbsRealLValue& obs, double
 
   std::list<double>* hint = new std::list<double> ;
 
-  // Widen range slighty
+  // Widen range slightly
   xlo = xlo - 0.01*(xhi-xlo) ;
   xhi = xhi + 0.01*(xhi-xlo) ;
 

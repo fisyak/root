@@ -19,7 +19,7 @@
 \class RooRealIntegral
 \ingroup Roofitcore
 
-RooRealIntegral performs hybrid numerical/analytical integrals of RooAbsReal objects.
+Performs hybrid numerical/analytical integrals of RooAbsReal objects.
 The class performs none of the actual integration, but only manages the logic
 of what variables can be integrated analytically, accounts for eventual jacobian
 terms and defines what numerical integrations needs to be done to complement the
@@ -28,26 +28,28 @@ The actual analytical integrations (if any) are done in the PDF themselves, the 
 integration is performed in the various implementations of the RooAbsIntegrator base class.
 **/
 
-#include "RooRealIntegral.h"
+#include <RooRealIntegral.h>
 
-#include "RooMsgService.h"
-#include "RooArgSet.h"
-#include "RooAbsRealLValue.h"
-#include "RooAbsCategoryLValue.h"
-#include "RooRealBinding.h"
-#include "RooRealAnalytic.h"
-#include "RooInvTransform.h"
-#include "RooSuperCategory.h"
-#include "RooNumIntFactory.h"
-#include "RooNumIntConfig.h"
-#include "RooNameReg.h"
-#include "RooExpensiveObjectCache.h"
-#include "RooConstVar.h"
-#include "RooDouble.h"
-#include "RooTrace.h"
-#include "RooHelpers.h"
+#include <RooAbsCategoryLValue.h>
+#include <RooAbsRealLValue.h>
+#include <RooArgSet.h>
+#include <RooConstVar.h>
+#include <RooDouble.h>
+#include <RooExpensiveObjectCache.h>
+#include <RooFuncWrapper.h>
+#include <RooHelpers.h>
+#include <RooInvTransform.h>
+#include <RooMsgService.h>
+#include <RooNameReg.h>
+#include <RooNumIntConfig.h>
+#include <RooNumIntFactory.h>
+#include <RooRealBinding.h>
+#include <RooSuperCategory.h>
+#include <RooTrace.h>
 
-#include "TClass.h"
+#include "RooFitImplHelpers.h"
+
+#include <TClass.h>
 
 #include <iostream>
 #include <memory>
@@ -227,7 +229,7 @@ Int_t RooRealIntegral::_cacheAllNDim(2) ;
 
 RooRealIntegral::RooRealIntegral()
 {
-  TRACE_CREATE
+  TRACE_CREATE;
 }
 
 
@@ -240,13 +242,18 @@ RooRealIntegral::RooRealIntegral()
 /// The other integrations are performed numerically. The optional
 /// config object prescribes how these numeric integrations are configured.
 ///
-
+/// \Note If pdf component selection was globally overridden to always include
+/// all components (either with RooAbsReal::globalSelectComp(bool) or a
+/// RooAbsReal::GlobalSelectComponentRAII), then any created integral will
+/// ignore component selections during its lifetime. This is especially useful
+/// when creating normalization or projection integrals.
 RooRealIntegral::RooRealIntegral(const char *name, const char *title,
              const RooAbsReal& function, const RooArgSet& depList,
              const RooArgSet* funcNormSet, const RooNumIntConfig* config,
              const char* rangeName) :
   RooAbsReal(name,title),
   _valid(true),
+  _respectCompSelect{!_globalSelectComp},
   _sumList("!sumList","Categories to be summed numerically",this,false,false),
   _intList("!intList","Variables to be integrated numerically",this,false,false),
   _anaList("!anaList","Variables to be integrated analytically",this,false,false),
@@ -263,7 +270,7 @@ RooRealIntegral::RooRealIntegral(const char *name, const char *title,
   //      lvalues that are higher in the expression tree
   //
   //   C) Check for dependents that the PDF insists on integrating
-  //      analytically iself
+  //      analytically itself
   //
   //   D) Make list of servers that can be integrated analytically
   //      Add all parameters/dependents as value/shape servers
@@ -318,10 +325,10 @@ RooRealIntegral::RooRealIntegral(const char *name, const char *title,
       _valid= false;
     }
     if (!function.dependsOn(*arg)) {
-      RooAbsArg* argClone = (RooAbsArg*) arg->Clone() ;
-      _facListOwned.addOwned(*argClone) ;
+      std::unique_ptr<RooAbsArg> argClone{static_cast<RooAbsArg*>(arg->Clone())};
       _facList.add(*argClone) ;
       addServer(*argClone,false,true) ;
+      _facListOwned.addOwned(std::move(argClone));
     }
   }
 
@@ -357,9 +364,10 @@ RooRealIntegral::RooRealIntegral(const char *name, const char *title,
   }
   exclLVBranches.remove(depList,true,true) ;
 
-  // Initial fill of list of LValue leaf servers (put in intDepList)
+  // Initial fill of list of LValue leaf servers (put in intDepList, but the
+  // instances that are in the actual computation graph of the function)
   RooArgSet exclLVServers("exclLVServers") ;
-  exclLVServers.add(intDepList) ;
+  function.getObservables(&intDepList, exclLVServers);
 
   // Obtain mutual exclusive dependence by iterative reduction
   bool converged(false) ;
@@ -417,7 +425,7 @@ RooRealIntegral::RooRealIntegral(const char *name, const char *title,
 
   // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
   // * C) Check for dependents that the PDF insists on integrating *
-  //      analytically iself                                       *
+  //      analytically itself                                       *
   // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
   RooArgSet anIntOKDepList ;
@@ -447,14 +455,9 @@ RooRealIntegral::RooRealIntegral(const char *name, const char *title,
   // * E) interact with function to make list of objects actually integrated analytically  *
   // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
-  RooArgSet anIntDepList ;
+  _mode = function.getAnalyticalIntegralWN(anIntOKDepList,_anaList,_funcNormSet.get(),RooNameReg::str(_rangeName)) ;
 
-  RooArgSet anaSet{ _anaList, Form("UniqueCloneOf_%s",_anaList.GetName())};
-  _mode = function.getAnalyticalIntegralWN(anIntOKDepList,anaSet,_funcNormSet.get(),RooNameReg::str(_rangeName)) ;
-  _anaList.removeAll() ;
-  _anaList.add(anaSet);
-
-  // Avoid confusion -- if mode is zero no analytical integral is defined regardless of contents of _anaListx
+  // Avoid confusion -- if mode is zero no analytical integral is defined regardless of contents of _anaList
   if (_mode==0) {
     _anaList.removeAll() ;
   }
@@ -600,7 +603,7 @@ RooRealIntegral::RooRealIntegral(const char *name, const char *title,
     }
   }
 
-  TRACE_CREATE
+  TRACE_CREATE;
 }
 
 
@@ -690,22 +693,24 @@ bool RooRealIntegral::initNumIntegrator() const
   // All done if there are no arguments to integrate numerically
   if(_intList.empty()) return true;
 
-  // Bind the appropriate analytic integral (specified by _mode) of our RooRealVar object to
+  // Bind the appropriate analytic integral of our RooRealVar object to
   // those of its arguments that will be integrated out numerically.
   if(_mode != 0) {
-    _numIntegrand = std::make_unique<RooRealAnalytic>(*_function,_intList,_mode,funcNormSet(),_rangeName);
+    std::unique_ptr<RooAbsReal> analyticalPart{_function->createIntegral(_anaList, *funcNormSet(), RooNameReg::str(_rangeName))};
+    _numIntegrand = std::make_unique<RooRealBinding>(*analyticalPart,_intList,nullptr,false,_rangeName);
+    const_cast<RooRealIntegral*>(this)->addOwnedComponents(std::move(analyticalPart));
   }
   else {
     _numIntegrand = std::make_unique<RooRealBinding>(*_function,_intList,funcNormSet(),false,_rangeName);
   }
-  if(0 == _numIntegrand || !_numIntegrand->isValid()) {
+  if(nullptr == _numIntegrand || !_numIntegrand->isValid()) {
     coutE(Integration) << ClassName() << "::" << GetName() << ": failed to create valid integrand." << std::endl;
     return false;
   }
 
   // Create appropriate numeric integrator using factory
   bool isBinned = _function->isBinnedDistribution(_intList) ;
-  _numIntEngine.reset(RooNumIntFactory::instance().createIntegrator(*_numIntegrand,*_iconfig,0,isBinned));
+  _numIntEngine = RooNumIntFactory::instance().createIntegrator(*_numIntegrand,*_iconfig,0,isBinned);
 
   if(_numIntEngine == nullptr || !_numIntEngine->isValid()) {
     coutE(Integration) << ClassName() << "::" << GetName() << ": failed to create valid integrator." << std::endl;
@@ -752,16 +757,16 @@ RooRealIntegral::RooRealIntegral(const RooRealIntegral& other, const char* name)
  }
 
  for (const auto arg : other._facList) {
-   RooAbsArg* argClone = (RooAbsArg*) arg->Clone() ;
-   _facListOwned.addOwned(*argClone) ;
+   std::unique_ptr<RooAbsArg> argClone{static_cast<RooAbsArg*>(arg->Clone())};
    _facList.add(*argClone) ;
    addServer(*argClone,false,true) ;
+   _facListOwned.addOwned(std::move(argClone));
  }
 
  other._intList.snapshot(_saveInt) ;
  other._sumList.snapshot(_saveSum) ;
 
-  TRACE_CREATE
+  TRACE_CREATE;
 }
 
 
@@ -769,13 +774,13 @@ RooRealIntegral::RooRealIntegral(const RooRealIntegral& other, const char* name)
 
 RooRealIntegral::~RooRealIntegral()
 {
-  TRACE_DESTROY
+  TRACE_DESTROY;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-RooAbsReal* RooRealIntegral::createIntegral(const RooArgSet& iset, const RooArgSet* nset, const RooNumIntConfig* cfg, const char* rangeName) const
+RooFit::OwningPtr<RooAbsReal> RooRealIntegral::createIntegral(const RooArgSet& iset, const RooArgSet* nset, const RooNumIntConfig* cfg, const char* rangeName) const
 {
   // Handle special case of no integration with default algorithm
   if (iset.empty()) {
@@ -789,7 +794,7 @@ RooAbsReal* RooRealIntegral::createIntegral(const RooArgSet& iset, const RooArgS
   isetAll.add(_anaList) ;
   isetAll.add(_facList) ;
 
-  const RooArgSet* newNormSet(0) ;
+  const RooArgSet* newNormSet(nullptr) ;
   std::unique_ptr<RooArgSet> tmp;
   if (nset && !_funcNormSet) {
     newNormSet = nset ;
@@ -801,9 +806,7 @@ RooAbsReal* RooRealIntegral::createIntegral(const RooArgSet& iset, const RooArgS
     tmp->add(*_funcNormSet,true) ;
     newNormSet = tmp.get();
   }
-  RooAbsReal* ret =  _function->createIntegral(isetAll,newNormSet,cfg,rangeName) ;
-
-  return ret ;
+  return  _function->createIntegral(isetAll,newNormSet,cfg,rangeName);
 }
 
 
@@ -841,7 +844,7 @@ double RooRealIntegral::getValV(const RooArgSet* nset) const
 
 double RooRealIntegral::evaluate() const
 {
-  GlobalSelectComponentRAII selCompRAII(_globalSelectComp || !_respectCompSelect);
+  GlobalSelectComponentRAII selCompRAII(!_respectCompSelect);
 
   double retVal(0) ;
   switch (_intOperMode) {
@@ -849,7 +852,7 @@ double RooRealIntegral::evaluate() const
   case Hybrid:
     {
       // Cache numeric integrals in >1d expensive object cache
-      RooDouble* cacheVal(0) ;
+      RooDouble* cacheVal(nullptr) ;
       if ((_cacheNum && !_intList.empty()) || _intList.getSize()>=_cacheAllNDim) {
         cacheVal = (RooDouble*) expensiveObjectCache().retrieveObject(GetName(),RooDouble::Class(),parameters())  ;
       }
@@ -1086,6 +1089,73 @@ void RooRealIntegral::setAllowComponentSelection(bool allow){
   _respectCompSelect = allow;
 }
 
+void RooRealIntegral::translate(RooFit::Detail::CodeSquashContext &ctx) const
+{
+   if (_sumList.empty() && _intList.empty()) {
+      ctx.addResult(this, _function.arg().buildCallToAnalyticIntegral(_mode, RooNameReg::str(_rangeName), ctx));
+      return;
+   }
+
+   if (intVars().size() != 1 || _intList.size() != 1) {
+      std::stringstream errorMsg;
+      errorMsg << "Only analytical integrals and 1D numeric integrals are supported for AD for class"
+               << _function.GetName();
+      coutE(Minimization) << errorMsg.str() << std::endl;
+      throw std::runtime_error(errorMsg.str().c_str());
+   }
+
+   auto &intVar = static_cast<RooAbsRealLValue &>(*_intList[0]);
+
+   RooFuncWrapper wrapper{GetName(), GetTitle(), *_function, {}, nullptr, nullptr, false};
+
+   RooArgSet params;
+   _function->getParameters(nullptr, params);
+
+   std::string paramsName = ctx.getTmpVarName();
+
+   std::stringstream ss;
+
+   std::string resName = RooFit::Detail::makeValidVarName(GetName()) + "Result";
+   ctx.addResult(this, resName);
+   ctx.addToGlobalScope("double " + resName + " = 0.0;\n");
+
+   ss  << "double " << paramsName << "[] = {";
+   std::string args;
+   int intVarIdx = 0;
+   for (RooAbsArg *param : params) {
+      // Fill the integration variable with dummy value for now. This will then
+      // be reset in the sampling loop.
+      if (param->namePtr() == intVar.namePtr()) {
+         args += "0.0,";
+      } else if (!param->isConstant()) {
+         args += ctx.getResult(*param) + ",";
+         intVarIdx++;
+      }
+   }
+   if (!args.empty()) {
+      args.pop_back();
+   }
+   ss << args << "};\n";
+
+   // TODO: once Clad has support for higher-order functions (follow also the
+   // Clad issue #637), we could refactor this code into an actual function
+   // instead of hardcoding it here as a string.
+   ss << "{\n"
+      << "   const int n = 1000; // number of sampling points\n"
+      << "   double d = " << intVar.getMax(intRange()) << " - " << intVar.getMin(intRange()) << ";\n"
+      << "   double eps = d / n;\n"
+      << "   for (int i = 0; i < n; ++i) {\n"
+      << "      " << paramsName << "[" << intVarIdx << "] = " << intVar.getMin(intRange()) << " + eps * i;\n"
+      // TODO: the second "paramsName" should be nullptr, but until Clad issue
+      // 636 is fixed, we have to pass a non-nullptr dummy.
+      << "      " << resName << " += " << " + " << ctx.buildCall(wrapper.funcName(), paramsName, paramsName) << ";\n"
+      << "   }\n"
+      << "   " << resName << " *= " << " d / n;\n"
+      << "}\n";
+
+   ctx.addToGlobalScope(ss.str());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Customized printing of arguments of a RooRealIntegral to more intuitively reflect the contents of the
 /// integration operation
@@ -1161,4 +1231,11 @@ void RooRealIntegral::setCacheAllNumeric(Int_t ndim) {
 Int_t RooRealIntegral::getCacheAllNumeric()
 {
   return _cacheAllNDim ;
+}
+
+
+std::unique_ptr<RooAbsArg>
+RooRealIntegral::compileForNormSet(RooArgSet const &normSet, RooFit::Detail::CompileContext &ctx) const
+{
+   return RooAbsReal::compileForNormSet(_funcNormSet ? *_funcNormSet : normSet, ctx);
 }

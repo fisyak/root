@@ -31,7 +31,7 @@ generate_1D_gaussian_pdf_nll(RooWorkspace &w, unsigned long N_events)
    RooAbsPdf *pdf = w.pdf("g");
    RooRealVar *mu = w.var("mu");
 
-   RooDataSet *data = pdf->generate(RooArgSet(*w.var("x")), N_events);
+   std::unique_ptr<RooDataSet> data{pdf->generate(RooArgSet(*w.var("x")), N_events)};
    mu->setVal(-2.9);
 
    std::unique_ptr<RooAbsReal> nll{pdf->createNLL(*data)};
@@ -77,7 +77,7 @@ generate_ND_gaussian_pdf_nll(RooWorkspace &w, unsigned int n, unsigned long N_ev
       {
          std::ostringstream os;
          os << "x" << ix;
-         obs_set.add(*w.arg(os.str().c_str()));
+         obs_set.add(*w.arg(os.str()));
       }
    }
 
@@ -94,7 +94,7 @@ generate_ND_gaussian_pdf_nll(RooWorkspace &w, unsigned int n, unsigned long N_ev
       RooRealVar a(os.str().c_str(), os2.str().c_str(), N_events / 10, 0., 10 * N_events);
       w.import(a);
       // gather in count_set
-      count_set.add(*w.arg(os.str().c_str()));
+      count_set.add(*w.arg(os.str()));
    }
    // ... and for the uniform background components
    for (unsigned ix = 0; ix < n; ++ix) {
@@ -104,14 +104,14 @@ generate_ND_gaussian_pdf_nll(RooWorkspace &w, unsigned int n, unsigned long N_ev
       RooRealVar a(os.str().c_str(), os2.str().c_str(), N_events / 10, 0., 10 * N_events);
       w.import(a);
       // gather in count_set
-      count_set.add(*w.arg(os.str().c_str()));
+      count_set.add(*w.arg(os.str()));
    }
 
    RooAddPdf *sum = new RooAddPdf("sum", "gaussians+uniforms", pdf_set, count_set);
    w.import(*sum); // keep sum around after returning
 
    // --- Generate a toyMC sample from composite PDF ---
-   RooDataSet *data = sum->generate(obs_set, N_events);
+   std::unique_ptr<RooDataSet> data{sum->generate(obs_set, N_events)};
 
    std::unique_ptr<RooAbsReal> nll{sum->createNLL(*data)};
 
@@ -120,12 +120,12 @@ generate_ND_gaussian_pdf_nll(RooWorkspace &w, unsigned int n, unsigned long N_ev
       {
          std::ostringstream os;
          os << "m" << ix;
-         dynamic_cast<RooRealVar *>(w.arg(os.str().c_str()))->setVal(RooRandom::randomGenerator()->Gaus(0, 2));
+         dynamic_cast<RooRealVar *>(w.arg(os.str()))->setVal(RooRandom::randomGenerator()->Gaus(0, 2));
       }
       {
          std::ostringstream os;
          os << "s" << ix;
-         dynamic_cast<RooRealVar *>(w.arg(os.str().c_str()))
+         dynamic_cast<RooRealVar *>(w.arg(os.str()))
             ->setVal(0.1 + std::abs(RooRandom::randomGenerator()->Gaus(0, 2)));
       }
    }
@@ -139,12 +139,12 @@ generate_ND_gaussian_pdf_nll(RooWorkspace &w, unsigned int n, unsigned long N_ev
       {
          std::ostringstream os;
          os << "m" << ix;
-         all_values->add(*w.arg(os.str().c_str()));
+         all_values->add(*w.arg(os.str()));
       }
       {
          std::ostringstream os;
          os << "s" << ix;
-         all_values->add(*w.arg(os.str().c_str()));
+         all_values->add(*w.arg(os.str()));
       }
    }
 

@@ -105,13 +105,13 @@ class ToyMCImportanceSampler: public ToyMCSampler {
             return;
          }
 
-         if( p == nullptr && fNullDensities.size() >= 1 ) p = fNullDensities[0];
+         if( p == nullptr && !fNullDensities.empty() ) p = fNullDensities[0];
          if( s == nullptr ) s = fParametersForTestStat.get();
          if( s ) s = (const RooArgSet*)s->snapshot();
 
          fNullDensities.push_back( p );
          fNullSnapshots.push_back( s );
-         fNullNLLs.push_back( nullptr );
+         fNullNLLs.emplace_back( nullptr );
          ClearCache();
       }
       /// overwrite from ToyMCSampler
@@ -190,8 +190,8 @@ class ToyMCImportanceSampler: public ToyMCSampler {
 
       toysStrategies fToysStrategy;
 
-      mutable std::vector<RooAbsReal*> fNullNLLs;    ///<!
-      mutable std::vector<RooAbsReal*> fImpNLLs;     ///<!
+      mutable std::vector<std::unique_ptr<RooAbsReal>> fNullNLLs;    ///<!
+      mutable std::vector<std::unique_ptr<RooAbsReal>> fImpNLLs;     ///<!
 
    protected:
    ClassDefOverride(ToyMCImportanceSampler,2) // An implementation of importance sampling

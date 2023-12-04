@@ -34,8 +34,8 @@ protected:
   const char* inputBaseName() const override {
     return pdf.arg().GetName() ;
   } ;
-  RooArgSet* actualObservables(const RooArgSet& nset) const override ;
-  RooArgSet* actualParameters(const RooArgSet& nset) const override ;
+  RooFit::OwningPtr<RooArgSet> actualObservables(const RooArgSet& nset) const override;
+  RooFit::OwningPtr<RooArgSet> actualParameters(const RooArgSet& nset) const override ;
   void fillCacheObject(PdfCacheElem& cachePdf) const override ;
   double evaluate() const override {
     // Dummy evaluate, it is never called

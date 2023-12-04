@@ -13,14 +13,13 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitHS3
   HEADERS
     RooFitHS3/JSONIO.h
     RooFitHS3/RooJSONFactoryWSTool.h
-    RooFitHS3/HistFactoryJSONTool.h
   SOURCES
     src/Domains.cxx
     src/JSONIO.cxx
     src/RooJSONFactoryWSTool.cxx
-    src/HistFactoryJSONTool.cxx
     src/JSONFactories_RooFitCore.cxx
     src/JSONFactories_HistFactory.cxx
+    src/JSONIOUtils.cxx
   DICTIONARY_OPTIONS
     "-writeEmptyRootPCM"
   DEPENDENCIES
@@ -28,7 +27,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitHS3
     RooFitJSONInterface
   LIBRARIES
     RooFit
-    RooStats
     HistFactory
 )
 

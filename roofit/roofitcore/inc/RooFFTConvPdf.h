@@ -95,8 +95,8 @@ protected:
 
   double evaluate() const override { RooArgSet dummy(_x.arg()) ; return getVal(&dummy) ; } ; // dummy
   const char* inputBaseName() const override ;
-  RooArgSet* actualObservables(const RooArgSet& nset) const override ;
-  RooArgSet* actualParameters(const RooArgSet& nset) const override ;
+  RooFit::OwningPtr<RooArgSet> actualObservables(const RooArgSet& nset) const override ;
+  RooFit::OwningPtr<RooArgSet> actualParameters(const RooArgSet& nset) const override ;
   RooAbsArg& pdfObservable(RooAbsArg& histObservable) const override ;
   void fillCacheObject(PdfCacheElem& cache) const override ;
   void fillCacheSlice(FFTCacheElem& cache, const RooArgSet& slicePosition) const ;
@@ -104,7 +104,7 @@ protected:
   PdfCacheElem* createCache(const RooArgSet* nset) const override ;
   TString histNameSuffix() const override ;
 
-  // mutable std:: map<const RooHistPdf*,CacheAuxInfo*> _cacheAuxInfo ; //! Auxilary Cache information (do not persist)
+  // mutable std::map<const RooHistPdf*,CacheAuxInfo*> _cacheAuxInfo ; //! Auxiliary Cache information (do not persist)
   double _bufFrac ; // Sampling buffer size as fraction of domain size
   BufStrat _bufStrat ; // Strategy to fill the buffer
 

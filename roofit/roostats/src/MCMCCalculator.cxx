@@ -57,11 +57,11 @@ using namespace std;
 /// default constructor
 
 MCMCCalculator::MCMCCalculator() :
-   fPropFunc(0),
-   fPdf(0),
-   fPriorPdf(0),
-   fData(0),
-   fAxes(0)
+   fPropFunc(nullptr),
+   fPdf(nullptr),
+   fPriorPdf(nullptr),
+   fData(nullptr),
+   fAxes(nullptr)
 {
    fNumIters = 0;
    fNumBurnInSteps = 0;
@@ -80,9 +80,9 @@ MCMCCalculator::MCMCCalculator() :
 /// by SetupBasicUsage()
 
 MCMCCalculator::MCMCCalculator(RooAbsData& data, const ModelConfig & model) :
-   fPropFunc(0),
+   fPropFunc(nullptr),
    fData(&data),
-   fAxes(0)
+   fAxes(nullptr)
 {
    SetModel(model);
    SetupBasicUsage();
@@ -115,7 +115,7 @@ void MCMCCalculator::SetModel(const ModelConfig & model) {
 
 void MCMCCalculator::SetupBasicUsage()
 {
-   fPropFunc = 0;
+   fPropFunc = nullptr;
    fNumIters = 10000;
    fNumBurnInSteps = 40;
    fNumBins = 50;
@@ -149,8 +149,8 @@ void MCMCCalculator::SetLeftSideTailFraction(double a)
 MCMCInterval* MCMCCalculator::GetInterval() const
 {
 
-   if (!fData || !fPdf   ) return 0;
-   if (fPOI.empty()) return 0;
+   if (!fData || !fPdf   ) return nullptr;
+   if (fPOI.empty()) return nullptr;
 
    if (fSize < 0) {
       coutE(InputArguments) << "MCMCCalculator::GetInterval: "
@@ -159,8 +159,8 @@ MCMCInterval* MCMCCalculator::GetInterval() const
    }
 
    // if a proposal function has not been specified create a default one
-   bool useDefaultPropFunc = (fPropFunc == 0);
-   bool usePriorPdf = (fPriorPdf != 0);
+   bool useDefaultPropFunc = (fPropFunc == nullptr);
+   bool usePriorPdf = (fPriorPdf != nullptr);
    if (useDefaultPropFunc) fPropFunc = new UniformProposal();
 
    // if prior is given create product
@@ -170,18 +170,17 @@ MCMCInterval* MCMCCalculator::GetInterval() const
       prodPdf = new RooProdPdf(prodName,prodName,RooArgList(*fPdf,*fPriorPdf) );
    }
 
-   RooArgSet* constrainedParams = prodPdf->getParameters(*fData);
-   RooAbsReal* nll = prodPdf->createNLL(*fData, Constrain(*constrainedParams),ConditionalObservables(fConditionalObs),GlobalObservables(fGlobalObs));
-   delete constrainedParams;
+   std::unique_ptr<RooArgSet> constrainedParams{prodPdf->getParameters(*fData)};
+   std::unique_ptr<RooAbsReal> nll{prodPdf->createNLL(*fData, Constrain(*constrainedParams),ConditionalObservables(fConditionalObs),GlobalObservables(fGlobalObs))};
 
-   RooArgSet* params = nll->getParameters(*fData);
-   RemoveConstantParameters(params);
+   std::unique_ptr<RooArgSet> params{nll->getParameters(*fData)};
+   RemoveConstantParameters(&*params);
    if (fNumBins > 0) {
       SetBins(*params, fNumBins);
       SetBins(fPOI, fNumBins);
       if (dynamic_cast<PdfProposal*>(fPropFunc)) {
-         RooArgSet* proposalVars = ((PdfProposal*)fPropFunc)->GetPdf()->
-                                               getParameters((RooAbsData*)nullptr);
+         std::unique_ptr<RooArgSet> proposalVars{((PdfProposal*)fPropFunc)->GetPdf()->
+                                               getParameters((RooAbsData*)nullptr)};
          SetBins(*proposalVars, fNumBins);
       }
    }
@@ -216,8 +215,6 @@ MCMCInterval* MCMCCalculator::GetInterval() const
 
    if (useDefaultPropFunc) delete fPropFunc;
    if (usePriorPdf) delete prodPdf;
-   delete nll;
-   delete params;
 
    return interval;
 }

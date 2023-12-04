@@ -19,8 +19,7 @@
 \class RooBinnedGenContext
 \ingroup Roofitcore
 
-RooBinnedGenContext is an efficient implementation of the
-generator context specific for binned pdfs.
+Efficient implementation of the generator context specific for binned pdfs.
 **/
 
 #include "Riostream.h"
@@ -37,7 +36,6 @@ generator context specific for binned pdfs.
 using namespace std;
 
 ClassImp(RooBinnedGenContext);
-;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,33 +66,16 @@ RooBinnedGenContext::RooBinnedGenContext(const RooAbsPdf &model, const RooArgSet
     }
 
   _pdf->recursiveRedirectServers(_theEvent) ;
-  _vars = _pdf->getObservables(vars) ;
-
-  // If pdf has boundary definitions, follow those for the binning
-  for (auto* rvar: dynamic_range_cast<RooRealVar*>(*_vars)) {
-    if (rvar) {
-      list<double>* binb = model.binBoundaries(*rvar,rvar->getMin(),rvar->getMax()) ;
-      delete binb ;
-    }
-  }
-
+  _vars = std::unique_ptr<RooArgSet>{_pdf->getObservables(vars)};
 
   // Create empty RooDataHist
-  _hist = new RooDataHist("genData","genData",*_vars) ;
+  _hist = std::make_unique<RooDataHist>("genData","genData",*_vars);
 
   _expectedData = false ;
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
-/// Destructor. Delete all owned subgenerator contexts
-
-RooBinnedGenContext::~RooBinnedGenContext()
-{
-  delete _vars ;
-  delete _hist ;
-}
-
+RooBinnedGenContext::~RooBinnedGenContext() = default;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -108,9 +89,9 @@ void RooBinnedGenContext::attach(const RooArgSet& args)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// One-time initialization of generator contex. Attach theEvent
+/// One-time initialization of generator context. Attach theEvent
 /// to internal p.d.f clone and forward initialization call to
-/// the component generators
+/// the component generators.
 
 void RooBinnedGenContext::initGenerator(const RooArgSet &theEvent)
 {
@@ -140,19 +121,19 @@ RooDataSet *RooBinnedGenContext::generate(double nEvt, bool /*skipInit*/, bool e
     if (!_pdf->canBeExtended()) {
       coutE(InputArguments) << "RooAbsPdf::generateBinned(" << GetName()
              << ") ERROR: No event count provided and p.d.f does not provide expected number of events" << endl ;
-      return 0 ;
+      return nullptr ;
     } else {
       // Don't round in expectedData mode
       if (_expectedData || extended) {
-   nEvents = _pdf->expectedEvents(_vars) ;
+   nEvents = _pdf->expectedEvents(_vars.get());
       } else {
-   nEvents = Int_t(_pdf->expectedEvents(_vars)+0.5) ;
+   nEvents = Int_t(_pdf->expectedEvents(_vars.get())+0.5) ;
       }
     }
   }
 
   // Sample p.d.f. distribution
-  _pdf->fillDataHist(_hist,_vars,1,true) ;
+  _pdf->fillDataHist(_hist.get(),_vars.get(),1,true) ;
 
   // Output container
   RooDataSet* wudata = new RooDataSet("wu","wu",*_vars,RooFit::WeightVar()) ;

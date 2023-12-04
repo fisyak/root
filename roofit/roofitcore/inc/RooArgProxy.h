@@ -27,8 +27,7 @@ public:
   // Constructors, assignment etc.
 
   /// Default constructor
-  RooArgProxy() : _owner(nullptr), _arg(nullptr), _valueServer(false), _shapeServer(false), _isFund(true), _ownArg(false) {
-  }
+  RooArgProxy() = default;
   RooArgProxy(const char* name, const char* desc, RooAbsArg* owner,
          bool valueServer, bool shapeServer, bool proxyOwnsArg=false) ;
   RooArgProxy(const char* name, const char* desc, RooAbsArg* owner, RooAbsArg& arg,
@@ -71,6 +70,7 @@ protected:
   friend class RooRealIntegral;
 
   bool changePointer(const RooAbsCollection& newServerSet, bool nameChange=false, bool factoryInitMode=false) override ;
+  bool changePointer(std::unordered_map<RooAbsArg*, RooAbsArg*> const& replacements) override;
 
   virtual void changeDataSet(const RooArgSet* newNormSet) ;
 

@@ -62,6 +62,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTDataFrame
     ROOT/RDF/RSampleInfo.hxx
     ROOT/RDF/RDefineBase.hxx
     ROOT/RDF/RDefine.hxx
+    ROOT/RDF/RDefinePerSample.hxx
     ROOT/RDF/RDefineReader.hxx
     ROOT/RDF/RDSColumnReader.hxx
     ROOT/RDF/RColumnReaderBase.hxx
@@ -121,6 +122,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTDataFrame
     src/RMetaData.cxx
     src/RRangeBase.cxx
     src/RSample.cxx
+    src/RResultPtr.cxx
     src/RVariationBase.cxx
     src/RVariationsDescription.cxx
     src/RRootDS.cxx

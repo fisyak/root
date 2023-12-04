@@ -14,28 +14,28 @@
 #include <RooWorkspace.h>
 #include <RooHelpers.h>
 
-#include <gtest/gtest.h>
+#include <Math/PdfFuncMathCore.h>
 
-// Backward compatibility for gtest version < 1.10.0
-#ifndef INSTANTIATE_TEST_SUITE_P
-#define INSTANTIATE_TEST_SUITE_P INSTANTIATE_TEST_CASE_P
-#endif
+#include "gtest_wrapper.h"
 
 #include <memory>
 #include <sstream>
 #include <string>
 
-class TestProdPdf : public ::testing::TestWithParam<std::tuple<int, std::string>> {
+class TestProdPdf : public ::testing::TestWithParam<std::tuple<int, RooFit::EvalBackend>> {
+public:
+   TestProdPdf() : _evalBackend{RooFit::EvalBackend::Legacy()} {}
+
 private:
    void SetUp() override
    {
       RooHelpers::LocalChangeMsgLevel chmsglvl{RooFit::WARNING, 0u, RooFit::NumIntegration, true};
 
-      datap.reset(prod.generate(x, 1000));
+      datap = std::unique_ptr<RooDataSet>{prod.generate(x, 1000)};
       a.setConstant(true);
 
       _optimize = std::get<0>(GetParam());
-      _batchMode = std::get<1>(GetParam());
+      _evalBackend = std::get<1>(GetParam());
    }
 
 protected:
@@ -51,7 +51,7 @@ protected:
    std::unique_ptr<RooDataSet> datap;
 
    int _optimize = 0;
-   std::string _batchMode;
+   RooFit::EvalBackend _evalBackend;
 };
 
 TEST_P(TestProdPdf, CachingOpt)
@@ -59,18 +59,17 @@ TEST_P(TestProdPdf, CachingOpt)
    RooHelpers::LocalChangeMsgLevel chmsglvl{RooFit::WARNING, 0u, RooFit::NumIntegration, true};
 
    using namespace RooFit;
-   prod.fitTo(*datap, Optimize(_optimize), PrintLevel(-1), BatchMode(_batchMode));
+   prod.fitTo(*datap, Optimize(_optimize), PrintLevel(-1), _evalBackend);
    EXPECT_LT(std::abs(b.getVal() - bTruth), b.getError() * 2.5) // 2.5-sigma compatibility check
       << "b=" << b.getVal() << " +- " << b.getError() << " doesn't match truth value with O" << _optimize << ".";
 }
 
 INSTANTIATE_TEST_SUITE_P(RooProdPdf, TestProdPdf,
-                         testing::Values(TestProdPdf::ParamType{0, "off"}, TestProdPdf::ParamType{0, "cpu"},
-                                         TestProdPdf::ParamType{1, "off"}, TestProdPdf::ParamType{1, "cpu"},
-                                         TestProdPdf::ParamType{2, "off"}, TestProdPdf::ParamType{2, "cpu"}),
+                         testing::Combine(testing::Values(0, 1, 2),
+                                          testing::Values(ROOFIT_EVAL_BACKENDS)),
                          [](testing::TestParamInfo<TestProdPdf::ParamType> const &paramInfo) {
                             std::stringstream ss;
-                            ss << "opt" << std::get<0>(paramInfo.param) << std::get<1>(paramInfo.param);
+                            ss << "opt" << std::get<0>(paramInfo.param) << std::get<1>(paramInfo.param).name();
                             return ss.str();
                          });
 
@@ -143,17 +142,22 @@ TEST(RooProdPdf, TestDepsAreCond)
 
    using ResultPtr = std::unique_ptr<RooFitResult>;
 
-   ResultPtr result1{pdf1.fitTo(*data, Save(), BatchMode("off"), PrintLevel(-1))};
    resetParameters();
-   ResultPtr result2{pdf1.fitTo(*data, Save(), BatchMode("cpu"), PrintLevel(-1))};
+   ResultPtr result2{pdf1.fitTo(*data, Save(), EvalBackend::Cpu(), PrintLevel(-1))};
    resetParameters();
-   ResultPtr result3{pdf2.fitTo(*data, Save(), BatchMode("off"), PrintLevel(-1))};
-   resetParameters();
-   ResultPtr result4{pdf2.fitTo(*data, Save(), BatchMode("cpu"), PrintLevel(-1))};
+   ResultPtr result4{pdf2.fitTo(*data, Save(), EvalBackend::Cpu(), PrintLevel(-1))};
 
-   EXPECT_TRUE(result2->isIdentical(*result1)) << "batchmode fit is inconsistent!";
-   EXPECT_TRUE(result3->isIdentical(*result1)) << "alternative model fit is inconsistent!";
-   EXPECT_TRUE(result4->isIdentical(*result1)) << "alternative model batchmode fit is inconsistent!";
+   EXPECT_TRUE(result4->isIdentical(*result2)) << "alternative model fit is inconsistent!";
+
+#ifdef ROOFIT_LEGACY_EVAL_BACKEND
+   resetParameters();
+   ResultPtr result1{pdf1.fitTo(*data, Save(), EvalBackend::Legacy(), PrintLevel(-1))};
+   resetParameters();
+   ResultPtr result3{pdf2.fitTo(*data, Save(), EvalBackend::Legacy(), PrintLevel(-1))};
+
+   EXPECT_TRUE(result2->isIdentical(*result1)) << "legacy fit is inconsistent!";
+   EXPECT_TRUE(result4->isIdentical(*result1)) << "alternative model legacy fit is inconsistent!";
+#endif
 }
 
 /// This test covers a potential problem with the custom normalization ranges
@@ -188,7 +192,7 @@ TEST(RooProdPdf, DISABLED_ChangeServerNormSetForProdPdfInAddPdf)
    x.setRange("FULL", -10, +10);
    y.setRange("FULL", -10, +10);
 
-   // Try different normalization sets to check if there is a false chache hit
+   // Try different normalization sets to check if there is a false cache hit
    // after changing the normalization range of the servers.
    RooArgSet normSet1{x, y};
    RooArgSet normSet2{x, y};
@@ -212,4 +216,26 @@ TEST(RooProdPdf, DISABLED_ChangeServerNormSetForProdPdfInAddPdf)
 
    EXPECT_FLOAT_EQ(val2, val1);
    EXPECT_FLOAT_EQ(val3, val1);
+}
+
+// Make sure that the pdf that provides the expected number of events in a
+// RooProdPdf is not considered as a constraint. Covers JIRA issue ROOT-7604.
+TEST(RooProdPdf, RooProdPdfWithExtendedTerm)
+{
+   RooHelpers::LocalChangeMsgLevel locmsg(RooFit::WARNING, 0u, RooFit::Minimization, false);
+
+   RooWorkspace ws;
+   ws.factory("Gaussian::L_constraint(L_nom[10],L[10,0,20],0.2)");
+   ws.factory("PROD::full_model( RooExtendedTerm::model( L ) , L_constraint )");
+
+   ws.factory("weightVar[10,0,100]");
+   ws.factory("dummy_obs[1,0,1]");
+   ws.defineSet("obs", "dummy_obs,weightVar");
+   RooDataSet data("data", "data", *ws.set("obs"), RooFit::WeightVar("weightVar"));
+   data.add(*ws.set("obs"), 5);
+
+   std::unique_ptr<RooAbsReal> nll1{ws.pdf("full_model")->createNLL(data)};
+   double refVal = -std::log(ROOT::Math::gaussian_pdf(10, 0.2, 10)) + (10. - 5 * std::log(10.));
+   double nll1Val = nll1->getVal();
+   EXPECT_FLOAT_EQ(nll1Val, refVal);
 }

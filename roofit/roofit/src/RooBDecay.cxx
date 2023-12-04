@@ -21,7 +21,7 @@
 
 Most general description of B decay time distribution with effects
 of CP violation, mixing and life time differences. This function can
-be analytically convolved with any RooResolutionModel implementation
+be analytically convolved with any RooResolutionModel implementation.
 **/
 
 #include "Riostream.h"
@@ -36,7 +36,22 @@ using namespace std;
 
 ClassImp(RooBDecay);
 
-////////////////////////////////////////////////////////////////////////////////
+/// \brief Constructor for RooBDecay.
+///
+/// Creates an instance of RooBDecay with the specified parameters.
+///
+/// \param[in] name      The name of the PDF.
+/// \param[in] title     The title of the PDF.
+/// \param[in] t         The time variable.
+/// \param[in] tau       The average decay time parameter.
+/// \param[in] dgamma    The Delta Gamma parameter.
+/// \param[in] f0        The Cosh Coefficient.
+/// \param[in] f1        The Sinh Coefficient.
+/// \param[in] f2        The Cos Coefficient.
+/// \param[in] f3        The Sin Coefficient.
+/// \param[in] dm        The Delta Mass parameter.
+/// \param[in] model     The resolution model.
+/// \param[in] type      The decay type.
 
 RooBDecay::RooBDecay(const char *name, const char* title,
           RooRealVar& t, RooAbsReal& tau, RooAbsReal& dgamma,
@@ -100,13 +115,6 @@ RooBDecay::RooBDecay(const RooBDecay& other, const char* name) :
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///Destructor
-
-RooBDecay::~RooBDecay()
-{
-}
-
-////////////////////////////////////////////////////////////////////////////////
 
 double RooBDecay::coefficient(Int_t basisIndex) const
 {
@@ -132,7 +140,7 @@ double RooBDecay::coefficient(Int_t basisIndex) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-RooArgSet* RooBDecay::coefVars(Int_t basisIndex) const
+RooFit::OwningPtr<RooArgSet> RooBDecay::coefVars(Int_t basisIndex) const
 {
   if(basisIndex == _basisCosh)
     {
@@ -151,7 +159,7 @@ RooArgSet* RooBDecay::coefVars(Int_t basisIndex) const
       return _f3.arg().getVariables();
     }
 
-  return 0 ;
+  return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -216,7 +224,7 @@ void RooBDecay::generateEvent(Int_t code)
 {
   R__ASSERT(code==1);
   double gammamin = 1/_tau-TMath::Abs(_dgamma)/2;
-  while(1) {
+  while(true) {
     double t = -log(RooRandom::uniform())/gammamin;
     if (_type == Flipped || (_type == DoubleSided && RooRandom::uniform() <0.5) ) t *= -1;
     if ( t<_t.min() || t>_t.max() ) continue;

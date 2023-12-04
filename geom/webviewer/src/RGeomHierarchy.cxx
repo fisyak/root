@@ -16,19 +16,21 @@
 
 using namespace std::string_literals;
 
-using namespace ROOT::Experimental;
+using namespace ROOT;
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 /// constructor
 
-RGeomHierarchy::RGeomHierarchy(RGeomDescription &desc) :
-  fDesc(desc)
+RGeomHierarchy::RGeomHierarchy(RGeomDescription &desc, bool use_server_threads) : fDesc(desc)
 {
    fWebWindow = RWebWindow::Create();
    fWebWindow->SetDataCallBack([this](unsigned connid, const std::string &arg) { WebWindowCallback(connid, arg); });
 
    fWebWindow->SetDefaultPage("file:rootui5sys/geom/index.html");
    fWebWindow->SetGeometry(600, 900); // configure predefined window geometry
+
+   if (use_server_threads)
+      fWebWindow->UseServerThreads();
 
    fDesc.AddSignalHandler(this, [this](const std::string &kind) { ProcessSignal(kind); });
 }
@@ -46,10 +48,11 @@ RGeomHierarchy::~RGeomHierarchy()
 
 void RGeomHierarchy::WebWindowCallback(unsigned connid, const std::string &arg)
 {
-   if (arg.compare(0,6, "BRREQ:") == 0) {
+   if (arg.compare(0, 6, "BRREQ:") == 0) {
       // central place for processing browser requests
       auto json = fDesc.ProcessBrowserRequest(arg.substr(6));
-      if (json.length() > 0) fWebWindow->Send(connid, json);
+      if (json.length() > 0)
+         fWebWindow->Send(connid, json);
    } else if (arg.compare(0, 7, "SEARCH:") == 0) {
 
       std::string query = arg.substr(7);
@@ -58,7 +61,7 @@ void RGeomHierarchy::WebWindowCallback(unsigned connid, const std::string &arg)
          std::string hjson, json;
          fDesc.SearchVisibles(query, hjson, json);
          // send reply with appropriate header - NOFOUND, FOUND0:, FOUND1:
-         fWebWindow->Send(connid, hjson);
+         fWebWindow->Send(0, hjson);
          // inform viewer that search is changed
          if (fDesc.SetSearch(query, json))
             fDesc.IssueSignal(this, json.empty() ? "ClearSearch" : "ChangeSearch");
@@ -66,10 +69,21 @@ void RGeomHierarchy::WebWindowCallback(unsigned connid, const std::string &arg)
          fDesc.SetSearch(""s, ""s);
          fDesc.IssueSignal(this, "ClearSearch");
       }
+
+      auto connids = fWebWindow->GetConnections(connid);
+
+      for (auto id : connids)
+         fWebWindow->Send(id, "SETSR:"s + query);
+
    } else if (arg.compare(0, 7, "SETTOP:") == 0) {
       auto path = TBufferJSON::FromJSON<std::vector<std::string>>(arg.substr(7));
-      if (path && fDesc.SelectTop(*path))
+      if (path && fDesc.SelectTop(*path)) {
          fDesc.IssueSignal(this, "SelectTop");
+         auto connids = fWebWindow->GetConnections(connid);
+
+         for (auto id : connids)
+            fWebWindow->Send(id, "UPDATE"s);
+      }
    } else if (arg.compare(0, 6, "HOVER:") == 0) {
       auto path = TBufferJSON::FromJSON<std::vector<std::string>>(arg.substr(6));
       if (path) {
@@ -106,7 +120,6 @@ void RGeomHierarchy::WebWindowCallback(unsigned connid, const std::string &arg)
       if (fDesc.ClearAllPhysVisibility())
          fDesc.IssueSignal(this, "NodeVisibility");
    }
-
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -148,7 +161,7 @@ void RGeomHierarchy::ProcessSignal(const std::string &kind)
       auto stack = fDesc.GetHighlightedItem();
       auto path = fDesc.MakePathByStack(stack);
       if (stack.size() == 0)
-         path = { "__OFF__" }; // just clear highlight
+         path = {"__OFF__"}; // just clear highlight
       if (fWebWindow)
          fWebWindow->Send(0, "HIGHL:"s + TBufferJSON::ToJSON(&path).Data());
    } else if (kind == "NodeVisibility") {

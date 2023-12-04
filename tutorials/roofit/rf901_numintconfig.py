@@ -4,6 +4,7 @@
 ## Numeric algorithm tuning: configuration and customization of how numeric (partial) integrals are executed
 ##
 ## \macro_code
+## \macro_output
 ##
 ## \date February 2018
 ## \authors Clemens Lange, Wouter Verkerke (C++ version)
@@ -83,7 +84,7 @@ print(" [3] int_dx landau(x) = ", val3)
 if not integratorGKNotExisting:
     ROOT.RooAbsReal.defaultIntegratorConfig().method1D().setLabel("RooAdaptiveGaussKronrodIntegrator1D")
 
-    # Adjusting parameters of a speficic technique
+    # Adjusting parameters of a specific technique
     # ---------------------------------------------------------------------------------------
 
     # Adjust maximum number of steps of ROOT.RooIntegrator1D in the global

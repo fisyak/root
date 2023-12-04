@@ -112,12 +112,12 @@ double RooJohnson::evaluate() const
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Compute multiple values of the Johnson distribution.
-void RooJohnson::computeBatch(cudaStream_t* stream, double* output, size_t nEvents, RooFit::Detail::DataMap const& dataMap) const
+void RooJohnson::computeBatch(double* output, size_t nEvents, RooFit::Detail::DataMap const& dataMap) const
 {
-  auto dispatch = stream ? RooBatchCompute::dispatchCUDA : RooBatchCompute::dispatchCPU;
-  dispatch->compute(stream, RooBatchCompute::Johnson, output, nEvents,
+  RooBatchCompute::ArgVector extraArgs{_massThreshold};
+  RooBatchCompute::compute(dataMap.config(this), RooBatchCompute::Johnson, output, nEvents,
           {dataMap.at(_mass), dataMap.at(_mu), dataMap.at(_lambda), dataMap.at(_gamma), dataMap.at(_delta)},
-          {_massThreshold});
+          extraArgs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

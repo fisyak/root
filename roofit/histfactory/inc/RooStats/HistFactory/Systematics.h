@@ -27,21 +27,6 @@ namespace HistFactory {
     Type GetType( const std::string& Name );
   }
 
-
-  // Base class for common functions
-  /*
-  class Systematic {
-
-  public:
-
-    virtual void Print(std::ostream& = std::cout);
-    virtual void writeToFile(const std::string& FileName,
-              const std::string& Directory);
-
-
-  };
-  */
-
 /** \class OverallSys
  * \ingroup HistFactory
  * Configuration for a constrained overall systematic to scale sample normalisations.
@@ -200,7 +185,6 @@ namespace HistFactory {
  */
 class HistoSys final : public HistogramUncertaintyBase {
 public:
-  ~HistoSys() override {}
   void PrintXML(std::ostream&) const override;
 };
 
@@ -210,7 +194,6 @@ public:
  */
   class HistoFactor final : public HistogramUncertaintyBase {
   public:
-    ~HistoFactor() override {}
     void PrintXML(std::ostream&) const override;
   };
 

@@ -58,7 +58,7 @@ ClassImp(RooSimGenContext);
 
 RooSimGenContext::RooSimGenContext(const RooSimultaneous &model, const RooArgSet &vars,
                const RooDataSet *prototype, const RooArgSet* auxProto, bool verbose) :
-  RooAbsGenContext(model,vars,prototype,auxProto,verbose), _pdf(&model), _protoData(0)
+  RooAbsGenContext(model,vars,prototype,auxProto,verbose), _pdf(&model), _protoData(nullptr)
 {
   // Determine if we are requested to generate the index category
   RooAbsCategoryLValue const& idxCat = model.indexCat();
@@ -205,12 +205,10 @@ RooDataSet* RooSimGenContext::createDataSet(const char* name, const char* title,
     map<string,RooAbsData*> dmap ;
     for (const auto& nameIdx : *_idxCat) {
       RooAbsPdf* slicePdf = _pdf->getPdf(nameIdx.first.c_str());
-      RooArgSet* sliceObs = slicePdf->getObservables(obs) ;
+      std::unique_ptr<RooArgSet> sliceObs{slicePdf->getObservables(obs)};
       std::string sliceName = Form("%s_slice_%s", name, nameIdx.first.c_str());
       std::string sliceTitle = Form("%s (index slice %s)", title, nameIdx.first.c_str());
-      RooDataSet* dset = new RooDataSet(sliceName.c_str(),sliceTitle.c_str(),*sliceObs) ;
-      dmap[nameIdx.first] = dset ;
-      delete sliceObs ;
+      dmap[nameIdx.first] = new RooDataSet(sliceName,sliceTitle,*sliceObs);
     }
     _protoData = new RooDataSet(name, title, obs, Index((RooCategory&)*_idxCat), Link(dmap), OwnLinked()) ;
   }

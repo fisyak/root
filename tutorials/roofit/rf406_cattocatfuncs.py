@@ -4,6 +4,7 @@
 ## Data and categories: demonstration of discrete-discrete (invertable) functions
 ##
 ## \macro_code
+## \macro_output
 ##
 ## \date February 2018
 ## \authors Clemens Lange, Wouter Verkerke (C++ version)
@@ -43,7 +44,7 @@ tcatType = ROOT.RooMappedCategory("tcatType", "tagCat type", tagCat, "Cut based"
 tcatType.map("Lepton", "Cut based")
 tcatType.map("Kaon", "Cut based")
 
-# Enter a wilcard expression mapping
+# Enter a wildcard expression mapping
 tcatType.map("NetTagger*", "Neural Network")
 
 # Make a table of the mapped category state multiplicit in data

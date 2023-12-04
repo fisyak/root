@@ -19,7 +19,7 @@
 \class RooConstraintSum
 \ingroup Roofitcore
 
-RooConstraintSum calculates the sum of the -(log) likelihoods of
+Calculates the sum of the -(log) likelihoods of
 a set of RooAbsPfs that represent constraint functions. This class
 is used to calculate the composite -log(L) of constraints to be
 added to the regular -log(L) in RooAbsPdf::fitTo() with Constrain(..)
@@ -87,8 +87,12 @@ double RooConstraintSum::evaluate() const
   return sum;
 }
 
+void RooConstraintSum::translate(RooFit::Detail::CodeSquashContext &ctx) const
+{
+   ctx.addResult(this, ctx.buildCall("RooFit::Detail::EvaluateFuncs::constraintSumEvaluate", _set1, _set1.size()));
+}
 
-void RooConstraintSum::computeBatch(cudaStream_t *, double *output, size_t /*size*/,
+void RooConstraintSum::computeBatch(double *output, size_t /*size*/,
                                     RooFit::Detail::DataMap const &dataMap) const
 {
    double sum(0);
@@ -104,15 +108,11 @@ std::unique_ptr<RooAbsArg> RooConstraintSum::compileForNormSet(RooArgSet const &
 {
    std::unique_ptr<RooAbsReal> newArg{static_cast<RooAbsReal*>(this->Clone())};
 
-   RooArgList serverClones;
    for (const auto server : newArg->servers()) {
       RooArgSet nset;
       server->getObservables(&_paramSet, nset);
-      if (auto serverClone = ctx.compile(*server, *newArg, nset)) {
-         serverClones.add(*serverClone);
-      }
+      ctx.compileServer(*server, *newArg, nset);
    }
-   newArg->redirectServers(serverClones, false, true);
 
    return newArg;
 }

@@ -5,11 +5,69 @@ import os
 import subprocess
 import sys
 import textwrap
+from functools import wraps
 from http import HTTPStatus
-from typing import Dict, Tuple
+from typing import Callable, Dict
 
 from openstack.connection import Connection
 from requests import get
+
+
+def github_log_group(title: str):
+    """ decorator that places function's stdout/stderr output in a
+        dropdown group when running on github workflows """
+    def group(func: Callable):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            print(f"\n::group::{title}\n")
+
+            try:
+                result = func(*args, **kwargs)
+            except Exception as exc:
+                print("\n::endgroup::\n")
+                raise exc
+
+            print("\n::endgroup::\n")
+
+            return result
+
+        return wrapper if os.getenv("GITHUB_ACTIONS") else func
+
+    return group
+
+
+class Tracer:
+    """
+    Trace command invocations and print them to reproduce builds.
+    """
+
+    image = ""
+    docker_opts = []
+    trace = ""
+
+    def __init__(self, image: str, docker_opts: str):
+        self.image = image
+        if docker_opts:
+            self.docker_opts = docker_opts.split(' ')
+        if '--rm' in self.docker_opts:
+            self.docker_opts.remove('--rm')
+
+    def add(self, command: str) -> None:
+        self.trace += '\n(\n' + textwrap.dedent(command.strip()) + '\n)'
+
+    @github_log_group("To replicate this build locally")
+    def print(self) -> None:
+        if self.trace != "":
+            if self.image:
+                print(f"""\
+Grab the image:
+$ docker run {' '.join(self.docker_opts)} -it {self.image}
+Then:
+""")
+            print(self.trace)
+
+
+log = Tracer("", "")
 
 
 def print_fancy(*values, sgr=1, **kwargs) -> None:
@@ -21,48 +79,43 @@ def print_fancy(*values, sgr=1, **kwargs) -> None:
     print("\033[0m", **kwargs)
 
 
-def warning(*values, **kwargs):
+def print_info(*values, **kwargs):
+    print_fancy("Info: ", *values, sgr=90, **kwargs)
+
+
+def print_warning(*values, **kwargs):
     print_fancy("Warning: ", *values, sgr=33, **kwargs)
 
 
-def error(*values, **kwargs):
+def print_error(*values, **kwargs):
     print_fancy("Fatal error: ", *values, sgr=31, **kwargs)
 
 
-def subprocess_with_log(command: str, log="") -> Tuple[int, str]:
+def subprocess_with_log(command: str) -> int:
     """Runs <command> in shell and appends <command> to log"""
 
     print_fancy(textwrap.dedent(command), sgr=1)
 
     print("\033[90m", end='')
 
+    if os.name == 'nt':
+        command = "$env:comspec = 'cmd.exe'; " + command
+
     result = subprocess.run(command, shell=True, check=False, stderr=subprocess.STDOUT)
 
     print("\033[0m", end='')
 
-    return (result.returncode,
-            log + '\n(\n' + textwrap.dedent(command.strip()) + '\n)')
+    log.add(command)
+
+    return result.returncode
 
 
-def die(code: int = 1, msg: str = "", log: str = "") -> None:
-    error(f"({code}) {msg}")
+def die(code: int = 1, msg: str = "") -> None:
+    log.print()
 
-    print_shell_log(log)
+    print_error(f"({code}) {msg}")
 
     sys.exit(code)
-
-
-def print_shell_log(log: str) -> None:
-    if log != "":
-        shell_log = textwrap.dedent(f"""\
-            ######################################
-            #    To replicate build locally     #
-            ######################################
-            
-            {log}
-        """)
-
-        print(shell_log)
 
 
 def load_config(filename) -> dict:
@@ -73,7 +126,7 @@ def load_config(filename) -> dict:
     try:
         file = open(filename, 'r', encoding='utf-8')
     except OSError as err:
-        warning(f"couldn't load {filename}: {err.strerror}")
+        print_warning(f"couldn't load {filename}: {err.strerror}")
         return {}
 
     with file:
@@ -143,20 +196,20 @@ def download_file(url: str, dest: str) -> None:
     if not os.path.exists(parent_dir):
         os.makedirs(parent_dir)
 
-    with open(dest, 'wb') as f, get(url, timeout=300) as r:
-        f.write(r.content)
+    with open(dest, 'wb') as fout, get(url, timeout=300) as req:
+        fout.write(req.content)
 
 
-def download_latest(url: str, prefix: str, destination: str, shell_log: str) -> Tuple[str, str]:
+def download_latest(url: str, prefix: str, destination: str) -> str:
     """Downloads latest build artifact starting with <prefix>,
        and returns the file path to the downloaded file and shell_log."""
 
     # https://docs.openstack.org/api-ref/object-store/#show-container-details-and-list-objects
-    with get(f"{url}/?prefix={prefix}&format=json", timeout=20) as r:
-        if r.status_code == HTTPStatus.NO_CONTENT or r.content == b'[]':
+    with get(f"{url}/?prefix={prefix}&format=json", timeout=20) as req:
+        if req.status_code == HTTPStatus.NO_CONTENT or req.content == b'[]':
             raise Exception(f"No object found with prefix: {prefix}")
-            
-        result = json.loads(r.content)
+
+        result = json.loads(req.content)
         artifacts = [x['name'] for x in result if 'content_type' in x]
 
     latest = max(artifacts)
@@ -164,8 +217,8 @@ def download_latest(url: str, prefix: str, destination: str, shell_log: str) -> 
     download_file(f"{url}/{latest}", f"{destination}/artifacts.tar.gz")
 
     if os.name == 'nt':
-        shell_log += f"\nInvoke-WebRequest {url}/{latest} -OutFile {destination}\\artifacts.tar.gz"
+        log.add(f"\nInvoke-WebRequest {url}/{latest} -OutFile {destination}\\artifacts.tar.gz")
     else:
-        shell_log += f"\nwget -x -O artifacts.tar.gz {url}/{latest}\n"
+        log.add(f"\ncurl --output {destination}/artifacts.tar.gz {url}/{latest}\n")
 
-    return f"{destination}/artifacts.tar.gz", shell_log
+    return f"{destination}/artifacts.tar.gz"

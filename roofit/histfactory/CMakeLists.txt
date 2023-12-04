@@ -27,6 +27,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(HistFactory
     RooStats/HistFactory/Asimov.h
     RooStats/HistFactory/Channel.h
     RooStats/HistFactory/Data.h
+    RooStats/HistFactory/Detail/HistFactoryImpl.h
     RooStats/HistFactory/FlexibleInterpVar.h
     RooStats/HistFactory/HistFactoryException.h
     RooStats/HistFactory/HistFactoryModelUtils.h
@@ -48,10 +49,12 @@ ROOT_STANDARD_LIBRARY_PACKAGE(HistFactory
     src/Channel.cxx
     src/Data.cxx
     src/FlexibleInterpVar.cxx
+    src/HistFactoryImpl.cxx
     src/HistFactoryModelUtils.cxx
     src/HistFactoryNavigation.cxx
-    src/HistoToWorkspaceFactoryFast.cxx
     src/HistRef.cxx
+    src/HistoToWorkspaceFactoryFast.cxx
+    src/JSONTool.cxx
     src/LinInterpVar.cxx
     src/MakeModelAndMeasurementsFast.cxx
     src/Measurement.cxx
@@ -78,6 +81,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(HistFactory
     Graf
     Gpad
     RooStats
+    RooFitJSONInterface
   ${EXTRA_DICT_OPTS}
 )
 

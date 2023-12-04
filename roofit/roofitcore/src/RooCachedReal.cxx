@@ -156,7 +156,7 @@ void RooCachedReal::fillCacheObject(RooAbsCachedReal::FuncCacheElem& cache) cons
 
   // Delete source clone if we don't cache it
   if (!cache.cacheSource()) {
-    cache.setSourceClone(0) ;
+    cache.setSourceClone(nullptr) ;
   }
 
   cache.func()->setCdfBoundaries(_useCdfBoundaries) ;
@@ -173,13 +173,9 @@ void RooCachedReal::fillCacheObject(RooAbsCachedReal::FuncCacheElem& cache) cons
 /// of the external input p.d.f given the choice of observables defined
 /// in nset
 
-RooArgSet* RooCachedReal::actualObservables(const RooArgSet& nset) const
+RooFit::OwningPtr<RooArgSet> RooCachedReal::actualObservables(const RooArgSet& nset) const
 {
-  if (_cacheObs.getSize()>0) {
-    return func.arg().getObservables(_cacheObs) ;
-  }
-
-  return func.arg().getObservables(nset) ;
+  return func->getObservables(_cacheObs.empty() ? nset : _cacheObs);
 }
 
 
@@ -190,12 +186,9 @@ RooArgSet* RooCachedReal::actualObservables(const RooArgSet& nset) const
 /// the cache observables. If this p.d.f is operated in automatic mode,
 /// return the parameters of the external input p.d.f
 
-RooArgSet* RooCachedReal::actualParameters(const RooArgSet& nset) const
+RooFit::OwningPtr<RooArgSet> RooCachedReal::actualParameters(const RooArgSet& nset) const
 {
-  if (_cacheObs.getSize()>0) {
-    return func.arg().getParameters(_cacheObs) ;
-  }
-  return func.arg().getParameters(nset) ;
+   return func->getParameters(_cacheObs.empty() ? nset : _cacheObs);
 }
 
 
@@ -205,7 +198,3 @@ void RooCachedReal::operModeHook()
     ((RooAbsArg*)func.absArg())->setOperMode(ADirty) ;
   }
 }
-
-
-
-

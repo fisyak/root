@@ -15,8 +15,7 @@
 #include <RooProdPdf.h>
 #include <RooRealVar.h>
 #include <RooWorkspace.h>
-
-#include <RooStats/ModelConfig.h>
+#include <RooFit/ModelConfig.h>
 
 #include <TROOT.h>
 
@@ -61,29 +60,24 @@ std::unique_ptr<RooFitResult> writeJSONAndFitModel(std::string &jsonStr)
    x1.setBins(20);
    x2.setBins(20);
 
-   RooAbsPdf &model_1 = *ws.pdf("model_1");
-   RooAbsPdf &model_2 = *ws.pdf("model_2");
+   std::map<std::string, std::unique_ptr<RooAbsData>> datasets;
+   datasets["channel_1"] = std::unique_ptr<RooDataHist>{ws.pdf("model_1")->generateBinned(x1)};
+   datasets["channel_2"] = std::unique_ptr<RooDataHist>{ws.pdf("model_2")->generateBinned(x2)};
 
-   std::map<std::string, std::unique_ptr<RooAbsData>> datas;
-   datas["channel_1"] = std::unique_ptr<RooDataHist>{model_1.generateBinned(x1)};
-   datas["channel_2"] = std::unique_ptr<RooDataHist>{model_2.generateBinned(x2)};
+   datasets["channel_1"]->SetName("obsData_channel_1");
+   datasets["channel_2"]->SetName("obsData_channel_2");
 
-   datas["channel_1"]->SetName("obsData_channel_1");
-   datas["channel_2"]->SetName("obsData_channel_2");
-
-   RooDataSet obsData{"obsData", "obsData", {x1, x2}, Index(*ws.cat("channelCat")), Import(datas)};
+   RooDataSet obsData{"obsData", "obsData", {x1, x2}, Index(*ws.cat("channelCat")), Import(datasets)};
    ws.import(obsData);
 
    auto &pdf = *ws.pdf("simPdf");
    auto &data = *ws.data("obsData");
 
-   // For now, this is the way to tell the JSONIO what the combined datasets are
-   pdf.setStringAttribute("combined_data_name", data.GetName());
-
    // Export before fitting to keep the prefit values
    jsonStr = RooJSONFactoryWSTool{ws}.exportJSONtoString();
 
-   return std::unique_ptr<RooFitResult>{pdf.fitTo(data, Save(), PrintLevel(-1), PrintEvalErrors(-1))};
+   return std::unique_ptr<RooFitResult>{
+      pdf.fitTo(data, Save(), PrintLevel(-1), PrintEvalErrors(-1), Minimizer("Minuit2"))};
 }
 
 std::unique_ptr<RooFitResult> readJSONAndFitModel(std::string const &jsonStr)
@@ -103,7 +97,8 @@ std::unique_ptr<RooFitResult> readJSONAndFitModel(std::string const &jsonStr)
    auto &pdf = *ws.pdf("simPdf");
    auto &data = *ws.data("obsData");
 
-   return std::unique_ptr<RooFitResult>{pdf.fitTo(data, Save(), PrintLevel(-1), PrintEvalErrors(-1))};
+   return std::unique_ptr<RooFitResult>{
+      pdf.fitTo(data, Save(), PrintLevel(-1), PrintEvalErrors(-1), Minimizer("Minuit2"))};
 }
 
 } // namespace
@@ -114,10 +109,6 @@ TEST(RooFitHS3, SimultaneousFit)
 
    using namespace RooFit;
 
-   auto etcDir = std::string(TROOT::GetEtcDir());
-   RooFit::JSONIO::loadExportKeys(etcDir + "/RooFitHS3_wsexportkeys.json");
-   RooFit::JSONIO::loadFactoryExpressions(etcDir + "/RooFitHS3_wsfactoryexpressions.json");
-
    std::string jsonStr;
 
    std::unique_ptr<RooFitResult> res1 = writeJSONAndFitModel(jsonStr);
@@ -125,6 +116,5 @@ TEST(RooFitHS3, SimultaneousFit)
 
    // todo: also check the modelconfig for equality
 
-   // The precision is not great, needs to be understood why it is not exactly the same
-   EXPECT_TRUE(res2->isIdentical(*res1, 1e-3, 1e-3));
+   EXPECT_TRUE(res2->isIdentical(*res1));
 }

@@ -26,29 +26,23 @@ RooArgSets with the same contents may be passed to an object that
 caches intermediate results dependent on the normalization/integration set
 To avoid unnecessary cache faulting, This class tracks all instances
 with the same contents and reports to the owner if the present nset/iset
-is truely different from the current reference. Class RooNormSet only
+is truly different from the current reference. Class RooNormSet only
 evaluates each RooArgSet pointer once, it therefore assumes that
 RooArgSets with normalization and/or integration sets are not changes
 during their lifetime.
 **/
 
 #include <RooNormSetCache.h>
-#include <RooHelpers.h>
+
+#include "RooFitImplHelpers.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Clear contents
 
 void RooNormSetCache::clear()
 {
-  {
-    PairIdxMapType tmpmap;
-    tmpmap.swap(_pairToIdx);
-  }
-  {
-    PairVectType tmppairvect;
-    tmppairvect.swap(_pairs);
-  }
-  _next = 0;
+  _pairSet.clear();
+  _pairs.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -56,28 +50,20 @@ void RooNormSetCache::clear()
 
 void RooNormSetCache::add(const RooArgSet* set1, const RooArgSet* set2)
 {
-  const Pair pair(set1, set2);
-  PairIdxMapType::iterator it = _pairToIdx.lower_bound(pair);
-  if (_pairToIdx.end() != it && it->first == pair) {
+  const Pair_t pair{RooFit::getUniqueId(set1), RooFit::getUniqueId(set2)};
+  auto it = _pairSet.find(pair);
+  if (it != _pairSet.end()) {
     // not empty, and keys match - nothing to do
     return;
   }
   // register pair -> index mapping
-  _pairToIdx.insert(it, std::make_pair(pair, _pairs.size()));
+  _pairSet.emplace(pair);
   // save pair at that index
-  _pairs.push_back(pair);
+  _pairs.emplace_back(pair);
   // if the cache grew too large, start replacing in a round-robin fashion
   while (_pairs.size() > _max) {
-    // new index of the pair: replace slot _next
-    it->second = _next;
-    // find and erase mapping of old pair in that slot
-    _pairToIdx.erase(_pairs[_next]);
-    // put new pair into new slot
-    _pairs[_next] = _pairs.back();
-    // and erase the copy we no longer need
-    _pairs.erase(_pairs.end() - 1);
-    ++_next;
-    _next %= _max;
+    _pairSet.erase(_pairs.front());
+    _pairs.pop_front();
   }
 }
 
@@ -100,11 +86,6 @@ bool RooNormSetCache::autoCache(const RooAbsArg* self, const RooArgSet* set1,
 
   // B - Check if dependents(set1/set2) are compatible with current cache
 
-//   cout << "RooNormSetCache::autoCache set1 = " << (set1?*set1:RooArgSet()) << " set2 = " << (set2?*set2:RooArgSet()) << endl;
-//   if (set1) set1->Print("v");
-//   if (set2) set2->Print("v");
-  //if (self) self->Print("v");
-
   RooArgSet set1d;
   RooArgSet set2d;
   if (self) {
@@ -114,8 +95,6 @@ bool RooNormSetCache::autoCache(const RooAbsArg* self, const RooArgSet* set1,
     if(set1) set1->snapshot(set1d);
     if(set2) set2->snapshot(set2d);
   }
-
-//   cout << "RooNormSetCache::autoCache set1d = " << *set1d << " set2 = " << *set2d << endl;
 
   using RooHelpers::getColonSeparatedNameString;
 
@@ -134,8 +113,6 @@ bool RooNormSetCache::autoCache(const RooAbsArg* self, const RooArgSet* set1,
     add(set1,set2);
     _name1 = getColonSeparatedNameString(set1d);
     _name2 = getColonSeparatedNameString(set2d);
-//     cout << "RooNormSetCache::autoCache() _name1 refilled from " << *set1d << " to " ; _name1.printValue(cout) ; cout << endl;
-//     cout << "RooNormSetCache::autoCache() _name2 refilled from " << *set2d << " to " ; _name2.printValue(cout) ; cout << endl;
     _set2RangeName = (TNamed*) set2RangeName;
   }
 

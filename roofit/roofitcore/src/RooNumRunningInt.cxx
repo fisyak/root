@@ -256,11 +256,11 @@ void RooNumRunningInt::fillCacheObject(RooAbsCachedReal::FuncCacheElem& cache) c
 /// Return observable in nset to be cached by RooAbsCachedPdf
 /// this is always the x observable that is integrated
 
-RooArgSet* RooNumRunningInt::actualObservables(const RooArgSet& /*nset*/) const
+RooFit::OwningPtr<RooArgSet> RooNumRunningInt::actualObservables(const RooArgSet& /*nset*/) const
 {
   RooArgSet* ret = new RooArgSet ;
   ret->add(x.arg()) ;
-  return ret ;
+  return RooFit::OwningPtr<RooArgSet>{ret};
 }
 
 
@@ -270,11 +270,11 @@ RooArgSet* RooNumRunningInt::actualObservables(const RooArgSet& /*nset*/) const
 /// These are always the input functions parameter, but never the
 /// integrated variable x.
 
-RooArgSet* RooNumRunningInt::actualParameters(const RooArgSet& /*nset*/) const
+RooFit::OwningPtr<RooArgSet> RooNumRunningInt::actualParameters(const RooArgSet& /*nset*/) const
 {
-  RooArgSet* ret = func.arg().getParameters(RooArgSet()) ;
+  auto ret = func->getParameters(RooArgSet()) ;
   ret->remove(x.arg(),true,true) ;
-  return ret ;
+  return ret;
 }
 
 

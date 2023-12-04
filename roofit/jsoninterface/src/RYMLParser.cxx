@@ -109,16 +109,18 @@ void TRYMLTree::Node::writeYML(std::ostream &os) const
    os << node->get();
 }
 
-void TRYMLTree::Node::set_map()
+TRYMLTree::Node &TRYMLTree::Node::set_map()
 {
    // assign this node to be a map (JSON object)
    node->get() |= c4::yml::MAP;
+   return *this;
 }
 
-void TRYMLTree::Node::set_seq()
+TRYMLTree::Node &TRYMLTree::Node::set_seq()
 {
    // assign this node to be a sequence (JSON array)
    node->get() |= c4::yml::SEQ;
+   return *this;
 }
 
 void TRYMLTree::Node::clear()
@@ -181,6 +183,13 @@ TRYMLTree::Node &TRYMLTree::Node::operator<<(double d)
    return *this;
 }
 
+TRYMLTree::Node &TRYMLTree::Node::operator<<(bool b)
+{
+   // write a bool to this node
+   node->get() << b;
+   return *this;
+}
+
 const TRYMLTree::Node &TRYMLTree::Node::operator>>(std::string &v) const
 {
    // read a string from this node
@@ -194,22 +203,10 @@ TRYMLTree::Node &TRYMLTree::Node::operator[](std::string const &k)
    return Impl::mkNode(tree, node->get()[c4::to_csubstr(tree->incache(k))]);
 }
 
-TRYMLTree::Node &TRYMLTree::Node::operator[](size_t pos)
-{
-   // get a child node with the given index
-   return Impl::mkNode(tree, node->get()[pos]);
-}
-
 const TRYMLTree::Node &TRYMLTree::Node::operator[](std::string const &k) const
 {
    // get a child node with the given key (const version)
    return Impl::mkNode(tree, node->get()[c4::to_csubstr(tree->incache(k))]);
-}
-
-const TRYMLTree::Node &TRYMLTree::Node::operator[](size_t pos) const
-{
-   // get a child node with the given index (const version)
-   return Impl::mkNode(tree, node->get()[pos]);
 }
 
 bool TRYMLTree::Node::is_container() const

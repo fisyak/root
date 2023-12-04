@@ -18,9 +18,9 @@ double MnTiny::One() const
    return fOne;
 }
 
-double MnTiny::operator()(volatile double epsp1) const
+double MnTiny::operator()(double epsp1) const
 {
-   // evaluate minimal diference between two floating points
+   // evaluate minimal difference between two floating points
    double result = epsp1 - One();
    return result;
 }

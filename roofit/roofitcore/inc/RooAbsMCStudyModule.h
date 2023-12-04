@@ -32,9 +32,8 @@ public:
 
   RooAbsMCStudyModule(const char* name, const char* title) ;
   RooAbsMCStudyModule(const RooAbsMCStudyModule& other) ;
-  ~RooAbsMCStudyModule() override {} ;
 
-  /// Initializer method called upon attachement to given RooMCStudy object
+  /// Initializer method called upon attachment to given RooMCStudy object
   bool doInitializeInstance(RooMCStudy& /*study*/) ;
 
   /// Initializer called immediately after attachment to RooMCStudy object and initialization of module base class
@@ -77,9 +76,7 @@ protected:
    // which are only functional after module has been attached to a RooMCStudy object
 
    /// Refit model using original or specified data sample
-   RooFitResult* refit(RooAbsData* inGenSample=nullptr) {
-     if (_mcs) return _mcs->refit(inGenSample) ; else return nullptr ;
-   }
+   RooFit::OwningPtr<RooFitResult> refit(RooAbsData* inGenSample=nullptr);
 
    /// Return generate sample
    RooAbsData* genSample() {

@@ -24,14 +24,13 @@ https://developer.nvidia.com/blog/cuda-pro-tip-write-flexible-kernels-grid-strid
 **/
 
 #include "RooBatchCompute.h"
+#include "RooNaNPacker.h"
 #include "RooVDTHeaders.h"
 #include "Batches.h"
 
 #include <TMath.h>
 
-#include <complex>
-
-#include "faddeeva_impl.h"
+#include <RooHeterogeneousMath.h>
 
 #ifdef __CUDACC__
 #define BEGIN blockDim.x *blockIdx.x + threadIdx.x
@@ -310,11 +309,39 @@ __rooglobal__ void computeDstD0BG(BatchesHandle batches)
          batches._output[i] = 0;
 }
 
+__rooglobal__ void computeExpPoly(BatchesHandle batches)
+{
+   int lowestOrder = batches.extraArg(0);
+   int nTerms = batches.extraArg(1);
+   auto x = batches[0];
+
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      batches._output[i] = 0.0;
+      double xTmp = std::pow(x[i], lowestOrder);
+      for (int k = 0; k < nTerms; ++k) {
+         batches._output[i] += batches[k + 1][i] * xTmp;
+         xTmp *= x[i];
+      }
+      batches._output[i] = std::exp(batches._output[i]);
+   }
+}
+
 __rooglobal__ void computeExponential(BatchesHandle batches)
 {
-   Batch x = batches[0], c = batches[1];
-   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
+   Batch x = batches[0];
+   Batch c = batches[1];
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
       batches._output[i] = fast_exp(x[i] * c[i]);
+   }
+}
+
+__rooglobal__ void computeExponentialNeg(BatchesHandle batches)
+{
+   Batch x = batches[0];
+   Batch c = batches[1];
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      batches._output[i] = fast_exp(-x[i] * c[i]);
+   }
 }
 
 __rooglobal__ void computeGamma(BatchesHandle batches)
@@ -341,9 +368,49 @@ __rooglobal__ void computeGamma(BatchesHandle batches)
       }
 }
 
+__rooglobal__ void computeGaussModelExpBasis(BatchesHandle batches)
+{
+   const double root2 = std::sqrt(2.);
+   const double root2pi = std::sqrt(2. * std::atan2(0., -1.));
+
+   const bool isMinus = batches.extraArg(0) < 0.0;
+   const bool isPlus = batches.extraArg(0) > 0.0;
+
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+
+      const double x = batches[0][i];
+      const double mean = batches[1][i] * batches[2][i];
+      const double sigma = batches[3][i] * batches[4][i];
+      const double tau = batches[5][i];
+
+      if (tau == 0.0) {
+         // Straight Gaussian, used for unconvoluted PDF or expBasis with 0 lifetime
+         double xprime = (x - mean) / sigma;
+         double result = std::exp(-0.5 * xprime * xprime) / (sigma * root2pi);
+         if (!isMinus && !isPlus)
+            result *= 2;
+         batches._output[i] = result;
+      } else {
+         // Convolution with exp(-t/tau)
+         const double xprime = (x - mean) / tau;
+         const double c = sigma / (root2 * tau);
+         const double u = xprime / (2 * c);
+
+         double result = 0.0;
+         if (!isMinus)
+            result += RooHeterogeneousMath::evalCerf(0, -u, c).real();
+         if (!isPlus)
+            result += RooHeterogeneousMath::evalCerf(0, u, c).real();
+         batches._output[i] = result;
+      }
+   }
+}
+
 __rooglobal__ void computeGaussian(BatchesHandle batches)
 {
-   auto x = batches[0], mean = batches[1], sigma = batches[2];
+   auto x = batches[0];
+   auto mean = batches[1];
+   auto sigma = batches[2];
    for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
       const double arg = x[i] - mean[i];
       const double halfBySigmaSq = -0.5 / (sigma[i] * sigma[i]);
@@ -476,7 +543,7 @@ __rooglobal__ void computeLandau(BatchesHandle batches)
 __rooglobal__ void computeLognormal(BatchesHandle batches)
 {
    Batch X = batches[0], M0 = batches[1], K = batches[2];
-   const double rootOf2pi = 2.506628274631000502415765284811;
+   constexpr double rootOf2pi = 2.506628274631000502415765284811;
    for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
       double lnxOverM0 = fast_log(X[i] / M0[i]);
       double lnk = fast_log(K[i]);
@@ -486,6 +553,59 @@ __rooglobal__ void computeLognormal(BatchesHandle batches)
       arg *= -0.5 * arg;
       batches._output[i] = fast_exp(arg) / (X[i] * lnk * rootOf2pi);
    }
+}
+
+__rooglobal__ void computeLognormalStandard(BatchesHandle batches)
+{
+   Batch X = batches[0], M0 = batches[1], K = batches[2];
+   constexpr double rootOf2pi = 2.506628274631000502415765284811;
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      double lnxOverM0 = fast_log(X[i]) - M0[i];
+      double lnk = K[i];
+      if (lnk < 0)
+         lnk = -lnk;
+      double arg = lnxOverM0 / lnk;
+      arg *= -0.5 * arg;
+      batches._output[i] = fast_exp(arg) / (X[i] * lnk * rootOf2pi);
+   }
+}
+
+__rooglobal__ void computeNormalizedPdf(BatchesHandle batches)
+{
+   auto rawVal = batches[0];
+   auto normVal = batches[1];
+
+   int nEvalErrorsType0 = 0;
+   int nEvalErrorsType1 = 0;
+   int nEvalErrorsType2 = 0;
+
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      double out = 0.0;
+      // batches._output[i] = rawVal[i] / normVar[i];
+      if (normVal[i] < 0. || (normVal[i] == 0. && rawVal[i] != 0)) {
+         // Unreasonable normalisations. A zero integral can be tolerated if the function vanishes, though.
+         out = RooNaNPacker::packFloatIntoNaN(-normVal[i] + (rawVal[i] < 0. ? -rawVal[i] : 0.));
+         nEvalErrorsType0++;
+      } else if (rawVal[i] < 0.) {
+         // The pdf value is less than zero.
+         out = RooNaNPacker::packFloatIntoNaN(-rawVal[i]);
+         nEvalErrorsType1++;
+      } else if (std::isnan(rawVal[i])) {
+         // The pdf value is Not-a-Number.
+         out = rawVal[i];
+         nEvalErrorsType2++;
+      } else {
+         out = (rawVal[i] == 0. && normVal[i] == 0.) ? 0. : rawVal[i] / normVal[i];
+      }
+      batches._output[i] = out;
+   }
+
+   if (nEvalErrorsType0 > 0)
+      batches.setExtraArg(0, batches.extraArg(0) + nEvalErrorsType0);
+   if (nEvalErrorsType1 > 1)
+      batches.setExtraArg(1, batches.extraArg(1) + nEvalErrorsType1);
+   if (nEvalErrorsType2 > 2)
+      batches.setExtraArg(2, batches.extraArg(2) + nEvalErrorsType2);
 }
 
 /* TMath::ASinH(x) needs to be replaced with ln( x + sqrt(x^2+1))
@@ -512,7 +632,7 @@ __rooglobal__ void computeNovosibirsk(BatchesHandle batches)
       batches._output[i] -= 2.0 / xi / xi * asinh * asinh;
    }
 
-   // faster if you exponentiate in a seperate loop (dark magic!)
+   // faster if you exponentiate in a separate loop (dark magic!)
    for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
       batches._output[i] = fast_exp(batches._output[i]);
 }
@@ -546,41 +666,32 @@ __rooglobal__ void computePoisson(BatchesHandle batches)
 
 __rooglobal__ void computePolynomial(BatchesHandle batches)
 {
-   Batch X = batches[0];
-   const int nCoef = batches.getNExtraArgs() - 1;
-   const int lowestOrder = batches.extraArg(nCoef);
-   if (nCoef == 0) {
-      for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
-         batches._output[i] = (lowestOrder > 0.0);
-      return;
-   } else
-      for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
-         batches._output[i] = batches.extraArg(nCoef - 1);
+   const int nCoef = batches.extraArg(0);
+   const std::size_t nEvents = batches.getNEvents();
+   Batch x = batches[nCoef];
 
-   /* Indexes are in range 0..nCoef-1 but coefList[nCoef-1]
-    * has already been processed. In order to traverse the list,
-    * with step of 2 we have to start at index nCoef-3 and use
-    * coefList[k+1] and coefList[k]
-    */
-   for (int k = nCoef - 3; k >= 0; k -= 2)
-      for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
-         batches._output[i] = X[i] * (batches._output[i] * X[i] + batches.extraArg(k + 1)) + batches.extraArg(k);
+   for (size_t i = BEGIN; i < nEvents; i += STEP) {
+      batches._output[i] = batches[nCoef - 1][i];
+   }
 
-   // If nCoef is even, then the coefList[0] didn't get processed
-   if (nCoef % 2 == 0)
-      for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
-         batches._output[i] = batches._output[i] * X[i] + batches.extraArg(0);
+   // Indexes are in range 0..nCoef-1 but coefList[nCoef-1] has already been
+   // processed.
+   for (int k = nCoef - 2; k >= 0; k--) {
+      for (size_t i = BEGIN; i < nEvents; i += STEP) {
+         batches._output[i] = batches[k][i] + x[i] * batches._output[i];
+      }
+   }
+}
 
-   // Increase the order of the polynomial, first by myltiplying with X[i]^2
-   if (lowestOrder != 0) {
-      for (int k = 2; k <= lowestOrder; k += 2)
-         for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP)
-            batches._output[i] *= X[i] * X[i];
+__rooglobal__ void computePower(BatchesHandle batches)
+{
+   const int nCoef = batches.extraArg(0);
+   Batch x = batches[0];
 
-      for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
-         if (lowestOrder % 2 == 1)
-            batches._output[i] *= X[i];
-         batches._output[i] += 1.0;
+   for (size_t i = BEGIN; i < batches.getNEvents(); i += STEP) {
+      batches._output[i] = 0.0;
+      for (int k = 0; k < nCoef; ++k) {
+         batches._output[i] += batches[2 * k + 1][i] * std::pow(x[i], batches[2 * k + 2][i]);
       }
    }
 }
@@ -721,8 +832,9 @@ __rooglobal__ void computeVoigtian(BatchesHandle batches)
          if (batches._output[i] < 0)
             batches._output[i] = -batches._output[i];
          const double factor = W[i] > 0.0 ? 0.5 : -0.5;
-         std::complex<double> z(batches._output[i] * (X[i] - M[i]), factor * batches._output[i] * W[i]);
-         batches._output[i] *= faddeeva_impl::faddeeva(z).real();
+         RooHeterogeneousMath::STD::complex<double> z(batches._output[i] * (X[i] - M[i]),
+                                                      factor * batches._output[i] * W[i]);
+         batches._output[i] *= RooHeterogeneousMath::faddeeva(z).real();
       }
    }
 }
@@ -742,17 +854,23 @@ std::vector<void (*)(BatchesHandle)> getFunctions()
            computeChiSquare,
            computeDeltaFunction,
            computeDstD0BG,
+           computeExpPoly,
            computeExponential,
+           computeExponentialNeg,
            computeGamma,
+           computeGaussModelExpBasis,
            computeGaussian,
            computeIdentity,
            computeJohnson,
            computeLandau,
            computeLognormal,
+           computeLognormalStandard,
            computeNegativeLogarithms,
+           computeNormalizedPdf,
            computeNovosibirsk,
            computePoisson,
            computePolynomial,
+           computePower,
            computeProdPdf,
            computeRatio,
            computeTruthModelExpBasis,

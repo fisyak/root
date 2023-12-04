@@ -47,15 +47,15 @@ protected:
   const char* binningName() const override { return _binningName.c_str() ; }
   FuncCacheElem* createCache(const RooArgSet* nset) const override ;
   const char* inputBaseName() const override ;
-  RooArgSet* actualObservables(const RooArgSet& nset) const override ;
-  RooArgSet* actualParameters(const RooArgSet& nset) const override ;
+  RooFit::OwningPtr<RooArgSet> actualObservables(const RooArgSet& nset) const override ;
+  RooFit::OwningPtr<RooArgSet> actualParameters(const RooArgSet& nset) const override ;
   void fillCacheObject(FuncCacheElem& cacheFunc) const override ;
   double evaluate() const override ;
 
   const char* payloadUniqueSuffix() const override { return func.arg().aggregateCacheUniqueSuffix() ; }
 
   RooRealProxy func ; ///< Proxy to functions whose running integral is calculated
-  RooRealProxy x   ; ///< Intergrated observable
+  RooRealProxy x   ; ///< Integrated observable
   std::string _binningName ; ///< Name of binning to be used for cache histogram
 
 private:

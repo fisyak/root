@@ -16,7 +16,6 @@
 #include <ROOT/RGeomViewer.hxx>
 
 namespace ROOT {
-namespace Experimental {
 
 class RGeoPainter : public TVirtualGeoPainter {
 
@@ -27,7 +26,7 @@ class RGeoPainter : public TVirtualGeoPainter {
 
 public:
    RGeoPainter(TGeoManager *manager);
-   virtual ~RGeoPainter();
+   ~RGeoPainter() override;
 
    void       AddSize3D(Int_t, Int_t, Int_t) override {}
    TVirtualGeoTrack *AddTrack(Int_t, Int_t, TObject *) override { return nullptr; }
@@ -113,7 +112,6 @@ public:
    ClassDefOverride(RGeoPainter,0)  // Web-based geo painter
 };
 
-} // namespace Experimental
 } // namespace ROOT
 
 

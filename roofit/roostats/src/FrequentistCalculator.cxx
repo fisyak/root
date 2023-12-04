@@ -56,8 +56,8 @@ int FrequentistCalculator::PreNullHook(RooArgSet *parameterPoint, double obsTest
    // ****** any TestStatSampler ********
 
    // create profile keeping everything but nuisance parameters fixed
-   RooArgSet * allParams = fNullModel->GetPdf()->getParameters(*fData);
-   RemoveConstantParameters(allParams);
+   std::unique_ptr<RooArgSet> allParams{fNullModel->GetPdf()->getParameters(*fData)};
+   RemoveConstantParameters(&*allParams);
 
    // note: making nll or profile class variables can only be done in the constructor
    // as all other hooks are const (which has to be because GetHypoTest is const). However,
@@ -94,26 +94,23 @@ int FrequentistCalculator::PreNullHook(RooArgSet *parameterPoint, double obsTest
       if (fNullModel->GetGlobalObservables()) globalObs.add(*fNullModel->GetGlobalObservables());
 
       auto& config = GetGlobalRooStatsConfig();
-      RooAbsReal* nll = fNullModel->GetPdf()->createNLL(*const_cast<RooAbsData*>(fData), RooFit::CloneData(false), RooFit::Constrain(*allParams),
+      std::unique_ptr<RooAbsReal> nll{fNullModel->GetPdf()->createNLL(*const_cast<RooAbsData*>(fData), RooFit::CloneData(false), RooFit::Constrain(*allParams),
                                                         RooFit::GlobalObservables(globalObs),
                                                         RooFit::ConditionalObservables(conditionalObs),
-                                                        RooFit::Offset(config.useLikelihoodOffset));
-      RooProfileLL* profile = dynamic_cast<RooProfileLL*>(nll->createProfile(allButNuisance));
+                                                        RooFit::Offset(config.useLikelihoodOffset))};
+      std::unique_ptr<RooAbsArg> profileOwner{nll->createProfile(allButNuisance)};
+      auto profile = dynamic_cast<RooProfileLL*>(profileOwner.get());
       // set minimier options
       profile->minimizer()->setPrintLevel(ROOT::Math::MinimizerOptions::DefaultPrintLevel()-1);
       profile->getVal(); // this will do fit and set nuisance parameters to profiled values
 
       // Hack to extract a RooFitResult
       if (fStoreFitInfo) {
-         RooFitResult *result = profile->minimizer()->save();
-         RooArgSet * detOutput = DetailedOutputAggregator::GetAsArgSet(result, "fitNull_");
+         std::unique_ptr<RooFitResult> result {profile->minimizer()->save()};
+         std::unique_ptr<RooArgSet> detOutput {DetailedOutputAggregator::GetAsArgSet(result.get(), "fitNull_")};
          fFitInfo->addOwned(*detOutput);
-         delete detOutput;
-         delete result;
       }
 
-      delete profile;
-      delete nll;
       RooMsgService::instance().setGlobalKillBelow(msglevel);
 
       // set in test statistics conditional and global observables
@@ -131,8 +128,6 @@ int FrequentistCalculator::PreNullHook(RooArgSet *parameterPoint, double obsTest
    // add nuisance parameters to parameter point
    if(fNullModel->GetNuisanceParameters())
       parameterPoint->add(*fNullModel->GetNuisanceParameters());
-
-   delete allParams;
 
 
    // ***** ToyMCSampler specific *******
@@ -173,8 +168,8 @@ int FrequentistCalculator::PreAltHook(RooArgSet *parameterPoint, double obsTestS
    // ****** any TestStatSampler ********
 
    // create profile keeping everything but nuisance parameters fixed
-   RooArgSet * allParams = fAltModel->GetPdf()->getParameters(*fData);
-   RemoveConstantParameters(allParams);
+   std::unique_ptr<RooArgSet> allParams{fAltModel->GetPdf()->getParameters(*fData)};
+   RemoveConstantParameters(&*allParams);
 
    bool doProfile = true;
    RooArgSet allButNuisance(*allParams);
@@ -205,27 +200,24 @@ int FrequentistCalculator::PreAltHook(RooArgSet *parameterPoint, double obsTestS
       if (fAltModel->GetGlobalObservables()) globalObs.add(*fAltModel->GetGlobalObservables());
 
       const auto& config = GetGlobalRooStatsConfig();
-      RooAbsReal* nll = fAltModel->GetPdf()->createNLL(*const_cast<RooAbsData*>(fData), RooFit::CloneData(false), RooFit::Constrain(*allParams),
+      std::unique_ptr<RooAbsReal> nll{fAltModel->GetPdf()->createNLL(*const_cast<RooAbsData*>(fData), RooFit::CloneData(false), RooFit::Constrain(*allParams),
                                                        RooFit::GlobalObservables(globalObs),
                                                        RooFit::ConditionalObservables(conditionalObs),
-                                                       RooFit::Offset(config.useLikelihoodOffset));
+                                                       RooFit::Offset(config.useLikelihoodOffset))};
 
-      RooProfileLL* profile = dynamic_cast<RooProfileLL*>(nll->createProfile(allButNuisance));
+      std::unique_ptr<RooAbsReal> profileOwner{nll->createProfile(allButNuisance)};
+      auto profile = dynamic_cast<RooProfileLL*>(profileOwner.get());
       // set minimizer options
       profile->minimizer()->setPrintLevel(ROOT::Math::MinimizerOptions::DefaultPrintLevel()-1); // use -1 to make more silent
       profile->getVal(); // this will do fit and set nuisance parameters to profiled values
 
       // Hack to extract a RooFitResult
       if (fStoreFitInfo) {
-         RooFitResult *result = profile->minimizer()->save();
-         RooArgSet * detOutput =  DetailedOutputAggregator::GetAsArgSet(result, "fitAlt_");
+         std::unique_ptr<RooFitResult> result {profile->minimizer()->save()};
+         std::unique_ptr<RooArgSet> detOutput {DetailedOutputAggregator::GetAsArgSet(result.get(), "fitAlt_")};
          fFitInfo->addOwned(*detOutput);
-         delete detOutput;
-         delete result;
       }
 
-      delete profile;
-      delete nll;
       RooMsgService::instance().setGlobalKillBelow(msglevel);
 
       // set in test statistics conditional and global observables
@@ -243,8 +235,6 @@ int FrequentistCalculator::PreAltHook(RooArgSet *parameterPoint, double obsTestS
    // add nuisance parameters to parameter point
    if(fAltModel->GetNuisanceParameters())
       parameterPoint->add(*fAltModel->GetNuisanceParameters());
-
-   delete allParams;
 
    // ***** ToyMCSampler specific *******
 

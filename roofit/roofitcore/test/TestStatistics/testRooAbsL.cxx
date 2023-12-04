@@ -22,9 +22,9 @@
 #include <RooFit/TestStatistics/RooUnbinnedL.h>
 #include <RooFit/TestStatistics/RooBinnedL.h>
 #include <RooFit/TestStatistics/RooSumL.h>
-#include <RooFit/TestStatistics/optional_parameter_types.h>
 #include <RooFit/TestStatistics/buildLikelihood.h>
 #include <RooFit/TestStatistics/RooRealL.h>
+#include <RooHelpers.h>
 
 #include "Math/Util.h" // KahanSum
 
@@ -137,7 +137,7 @@ protected:
       w.factory("PROD::model_A(model_phys_A,model_subs_A)");
       w.factory("PROD::model_B(model_phys_B,model_subs_B)");
 
-      // Construct simulatenous pdf
+      // Construct simultaneous pdf
       w.factory("SIMUL::model(index[A,B],A=model_A,B=model_B)");
 
       pdf = w.pdf("model");
@@ -188,9 +188,9 @@ TEST_F(RooAbsLTest, SumLikelihoodIntrospection)
 TEST_F(SimBinnedConstrainedTest, SumSubsidiaryLikelihoodIntrospection)
 {
 
-   likelihood = RooFit::TestStatistics::buildLikelihood(
-      pdf, data.get(),
-      RooFit::TestStatistics::GlobalObservables({*w.var("alpha_bkg_obs_A"), *w.var("alpha_bkg_obs_B")}));
+   likelihood = RooFit::TestStatistics::NLLFactory{*pdf, *data}
+                   .GlobalObservables({*w.var("alpha_bkg_obs_A"), *w.var("alpha_bkg_obs_B")})
+                   .build();
 
    EXPECT_STREQ("RooSumL", (likelihood->GetClassName()).c_str());
    EXPECT_STREQ("RooSumL::model", (likelihood->GetInfo()).c_str());
@@ -217,27 +217,36 @@ TEST_F(BinnedDatasetTest, EventSections)
    auto whole = likelihood->evaluatePartition({0, 1}, 0, 0);
    auto part1 = likelihood->evaluatePartition({0, 0.5}, 0, 0);
    auto part2 = likelihood->evaluatePartition({0.5, 1}, 0, 0);
-   EXPECT_EQ(whole.Sum(), (part1 + part2).Sum());
+
+   // We cannot EXPECT_EQ in this test, because we compare actually different
+   // calculations. The multiple additions and FMA operations involved in the
+   // calculation of the multiple parts introduces different rounding errors
+   // on the CPU level than the single calculation over all events at once.
+   EXPECT_DOUBLE_EQ(whole.Sum(), (part1 + part2).Sum());
 }
 
 TEST_F(SimBinnedConstrainedTest, EventSections)
 {
    // Test whether the summed total of multiple sections gives the same result
    // as an evaluation with a single section over the whole event range.
-   likelihood = RooFit::TestStatistics::buildLikelihood(
-      pdf, data.get(),
-      RooFit::TestStatistics::GlobalObservables({*w.var("alpha_bkg_obs_A"), *w.var("alpha_bkg_obs_B")}));
+   likelihood = RooFit::TestStatistics::NLLFactory{*pdf, *data}
+                   .GlobalObservables({*w.var("alpha_bkg_obs_A"), *w.var("alpha_bkg_obs_B")})
+                   .build();
 
    auto whole = likelihood->evaluatePartition({0, 1}, 0, likelihood->getNComponents());
    auto part1 = likelihood->evaluatePartition({0, 0.5}, 0, likelihood->getNComponents());
    auto part2 = likelihood->evaluatePartition({0.5, 1}, 0, likelihood->getNComponents());
-   EXPECT_EQ(whole.Sum(), (part1 + part2).Sum());
+
+   // See comment in first EventSections test for explanation on why no EXPECT_EQ.
+   EXPECT_DOUBLE_EQ(whole.Sum(), (part1 + part2).Sum());
 
    auto part1of4 = likelihood->evaluatePartition({0, 0.25}, 0, likelihood->getNComponents());
    auto part2of4 = likelihood->evaluatePartition({0.25, 0.5}, 0, likelihood->getNComponents());
    auto part3of4 = likelihood->evaluatePartition({0.5, 0.75}, 0, likelihood->getNComponents());
    auto part4of4 = likelihood->evaluatePartition({0.75, 1}, 0, likelihood->getNComponents());
-   EXPECT_EQ(whole.Sum(), (part1of4 + part2of4 + part3of4 + part4of4).Sum());
+
+   // See comment in first EventSections test for explanation on why no EXPECT_EQ.
+   EXPECT_DOUBLE_EQ(whole.Sum(), (part1of4 + part2of4 + part3of4 + part4of4).Sum());
 }
 
 TEST_F(RooAbsLTest, SubEventSections)
@@ -257,19 +266,22 @@ TEST_F(RooAbsLTest, SubEventSections)
       nine_parts += likelihood->evaluatePartition({static_cast<double>(ix) / 9, static_cast<double>(ix + 1) / 9}, 0,
                                                   likelihood->getNComponents());
    }
-   EXPECT_EQ(whole.Sum(), nine_parts.Sum());
+   // See comment in first EventSections test for explanation on why no EXPECT_EQ.
+   EXPECT_DOUBLE_EQ(whole.Sum(), nine_parts.Sum());
 
    for (std::size_t ix = 0; ix < 11; ++ix) {
       eleven_parts += likelihood->evaluatePartition({static_cast<double>(ix) / 11, static_cast<double>(ix + 1) / 11}, 0,
                                                     likelihood->getNComponents());
    }
-   EXPECT_EQ(whole.Sum(), eleven_parts.Sum());
+   // See comment in first EventSections test for explanation on why no EXPECT_EQ.
+   EXPECT_DOUBLE_EQ(whole.Sum(), eleven_parts.Sum());
 
    for (std::size_t ix = 0; ix < 20; ++ix) {
       twenty_parts += likelihood->evaluatePartition({static_cast<double>(ix) / 20, static_cast<double>(ix + 1) / 20}, 0,
                                                     likelihood->getNComponents());
    }
-   EXPECT_EQ(whole.Sum(), twenty_parts.Sum());
+   // See comment in first EventSections test for explanation on why no EXPECT_EQ.
+   EXPECT_DOUBLE_EQ(whole.Sum(), twenty_parts.Sum());
 }
 
 TEST_F(SimBinnedConstrainedTest, SubEventSections)
@@ -279,9 +291,9 @@ TEST_F(SimBinnedConstrainedTest, SubEventSections)
    // number (less) of events than the RooSumL itself. Moreover, this more
    // complex likelihood has an extended term and a subsidiary component
    // which also depend on section so will also be checked here.
-   likelihood = RooFit::TestStatistics::buildLikelihood(
-      pdf, data.get(),
-      RooFit::TestStatistics::GlobalObservables({*w.var("alpha_bkg_obs_A"), *w.var("alpha_bkg_obs_B")}));
+   likelihood = RooFit::TestStatistics::NLLFactory{*pdf, *data}
+                   .GlobalObservables({*w.var("alpha_bkg_obs_A"), *w.var("alpha_bkg_obs_B")})
+                   .build();
 
    auto whole = likelihood->evaluatePartition({0, 1}, 0, likelihood->getNComponents());
 
@@ -293,7 +305,8 @@ TEST_F(SimBinnedConstrainedTest, SubEventSections)
          {static_cast<double>(ix) / N_events_total, static_cast<double>(ix + 1) / N_events_total}, 0,
          likelihood->getNComponents());
    }
-   EXPECT_EQ(whole.Sum(), N_events_total_parts.Sum());
+   // See comment in first EventSections test for explanation on why no EXPECT_EQ.
+   EXPECT_DOUBLE_EQ(whole.Sum(), N_events_total_parts.Sum());
 
    // now let's do it again over a number of sections 3 times the number of events
    ROOT::Math::KahanSum<double> thrice_N_events_total_parts;
@@ -303,5 +316,6 @@ TEST_F(SimBinnedConstrainedTest, SubEventSections)
          {static_cast<double>(ix) / (3 * N_events_total), static_cast<double>(ix + 1) / (3 * N_events_total)}, 0,
          likelihood->getNComponents());
    }
-   EXPECT_EQ(whole.Sum(), thrice_N_events_total_parts.Sum());
+   // See comment in BinnedDatasetTest.EventSections for explanation on why no EXPECT_EQ.
+   EXPECT_DOUBLE_EQ(whole.Sum(), thrice_N_events_total_parts.Sum());
 }

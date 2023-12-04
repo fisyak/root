@@ -1,3 +1,5 @@
+/// \cond ROOFIT_INTERNAL
+
 /*
  * Project: RooFit
  * Authors:
@@ -23,23 +25,16 @@ class RooAbsPdf;
 class RooAbsReal;
 class RooArgSet;
 
-namespace ROOT {
-namespace Experimental {
-class RooFitDriver;
-}
-} // namespace ROOT
-
 namespace RooFit {
 namespace BatchModeHelpers {
 
-std::unique_ptr<RooAbsReal>
-createNLL(std::unique_ptr<RooAbsPdf> &&pdf, RooAbsData &data, std::unique_ptr<RooAbsReal> &&constraints,
-          std::string const &rangeName, RooArgSet const &projDeps, bool isExtended, double integrateOverBinsPrecision,
-          RooFit::BatchModeOption batchMode, RooFit::OffsetMode offset, bool takeGlobalObservablesFromData);
-
-void logArchitectureInfo(RooFit::BatchModeOption batchMode);
+std::unique_ptr<RooAbsReal> createNLL(RooAbsPdf &pdf, RooAbsData &data, std::unique_ptr<RooAbsReal> &&constraints,
+                                      std::string const &rangeName, RooArgSet const &projDeps, bool isExtended,
+                                      double integrateOverBinsPrecision, RooFit::OffsetMode offset);
 
 } // namespace BatchModeHelpers
 } // namespace RooFit
 
 #endif
+
+/// \endcond

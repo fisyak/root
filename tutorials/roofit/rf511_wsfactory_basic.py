@@ -5,6 +5,7 @@
 ## workspace to rapidly build pdfs functions and their parameter components
 ##
 ## \macro_code
+## \macro_output
 ##
 ## \date February 2018
 ## \authors Clemens Lange, Wouter Verkerke (C++ version)
@@ -51,7 +52,7 @@ else:
 #
 # Double_t -. converted to ROOT.RooConst(...)
 # {a,b,c} -. converted to ROOT.RooArgSet() or ROOT.RooArgList() depending on required ctor arg
-# dataset name -. convered to ROOT.RooAbsData reference for any dataset residing in the workspace
+# dataset name -. converted to ROOT.RooAbsData reference for any dataset residing in the workspace
 # enum -. Any enum label that belongs to an enum defined in the (base)
 # class
 

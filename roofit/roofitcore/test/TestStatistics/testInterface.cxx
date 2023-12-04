@@ -43,9 +43,9 @@ TEST(Interface, createNLLRooAbsL)
    sigma->setConstant(true);
    RooAbsPdf *pdf = w.pdf("g");
    std::unique_ptr<RooDataSet> data{pdf->generate(*x, 10000)};
-   RooAbsReal *nll = pdf->createNLL(*data, RooFit::ModularL(true));
+   std::unique_ptr<RooAbsReal> nll{pdf->createNLL(*data, RooFit::ModularL(true))};
 
-   auto *nll_real = dynamic_cast<RooFit::TestStatistics::RooRealL *>(nll);
+   auto *nll_real = dynamic_cast<RooFit::TestStatistics::RooRealL *>(&*nll);
 
    EXPECT_TRUE(nll_real != nullptr);
 
@@ -78,7 +78,7 @@ TEST(Interface, createNLLModularLAndOffset)
 }
 
 // Verifies that the fitTo parallelize interface creates a valid minimization
-#ifdef R__HAS_ROOFIT_MULTIPROCESS
+#ifdef ROOFIT_MULTIPROCESS
 TEST(Interface, fitTo)
 #else
 TEST(Interface, DISABLED_fitTo)

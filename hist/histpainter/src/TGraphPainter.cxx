@@ -18,6 +18,7 @@
 #include "TCanvas.h"
 #include "TStyle.h"
 #include "TH1.h"
+#include "TH2.h"
 #include "TF1.h"
 #include "TPaveStats.h"
 #include "TGaxis.h"
@@ -27,6 +28,8 @@
 #include "TGraphPolargram.h"
 #include "TGraphPolar.h"
 #include "TGraphQQ.h"
+#include "TScatter.h"
+#include "TPaletteAxis.h"
 #include "TLatex.h"
 #include "TArrow.h"
 #include "TFrame.h"
@@ -107,7 +110,7 @@ Graphs can be drawn with the following options:
 
 | Option   | Description                                                       |
 |----------|-------------------------------------------------------------------|
-| "A"      | Axis are drawn around the graph |
+| "A"      | Produce a new plot with Axis around the graph |
 | "I"      | Combine with option 'A' it draws invisible axis |
 | "L"      | A simple polyline is drawn |
 | "F"      | A fill area is drawn ('CF' draw a smoothed fill area) |
@@ -724,16 +727,6 @@ Int_t TGraphPainter::DistancetoPrimitiveHelper(TGraph *theGraph, Int_t px, Int_t
    // Somewhere on the graph points?
    const Int_t big = 9999;
    const Int_t kMaxDiff = 10;
-   Int_t puxmin = gPad->XtoAbsPixel(gPad->GetUxmin());
-   Int_t puymin = gPad->YtoAbsPixel(gPad->GetUymin());
-   Int_t puxmax = gPad->XtoAbsPixel(gPad->GetUxmax());
-   Int_t puymax = gPad->YtoAbsPixel(gPad->GetUymax());
-
-   // return if point is not in the graph area
-   if (px <= puxmin) return big;
-   if (py >= puymin) return big;
-   if (px >= puxmax) return big;
-   if (py <= puymax) return big;
 
    // check if point is near one of the graph points
    Int_t i, pxp, pyp, d;
@@ -785,10 +778,9 @@ Int_t TGraphPainter::DistancetoPrimitiveHelper(TGraph *theGraph, Int_t px, Int_t
    TList *functions = theGraph->GetListOfFunctions();
    TIter   next(functions);
    while ((f = (TObject*) next())) {
-      Int_t dist;
-      if (f->InheritsFrom(TF1::Class())) dist = f->DistancetoPrimitive(-px,py);
-      else                               dist = f->DistancetoPrimitive(px,py);
-      if (dist < kMaxDiff) {
+      if (f->InheritsFrom(TF1::Class())) distance = f->DistancetoPrimitive(-px,py);
+      else                               distance = f->DistancetoPrimitive(px,py);
+      if (distance < kMaxDiff) {
          gPad->SetSelected(f);
          return 0; //must be o and not dist in case of TMultiGraph
       }
@@ -810,8 +802,8 @@ void TGraphPainter::DrawPanelHelper(TGraph *theGraph)
    }
    TVirtualPadEditor *editor = TVirtualPadEditor::GetPadEditor();
    editor->Show();
-   gROOT->ProcessLine(Form("((TCanvas*)0x%zx)->Selected((TVirtualPad*)0x%zx,(TObject*)0x%zx,1)",
-                           (size_t)gPad->GetCanvas(), (size_t)gPad, (size_t)theGraph));
+   gROOT->ProcessLine(TString::Format("((TCanvas*)0x%zx)->Selected((TVirtualPad*)0x%zx,(TObject*)0x%zx,1)",
+                                      (size_t)gPad->GetCanvas(), (size_t)gPad, (size_t)theGraph));
 }
 
 
@@ -1277,9 +1269,10 @@ void TGraphPainter::PaintHelper(TGraph *theGraph, Option_t *option)
                break;
             }
          }
+         TPaletteAxis *palette = (TPaletteAxis*)functions->FindObject("palette");
+         if (palette) palette->Paint();
       }
       if (fit && !theGraph->TestBit(TGraph::kNoStats)) PaintStats(theGraph, fit);
-
    }
 }
 
@@ -1407,14 +1400,14 @@ void TGraphPainter::PaintGraph(TGraph *theGraph, Int_t npoints, const Double_t *
          rwxmax = uxmax;
          npt = 100;
          if (theNpoints > npt) npt = theNpoints;
-         TH1F *h = new TH1F(Form("%s_h",GetName()),GetTitle(),npt,rwxmin,rwxmax);
+         TH1F *h = new TH1F(TString::Format("%s_h",GetName()),GetTitle(),npt,rwxmin,rwxmax);
          theGraph->SetHistogram(h);
          if (!theGraph->GetHistogram()) return;
          theGraph->GetHistogram()->SetMinimum(rwymin);
          theGraph->GetHistogram()->SetMaximum(rwymax);
          theGraph->GetHistogram()->GetYaxis()->SetLimits(rwymin,rwymax);
          theGraph->GetHistogram()->SetBit(TH1::kNoStats);
-         theGraph->GetHistogram()->SetDirectory(0);
+         theGraph->GetHistogram()->SetDirectory(nullptr);
          theGraph->GetHistogram()->Sumw2(kFALSE);
          theGraph->GetHistogram()->Paint(chopth); // Draw histogram axis, title and grid
       } else {
@@ -3758,7 +3751,7 @@ void TGraphPainter::PaintGraphPolar(TGraph *theGraph, Option_t* options)
    // Check for existing TGraphPolargram in the Pad
    if (gPad) {
       // Existing polargram
-      if (thePolargram) if (!gPad->FindObject(thePolargram->GetName())) thePolargram=0;
+      if (thePolargram) if (!gPad->FindObject(thePolargram->GetName())) thePolargram=nullptr;
       if (!thePolargram) {
          // Find any other Polargram in the Pad
          TListIter padObjIter(gPad->GetListOfPrimitives());
@@ -4330,6 +4323,188 @@ void TGraphPainter::PaintGraphReverse(TGraph *theGraph, Option_t *option)
 
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Paint a scatter plot
+
+void TGraphPainter::PaintScatter(TScatter *theScatter, Option_t* chopt)
+{
+
+   Int_t optionAxis;
+
+   TString opt = chopt;
+   opt.ToUpper();
+
+   if (opt.Contains("A")) optionAxis  = 1;  else optionAxis  = 0;
+
+   double *theX         = theScatter->GetGraph()->GetX();
+   double *theY         = theScatter->GetGraph()->GetY();
+   int n                = theScatter->GetGraph()->GetN();
+   double *theColor     = theScatter->GetColor();
+   double *theSize      = theScatter->GetSize();
+   double MinMarkerSize = theScatter->GetMinMarkerSize();
+   double MaxMarkerSize = theScatter->GetMaxMarkerSize();
+
+   double minx =  DBL_MAX;
+   double maxx = -DBL_MAX;
+   double miny =  DBL_MAX;
+   double maxy = -DBL_MAX;
+   double minc =  DBL_MAX;
+   double maxc = -DBL_MAX;
+   double mins =  DBL_MAX;
+   double maxs = -DBL_MAX;
+   for (int i=0; i<n; i++) {
+      minx = TMath::Min(minx,theX[i]);
+      maxx = TMath::Max(maxx,theX[i]);
+      miny = TMath::Min(miny,theY[i]);
+      maxy = TMath::Max(maxy,theY[i]);
+      if (theColor) {
+         minc = TMath::Min(minc,theColor[i]);
+         maxc = TMath::Max(maxc,theColor[i]);
+      }
+      if (theSize) {
+         mins = TMath::Min(mins,theSize[i]);
+         maxs = TMath::Max(maxs,theSize[i]);
+      }
+   }
+
+   // Make sure minimum and maximum values are different
+   Double_t d, e = 0.1;
+   if (minx == maxx) {
+      if (theX[0] == 0.) {
+         minx = -e;
+         maxx = e;
+      } else {
+         d = TMath::Abs(theX[0]*e);
+         minx = theX[0] - d;
+         maxx = theX[0] + d;
+      }
+   }
+   if (miny == maxy) {
+      if (theY[0] == 0.) {
+         miny = -e;
+         maxy = e;
+      } else {
+         d = TMath::Abs(theY[0]*e);
+         miny = theY[0] - d;
+         maxy = theY[0] + d;
+      }
+   }
+   if (theColor) {
+      if (minc == maxc) {
+         if (theColor[0] == 0.) {
+            minc = -e;
+            maxc = e;
+         } else {
+            d = TMath::Abs(theColor[0]*e);
+            minc = theColor[0] - d;
+            maxc = theColor[0] + d;
+         }
+      }
+   }
+   if (theSize) {
+      if (mins == maxs) {
+         if (theSize[0] == 0.) {
+            mins = -e;
+            maxs = e;
+         } else {
+            d = TMath::Abs(theSize[0]*e);
+            mins = theSize[0] - d;
+            maxs = theSize[0] + d;
+         }
+      }
+   }
+
+   TH2F *h = theScatter->GetHistogram();
+   if (optionAxis) h->Paint(" ");
+
+   // Define and paint palette
+   if (theColor) {
+      TPaletteAxis *palette;
+      TList *functions = theScatter->GetGraph()->GetListOfFunctions();
+      palette = (TPaletteAxis*)functions->FindObject("palette");
+      TView *view = gPad->GetView();
+      if (palette) {
+         if (view) {
+            if (!palette->TestBit(TPaletteAxis::kHasView)) {
+               functions->Remove(palette);
+               delete palette; palette = nullptr;
+            }
+         } else {
+            if (palette->TestBit(TPaletteAxis::kHasView)) {
+               functions->Remove(palette);
+               delete palette; palette = nullptr;
+            }
+         }
+      }
+      if (!palette) {
+         Double_t xup  = gPad->GetUxmax();
+         Double_t x2   = gPad->PadtoX(gPad->GetX2());
+         Double_t ymin = gPad->PadtoY(gPad->GetUymin());
+         Double_t ymax = gPad->PadtoY(gPad->GetUymax());
+         Double_t xr   = 0.05*(gPad->GetX2() - gPad->GetX1());
+         Double_t xmin = gPad->PadtoX(xup +0.1*xr);
+         Double_t xmax = gPad->PadtoX(xup + xr);
+         if (xmax > x2) xmax = gPad->PadtoX(gPad->GetX2()-0.01*xr);
+         palette = new TPaletteAxis(xmin,ymin,xmax,ymax,minc,maxc);
+         palette->SetLabelColor(h->GetLabelColor());
+         palette->SetLabelFont(h->GetLabelFont());
+         palette->SetLabelOffset(h->GetLabelOffset());
+         palette->SetLabelSize(h->GetLabelSize());
+         palette->SetTitleOffset(h->GetTitleOffset());
+         palette->SetTitleSize(h->GetTitleSize());
+         palette->SetNdivisions(h->GetNdivisions());
+         functions->AddFirst(palette);
+      }
+      if (palette) palette->Paint();
+   }
+
+   // Draw markers
+   auto nbcol = gStyle->GetNumberOfColors();
+   int logx = gPad->GetLogx();
+   int logy = gPad->GetLogy();
+   int logz = gPad->GetLogz();
+   if (theColor && logz) {
+      if (minc>0) minc = log10(minc);
+      if (maxc>0) maxc = log10(maxc);
+   }
+   theScatter->SetMarkerColor(theScatter->GetMarkerColor());
+   theScatter->TAttMarker::Modify();
+   double x,y,c,ms;
+   int nc;
+   for (int i=0; i<n; i++) {
+      if (theColor) {
+         if (logz) {
+            if (theColor[i]>0) c = log10(theColor[i]);
+            else continue;
+         } else {
+            c = theColor[i];
+         }
+         nc = TMath::Nint(((c-minc)/(maxc-minc))*(nbcol-1));
+         if (nc > nbcol-1) nc = nbcol-1;
+         theScatter->SetMarkerColor(gStyle->GetColorPalette(nc));
+      }
+      if (theSize)  {
+         ms = (MaxMarkerSize-MinMarkerSize)*((theSize[i]-mins)/(maxs-mins))+MinMarkerSize;
+         theScatter->SetMarkerSize(ms);
+      }
+      if (theColor || theSize) theScatter->TAttMarker::Modify();
+      if (logx) {
+        if (theX[i]>0) x = log10(theX[i]);
+        else break;
+      } else {
+        x = theX[i];
+      }
+      if (logy) {
+        if (theY[i]>0) y = log10(theY[i]);
+        else break;
+      } else {
+        y = theY[i];
+      }
+      gPad->PaintPolyMarker(1,&x,&y);
+   }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 /// Paint a simple graph, without errors bars.
 
 void TGraphPainter::PaintGraphSimple(TGraph *theGraph, Option_t *option)
@@ -4585,7 +4760,7 @@ void TGraphPainter::PaintStats(TGraph *theGraph, TF1 *fit)
    if (stats) dofit  = stats->GetOptFit();
    else       dofit  = gStyle->GetOptFit();
 
-   if (!dofit) fit = 0;
+   if (!dofit) fit = nullptr;
    if (!fit) return;
    if (dofit  == 1) dofit  =  111;
    Int_t nlines = 0;

@@ -46,13 +46,12 @@ ClassImp(RooGenFitStudy);
 
 RooGenFitStudy::RooGenFitStudy(const char* name, const char* title) :
   RooAbsStudy(name?name:"RooGenFitStudy",title?title:"RooGenFitStudy"),
-  _genPdf(0),
-  _fitPdf(0),
-  _genSpec(0),
-  _nllVar(0),
-  _ngenVar(0),
-  _params(0),
-  _initParams(0)
+  _genPdf(nullptr),
+  _fitPdf(nullptr),
+  _genSpec(nullptr),
+  _nllVar(nullptr),
+  _ngenVar(nullptr),
+  _initParams(nullptr)
 {
 }
 
@@ -67,13 +66,12 @@ RooGenFitStudy::RooGenFitStudy(const RooGenFitStudy& other) :
   _genObsName(other._genObsName),
   _fitPdfName(other._fitPdfName),
   _fitObsName(other._fitObsName),
-  _genPdf(0),
-  _fitPdf(0),
-  _genSpec(0),
-  _nllVar(0),
-  _ngenVar(0),
-  _params(0),
-  _initParams(0)
+  _genPdf(nullptr),
+  _fitPdf(nullptr),
+  _genSpec(nullptr),
+  _nllVar(nullptr),
+  _ngenVar(nullptr),
+  _initParams(nullptr)
 {
   for(TObject * o : other._genOpts) _genOpts.Add(o->Clone());
   for(TObject * o : other._fitOpts) _fitOpts.Add(o->Clone());
@@ -85,7 +83,6 @@ RooGenFitStudy::RooGenFitStudy(const RooGenFitStudy& other) :
 
 RooGenFitStudy::~RooGenFitStudy()
 {
-  if (_params) delete _params ;
 }
 
 
@@ -97,7 +94,7 @@ bool RooGenFitStudy::attach(RooWorkspace& w)
 {
   bool ret = false ;
 
-  RooAbsPdf* pdf = w.pdf(_genPdfName.c_str()) ;
+  RooAbsPdf* pdf = w.pdf(_genPdfName) ;
   if (pdf) {
     _genPdf = pdf ;
   } else {
@@ -111,7 +108,7 @@ bool RooGenFitStudy::attach(RooWorkspace& w)
     ret = true ;
   }
 
-  pdf = w.pdf(_fitPdfName.c_str()) ;
+  pdf = w.pdf(_fitPdfName) ;
   if (pdf) {
     _fitPdf = pdf ;
   } else {
@@ -164,7 +161,7 @@ bool RooGenFitStudy::initialize()
   _nllVar = new RooRealVar("NLL","-log(Likelihood)",0) ;
   _ngenVar = new RooRealVar("ngen","number of generated events",0) ;
 
-  _params = _fitPdf->getParameters(_genObs) ;
+  _params = std::unique_ptr<RooArgSet>{_fitPdf->getParameters(_genObs)};
   RooArgSet modelParams(*_params) ;
   _initParams = new RooArgSet;
   _params->snapshot(*_initParams);
@@ -185,17 +182,16 @@ bool RooGenFitStudy::initialize()
 bool RooGenFitStudy::execute()
 {
   _params->assign(*_initParams) ;
-  RooDataSet* data = _genPdf->generate(*_genSpec) ;
-  RooFitResult* fr  = _fitPdf->fitTo(*data,RooFit::Save(true),(RooCmdArg&)*_fitOpts.At(0),(RooCmdArg&)*_fitOpts.At(1),(RooCmdArg&)*_fitOpts.At(2)) ;
+  std::unique_ptr<RooDataSet> data{_genPdf->generate(*_genSpec)};
+  std::unique_ptr<RooFitResult> fr{_fitPdf->fitTo(*data,RooFit::Save(true),(RooCmdArg&)*_fitOpts.At(0),(RooCmdArg&)*_fitOpts.At(1),(RooCmdArg&)*_fitOpts.At(2))};
 
   if (fr->status()==0) {
     _ngenVar->setVal(data->sumEntries()) ;
     _nllVar->setVal(fr->minNll()) ;
     storeSummaryOutput(*_params) ;
-    storeDetailedOutput(*fr) ;
+    storeDetailedOutput(std::move(fr)) ;
   }
 
-  delete data ;
   return false ;
 }
 
@@ -206,16 +202,15 @@ bool RooGenFitStudy::execute()
 
 bool RooGenFitStudy::finalize()
 {
-  delete _params ;
   delete _nllVar ;
   delete _ngenVar ;
   delete _initParams ;
   delete _genSpec ;
-  _params = 0 ;
-  _nllVar = 0 ;
-  _ngenVar = 0 ;
-  _initParams = 0 ;
-  _genSpec = 0 ;
+  _params.reset();
+  _nllVar = nullptr ;
+  _ngenVar = nullptr ;
+  _initParams = nullptr ;
+  _genSpec = nullptr ;
 
 
   return false ;

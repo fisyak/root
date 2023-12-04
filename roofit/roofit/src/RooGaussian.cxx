@@ -26,6 +26,7 @@ Plain Gaussian p.d.f
 #include "RooRandom.h"
 
 #include <RooFit/Detail/AnalyticalIntegrals.h>
+#include <RooFit/Detail/EvaluateFuncs.h>
 
 #include <vector>
 
@@ -56,18 +57,15 @@ RooGaussian::RooGaussian(const RooGaussian& other, const char* name) :
 
 double RooGaussian::evaluate() const
 {
-  const double arg = x - mean;
-  const double sig = sigma;
-  return std::exp(-0.5*arg*arg/(sig*sig));
+   return RooFit::Detail::EvaluateFuncs::gaussianEvaluate(x, mean, sigma);
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Compute multiple values of Gaussian distribution.
-void RooGaussian::computeBatch(cudaStream_t* stream, double* output, size_t nEvents, RooFit::Detail::DataMap const& dataMap) const
+void RooGaussian::computeBatch(double* output, size_t nEvents, RooFit::Detail::DataMap const& dataMap) const
 {
-  auto dispatch = stream ? RooBatchCompute::dispatchCUDA : RooBatchCompute::dispatchCPU;
-  dispatch->compute(stream, RooBatchCompute::Gaussian, output, nEvents,
+  RooBatchCompute::compute(dataMap.config(this), RooBatchCompute::Gaussian, output, nEvents,
           {dataMap.at(x), dataMap.at(mean), dataMap.at(sigma)});
 }
 
@@ -84,13 +82,12 @@ Int_t RooGaussian::getAnalyticalIntegral(RooArgSet& allVars, RooArgSet& analVars
 
 double RooGaussian::analyticalIntegral(Int_t code, const char* rangeName) const
 {
-  using namespace RooFit::Detail::AnalyticalIntegrals;
-  if (code == 2) {
-     // Integration over mean if the code was "2"
-     return gaussianIntegral(mean.min(rangeName), mean.max(rangeName), x, sigma);
-  }
-  // Integration over x otherwise
-  return gaussianIntegral(x.min(rangeName), x.max(rangeName), mean, sigma);
+   using namespace RooFit::Detail::AnalyticalIntegrals;
+
+   auto& constant  = code == 1 ? mean : x;
+   auto& integrand = code == 1 ? x : mean;
+
+   return gaussianIntegral(integrand.min(rangeName), integrand.max(rangeName), constant, sigma);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -109,7 +106,7 @@ void RooGaussian::generateEvent(Int_t code)
   assert(code==1 || code==2) ;
   double xgen ;
   if(code==1){
-    while(1) {
+    while(true) {
       xgen = RooRandom::randomGenerator()->Gaus(mean,sigma);
       if (xgen<x.max() && xgen>x.min()) {
    x = xgen ;
@@ -117,7 +114,7 @@ void RooGaussian::generateEvent(Int_t code)
       }
     }
   } else if(code==2){
-    while(1) {
+    while(true) {
       xgen = RooRandom::randomGenerator()->Gaus(x,sigma);
       if (xgen<mean.max() && xgen>mean.min()) {
    mean = xgen ;
@@ -129,4 +126,24 @@ void RooGaussian::generateEvent(Int_t code)
   }
 
   return;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void RooGaussian::translate(RooFit::Detail::CodeSquashContext &ctx) const
+{
+   // Build a call to the stateless gaussian defined later.
+   ctx.addResult(this, ctx.buildCall("RooFit::Detail::EvaluateFuncs::gaussianEvaluate", x, mean, sigma));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::string RooGaussian::buildCallToAnalyticIntegral(Int_t code, const char *rangeName,
+                                                     RooFit::Detail::CodeSquashContext &ctx) const
+{
+   auto& constant  = code == 1 ? mean : x;
+   auto& integrand = code == 1 ? x : mean;
+
+   return ctx.buildCall("RooFit::Detail::AnalyticalIntegrals::gaussianIntegral",
+                        integrand.min(rangeName), integrand.max(rangeName), constant, sigma);
 }

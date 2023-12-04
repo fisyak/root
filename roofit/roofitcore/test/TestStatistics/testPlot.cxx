@@ -10,16 +10,17 @@
  * listed in LICENSE (http://roofit.sourceforge.net/license.txt)
  */
 
-#include <RooWorkspace.h>
-#include <RooPlot.h>
-#include <RooDataSet.h>
-#include <RooFit/TestStatistics/buildLikelihood.h>
 #include <RooAbsPdf.h>
-#include <RooRealVar.h>
-#include <RooFit/TestStatistics/RooRealL.h>
+#include <RooDataSet.h>
 #include <RooFit/MultiProcess/Config.h>
+#include <RooFit/TestStatistics/RooRealL.h>
+#include <RooFit/TestStatistics/buildLikelihood.h>
+#include <RooHelpers.h>
 #include <RooMinimizer.h>
+#include <RooPlot.h>
+#include <RooRealVar.h>
 #include <RooUnitTest.h>
+#include <RooWorkspace.h>
 
 #include <TFile.h>
 
@@ -51,8 +52,8 @@ int main(int argc, char **argv)
 
 class TestRooRealLPlot : public RooUnitTest {
 public:
-   TestRooRealLPlot(TFile &refFile, bool writeRef, int verbose, std::string const &batchMode)
-      : RooUnitTest("Plotting and minimization with RooFit::TestStatistics", &refFile, writeRef, verbose, batchMode){};
+   TestRooRealLPlot(TFile &refFile, bool writeRef, int verbose)
+      : RooUnitTest("Plotting and minimization with RooFit::TestStatistics", &refFile, writeRef, verbose){};
    bool testCode() override
    {
 
@@ -71,7 +72,7 @@ public:
       // --------------------------------------------------------------------------------
 
       // Creating a RooAbsL likelihood
-      RooAbsReal *likelihood = w.pdf("model")->createNLL(d, ModularL(true));
+      std::unique_ptr<RooAbsReal> likelihood{w.pdf("model")->createNLL(d, ModularL(true))};
 
       // Creating a minimizer and explicitly setting type of parallelization
       std::size_t nWorkers = 1;
@@ -103,9 +104,11 @@ TEST(TestStatisticsPlot, RooRealL)
 
    RooUnitTest::setMemDir(gDirectory);
 
+   gErrorIgnoreLevel = kWarning;
+
    TFile fref("TestStatistics_ref.root");
 
-   TestRooRealLPlot plotTest{fref, false, 0, "off"};
+   TestRooRealLPlot plotTest{fref, false, 0};
    bool result = plotTest.runTest();
    ASSERT_TRUE(result);
 }

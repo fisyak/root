@@ -686,7 +686,7 @@ std::vector<double>  RooFFTConvPdf::scanPdf(RooRealVar& obs, RooAbsPdf& pdf, con
 ///    - all member of nset that are observables of this p.d.f.
 ///
 
-RooArgSet* RooFFTConvPdf::actualObservables(const RooArgSet& nset) const
+RooFit::OwningPtr<RooArgSet> RooFFTConvPdf::actualObservables(const RooArgSet& nset) const
 {
   // Get complete list of observables
   auto obs1 = new RooArgSet{};
@@ -731,7 +731,7 @@ RooArgSet* RooFFTConvPdf::actualObservables(const RooArgSet& nset) const
 
   }
 
-  return obs1 ;
+  return RooFit::OwningPtr<RooArgSet>{obs1};
 }
 
 
@@ -741,12 +741,12 @@ RooArgSet* RooFFTConvPdf::actualObservables(const RooArgSet& nset) const
 /// set nset. For this p.d.f these are the parameters of the input p.d.f.
 /// but never the convolution variable, in case it is not part of nset.
 
-RooArgSet* RooFFTConvPdf::actualParameters(const RooArgSet& nset) const
+RooFit::OwningPtr<RooArgSet> RooFFTConvPdf::actualParameters(const RooArgSet& nset) const
 {
-  RooArgSet* vars = getVariables() ;
+  auto vars = getVariables() ;
   vars->remove(*std::unique_ptr<RooArgSet>{actualObservables(nset)});
 
-  return vars ;
+  return RooFit::OwningPtr<RooArgSet>{std::move(vars)};
 }
 
 

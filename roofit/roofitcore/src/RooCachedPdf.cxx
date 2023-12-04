@@ -40,7 +40,7 @@ ClassImp(RooCachedPdf);
 /// in the binning named "cache" in the observables of the function. The dimensions
 /// of the cache are automatically matched to the number of observables used
 /// in each use context. Multiple cache in different observable may exists
-/// simultanously if the cached p.d.f is used with multiple observable
+/// simultaneously if the cached p.d.f is used with multiple observable
 /// configurations simultaneously
 
 RooCachedPdf::RooCachedPdf(const char *name, const char *title, RooAbsPdf& _pdf) :
@@ -139,13 +139,13 @@ void RooCachedPdf::preferredObservableScanOrder(const RooArgSet& obs, RooArgSet&
 /// of the external input p.d.f given the choice of observables defined
 /// in nset
 
-RooArgSet* RooCachedPdf::actualObservables(const RooArgSet& nset) const
+RooFit::OwningPtr<RooArgSet> RooCachedPdf::actualObservables(const RooArgSet& nset) const
 {
-  if (_cacheObs.getSize()>0) {
-    return pdf.arg().getObservables(_cacheObs) ;
+  if (!_cacheObs.empty()) {
+    return pdf->getObservables(_cacheObs);
   }
 
-  return pdf.arg().getObservables(nset) ;
+  return pdf->getObservables(nset);
 }
 
 
@@ -156,12 +156,9 @@ RooArgSet* RooCachedPdf::actualObservables(const RooArgSet& nset) const
 /// the cache observables. If this p.d.f is operated in automatic mode,
 /// return the parameters of the external input p.d.f
 
-RooArgSet* RooCachedPdf::actualParameters(const RooArgSet& nset) const
+RooFit::OwningPtr<RooArgSet> RooCachedPdf::actualParameters(const RooArgSet& nset) const
 {
-  if (_cacheObs.getSize()>0) {
-    return pdf.arg().getParameters(_cacheObs) ;
-  }
-  return pdf.arg().getParameters(nset) ;
+   return pdf.arg().getParameters(_cacheObs.empty() ? nset : _cacheObs) ;
 }
 
 

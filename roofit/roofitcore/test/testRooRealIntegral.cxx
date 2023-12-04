@@ -5,7 +5,6 @@
 #include <RooDataHist.h>
 #include <RooDataSet.h>
 #include <RooFormulaVar.h>
-#include <RooGenProdProj.h>
 #include <RooGenericPdf.h>
 #include <RooHelpers.h>
 #include <RooHistPdf.h>
@@ -18,12 +17,9 @@
 
 #include <ROOT/StringUtils.hxx>
 
-#include <gtest/gtest.h>
+#include "../src/RooGenProdProj.h"
 
-// Backward compatibility for gtest version < 1.10.0
-#ifndef INSTANTIATE_TEST_SUITE_P
-#define INSTANTIATE_TEST_SUITE_P INSTANTIATE_TEST_CASE_P
-#endif
+#include "gtest_wrapper.h"
 
 #include <memory>
 
@@ -230,7 +226,7 @@ TEST(RooRealIntegral, UseCloneAsIntegrationVariable2)
 /// factors. Covers GitHub #11476 and JIRA issue ROOT-9436.
 ///
 /// Disabled for now because the fix to the bug that is covered by this unit
-/// test caused a severe performance problem and was reverted. The performace
+/// test caused a severe performance problem and was reverted. The performance
 /// regression is covered by another unit test in this file, called
 /// "ProjectConditional".
 TEST(RooRealIntegral, DISABLED_Issue11476)
@@ -361,3 +357,32 @@ INSTANTIATE_TEST_SUITE_P(RooRealIntegral, LevelTest, testing::Values(1, 2, 3),
                             ss << "Level" << paramInfo.param;
                             return ss.str();
                          });
+
+// If we integrate a model that uses RooLinearVar and should be able to get
+// integrated analytically, this should also work if we integrate over variable
+// clones because RooFit considers them identical. Covers GitHub issue #12646.
+TEST(RooRealIntegral, RooLinearVarModelIntegratedOverVariableClones)
+{
+   RooWorkspace ws;
+   ws.factory("LinearVar::x2(x[0, 1], 1, 0)");
+   ws.factory("LinearVar::y2(y[0, 1], 1, 0)");
+
+   // RooGaussian can integrate over x or mu, but not both still, the issue is
+   // visible regardless
+   ws.factory("Gaussian::gauss(x2, y2, 0.2)");
+
+   RooRealVar &x = *ws.var("x");
+   RooRealVar &y = *ws.var("y");
+   RooAbsPdf &gauss = *ws.pdf("gauss");
+
+   // There should be no numeric integration happening
+   std::unique_ptr<RooAbsReal> integral{gauss.createIntegral({y}, {x, y})};
+   EXPECT_TRUE(static_cast<RooRealIntegral &>(*integral).numIntRealVars().empty());
+
+   RooRealVar xCopy{x};
+   RooRealVar yCopy{y};
+
+   // Also if we use clones of the observables, it should not make a difference
+   std::unique_ptr<RooAbsReal> integral2{gauss.createIntegral({yCopy}, {xCopy, yCopy})};
+   EXPECT_TRUE(static_cast<RooRealIntegral &>(*integral2).numIntRealVars().empty());
+}

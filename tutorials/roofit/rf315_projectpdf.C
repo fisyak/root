@@ -4,8 +4,8 @@
 /// Multidimensional models: marginizalization of multi-dimensional pdfs through integration
 ///
 /// \macro_image
-/// \macro_output
 /// \macro_code
+/// \macro_output
 ///
 /// \date July 2008
 /// \author Wouter Verkerke
@@ -61,10 +61,10 @@ void rf315_projectpdf()
    // ------------------------------------------------------------------------------------------
 
    // Sample 1000 events from modelx
-   RooAbsData *data = modelx->generateBinned(x, 1000);
+   std::unique_ptr<RooAbsData> data{modelx->generateBinned(x, 1000)};
 
    // Fit modelx to toy data
-   modelx->fitTo(*data, Verbose());
+   modelx->fitTo(*data, Verbose(), PrintLevel(-1));
 
    // Plot modelx over data
    RooPlot *frame = x.frame(40);

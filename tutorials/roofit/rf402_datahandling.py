@@ -3,7 +3,9 @@
 ## \notebook
 ## Data and categories: tools for manipulation of (un)binned datasets
 ##
+## \macro_image
 ## \macro_code
+## \macro_output
 ##
 ## \date February 2018
 ## \authors Clemens Lange, Wouter Verkerke (C++ version)
@@ -93,7 +95,7 @@ print("\n >> merge d2(y) with d1(x,c) to form d1(x,c,y)")
 d1.merge(d2)
 d1.Print("v")
 
-# The append() function addes two datasets row-wise
+# The append() function adds two datasets row-wise
 print("\n >> append data points of d3 to d1")
 d1.append(d3)
 d1.Print("v")

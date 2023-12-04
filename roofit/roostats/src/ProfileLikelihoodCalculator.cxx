@@ -80,14 +80,14 @@ using namespace RooStats;
 /// default constructor
 
 ProfileLikelihoodCalculator::ProfileLikelihoodCalculator() :
-   CombinedCalculator(), fFitResult(0), fGlobalFitDone(false)
+   CombinedCalculator(), fGlobalFitDone(false)
 {
 }
 
 ProfileLikelihoodCalculator::ProfileLikelihoodCalculator(RooAbsData& data, RooAbsPdf& pdf, const RooArgSet& paramsOfInterest,
                                                          double size, const RooArgSet* nullParams ) :
    CombinedCalculator(data,pdf, paramsOfInterest, size, nullParams ),
-   fFitResult(0), fGlobalFitDone(false)
+   fGlobalFitDone(false)
 {
    // constructor from pdf and parameters
    // the pdf must contain eventually the nuisance parameters
@@ -95,7 +95,7 @@ ProfileLikelihoodCalculator::ProfileLikelihoodCalculator(RooAbsData& data, RooAb
 
 ProfileLikelihoodCalculator::ProfileLikelihoodCalculator(RooAbsData& data,  ModelConfig& model, double size) :
    CombinedCalculator(data, model, size),
-   fFitResult(0), fGlobalFitDone(false)
+   fGlobalFitDone(false)
 {
    // construct from a ModelConfig. Assume data model.GetPdf() will provide full description of model including
    // constraint term on the nuisances parameters
@@ -109,18 +109,15 @@ ProfileLikelihoodCalculator::ProfileLikelihoodCalculator(RooAbsData& data,  Mode
 ///    if (fOwnPdf) delete fPdf;
 ///    fPdf = 0;
 
-ProfileLikelihoodCalculator::~ProfileLikelihoodCalculator(){
-   if (fFitResult) delete fFitResult;
-}
+ProfileLikelihoodCalculator::~ProfileLikelihoodCalculator() = default;
 
 void ProfileLikelihoodCalculator::DoReset() const {
    // reset and clear fit result
    // to be called when a new model or data are set in the calculator
-   if (fFitResult) delete fFitResult;
-   fFitResult = 0;
+   fFitResult.reset();
 }
 
-RooAbsReal *  ProfileLikelihoodCalculator::DoGlobalFit() const {
+RooFit::OwningPtr<RooAbsReal>  ProfileLikelihoodCalculator::DoGlobalFit() const {
    // perform a global fit of the likelihood letting with all parameter of interest and
    // nuisance parameters
    // keep the list of fitted parameters
@@ -128,32 +125,30 @@ RooAbsReal *  ProfileLikelihoodCalculator::DoGlobalFit() const {
    DoReset();
    RooAbsPdf * pdf = GetPdf();
    RooAbsData* data = GetData();
-   if (!data || !pdf ) return 0;
+   if (!data || !pdf ) return nullptr;
 
    // get all non-const parameters
-   RooArgSet* constrainedParams = pdf->getParameters(*data);
-   if (!constrainedParams) return 0;
-   RemoveConstantParameters(constrainedParams);
+   std::unique_ptr<RooArgSet> constrainedParams{pdf->getParameters(*data)};
+   if (!constrainedParams) return nullptr;
+   RemoveConstantParameters(&*constrainedParams);
 
    const auto& config = GetGlobalRooStatsConfig();
-   RooAbsReal * nll = pdf->createNLL(*data, CloneData(true), Constrain(*constrainedParams),ConditionalObservables(fConditionalObs), GlobalObservables(fGlobalObs),
+   auto nll = pdf->createNLL(*data, CloneData(true), Constrain(*constrainedParams),ConditionalObservables(fConditionalObs), GlobalObservables(fGlobalObs),
        RooFit::Offset(config.useLikelihoodOffset) );
 
    // check if global fit has been already done
    if (fFitResult && fGlobalFitDone) {
-      delete constrainedParams;
-      return nll;
+      return RooFit::OwningPtr<RooAbsReal>{std::move(nll)};
    }
 
       // calculate MLE
    oocoutP(nullptr,Minimization) << "ProfileLikelihoodCalcultor::DoGLobalFit - find MLE " << std::endl;
 
-   if (fFitResult) delete fFitResult;
-   fFitResult = DoMinimizeNLL(nll);
+   fFitResult = std::unique_ptr<RooFitResult>{DoMinimizeNLL(&*nll)};
 
    // print fit result
    if (fFitResult) {
-      fFitResult->printStream( oocoutI(nullptr,Minimization), fFitResult->defaultPrintContents(0), fFitResult->defaultPrintStyle(0) );
+      fFitResult->printStream( oocoutI(nullptr,Minimization), fFitResult->defaultPrintContents(nullptr), fFitResult->defaultPrintStyle(nullptr) );
 
       if (fFitResult->status() != 0)
          oocoutW(nullptr,Minimization) << "ProfileLikelihoodCalcultor::DoGlobalFit -  Global fit failed - status = " << fFitResult->status() << std::endl;
@@ -161,11 +156,10 @@ RooAbsReal *  ProfileLikelihoodCalculator::DoGlobalFit() const {
          fGlobalFitDone = true;
    }
 
-   delete constrainedParams;
-   return nll;
+   return RooFit::OwningPtr<RooAbsReal>{std::move(nll)};
 }
 
-RooFitResult * ProfileLikelihoodCalculator::DoMinimizeNLL(RooAbsReal * nll)  {
+RooFit::OwningPtr<RooFitResult> ProfileLikelihoodCalculator::DoMinimizeNLL(RooAbsReal * nll)  {
    // Minimizer the given NLL using the default options
 
    const char * minimType = ""; // empty string to select RooMinimizer default
@@ -190,7 +184,7 @@ RooFitResult * ProfileLikelihoodCalculator::DoMinimizeNLL(RooAbsReal * nll)  {
    int status = -1;
    for (int tries = 1, maxtries = 4; tries <= maxtries; ++tries) {
       status = minim.minimize(minimType,minimAlgo);
-      if (status%1000 == 0) {  // ignore erros from Improve
+      if (status%1000 == 0) {  // ignore errors from Improve
          break;
       } else if (tries < maxtries) {
          cout << "    ----> Doing a re-scan first" << endl;
@@ -211,10 +205,7 @@ RooFitResult * ProfileLikelihoodCalculator::DoMinimizeNLL(RooAbsReal * nll)  {
       }
    }
 
-   RooFitResult * result = minim.save();
-
-
-   return result;
+   return minim.save();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -226,10 +217,10 @@ LikelihoodInterval* ProfileLikelihoodCalculator::GetInterval() const {
 //    RooAbsData* data = fWS->data(fDataName);
    RooAbsPdf * pdf = GetPdf();
    RooAbsData* data = GetData();
-   if (!data || !pdf || fPOI.empty()) return 0;
+   if (!data || !pdf || fPOI.empty()) return nullptr;
 
-   RooArgSet* constrainedParams = pdf->getParameters(*data);
-   RemoveConstantParameters(constrainedParams);
+   std::unique_ptr<RooArgSet> constrainedParams{pdf->getParameters(*data)};
+   RemoveConstantParameters(&*constrainedParams);
 
 
    /*
@@ -239,16 +230,15 @@ LikelihoodInterval* ProfileLikelihoodCalculator::GetInterval() const {
    */
 
    // do a global fit cloning the data
-   RooAbsReal * nll = DoGlobalFit();
-   if (!nll) return 0;
+   std::unique_ptr<RooAbsReal> nll{DoGlobalFit()};
+   if (!nll) return nullptr;
 
    if (!fFitResult)   {
-      delete nll;
-      return 0;
+      return nullptr;
    }
 
-   RooAbsReal* profile = nll->createProfile(fPOI);
-   profile->addOwnedComponents(*nll) ;  // to avoid memory leak
+   std::unique_ptr<RooAbsReal> profile{nll->createProfile(fPOI)};
+   profile->addOwnedComponents(std::move(nll)) ;  // to avoid memory leak
 
    // t.b.f. " RooProfileLL should keep and provide possibility to query on global minimum
    // set POI to fit value (this will speed up profileLL calculation of global minimum)
@@ -282,9 +272,8 @@ LikelihoodInterval* ProfileLikelihoodCalculator::GetInterval() const {
    }
    // fPOI contains the parameter of interest of the PL object
    // and bestPOI contains a snapshot with the best fit values
-   LikelihoodInterval* interval = new LikelihoodInterval(name, profile, &fPOI, bestPOI);
+   LikelihoodInterval* interval = new LikelihoodInterval(name, profile.release(), &fPOI, bestPOI);
    interval->SetConfidenceLevel(1.-fSize);
-   delete constrainedParams;
    return interval;
 }
 
@@ -305,9 +294,9 @@ HypoTestResult* ProfileLikelihoodCalculator::GetHypoTest() const {
    RooAbsData* data = GetData();
 
 
-   if (!data || !pdf) return 0;
+   if (!data || !pdf) return nullptr;
 
-   if (fNullParams.empty()) return 0;
+   if (fNullParams.empty()) return nullptr;
 
    // make a clone and ordered list since a vector will be associated to keep parameter values
    // clone the list since first fit will changes the fNullParams values
@@ -316,16 +305,15 @@ HypoTestResult* ProfileLikelihoodCalculator::GetHypoTest() const {
 
 
    // do a global fit
-   RooAbsReal * nll = DoGlobalFit();
-   if (!nll) return 0;
+   std::unique_ptr<RooAbsReal> nll{DoGlobalFit()};
+   if (!nll) return nullptr;
 
    if (!fFitResult) {
-      delete nll;
-      return 0;
+      return nullptr;
    }
 
-   RooArgSet* constrainedParams = pdf->getParameters(*data);
-   RemoveConstantParameters(constrainedParams);
+   std::unique_ptr<RooArgSet> constrainedParams{pdf->getParameters(*data)};
+   RemoveConstantParameters(&*constrainedParams);
 
    double nLLatMLE = fFitResult->minNll();
    // in case of using offset need to save offset value
@@ -365,12 +353,12 @@ HypoTestResult* ProfileLikelihoodCalculator::GetHypoTest() const {
    if (existVarParams) {
       oocoutP(nullptr,Minimization) << "ProfileLikelihoodCalcultor::GetHypoTest - do conditional fit " << std::endl;
 
-      RooFitResult * fit2 = DoMinimizeNLL(nll);
+      std::unique_ptr<RooFitResult> fit2{DoMinimizeNLL(&*nll)};
 
       // print fit result
       if (fit2) {
          nLLatCondMLE = fit2->minNll();
-         fit2->printStream( oocoutI(nullptr,Minimization), fit2->defaultPrintContents(0), fit2->defaultPrintStyle(0) );
+         fit2->printStream( oocoutI(nullptr,Minimization), fit2->defaultPrintContents(nullptr), fit2->defaultPrintStyle(nullptr) );
 
          if (fit2->status() != 0)
             oocoutW(nullptr,Minimization) << "ProfileLikelihoodCalcultor::GetHypotest -  Conditional fit failed - status = " << fit2->status() << std::endl;
@@ -408,8 +396,6 @@ HypoTestResult* ProfileLikelihoodCalculator::GetHypoTest() const {
       }
    }
 
-   delete constrainedParams;
-   delete nll;
    return htr;
 
 }

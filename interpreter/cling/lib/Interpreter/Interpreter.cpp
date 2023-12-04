@@ -257,7 +257,7 @@ namespace cling {
     if (!m_LookupHelper)
       return;
 
-    if (!isInSyntaxOnlyMode()) {
+    if (!isInSyntaxOnlyMode() && !m_Opts.CompilerOpts.CUDADevice) {
       m_Executor.reset(new IncrementalExecutor(SemaRef.Diags, *getCI(),
         extraLibHandle, m_Opts.Verbose()));
 
@@ -372,7 +372,8 @@ namespace cling {
 
       // Give my IncrementalExecutor a pointer to the Incremental executor of the
       // parent Interpreter.
-      m_Executor->setExternalIncrementalExecutor(parentInterpreter.m_Executor.get());
+      m_Executor->registerExternalIncrementalExecutor(
+          *parentInterpreter.m_Executor);
 
       if (auto C = parentInterpreter.m_IncrParser->getDiagnosticConsumer())
         m_IncrParser->setDiagnosticConsumer(C, /*Own=*/false);
@@ -773,7 +774,7 @@ namespace cling {
     CO.CodeGeneration = m_IncrParser->hasCodeGenerator();
     CO.DynamicScoping = isDynamicLookupEnabled();
     CO.Debug = isPrintingDebug();
-    CO.IgnorePromptDiags = !isRawInputEnabled();
+    CO.IgnorePromptDiags = 0;
     CO.CheckPointerValidity = !isRawInputEnabled();
     CO.OptLevel = getDefaultOptLevel();
     return CO;

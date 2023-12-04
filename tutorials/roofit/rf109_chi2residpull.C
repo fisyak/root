@@ -5,8 +5,8 @@
 /// histogram of residual and pull distributions
 ///
 /// \macro_image
-/// \macro_output
 /// \macro_code
+/// \macro_output
 ///
 /// \date July 2008
 /// \author Wouter Verkerke
@@ -35,7 +35,7 @@ void rf109_chi2residpull()
    RooGaussian gauss("gauss", "gauss", x, 0.0, sigma);
 
    // Generate a sample of 1000 events with sigma=3
-   RooDataSet *data = gauss.generate(x, 10000);
+   std::unique_ptr<RooDataSet> data{gauss.generate(x, 10000)};
 
    // Change sigma to 3.15
    sigma.setVal(3.15);

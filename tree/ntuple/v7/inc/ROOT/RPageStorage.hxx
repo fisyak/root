@@ -47,6 +47,7 @@ class RColumn;
 class RColumnElementBase;
 class RNTupleCompressor;
 class RNTupleDecompressor;
+struct RNTupleModelChangeset;
 class RPagePool;
 class RFieldBase;
 
@@ -112,6 +113,13 @@ public:
 protected:
    std::string fNTupleName;
    RTaskScheduler *fTaskScheduler = nullptr;
+   void WaitForAllTasks()
+   {
+      if (!fTaskScheduler)
+         return;
+      fTaskScheduler->Wait();
+      fTaskScheduler->Reset();
+   }
 
 public:
    explicit RPageStorage(std::string_view name);
@@ -265,6 +273,11 @@ public:
    /// To do so, Create() calls CreateImpl() after updating the descriptor.
    /// Create() associates column handles to the columns referenced by the model
    void Create(RNTupleModel &model);
+   /// Incorporate incremental changes to the model into the ntuple descriptor. This happens, e.g. if new fields were
+   /// added after the initial call to `RPageSink::Create(RNTupleModel &)`.
+   /// `firstEntry` specifies the global index for the first stored element in the added columns.
+   virtual void UpdateSchema(const RNTupleModelChangeset &changeset, NTupleSize_t firstEntry);
+
    /// Write a page to the storage. The column must have been added before.
    void CommitPage(ColumnHandle_t columnHandle, const RPage &page);
    /// Write a preprocessed page to storage. The column must have been added before.
@@ -403,8 +416,16 @@ protected:
    /// Helper for unstreaming a page. This is commonly used in derived, concrete page sources.  The implementation
    /// currently always makes a memory copy, even if the sealed page is uncompressed and in the final memory layout.
    /// The optimization of directly mapping pages is left to the concrete page source implementations.
-   /// Usage of this method requires construction of fDecompressor.
-   std::unique_ptr<unsigned char []> UnsealPage(const RSealedPage &sealedPage, const RColumnElementBase &element);
+   /// Usage of this method requires construction of fDecompressor. Memory is allocated via
+   /// `RPageAllocatorHeap`; use `RPageAllocatorHeap::DeletePage()` to deallocate returned pages.
+   RPage UnsealPage(const RSealedPage &sealedPage, const RColumnElementBase &element, DescriptorId_t physicalColumnId);
+
+   /// Prepare a page range read for the column set in `clusterKey`.  Specifically, pages referencing the
+   /// `kTypePageZero` locator are filled in `pageZeroMap`; otherwise, `perPageFunc` is called for each page. This is
+   /// commonly used as part of `LoadClusters()` in derived classes.
+   void PrepareLoadCluster(
+      const RCluster::RKey &clusterKey, ROnDiskPageMap &pageZeroMap,
+      std::function<void(DescriptorId_t, NTupleSize_t, const RClusterDescriptor::RPageRange::RPageInfo &)> perPageFunc);
 
    /// Enables the default set of metrics provided by RPageSource. `prefix` will be used as the prefix for
    /// the counters registered in the internal RNTupleMetrics object.

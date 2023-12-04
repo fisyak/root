@@ -18,7 +18,6 @@
 #include <ROOT/REveSceneInfo.hxx>
 #include <ROOT/REveClient.hxx>
 #include <ROOT/RWebWindow.hxx>
-#include <ROOT/RFileDialog.hxx>
 #include <ROOT/RLogger.hxx>
 #include <ROOT/REveSystem.hxx>
 
@@ -154,7 +153,7 @@ REveManager::REveManager()
    // !!! AMT increase threshold to enable color pick on client
    TColor::SetColorThreshold(0.1);
 
-   fWebWindow = RWebWindow::Create();
+   fWebWindow = ROOT::RWebWindow::Create();
    fWebWindow->UseServerThreads();
    fWebWindow->SetDefaultPage("file:rootui5sys/eve7/index.html");
 
@@ -849,11 +848,11 @@ void REveManager::WindowData(unsigned connid, const std::string &arg)
 
       return;
    }
-   else if (arg.compare( 0, 10, "FILEDIALOG") == 0)
+   else if (ROOT::RWebWindow::IsFileDialogMessage(arg))
    {
       // file dialog
-       RFileDialog::Embedded(fWebWindow, arg);
-       return;
+      ROOT::RWebWindow::EmbedFileDialog(fWebWindow, connid, arg);
+      return;
    }
 
    nlohmann::json cj = nlohmann::json::parse(arg);
@@ -986,7 +985,7 @@ void REveManager::SendSceneChanges()
       std::stringstream strm;
       for (auto entry : gEveLogEntries) {
          nlohmann::json item = {};
-         item["lvl"] = entry.fLevel; 
+         item["lvl"] = entry.fLevel;
          int cappedLevel = std::min(static_cast<int>(entry.fLevel), numLevels - 1);
          strm <<  "Server " << sTag[cappedLevel] << ":";
 

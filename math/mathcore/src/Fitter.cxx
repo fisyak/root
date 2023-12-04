@@ -144,7 +144,7 @@ bool Fitter::DoSetFCN(bool extFcn, const ROOT::Math::IMultiGenFunction & fcn, co
       MATH_ERROR_MSG("Fitter::SetFCN","FCN function has zero parameters ");
       return false;
    }
-   if (params != 0 )
+   if (params != nullptr || fConfig.ParamsSettings().size() == 0)
       fConfig.SetParamsSettings(npar, params);
    else {
       if ( fConfig.ParamsSettings().size() != npar) {
@@ -170,7 +170,7 @@ bool Fitter::DoSetFCN(bool extFcn, const ROOT::Math::IMultiGenFunction & fcn, co
    }
 
    // in case a model function and data exists from a previous fit - reset shared-ptr
-   if (fResult && fResult->FittedFunction() == 0 && fFunc)  fFunc.reset();
+   if (fResult && fResult->FittedFunction() == nullptr && fFunc)  fFunc.reset();
    if (fData) fData.reset();
 
    return true;
@@ -244,7 +244,7 @@ bool Fitter::FitFCN(const ROOT::Math::FitMethodGradFunction &fcn, const double *
 bool Fitter::SetFCN(MinuitFCN_t fcn, int npar, const double *params, unsigned int dataSize, bool chi2fit)
 {
    // set TMinuit style FCN type (global function pointer)
-   // create corresponfing objective function from that function
+   // create corresponding objective function from that function
 
    if (npar == 0) {
       npar = fConfig.ParamsSettings().size();
@@ -291,7 +291,7 @@ bool Fitter::EvalFCN()
 {
    // evaluate the FCN using the stored values in fConfig
 
-   if (fFunc && fResult->FittedFunction() == 0)
+   if (fFunc && fResult->FittedFunction() == nullptr)
       fFunc.reset();
 
    if (!ObjFunction()) {
@@ -710,7 +710,7 @@ bool Fitter::DoInitMinimizer() {
    // create first Minimizer
    // using an auto_Ptr will delete the previous existing one
    fMinimizer = std::shared_ptr<ROOT::Math::Minimizer> ( fConfig.CreateMinimizer() );
-   if (fMinimizer.get() == 0) {
+   if (fMinimizer.get() == nullptr) {
       MATH_ERROR_MSG("Fitter::DoInitMinimizer","Minimizer cannot be created");
       return false;
    }
@@ -869,7 +869,7 @@ void Fitter::DoUpdateFitConfig() {
 
 int Fitter::GetNCallsFromFCN() {
    // retrieve ncalls from the fit method functions
-   // this function is called when minimizer does not provide a way of returning the nnumber of function calls
+   // this function is called when minimizer does not provide a way of returning the number of function calls
    int ncalls = 0;
    if (!fUseGradient) {
       const ROOT::Math::FitMethodFunction * fcn = dynamic_cast<const ROOT::Math::FitMethodFunction *>(fObjFunction.get());
@@ -891,7 +891,7 @@ bool Fitter::ApplyWeightCorrection(const ROOT::Math::IMultiGenFunction & loglw2,
    // - the objective function is a likelihood function and Likelihood::UseSumOfWeightSquare()
    //    has been called before
 
-   if (fMinimizer.get() == 0) {
+   if (fMinimizer.get() == nullptr) {
       MATH_ERROR_MSG("Fitter::ApplyWeightCorrection","Must perform first a fit before applying the correction");
       return false;
    }

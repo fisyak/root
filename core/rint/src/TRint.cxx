@@ -384,7 +384,7 @@ void TRint::ExecLogon()
 void TRint::Run(Bool_t retrn)
 {
    if (!QuitOpt()) {
-      // Promt prompt only if we are expecting / allowing input.
+      // Prompt prompt only if we are expecting / allowing input.
       Getlinem(kInit, GetPrompt());
    }
 
@@ -518,7 +518,7 @@ void TRint::PrintLogo(Bool_t lite)
       // Here, %%s results in %s after TString::Format():
       lines.emplace_back(TString::Format("Welcome to ROOT %s%%shttps://root.cern",
                                          gROOT->GetVersion()));
-      lines.emplace_back(TString::Format("(c) 1995-2022, The ROOT Team; conception: R. Brun, F. Rademakers%%s"));
+      lines.emplace_back(TString::Format("(c) 1995-2023, The ROOT Team; conception: R. Brun, F. Rademakers%%s"));
       lines.emplace_back(TString::Format("Built for %s on %s%%s", gSystem->GetBuildArch(), gROOT->GetGitDate()));
       if (!strcmp(gROOT->GetGitBranch(), gROOT->GetGitCommit())) {
          static const char *months[] = {"January","February","March","April","May",

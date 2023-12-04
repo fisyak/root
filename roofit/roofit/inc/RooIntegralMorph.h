@@ -25,9 +25,7 @@ class TH1D;
 
 class RooIntegralMorph : public RooAbsCachedPdf {
 public:
-   RooIntegralMorph() :  _cache(nullptr)  {
-    // coverity[UNINIT_CTOR]
-  } ;
+  RooIntegralMorph() = default;
   RooIntegralMorph(const char *name, const char *title,
          RooAbsReal& _pdf1,
          RooAbsReal& _pdf2,
@@ -35,7 +33,6 @@ public:
          RooAbsReal& _alpha, bool cacheAlpha=false);
   RooIntegralMorph(const RooIntegralMorph& other, const char* name=nullptr) ;
   TObject* clone(const char* newname) const override { return new RooIntegralMorph(*this,newname); }
-  inline ~RooIntegralMorph() override { }
 
   bool selfNormalized() const override {
     // P.d.f is self normalized
@@ -73,10 +70,10 @@ public:
     RooAbsPdf* _pdf2 ; // PDF2
     RooRealVar* _x   ; // X
     RooAbsReal* _alpha ; // ALPHA
-    RooAbsReal* _c1 ; // CDF of PDF 1
-    RooAbsReal* _c2 ; // CDF of PDF 2
-    RooAbsFunc* _cb1 ; // Binding of CDF1
-    RooAbsFunc* _cb2 ; // Binding of CDF2
+    std::unique_ptr<RooAbsReal> _c1 ; // CDF of PDF 1
+    std::unique_ptr<RooAbsReal> _c2 ; // CDF of PDF 2
+    std::unique_ptr<RooAbsFunc> _cb1 ; // Binding of CDF1
+    std::unique_ptr<RooAbsFunc> _cb2 ; // Binding of CDF2
     std::unique_ptr<RooBrentRootFinder> _rf1; // ROOT finder on CDF1
     std::unique_ptr<RooBrentRootFinder> _rf2; // ROOT finder of CDF2 ;
 
@@ -94,8 +91,8 @@ protected:
   friend class MorphCacheElem ;
   PdfCacheElem* createCache(const RooArgSet* nset) const override ;
   const char* inputBaseName() const override ;
-  RooArgSet* actualObservables(const RooArgSet& nset) const override ;
-  RooArgSet* actualParameters(const RooArgSet& nset) const override ;
+  RooFit::OwningPtr<RooArgSet> actualObservables(const RooArgSet& nset) const override ;
+  RooFit::OwningPtr<RooArgSet> actualParameters(const RooArgSet& nset) const override ;
   void fillCacheObject(PdfCacheElem& cache) const override ;
 
   RooRealProxy pdf1 ; // First input shape
@@ -103,7 +100,7 @@ protected:
   RooRealProxy x ;    // Observable
   RooRealProxy alpha ; // Interpolation parameter
   bool _cacheAlpha ; // If true, both (x,alpha) are cached
-  mutable MorphCacheElem* _cache ; // Current morph cache element in use
+  mutable MorphCacheElem* _cache = nullptr; // Current morph cache element in use
 
 
   double evaluate() const override ;

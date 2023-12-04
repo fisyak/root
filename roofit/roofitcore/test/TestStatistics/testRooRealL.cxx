@@ -28,17 +28,14 @@
 #include <RooConstraintSum.h>
 #include <RooDataHist.h>
 #include <RooRealSumPdf.h>
+#ifdef ROOFIT_LEGACY_EVAL_BACKEND
 #include <RooNLLVar.h>
+#endif
 #include <RooRealVar.h>
 
 #include <algorithm> // count_if
 
-#include <gtest/gtest.h>
-
-// Backward compatibility for gtest version < 1.10.0
-#ifndef INSTANTIATE_TEST_SUITE_P
-#define INSTANTIATE_TEST_SUITE_P INSTANTIATE_TEST_CASE_P
-#endif
+#include "../gtest_wrapper.h"
 
 class RooRealL : public ::testing::TestWithParam<std::tuple<std::size_t>> {};
 
@@ -64,6 +61,7 @@ TEST_P(RooRealL, getVal)
    EXPECT_DOUBLE_EQ(nominal_result, mp_result);
 }
 
+#ifdef ROOFIT_LEGACY_EVAL_BACKEND
 void check_NLL_type(RooAbsReal *nll, bool verbose = false)
 {
    if (dynamic_cast<RooAddition *>(nll) != nullptr) {
@@ -102,7 +100,8 @@ void count_NLL_components(RooAbsReal *nll, bool verbose = false)
          std::cout << "the NLL object is a RooAddition*..." << std::endl;
       }
       std::size_t nll_component_count = 0;
-      for (const auto &component : *nll->getComponents()) {
+      std::unique_ptr<RooArgSet> components{nll->getComponents()};
+      for (const auto &component : *components) {
          if (component->IsA() == RooNLLVar::Class()) {
             ++nll_component_count;
          }
@@ -197,6 +196,7 @@ TEST_P(RooRealL, getValRooConstraintSumAddition)
    count_NLL_components(nll.get());
 }
 #endif // !defined(_MSC_VER) || defined(R__ENABLE_BROKEN_WIN_TESTS)
+#endif // ROOFIT_LEGACY_EVAL_BACKEND
 
 TEST_P(RooRealL, setVal)
 {

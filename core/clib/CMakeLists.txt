@@ -15,7 +15,6 @@ set_property(TARGET Core APPEND PROPERTY DICT_HEADERS
 )
 
 ROOT_OBJECT_LIBRARY(Clib
-  src/Demangle.c
   src/attach.c
   src/detach.c
   src/getpagesize.c
@@ -25,11 +24,7 @@ ROOT_OBJECT_LIBRARY(Clib
   src/mmalloc.c
   src/mmapsup.c
   src/mmcheck.c
-  src/mmemalign.c
-  src/mmstats.c
-  src/mmtrace.c
   src/mrealloc.c
-  src/mvalloc.c
   src/sbrksup.c
   src/snprintf.c
   src/strlcat.c

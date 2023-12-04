@@ -31,7 +31,11 @@ class PiecewiseInterpolation : public RooAbsReal {
 public:
 
   PiecewiseInterpolation() ;
-  PiecewiseInterpolation(const char *name, const char *title, const RooAbsReal& nominal, const RooArgList& lowSet, const RooArgList& highSet, const RooArgList& paramSet, bool takeOwnerShip=false) ;
+  PiecewiseInterpolation(const char *name, const char *title, const RooAbsReal& nominal, const RooArgList& lowSet, const RooArgList& highSet, const RooArgList& paramSet
+#ifndef ROOFIT_MEMORY_SAFE_INTERFACES
+              , bool takeOwnership=false
+#endif
+  );
   ~PiecewiseInterpolation() override ;
 
   PiecewiseInterpolation(const PiecewiseInterpolation& other, const char *name = nullptr);
@@ -68,12 +72,13 @@ public:
   std::list<double>* plotSamplingHint(RooAbsRealLValue& obs, double xlo, double xhi) const override ;
   bool isBinnedDistribution(const RooArgSet& obs) const override ;
 
+  void translate(RooFit::Detail::CodeSquashContext &ctx) const override;
+
 protected:
 
   class CacheElem : public RooAbsCacheElement {
   public:
     CacheElem()  {} ;
-    ~CacheElem() override {} ;
     RooArgList containedArgs(Action) override {
       RooArgList ret(_funcIntList) ;
       ret.add(_lowIntList);
@@ -98,7 +103,7 @@ protected:
   std::vector<int> _interpCode;
 
   double evaluate() const override;
-  void computeBatch(cudaStream_t*, double* output, size_t size, RooFit::Detail::DataMap const&) const override;
+  void computeBatch(double* output, size_t size, RooFit::Detail::DataMap const&) const override;
 
   ClassDefOverride(PiecewiseInterpolation,4) // Sum of RooAbsReal objects
 };

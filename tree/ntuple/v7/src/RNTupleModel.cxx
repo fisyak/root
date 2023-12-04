@@ -29,9 +29,9 @@ ROOT::Experimental::RNTupleModel::RProjectedFields::EnsureValidMapping(const Det
                                                                        const FieldMap_t &fieldMap)
 {
    auto source = fieldMap.at(target);
-   const bool hasCompatibleStructure = (source->GetStructure() == target->GetStructure()) ||
-                                       ((source->GetStructure() == ENTupleStructure::kCollection) &&
-                                        (target->GetType() == "ROOT::Experimental::RNTupleCardinality"));
+   const bool hasCompatibleStructure =
+      (source->GetStructure() == target->GetStructure()) ||
+      ((source->GetStructure() == ENTupleStructure::kCollection) && dynamic_cast<const RCardinalityField *>(target));
    if (!hasCompatibleStructure)
       return R__FAIL("field mapping structural mismatch: " + source->GetName() + " --> " + target->GetName());
    if (source->GetStructure() == ENTupleStructure::kLeaf) {
@@ -126,6 +126,45 @@ ROOT::Experimental::RNTupleModel::RProjectedFields::Clone(const RNTupleModel *ne
       }
    }
    return clone;
+}
+
+ROOT::Experimental::RNTupleModel::RUpdater::RUpdater(RNTupleWriter &writer)
+   : fWriter(writer), fOpenChangeset(*fWriter.fModel)
+{
+}
+
+void ROOT::Experimental::RNTupleModel::RUpdater::BeginUpdate()
+{
+   fOpenChangeset.fModel.Unfreeze();
+}
+
+void ROOT::Experimental::RNTupleModel::RUpdater::CommitUpdate()
+{
+   fOpenChangeset.fModel.Freeze();
+   if (fOpenChangeset.IsEmpty())
+      return;
+   Detail::RNTupleModelChangeset toCommit{fOpenChangeset.fModel};
+   std::swap(fOpenChangeset.fAddedFields, toCommit.fAddedFields);
+   std::swap(fOpenChangeset.fAddedProjectedFields, toCommit.fAddedProjectedFields);
+   fWriter.fSink->UpdateSchema(toCommit, fWriter.fNEntries);
+}
+
+void ROOT::Experimental::RNTupleModel::RUpdater::AddField(std::unique_ptr<Detail::RFieldBase> field)
+{
+   auto fieldp = field.get();
+   fOpenChangeset.fModel.AddField(std::move(field));
+   fOpenChangeset.fAddedFields.emplace_back(fieldp);
+}
+
+ROOT::Experimental::RResult<void>
+ROOT::Experimental::RNTupleModel::RUpdater::AddProjectedField(std::unique_ptr<Detail::RFieldBase> field,
+                                                              std::function<std::string(const std::string &)> mapping)
+{
+   auto fieldp = field.get();
+   auto result = fOpenChangeset.fModel.AddProjectedField(std::move(field), mapping);
+   if (result)
+      fOpenChangeset.fAddedProjectedFields.emplace_back(fieldp);
+   return R__FORWARD_RESULT(result);
 }
 
 void ROOT::Experimental::RNTupleModel::EnsureValidFieldName(std::string_view fieldName)
@@ -242,7 +281,7 @@ std::shared_ptr<ROOT::Experimental::RCollectionNTupleWriter> ROOT::Experimental:
    auto collectionNTuple = std::make_shared<RCollectionNTupleWriter>(std::move(collectionModel->fDefaultEntry));
    auto field = std::make_unique<RCollectionField>(fieldName, collectionNTuple, std::move(collectionModel));
    if (fDefaultEntry)
-      fDefaultEntry->CaptureValue(field->CaptureValue(collectionNTuple->GetOffsetPtr()));
+      fDefaultEntry->AddValue(field->BindValue(collectionNTuple->GetOffsetPtr()));
    fFieldZero->Attach(std::move(field));
    return collectionNTuple;
 }
@@ -296,9 +335,16 @@ std::unique_ptr<ROOT::Experimental::REntry> ROOT::Experimental::RNTupleModel::Cr
 
    auto entry = std::unique_ptr<REntry>(new REntry(fModelId));
    for (const auto &f : fFieldZero->GetSubFields()) {
-      entry->CaptureValue(f->CaptureValue(nullptr));
+      entry->AddValue(f->BindValue(nullptr));
    }
    return entry;
+}
+
+void ROOT::Experimental::RNTupleModel::Unfreeze()
+{
+   if (!IsFrozen())
+      throw RException(R__FAIL("invalid attempt to unfreeze an unfrozen model"));
+   fModelId = 0;
 }
 
 void ROOT::Experimental::RNTupleModel::Freeze()

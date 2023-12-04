@@ -4,7 +4,9 @@
 ## Multidimensional models: normalization and  integration of pdfs, construction of
 ## cumulative distribution functions from pdfs in two dimensions
 ##
+## \macro_image
 ## \macro_code
+## \macro_output
 ##
 ## \date February 2018
 ## \authors Clemens Lange, Wouter Verkerke (C++ version)
@@ -54,7 +56,7 @@ print("gx_Norm[x] = ", gxy.getVal(nset_x))
 nset_y = {y}
 print("gx_Norm[y] = ", gxy.getVal(nset_y))
 
-# Integarte normalizes pdf over subrange
+# Integrate normalized pdf over subrange
 # ----------------------------------------------------------------------------
 
 # Define a range named "signal" in x from -5,5

@@ -107,7 +107,7 @@ private:
 
    RCanvas &fCanvas; ///<!  Canvas we are painting, *this will be owned by canvas
 
-   std::shared_ptr<RWebWindow> fWindow; ///!< configured display
+   std::shared_ptr<ROOT::RWebWindow> fWindow; ///!< configured display
 
    std::list<WebConn> fWebConn;                  ///<! connections list
    std::list<std::shared_ptr<WebCommand>> fCmds; ///<! list of submitted commands
@@ -167,7 +167,7 @@ public:
 
    void Run(double tm = 0.) final;
 
-   bool AddPanel(std::shared_ptr<RWebWindow>) final;
+   bool AddPanel(std::shared_ptr<ROOT::RWebWindow>) final;
 
    void SetClearOnClose(const std::shared_ptr<void> &) final;
 
@@ -457,13 +457,19 @@ void RCanvasPainter::DoWhenReady(const std::string &name, const std::string &arg
 
 bool RCanvasPainter::ProduceBatchOutput(const std::string &fname, int width, int height)
 {
+   auto len = fname.length();
+   bool is_json = (len > 4) && ((fname.compare(len-4,4,".json") == 0) || (fname.compare(len-4,4,".JSON") == 0));
+
+   // do not try to produce image if current settings not allowing this
+   if (!is_json && !RWebDisplayHandle::CanProduceImages())
+      return false;
+
    RDrawable::RDisplayContext ctxt(&fCanvas, &fCanvas, 0);
    ctxt.SetConnection(1, true);
 
    auto snapshot = CreateSnapshot(ctxt);
 
-   auto len = fname.length();
-   if ((len > 4) && ((fname.compare(len-4,4,".json") == 0) || (fname.compare(len-4,4,".JSON") == 0))) {
+   if (is_json) {
       std::ofstream f(fname);
       if (!f) {
          R__LOG_ERROR(CanvasPainerLog()) << "Fail to open file " << fname << " to store canvas snapshot";
@@ -519,6 +525,9 @@ void RCanvasPainter::ProcessData(unsigned connid, const std::string &arg)
       // use window manager to correctly terminate http server and ROOT session
       fWindow->TerminateROOT();
       return;
+   } else if (arg == "START_BROWSER") {
+      gROOT->ProcessLine("auto br = std::make_shared<ROOT::RBrowser>();br->ClearOnClose(br);");
+
    } else if (arg == "RELOAD") {
       conn->fSend = 0; // reset send version, causes new data sending
    } else if (arg == "INTERRUPT") {
@@ -546,6 +555,10 @@ void RCanvasPainter::ProcessData(unsigned connid, const std::string &arg)
       TFile *f = TFile::Open(cdata.c_str(), "RECREATE");
       f->WriteObject(&fCanvas, "Canvas");
       delete f;
+   } else if (ROOT::RWebWindow::IsFileDialogMessage(arg)) {
+
+      ROOT::RWebWindow::EmbedFileDialog(fWindow, connid, arg);
+
    } else if (check_header("REQ:")) {
       auto req = TBufferJSON::FromJSON<RDrawableRequest>(cdata);
       if (req) {
@@ -605,7 +618,7 @@ void RCanvasPainter::CreateWindow()
 {
    if (fWindow) return;
 
-   fWindow = RWebWindow::Create();
+   fWindow = ROOT::RWebWindow::Create();
    fWindow->SetConnLimit(0); // allow any number of connections
    fWindow->SetDefaultPage("file:rootui5sys/canv/canvas.html");
    fWindow->SetCallBacks(
@@ -631,7 +644,7 @@ void RCanvasPainter::CreateWindow()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create new display for the canvas
-/// See RWebWindowsManager::Show() docu for more info
+/// See ROOT::RWebWindowsManager::Show() docu for more info
 
 void RCanvasPainter::NewDisplay(const std::string &where)
 {
@@ -676,7 +689,7 @@ std::string RCanvasPainter::GetWindowAddr() const
 ////////////////////////////////////////////////////////////////////////////////
 /// Add window as panel inside canvas window
 
-bool RCanvasPainter::AddPanel(std::shared_ptr<RWebWindow> win)
+bool RCanvasPainter::AddPanel(std::shared_ptr<ROOT::RWebWindow> win)
 {
    if (gROOT->IsWebDisplayBatch())
       return false;
