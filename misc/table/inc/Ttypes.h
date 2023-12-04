@@ -142,10 +142,10 @@ namespace Internal {
          fgStructName = T::TableDictionary();
          return cl;
       }
-      virtual void Unregister(const char* classname) const
+      virtual void Unregister(const char* classname, TClass *cl) const
       {
-         TDefaultInitBehavior::Unregister(classname);
-         TDefaultInitBehavior::Unregister(fgStructName);
+	TDefaultInitBehavior::Unregister(classname, cl);
+	TDefaultInitBehavior::Unregister(fgStructName, cl);
       }
    };
    template <class T> const char * TTableInitBehavior<T >::fgStructName = 0;
