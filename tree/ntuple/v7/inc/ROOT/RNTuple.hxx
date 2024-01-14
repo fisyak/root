@@ -26,7 +26,8 @@
 #include <ROOT/RNTupleView.hxx>
 #include <ROOT/RPageStorage.hxx>
 #include <ROOT/RSpan.hxx>
-#include <ROOT/RStringView.hxx>
+#include <memory>
+#include <string_view>
 
 #include <TClassRef.h>
 
@@ -379,7 +380,7 @@ private:
    /// Limit for committing cluster no matter the other tunables
    std::size_t fMaxUnzippedClusterSize;
    /// Estimator of uncompressed cluster size, taking into account the estimated compression ratio
-   NTupleSize_t fUnzippedClusterSizeEst;
+   std::size_t fUnzippedClusterSizeEst;
 
    // Helper function that is called from CommitCluster() when necessary
    void CommitClusterGroup();
@@ -426,6 +427,13 @@ public:
 
    std::unique_ptr<REntry> CreateEntry() { return fModel->CreateEntry(); }
 
+   /// Return the entry number that was last committed in a cluster.
+   NTupleSize_t GetLastCommitted() const { return fLastCommitted; }
+   /// Return the entry number that was last committed in a cluster group.
+   NTupleSize_t GetLastCommittedClusterGroup() const { return fLastCommittedClusterGroup; }
+   /// Return the number of entries filled so far.
+   NTupleSize_t GetNEntries() const { return fNEntries; }
+
    void EnableMetrics() { fMetrics.Enable(); }
    const Detail::RNTupleMetrics &GetMetrics() const { return fMetrics; }
 
@@ -452,7 +460,7 @@ public:
    /// ~~~
    std::unique_ptr<RNTupleModel::RUpdater> CreateModelUpdater()
    {
-      return std::unique_ptr<RNTupleModel::RUpdater>(new RNTupleModel::RUpdater(*this));
+      return std::make_unique<RNTupleModel::RUpdater>(*this);
    }
 };
 
@@ -486,56 +494,6 @@ public:
    }
 
    ClusterSize_t *GetOffsetPtr() { return &fOffset; }
-};
-
-// clang-format off
-/**
-\class ROOT::Experimental::RNTuple
-\ingroup NTuple
-\brief Representation of an RNTuple data set in a ROOT file
-
-This class provides an API entry point to an RNTuple stored in a ROOT file. Its main purpose is to
-construct a page source for an RNTuple, which in turn can be used to read an RNTuple with an RDF or
-an RNTupleReader.
-
-For instance, for an RNTuple called "Events" in a ROOT file, usage can be
-~~~ {.cpp}
-auto f = TFile::Open("data.root");
-auto ntpl = f->Get<ROOT::Experimental::RNTuple>("Events");
-
-auto reader = RNTupleReader::Open(ntpl);
-or
-auto pageSource = ntpl->MakePageSource();
-~~~
-*/
-// clang-format on
-class RNTuple final : protected ROOT::Experimental::Internal::RFileNTupleAnchor {
-   friend class ROOT::Experimental::Internal::RNTupleFileWriter;
-   friend struct ROOT::Experimental::Internal::RNTupleTester;
-
-private:
-   // Only add transient members. The on-disk layout must be identical to RFileNTupleAnchor
-
-   TFile *fFile = nullptr; ///<! The file from which the ntuple was streamed, registered in the custom streamer
-
-   // Conversion between low-level anchor and RNTuple UI class
-   explicit RNTuple(const Internal::RFileNTupleAnchor &a) : Internal::RFileNTupleAnchor(a) {}
-   Internal::RFileNTupleAnchor GetAnchor() const { return *this; }
-
-public:
-   RNTuple() = default;
-   ~RNTuple() = default;
-
-   /// Create a page source from the RNTuple object. Requires the RNTuple object to be streamed from a file.
-   /// If fFile is not set, an exception is thrown.
-   std::unique_ptr<Detail::RPageSource> MakePageSource(const RNTupleReadOptions &options = RNTupleReadOptions());
-
-   /// RNTuple implements the hadd MergeFile interface
-   /// Merge this NTuple with the input list entries
-   Long64_t Merge(TCollection *input, TFileMergeInfo *mergeInfo);
-
-   // The version must match the RFileNTupleAnchor version in the LinkDef.h
-   ClassDefNV(RNTuple, 3);
 };
 
 } // namespace Experimental

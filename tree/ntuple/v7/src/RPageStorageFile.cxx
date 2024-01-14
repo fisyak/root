@@ -45,9 +45,8 @@
 #include <queue>
 
 ROOT::Experimental::Detail::RPageSinkFile::RPageSinkFile(std::string_view ntupleName,
-   const RNTupleWriteOptions &options)
-   : RPageSink(ntupleName, options)
-   , fPageAllocator(std::make_unique<RPageAllocatorHeap>())
+                                                         const RNTupleWriteOptions &options)
+   : RPagePersistentSink(ntupleName, options), fPageAllocator(std::make_unique<RPageAllocatorHeap>())
 {
    R__LOG_WARNING(NTupleLog()) << "The RNTuple file format will change. " <<
       "Do not store real data with this version of RNTuple!";
@@ -210,26 +209,34 @@ ROOT::Experimental::Detail::RPageSourceFile::RPageSourceFile(std::string_view nt
    fReader = Internal::RMiniFileReader(fFile.get());
 }
 
-void ROOT::Experimental::Detail::RPageSourceFile::InitDescriptor(const Internal::RFileNTupleAnchor &anchor)
+void ROOT::Experimental::Detail::RPageSourceFile::InitDescriptor(const RNTuple &anchor)
 {
+   // TOOD(jblomer): can the epoch check be factored out across anchors?
+   if (anchor.fVersionEpoch != RNTuple::kVersionEpoch) {
+      throw RException(R__FAIL("unsupported RNTuple epoch version: " + std::to_string(anchor.fVersionEpoch)));
+   }
+   if (anchor.fVersionEpoch == 0) {
+      R__LOG_WARNING(NTupleLog()) << "Pre-release format version: RC " << anchor.fVersionMajor;
+   }
+
    fDescriptorBuilder.SetOnDiskHeaderSize(anchor.fNBytesHeader);
    auto buffer = std::make_unique<unsigned char[]>(anchor.fLenHeader);
    auto zipBuffer = std::make_unique<unsigned char[]>(anchor.fNBytesHeader);
    fReader.ReadBuffer(zipBuffer.get(), anchor.fNBytesHeader, anchor.fSeekHeader);
    fDecompressor->Unzip(zipBuffer.get(), anchor.fNBytesHeader, anchor.fLenHeader, buffer.get());
-   Internal::RNTupleSerializer::DeserializeHeaderV1(buffer.get(), anchor.fLenHeader, fDescriptorBuilder);
+   Internal::RNTupleSerializer::DeserializeHeader(buffer.get(), anchor.fLenHeader, fDescriptorBuilder);
 
    fDescriptorBuilder.AddToOnDiskFooterSize(anchor.fNBytesFooter);
    buffer = std::make_unique<unsigned char[]>(anchor.fLenFooter);
    zipBuffer = std::make_unique<unsigned char[]>(anchor.fNBytesFooter);
    fReader.ReadBuffer(zipBuffer.get(), anchor.fNBytesFooter, anchor.fSeekFooter);
    fDecompressor->Unzip(zipBuffer.get(), anchor.fNBytesFooter, anchor.fLenFooter, buffer.get());
-   Internal::RNTupleSerializer::DeserializeFooterV1(buffer.get(), anchor.fLenFooter, fDescriptorBuilder);
+   Internal::RNTupleSerializer::DeserializeFooter(buffer.get(), anchor.fLenFooter, fDescriptorBuilder);
 }
 
 std::unique_ptr<ROOT::Experimental::Detail::RPageSourceFile>
-ROOT::Experimental::Detail::RPageSourceFile::CreateFromAnchor(const Internal::RFileNTupleAnchor &anchor,
-                                                              std::string_view path, const RNTupleReadOptions &options)
+ROOT::Experimental::Detail::RPageSourceFile::CreateFromAnchor(const RNTuple &anchor, std::string_view path,
+                                                              const RNTupleReadOptions &options)
 {
    auto pageSource = std::make_unique<RPageSourceFile>("", path, options);
    pageSource->InitDescriptor(anchor);
@@ -249,9 +256,9 @@ ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::Detail::RPageSourceFil
       InitDescriptor(anchor);
    }
 
-   auto ntplDesc = fDescriptorBuilder.MoveDescriptor();
+   auto desc = fDescriptorBuilder.MoveDescriptor();
 
-   for (const auto &cgDesc : ntplDesc.GetClusterGroupIterable()) {
+   for (const auto &cgDesc : desc.GetClusterGroupIterable()) {
       auto buffer = std::make_unique<unsigned char[]>(cgDesc.GetPageListLength());
       auto zipBuffer = std::make_unique<unsigned char[]>(cgDesc.GetPageListLocator().fBytesOnStorage);
       fReader.ReadBuffer(zipBuffer.get(), cgDesc.GetPageListLocator().fBytesOnStorage,
@@ -259,14 +266,10 @@ ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::Detail::RPageSourceFil
       fDecompressor->Unzip(zipBuffer.get(), cgDesc.GetPageListLocator().fBytesOnStorage, cgDesc.GetPageListLength(),
                            buffer.get());
 
-      auto clusters = RClusterGroupDescriptorBuilder::GetClusterSummaries(ntplDesc, cgDesc.GetId());
-      Internal::RNTupleSerializer::DeserializePageListV1(buffer.get(), cgDesc.GetPageListLength(), clusters);
-      for (std::size_t i = 0; i < clusters.size(); ++i) {
-         ntplDesc.AddClusterDetails(clusters[i].AddDeferredColumnRanges(ntplDesc).MoveDescriptor().Unwrap());
-      }
+      Internal::RNTupleSerializer::DeserializePageList(buffer.get(), cgDesc.GetPageListLength(), cgDesc.GetId(), desc);
    }
 
-   return ntplDesc;
+   return desc;
 }
 
 void ROOT::Experimental::Detail::RPageSourceFile::LoadSealedPage(DescriptorId_t physicalColumnId,
@@ -372,7 +375,9 @@ ROOT::Experimental::Detail::RPage ROOT::Experimental::Detail::RPageSourceFile::P
    {
       auto descriptorGuard = GetSharedDescriptorGuard();
       clusterInfo.fClusterId = descriptorGuard->FindClusterId(columnId, globalIndex);
-      R__ASSERT(clusterInfo.fClusterId != kInvalidDescriptorId);
+
+      if (clusterInfo.fClusterId == kInvalidDescriptorId)
+         throw RException(R__FAIL("entry with index " + std::to_string(globalIndex) + " out of bounds"));
 
       const auto &clusterDescriptor = descriptorGuard->GetClusterDescriptor(clusterInfo.fClusterId);
       clusterInfo.fColumnOffset = clusterDescriptor.GetColumnRange(columnId).fFirstElementIndex;
@@ -395,7 +400,9 @@ ROOT::Experimental::Detail::RPage ROOT::Experimental::Detail::RPageSourceFile::P
    if (!cachedPage.IsNull())
       return cachedPage;
 
-   R__ASSERT(clusterId != kInvalidDescriptorId);
+   if (clusterId == kInvalidDescriptorId)
+      throw RException(R__FAIL("entry out of bounds"));
+
    RClusterInfo clusterInfo;
    {
       auto descriptorGuard = GetSharedDescriptorGuard();
@@ -545,12 +552,42 @@ ROOT::Experimental::Detail::RPageSourceFile::LoadClusters(std::span<RCluster::RK
    }
 
    auto nReqs = readRequests.size();
-   {
-      RNTupleAtomicTimer timer(fCounters->fTimeWallRead, fCounters->fTimeCpuRead);
-      fFile->ReadV(&readRequests[0], nReqs);
+   auto readvLimits = fFile->GetReadVLimits();
+
+   int iReq = 0;
+   while (nReqs > 0) {
+      auto nBatch = std::min(nReqs, readvLimits.fMaxReqs);
+
+      if (readvLimits.HasSizeLimit()) {
+         std::uint64_t totalSize = 0;
+         for (std::size_t i = 0; i < nBatch; ++i) {
+            if (readRequests[iReq + i].fSize > readvLimits.fMaxSingleSize) {
+               nBatch = i;
+               break;
+            }
+
+            totalSize += readRequests[iReq + i].fSize;
+            if (totalSize > readvLimits.fMaxTotalSize) {
+               nBatch = i;
+               break;
+            }
+         }
+      }
+
+      if (nBatch <= 1) {
+         nBatch = 1;
+         RNTupleAtomicTimer timer(fCounters->fTimeWallRead, fCounters->fTimeCpuRead);
+         fFile->ReadAt(readRequests[iReq].fBuffer, readRequests[iReq].fSize, readRequests[iReq].fOffset);
+      } else {
+         RNTupleAtomicTimer timer(fCounters->fTimeWallRead, fCounters->fTimeCpuRead);
+         fFile->ReadV(&readRequests[iReq], nBatch);
+      }
+      fCounters->fNReadV.Inc();
+      fCounters->fNRead.Add(nBatch);
+
+      iReq += nBatch;
+      nReqs -= nBatch;
    }
-   fCounters->fNReadV.Inc();
-   fCounters->fNRead.Add(nReqs);
 
    return clusters;
 }

@@ -19,8 +19,7 @@
 \class RooFormula
 \ingroup Roofitcore
 
-RooFormula internally uses ROOT's TFormula to compute user-defined expressions
-of RooAbsArgs.
+Internally uses ROOT's TFormula to compute user-defined expressions of RooAbsArgs.
 
 The string expression can be any valid TFormula expression referring to the
 listed servers either by name or by their ordinal list position. These three are
@@ -167,10 +166,11 @@ void replaceVarNamesWithIndexStyle(std::string &formula, RooArgList const &varLi
          std::size_t nOld = varName.length();
          std::size_t nNew = replacement.size();
          auto wbIter = isWordBoundary.begin() + pos;
-         if (nNew > nOld)
+         if (nNew > nOld) {
             isWordBoundary.insert(wbIter + nOld, nNew - nOld, false);
-         else if (nNew < nOld)
+         } else if (nNew < nOld) {
             isWordBoundary.erase(wbIter + nNew, wbIter + nOld);
+         }
 
          // Do the actual replacement
          formula.replace(pos, varName.length(), replacement);
@@ -361,7 +361,7 @@ bool RooFormula::changeDependents(const RooAbsCollection& newDeps, bool mustRepl
   // We only consider the usedVariables() for replacement, because only these
   // are registered as servers.
   for (const auto arg : usedVariables()) {
-    RooAbsReal* replace = (RooAbsReal*) arg->findNewServer(newDeps,nameChange) ;
+    RooAbsReal* replace = static_cast<RooAbsReal*>(arg->findNewServer(newDeps,nameChange)) ;
     if (replace) {
       _origList.replace(*arg, *replace);
 

@@ -18,6 +18,7 @@ import datetime
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 from hashlib import sha1
 
@@ -37,7 +38,8 @@ S3URL = 'https://s3.cern.ch/swift/v1/' + S3CONTAINER  # Used for downloads
 
 try:
     CONNECTION = openstack.connect(cloud='envvars')
-except:
+except Exception as exc:
+    print("Failed to open the S3 connection:", exc, file=sys.stderr)
     CONNECTION = None
 
 WINDOWS = (os.name == 'nt')
@@ -312,7 +314,7 @@ def archive_and_upload(archive_name, prefix):
 @github_log_group("Configure")
 def cmake_configure(options, buildtype):
     result = subprocess_with_log(f"""
-        cmake -S '{WORKDIR}/src' -B '{WORKDIR}/build' {options} -DCMAKE_BUILD_TYPE={buildtype}
+        cmake -S '{WORKDIR}/src' -B '{WORKDIR}/build' -DCMAKE_BUILD_TYPE={buildtype} {options}
     """)
 
     if result != 0:

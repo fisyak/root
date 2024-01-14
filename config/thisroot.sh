@@ -165,6 +165,11 @@ getTrueShellExeName() { # mklement0 https://stackoverflow.com/a/23011530/7471760
    # Determine the shell executable filename.
    if [ -r "/proc/$$/cmdline" ]; then
       trueExe=$(cut -d '' -f1 /proc/$$/cmdline) || return 1
+      # Qemu emulation has cmdline start with the emulator
+      if [ "${trueExe##*qemu*}" != "${trueExe}" ]; then
+         # but qemu sets comm to the emulated command
+         trueExe=$(cat /proc/$$/comm) || return 1
+      fi
    else
       trueExe=$(ps -p $$ -o comm=) || return 1
    fi
@@ -174,7 +179,7 @@ getTrueShellExeName() { # mklement0 https://stackoverflow.com/a/23011530/7471760
    fi
    # Determine full executable path.
    if [ "${trueExe#/}" = "$trueExe" ]; then
-      trueExe=$(if [ -n "${ZSH_VERSION-}" ]; then which -p "$trueExe"; else which "$trueExe"; fi)
+      trueExe=$(if [ -n "${ZSH_VERSION-}" ]; then builtin which -p "$trueExe"; else which "$trueExe"; fi)
    fi
    # If the executable is a symlink, resolve it to its *ultimate*
    # target.

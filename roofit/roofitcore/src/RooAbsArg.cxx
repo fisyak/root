@@ -111,10 +111,7 @@ std::stack<RooAbsArg*> RooAbsArg::_ioReadStack ;
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor
 
-RooAbsArg::RooAbsArg()
-{
-  _namePtr = RooNameReg::instance().constPtr(GetName()) ;
-}
+RooAbsArg::RooAbsArg() : _namePtr(RooNameReg::instance().constPtr(GetName())) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create an object with the specified name and descriptive title.
@@ -147,7 +144,8 @@ RooAbsArg::RooAbsArg(const RooAbsArg &other, const char *name)
 {
 
   // Copy server list by hand
-  bool valueProp, shapeProp ;
+  bool valueProp;
+  bool shapeProp;
   for (const auto server : other._serverList) {
     valueProp = server->_clientListValue.containsByNamePtr(&other);
     shapeProp = server->_clientListShape.containsByNamePtr(&other);
@@ -1821,10 +1819,11 @@ void RooAbsArg::optimizeCacheMode(const RooArgSet& observables, RooArgSet& optim
   // this node has not been processed (FindObject returns a null pointer)
   auto obj = processedNodes.findArg(this);
   assert(obj != this); // obj == this cannot happen
-  if (obj)
+  if (obj) {
      // here for nodes with duplicate names
-     cxcoutI(Optimization) << "RooAbsArg::optimizeCacheMode(" << GetName()
-                           << " node " << this << " exists already as " << obj << " but with the SAME name !" << endl;
+     cxcoutI(Optimization) << "RooAbsArg::optimizeCacheMode(" << GetName() << " node " << this << " exists already as "
+                           << obj << " but with the SAME name !" << endl;
+  }
 
   processedNodes.Add(this);
 
@@ -2312,9 +2311,9 @@ RooAbsArg* RooAbsArg::cloneTree(const char* newname) const
 void RooAbsArg::attachToStore(RooAbsDataStore& store)
 {
   if (dynamic_cast<RooTreeDataStore*>(&store)) {
-    attachToTree(((RooTreeDataStore&)store).tree()) ;
+    attachToTree((static_cast<RooTreeDataStore&>(store)).tree()) ;
   } else if (dynamic_cast<RooVectorDataStore*>(&store)) {
-    attachToVStore((RooVectorDataStore&)store) ;
+    attachToVStore(static_cast<RooVectorDataStore&>(store)) ;
   }
 }
 
@@ -2471,14 +2470,17 @@ RooAbsArg::makeLegacyIterator(const RooAbsArg::RefCountList_t& list) const {
 
 void RooRefArray::Streamer(TBuffer &R__b)
 {
-   UInt_t R__s, R__c;
+   UInt_t R__s;
+   UInt_t R__c;
    if (R__b.IsReading()) {
 
-      Version_t R__v = R__b.ReadVersion(&R__s, &R__c); if (R__v) { }
+      Version_t R__v = R__b.ReadVersion(&R__s, &R__c);
+      if (R__v) {
+      }
 
       // Make temporary refArray and read that from the streamer
       auto refArray = std::make_unique<TRefArray>();
-      refArray->Streamer(R__b) ;
+      refArray->Streamer(R__b);
       R__b.CheckByteCount(R__s, R__c, refArray->IsA());
 
       // Schedule deferred processing of TRefArray into proxy list
@@ -2486,17 +2488,16 @@ void RooRefArray::Streamer(TBuffer &R__b)
 
    } else {
 
-     R__c = R__b.WriteVersion(RooRefArray::IsA(), true);
+      R__c = R__b.WriteVersion(RooRefArray::IsA(), true);
 
-     // Make a temporary refArray and write that to the streamer
-     TRefArray refArray;
-     for(TObject * tmpObj : *this) {
-       refArray.Add(tmpObj) ;
-     }
+      // Make a temporary refArray and write that to the streamer
+      TRefArray refArray;
+      for (TObject *tmpObj : *this) {
+         refArray.Add(tmpObj);
+      }
 
-     refArray.Streamer(R__b) ;
-     R__b.SetByteCount(R__c, true) ;
-
+      refArray.Streamer(R__b);
+      R__b.SetByteCount(R__c, true);
    }
 }
 

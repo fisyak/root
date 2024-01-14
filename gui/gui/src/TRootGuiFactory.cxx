@@ -66,13 +66,10 @@ void TRootGuiFactory::ShowWebCanvasWarning()
    show_warn = false;
 
    std::cout << "\n"
-                "   !!! ATTENTION !!! \n"
-                "\n"
                 "ROOT comes with a web-based canvas, which is now being started. \n"
                 "Revert to the legacy canvas by setting \"Canvas.Name: TRootCanvas\" in rootrc file or\n"
                 "by starting \"root --web=off\".\n"
-                "Find more info on https://root.cern/for_developers/root7/#twebcanvas\n"
-                "\n";
+                "Find more info on https://root.cern/for_developers/root7/#twebcanvas\n";
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,7 +78,7 @@ void TRootGuiFactory::ShowWebCanvasWarning()
 TCanvasImp *TRootGuiFactory::CreateCanvasImp(TCanvas *c, const char *title,
                                              UInt_t width, UInt_t height)
 {
-   TString canvName = gEnv->GetValue("Canvas.Name", "TRootCanvas");
+   TString canvName = gEnv->GetValue("Canvas.Name", "TWebCanvas");
    if (canvName == "TWebCanvas") {
       auto ph = gROOT->GetPluginManager()->FindHandler("TCanvasImp", "TWebCanvas");
 
@@ -101,7 +98,7 @@ TCanvasImp *TRootGuiFactory::CreateCanvasImp(TCanvas *c, const char *title,
 TCanvasImp *TRootGuiFactory::CreateCanvasImp(TCanvas *c, const char *title,
                                   Int_t x, Int_t y, UInt_t width, UInt_t height)
 {
-   TString canvName = gEnv->GetValue("Canvas.Name", "TRootCanvas");
+   TString canvName = gEnv->GetValue("Canvas.Name", "TWebCanvas");
    if (canvName == "TWebCanvas") {
       auto ph = gROOT->GetPluginManager()->FindHandler("TCanvasImp", "TWebCanvas");
 

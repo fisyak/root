@@ -91,8 +91,17 @@ ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::Detail::RPageSourceFri
       }
       AddVirtualField(descriptorGuard.GetRef(), i, descriptorGuard->GetFieldZero(), 0, descriptorGuard->GetName());
 
+      for (const auto &cg : descriptorGuard->GetClusterGroupIterable()) {
+         auto clusterGroupBuilder = RClusterGroupDescriptorBuilder::FromSummary(cg);
+         clusterGroupBuilder.ClusterGroupId(fNextId);
+         fBuilder.AddClusterGroup(clusterGroupBuilder.MoveDescriptor().Unwrap());
+         fIdBiMap.Insert({i, cg.GetId()}, fNextId);
+         fNextId++;
+      }
+
       for (const auto &c : descriptorGuard->GetClusterIterable()) {
-         RClusterDescriptorBuilder clusterBuilder(fNextId, c.GetFirstEntryIndex(), c.GetNEntries());
+         RClusterDescriptorBuilder clusterBuilder;
+         clusterBuilder.ClusterId(fNextId).FirstEntryIndex(c.GetFirstEntryIndex()).NEntries(c.GetNEntries());
          for (auto originColumnId : c.GetColumnIds()) {
             DescriptorId_t virtualColumnId = fIdBiMap.GetVirtualId({i, originColumnId});
 
@@ -104,7 +113,7 @@ ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::Detail::RPageSourceFri
 
             clusterBuilder.CommitColumnRange(virtualColumnId, firstElementIndex, compressionSettings, pageRange);
          }
-         fBuilder.AddClusterWithDetails(clusterBuilder.MoveDescriptor().Unwrap());
+         fBuilder.AddCluster(clusterBuilder.MoveDescriptor().Unwrap());
          fIdBiMap.Insert({i, c.GetId()}, fNextId);
          fNextId++;
       }
@@ -119,6 +128,7 @@ std::unique_ptr<ROOT::Experimental::Detail::RPageSource>
 ROOT::Experimental::Detail::RPageSourceFriends::Clone() const
 {
    std::vector<std::unique_ptr<RPageSource>> cloneSources;
+   cloneSources.reserve(fSources.size());
    for (const auto &f : fSources)
       cloneSources.emplace_back(f->Clone());
    return std::make_unique<RPageSourceFriends>(fNTupleName, cloneSources);

@@ -29,7 +29,7 @@
 #include "ROOT/RDF/RVariationsDescription.hxx"
 #include "ROOT/RResultPtr.hxx"
 #include "ROOT/RSnapshotOptions.hxx"
-#include "ROOT/RStringView.hxx"
+#include <string_view>
 #include "ROOT/RVec.hxx"
 #include "ROOT/TypeTraits.hxx"
 #include "RtypesCore.h" // for ULong64_t
@@ -2543,7 +2543,7 @@ public:
    /// double initValue = 1.;
    ///
    /// // Multiplies all elements of the column "x"
-   /// auto result = d.Aggregate(aggregator, merger, columnName, initValue);
+   /// auto result = d.Aggregate(aggregator, merger, "x", initValue);
    /// ~~~
    // clang-format on
    template <typename AccFun, typename MergeFun, typename R = typename TTraits::CallableTraits<AccFun>::ret_type,
@@ -2925,8 +2925,8 @@ private:
                                             const std::vector<std::string> &variationTags,
                                             std::string_view variationName, bool isSingleColumn)
    {
-      R__ASSERT(variationTags.size() > 0 && "Must have at least one variation.");
-      R__ASSERT(colNames.size() > 0 && "Must have at least one varied column.");
+      R__ASSERT(!variationTags.empty() && "Must have at least one variation.");
+      R__ASSERT(!colNames.empty() && "Must have at least one varied column.");
       R__ASSERT(!variationName.empty() && "Must provide a variation name.");
 
       for (auto &colName : colNames) {

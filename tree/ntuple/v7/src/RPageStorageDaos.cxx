@@ -129,33 +129,45 @@ std::uint32_t ROOT::Experimental::Detail::RDaosNTupleAnchor::Serialize(void *buf
    using RNTupleSerializer = ROOT::Experimental::Internal::RNTupleSerializer;
    if (buffer != nullptr) {
       auto bytes = reinterpret_cast<unsigned char *>(buffer);
-      bytes += RNTupleSerializer::SerializeUInt32(fVersion, bytes);
+      bytes += RNTupleSerializer::SerializeUInt64(fVersionAnchor, bytes);
+      bytes += RNTupleSerializer::SerializeUInt16(fVersionEpoch, bytes);
+      bytes += RNTupleSerializer::SerializeUInt16(fVersionMajor, bytes);
+      bytes += RNTupleSerializer::SerializeUInt16(fVersionMinor, bytes);
+      bytes += RNTupleSerializer::SerializeUInt16(fVersionPatch, bytes);
       bytes += RNTupleSerializer::SerializeUInt32(fNBytesHeader, bytes);
       bytes += RNTupleSerializer::SerializeUInt32(fLenHeader, bytes);
       bytes += RNTupleSerializer::SerializeUInt32(fNBytesFooter, bytes);
       bytes += RNTupleSerializer::SerializeUInt32(fLenFooter, bytes);
       bytes += RNTupleSerializer::SerializeString(fObjClass, bytes);
    }
-   return RNTupleSerializer::SerializeString(fObjClass, nullptr) + 20;
+   return RNTupleSerializer::SerializeString(fObjClass, nullptr) + 32;
 }
 
 ROOT::Experimental::RResult<std::uint32_t>
 ROOT::Experimental::Detail::RDaosNTupleAnchor::Deserialize(const void *buffer, std::uint32_t bufSize)
 {
-   if (bufSize < 20)
+   if (bufSize < 32)
       return R__FAIL("DAOS anchor too short");
 
    using RNTupleSerializer = ROOT::Experimental::Internal::RNTupleSerializer;
    auto bytes = reinterpret_cast<const unsigned char *>(buffer);
-   bytes += RNTupleSerializer::DeserializeUInt32(bytes, fVersion);
+   bytes += RNTupleSerializer::DeserializeUInt64(bytes, fVersionAnchor);
+   if (fVersionAnchor != RDaosNTupleAnchor().fVersionAnchor) {
+      return R__FAIL("unsupported DAOS anchor version: " + std::to_string(fVersionAnchor));
+   }
+
+   bytes += RNTupleSerializer::DeserializeUInt16(bytes, fVersionEpoch);
+   bytes += RNTupleSerializer::DeserializeUInt16(bytes, fVersionMajor);
+   bytes += RNTupleSerializer::DeserializeUInt16(bytes, fVersionMinor);
+   bytes += RNTupleSerializer::DeserializeUInt16(bytes, fVersionPatch);
    bytes += RNTupleSerializer::DeserializeUInt32(bytes, fNBytesHeader);
    bytes += RNTupleSerializer::DeserializeUInt32(bytes, fLenHeader);
    bytes += RNTupleSerializer::DeserializeUInt32(bytes, fNBytesFooter);
    bytes += RNTupleSerializer::DeserializeUInt32(bytes, fLenFooter);
-   auto result = RNTupleSerializer::DeserializeString(bytes, bufSize - 20, fObjClass);
+   auto result = RNTupleSerializer::DeserializeString(bytes, bufSize - 32, fObjClass);
    if (!result)
       return R__FORWARD_ERROR(result);
-   return result.Unwrap() + 20;
+   return result.Unwrap() + 32;
 }
 
 std::uint32_t ROOT::Experimental::Detail::RDaosNTupleAnchor::GetSize()
@@ -181,6 +193,12 @@ int ROOT::Experimental::Detail::RDaosContainerNTupleLocator::InitNTupleDescripto
       return err;
 
    anchor.Deserialize(buffer.get(), anchorSize).Unwrap();
+   if (anchor.fVersionEpoch != RNTuple::kVersionEpoch) {
+      throw RException(R__FAIL("unsupported RNTuple epoch version: " + std::to_string(anchor.fVersionEpoch)));
+   }
+   if (anchor.fVersionEpoch == 0) {
+      R__LOG_WARNING(NTupleLog()) << "Pre-release format version: RC " << anchor.fVersionMajor;
+   }
 
    builder.SetOnDiskHeaderSize(anchor.fNBytesHeader);
    buffer = std::make_unique<unsigned char[]>(anchor.fLenHeader);
@@ -189,7 +207,7 @@ int ROOT::Experimental::Detail::RDaosContainerNTupleLocator::InitNTupleDescripto
                                   kAttributeKeyHeader, kCidMetadata)))
       return err;
    decompressor.Unzip(zipBuffer.get(), anchor.fNBytesHeader, anchor.fLenHeader, buffer.get());
-   ROOT::Experimental::Internal::RNTupleSerializer::DeserializeHeaderV1(buffer.get(), anchor.fLenHeader, builder);
+   ROOT::Experimental::Internal::RNTupleSerializer::DeserializeHeader(buffer.get(), anchor.fLenHeader, builder);
 
    builder.AddToOnDiskFooterSize(anchor.fNBytesFooter);
    buffer = std::make_unique<unsigned char[]>(anchor.fLenFooter);
@@ -198,7 +216,7 @@ int ROOT::Experimental::Detail::RDaosContainerNTupleLocator::InitNTupleDescripto
                                   kAttributeKeyFooter, kCidMetadata)))
       return err;
    decompressor.Unzip(zipBuffer.get(), anchor.fNBytesFooter, anchor.fLenFooter, buffer.get());
-   ROOT::Experimental::Internal::RNTupleSerializer::DeserializeFooterV1(buffer.get(), anchor.fLenFooter, builder);
+   ROOT::Experimental::Internal::RNTupleSerializer::DeserializeFooter(buffer.get(), anchor.fLenFooter, builder);
 
    return 0;
 }
@@ -227,7 +245,7 @@ ROOT::Experimental::Detail::RDaosContainerNTupleLocator::LocateNTuple(RDaosConta
 
 ROOT::Experimental::Detail::RPageSinkDaos::RPageSinkDaos(std::string_view ntupleName, std::string_view uri,
                                                          const RNTupleWriteOptions &options)
-   : RPageSink(ntupleName, options), fPageAllocator(std::make_unique<RPageAllocatorHeap>()), fURI(uri)
+   : RPagePersistentSink(ntupleName, options), fPageAllocator(std::make_unique<RPageAllocatorHeap>()), fURI(uri)
 {
    R__LOG_WARNING(NTupleLog()) << "The DAOS backend is experimental and still under development. "
                                << "Do not store real data with this version of RNTuple!";
@@ -285,7 +303,7 @@ ROOT::Experimental::Detail::RPageSinkDaos::CommitSealedPageImpl(DescriptorId_t p
                                                                 const RPageStorage::RSealedPage &sealedPage)
 {
    auto offsetData = fPageId.fetch_add(1);
-   DescriptorId_t clusterId = fDescriptorBuilder.GetDescriptor().GetNClusters();
+   DescriptorId_t clusterId = fDescriptorBuilder.GetDescriptor().GetNActiveClusters();
 
    {
       RNTupleAtomicTimer timer(fCounters->fTimeWallWrite, fCounters->fTimeCpuWrite);
@@ -318,7 +336,7 @@ ROOT::Experimental::Detail::RPageSinkDaos::CommitSealedPageVImpl(std::span<RPage
    const bool useCaging = fCageSizeLimit > 0;
    const std::uint8_t locatorFlags = useCaging ? Internal::EDaosLocatorFlags::kCagedPage : 0;
 
-   DescriptorId_t clusterId = fDescriptorBuilder.GetDescriptor().GetNClusters();
+   DescriptorId_t clusterId = fDescriptorBuilder.GetDescriptor().GetNActiveClusters();
    int64_t payloadSz = 0;
    std::size_t positionOffset;
    uint32_t positionIndex;
@@ -488,11 +506,11 @@ ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::Detail::RPageSourceDao
 
    fDaosContainer->SetDefaultObjectClass(oclass);
    fNTupleIndex = locator.GetIndex();
-
-   ntplDesc = descBuilder.MoveDescriptor();
    daos_obj_id_t oidPageList{kOidLowPageList, static_cast<decltype(daos_obj_id_t::hi)>(fNTupleIndex)};
 
-   for (const auto &cgDesc : ntplDesc.GetClusterGroupIterable()) {
+   auto desc = descBuilder.MoveDescriptor();
+
+   for (const auto &cgDesc : desc.GetClusterGroupIterable()) {
       buffer = std::make_unique<unsigned char[]>(cgDesc.GetPageListLength());
       zipBuffer = std::make_unique<unsigned char[]>(cgDesc.GetPageListLocator().fBytesOnStorage);
       fDaosContainer->ReadSingleAkey(
@@ -501,14 +519,10 @@ ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::Detail::RPageSourceDao
       fDecompressor->Unzip(zipBuffer.get(), cgDesc.GetPageListLocator().fBytesOnStorage, cgDesc.GetPageListLength(),
                            buffer.get());
 
-      auto clusters = RClusterGroupDescriptorBuilder::GetClusterSummaries(ntplDesc, cgDesc.GetId());
-      Internal::RNTupleSerializer::DeserializePageListV1(buffer.get(), cgDesc.GetPageListLength(), clusters);
-      for (std::size_t i = 0; i < clusters.size(); ++i) {
-         ntplDesc.AddClusterDetails(clusters[i].MoveDescriptor().Unwrap());
-      }
+      Internal::RNTupleSerializer::DeserializePageList(buffer.get(), cgDesc.GetPageListLength(), cgDesc.GetId(), desc);
    }
 
-   return ntplDesc;
+   return desc;
 }
 
 std::string ROOT::Experimental::Detail::RPageSourceDaos::GetObjectClass() const
@@ -633,7 +647,9 @@ ROOT::Experimental::Detail::RPageSourceDaos::PopulatePage(ColumnHandle_t columnH
    {
       auto descriptorGuard = GetSharedDescriptorGuard();
       clusterInfo.fClusterId = descriptorGuard->FindClusterId(columnId, globalIndex);
-      R__ASSERT(clusterInfo.fClusterId != kInvalidDescriptorId);
+
+      if (clusterInfo.fClusterId == kInvalidDescriptorId)
+         throw RException(R__FAIL("entry with index " + std::to_string(globalIndex) + " out of bounds"));
 
       const auto &clusterDescriptor = descriptorGuard->GetClusterDescriptor(clusterInfo.fClusterId);
       clusterInfo.fColumnOffset = clusterDescriptor.GetColumnRange(columnId).fFirstElementIndex;
@@ -655,7 +671,9 @@ ROOT::Experimental::Detail::RPageSourceDaos::PopulatePage(ColumnHandle_t columnH
    if (!cachedPage.IsNull())
       return cachedPage;
 
-   R__ASSERT(clusterId != kInvalidDescriptorId);
+   if (clusterId == kInvalidDescriptorId)
+      throw RException(R__FAIL("entry out of bounds"));
+
    RClusterInfo clusterInfo;
    {
       auto descriptorGuard = GetSharedDescriptorGuard();

@@ -83,11 +83,12 @@ RooGenProdProj::RooGenProdProj(const char *name, const char *title, const RooArg
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy constructor
 
-RooGenProdProj::RooGenProdProj(const RooGenProdProj& other, const char* name) :
-  RooAbsReal(other, name),
-  _compSetN("compSetN","Set of integral components owned by numerator",this),
-  _compSetD("compSetD","Set of integral components owned by denominator",this),
-  _intList("intList","List of integrals",this)
+RooGenProdProj::RooGenProdProj(const RooGenProdProj &other, const char *name)
+   : RooAbsReal(other, name),
+     _compSetN("compSetN", "Set of integral components owned by numerator", this),
+     _compSetD("compSetD", "Set of integral components owned by denominator", this),
+     _intList("intList", "List of integrals", this),
+     _haveD(other._haveD)
 {
   // Copy constructor
   _compSetOwnedN = std::make_unique<RooArgSet>();
@@ -106,7 +107,7 @@ RooGenProdProj::RooGenProdProj(const RooGenProdProj& other, const char* name) :
   }
 
   // Fill _intList
-  _haveD = other._haveD ;
+
   _intList.add(*_compSetN.find(other._intList.at(0)->GetName())) ;
   if (other._haveD) {
     _intList.add(*_compSetD.find(other._intList.at(1)->GetName())) ;
@@ -130,7 +131,8 @@ RooGenProdProj::RooGenProdProj(const RooGenProdProj& other, const char* name) :
 RooAbsReal* RooGenProdProj::makeIntegral(const char* name, const RooArgSet& compSet, const RooArgSet& intSet,
                 RooArgSet& saveSet, const char* isetRangeName, bool doFactorize)
 {
-  RooArgSet anaIntSet, numIntSet ;
+  RooArgSet anaIntSet;
+  RooArgSet numIntSet;
 
   // First determine subset of observables in intSet that are factorizable
   for (const auto arg : intSet) {
@@ -164,6 +166,8 @@ RooAbsReal* RooGenProdProj::makeIntegral(const char* name, const RooArgSet& comp
   // normalization.
   RooArgSet emptyNormSet{};
 
+  RooArgSet keepAlive;
+
   for (const auto pdfAsArg : compSet) {
     auto pdf = static_cast<const RooAbsPdf*>(pdfAsArg);
 
@@ -181,8 +185,8 @@ RooAbsReal* RooGenProdProj::makeIntegral(const char* name, const RooArgSet& comp
         // Remove analytically integratable observables from numeric integration list
         numIntSet.remove(anaSet) ;
 
-        // Declare ownership of integral
-        saveSet.addOwned(std::move(pai));
+        // Keep integral alive until the prodSet is cloned later
+        keepAlive.addOwned(std::move(pai));
       } else {
         // Analytic integration of factorizable observable not possible, add straight pdf to product
         prodSet.add(*pdf) ;

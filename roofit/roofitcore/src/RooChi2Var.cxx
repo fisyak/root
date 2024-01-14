@@ -17,7 +17,7 @@
 //////////////////////////////////////////////////////////////////////////////
 /** \class RooChi2Var
     \ingroup Roofitcore
-    \brief RooChi2Var implements a simple \f$ \chi^2 \f$ calculation from a binned dataset and a PDF.
+    \brief Simple \f$ \chi^2 \f$ calculation from a binned dataset and a PDF.
  *
  * It calculates:
  *
@@ -180,18 +180,19 @@ RooChi2Var::RooChi2Var(const RooChi2Var& other, const char* name) :
 
 double RooChi2Var::evaluatePartition(std::size_t firstEvent, std::size_t lastEvent, std::size_t stepSize) const
 {
-  double result(0), carry(0);
+  double result(0);
+  double carry(0);
 
   // Determine normalization factor depending on type of input function
   double normFactor(1) ;
   switch (_funcMode) {
   case Function: normFactor=1 ; break ;
   case Pdf: normFactor = _dataClone->sumEntries() ; break ;
-  case ExtendedPdf: normFactor = ((RooAbsPdf*)_funcClone)->expectedEvents(_dataClone->get()) ; break ;
+  case ExtendedPdf: normFactor = (static_cast<RooAbsPdf*>(_funcClone))->expectedEvents(_dataClone->get()) ; break ;
   }
 
   // Loop over bins of dataset
-  RooDataHist* hdata = (RooDataHist*) _dataClone ;
+  RooDataHist* hdata = static_cast<RooDataHist*>(_dataClone) ;
   for (auto i=firstEvent ; i<lastEvent ; i+=stepSize) {
 
     // get the data values for this event
@@ -206,9 +207,10 @@ double RooChi2Var::evaluatePartition(std::size_t firstEvent, std::size_t lastEve
 
     double eInt ;
     if (_etype != RooAbsData::Expected) {
-      double eIntLo,eIntHi ;
-      hdata->weightError(eIntLo,eIntHi,_etype) ;
-      eInt = (eExt>0) ? eIntHi : eIntLo ;
+       double eIntLo;
+       double eIntHi;
+       hdata->weightError(eIntLo, eIntHi, _etype);
+       eInt = (eExt > 0) ? eIntHi : eIntLo;
     } else {
       eInt = sqrt(nPdf) ;
     }

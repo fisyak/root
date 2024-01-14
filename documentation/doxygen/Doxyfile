@@ -1029,6 +1029,7 @@ FILE_PATTERNS          = *.c \
                          *.qsf \
                          *.as \
                          *.js \
+                         *.json \
                          *.pyzdoc
 
 # The RECURSIVE tag can be used to specify whether or not subdirectories should
@@ -1076,7 +1077,8 @@ EXCLUDE_PATTERNS       = */G__* \
                          */src/lexertk.hpp \
                          *.xml \
                          *.dtd \
-                         */tutorials/webgui/qt5web/*
+                         */tutorials/webgui/qt5web/* \
+                         */math/mathcore/src/CDT*
 
 # The EXCLUDE_SYMBOLS tag can be used to specify one or more symbol names
 # (namespaces, classes, functions, etc.) that should be excluded from the
@@ -1593,7 +1595,7 @@ SITEMAP_URL            =
 # The default value is: NO.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-GENERATE_QHP           = NO
+GENERATE_QHP           = YES
 
 # If the QHG_LOCATION tag is specified, the QCH_FILE tag can be used to specify
 # the file name of the resulting .qch file. The path specified is relative to

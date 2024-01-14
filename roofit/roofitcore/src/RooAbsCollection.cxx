@@ -141,8 +141,7 @@ RooAbsCollection::RooAbsCollection(const RooAbsCollection& other, const char *na
   TObject(other),
   RooPrintable(other),
   _name(name),
-  _allRRV(other._allRRV),
-  _sizeThresholdForMapSearch(100)
+  _allRRV(other._allRRV)
 {
   RooTrace::create(this) ;
   if (!name) setName(other.GetName()) ;
@@ -746,7 +745,7 @@ RooAbsCollection* RooAbsCollection::selectByAttrib(const char* name, bool value)
 {
   TString selName(GetName()) ;
   selName.Append("_selection") ;
-  RooAbsCollection *sel = (RooAbsCollection*) create(selName.Data()) ;
+  RooAbsCollection *sel = static_cast<RooAbsCollection*>(create(selName.Data())) ;
 
   // Scan set contents for matching attribute
   for (auto arg : _list) {
@@ -804,7 +803,7 @@ RooAbsCollection* RooAbsCollection::selectByName(const char* nameList, bool verb
   // Create output set
   TString selName(GetName()) ;
   selName.Append("_selection") ;
-  RooAbsCollection *sel = (RooAbsCollection*) create(selName.Data()) ;
+  RooAbsCollection *sel = static_cast<RooAbsCollection*>(create(selName.Data())) ;
 
   const size_t bufSize = strlen(nameList) + 1;
   std::vector<char> buf(bufSize);
@@ -1178,7 +1177,7 @@ void RooAbsCollection::printValue(std::ostream& os) const
       first2 = false ;
     }
     if (arg->IsA()->InheritsFrom(RooStringVar::Class())) {
-       os << '\'' << ((RooStringVar *)arg)->getVal() << '\'';
+       os << '\'' << (static_cast<RooStringVar *>(arg))->getVal() << '\'';
     } else {
        os << arg->GetName();
     }
@@ -1329,8 +1328,10 @@ void RooAbsCollection::printLatex(const RooCmdArg& arg1, const RooCmdArg& arg2,
 void RooAbsCollection::printLatex(std::ostream& ofs, Int_t ncol, const char* option, Int_t sigDigit, const RooLinkedList& siblingList, const RooCmdArg* formatCmd) const
 {
   // Count number of rows to print
-  Int_t nrow = (Int_t) (getSize() / ncol + 0.99) ;
-  Int_t i,j,k ;
+  Int_t nrow = (Int_t) (size() / ncol + 0.99) ;
+  Int_t i;
+  Int_t j;
+  Int_t k;
 
   // Sibling list do not need to print their name as it is supposed to be the same
   TString sibOption ;
@@ -1352,7 +1353,7 @@ void RooAbsCollection::printLatex(std::ostream& ofs, Int_t ncol, const char* opt
 
   // Make list of lists ;
   RooLinkedList listList ;
-  listList.Add((RooAbsArg*)this) ;
+  listList.Add(const_cast<RooAbsCollection *>(this));
   for(auto * col : static_range_cast<RooAbsCollection*>(siblingList)) {
     listList.Add(col) ;
   }
@@ -1371,7 +1372,7 @@ void RooAbsCollection::printLatex(std::ostream& ofs, Int_t ncol, const char* opt
         coutW(InputArguments) << "RooAbsCollection::printLatex: can only print RooRealVar in LateX, skipping non-RooRealVar object named "
         << arg->GetName() << std::endl;
       }
-      if (prevList && TString(rrv->GetName()).CompareTo(prevList->at(list->getSize()-1)->GetName())) {
+      if (prevList && TString(rrv->GetName()).CompareTo(prevList->at(list->size()-1)->GetName())) {
         coutW(InputArguments) << "RooAbsCollection::printLatex: WARNING: naming and/or ordering of sibling list is different" << std::endl;
       }
     }
@@ -1403,7 +1404,7 @@ void RooAbsCollection::printLatex(std::ostream& ofs, Int_t ncol, const char* opt
   for (i=0 ; i<nrow ; i++) {
     for (j=0 ; j<ncol ; j++) {
       for (k=0 ; k<nlist ; k++) {
-   RooRealVar* par = (RooRealVar*) ((RooArgList*)listListRRV.At(k))->at(i+j*nrow) ;
+   RooRealVar* par = static_cast<RooRealVar*>((static_cast<RooArgList*>(listListRRV.At(k)))->at(i+j*nrow)) ;
    if (par) {
      if (option) {
        ofs << *std::unique_ptr<TString>{par->format(sigDigit,(k==0)?option:sibOption.Data())};
@@ -1477,7 +1478,7 @@ bool RooAbsCollection::allInRange(const char* rangeSpec) const
 
 void RooAbsCollection::RecursiveRemove(TObject *obj)
 {
-   if (obj && obj->InheritsFrom(RooAbsArg::Class())) remove(*(RooAbsArg*)obj,false,false);
+   if (obj && obj->InheritsFrom(RooAbsArg::Class())) remove(*static_cast<RooAbsArg*>(obj),false,false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1536,9 +1537,10 @@ void RooAbsCollection::sortTopologically() {
 /// Factory for legacy iterators.
 
 std::unique_ptr<RooAbsCollection::LegacyIterator_t> RooAbsCollection::makeLegacyIterator (bool forward) const {
-  if (!forward)
-    ccoutE(DataHandling) << "The legacy RooFit collection iterators don't support reverse iterations, any more. "
-    << "Use begin() and end()" << std::endl;
+   if (!forward) {
+      ccoutE(DataHandling) << "The legacy RooFit collection iterators don't support reverse iterations, any more. "
+                           << "Use begin() and end()" << std::endl;
+   }
   return std::make_unique<LegacyIterator_t>(_list);
 }
 
@@ -1575,4 +1577,14 @@ bool RooAbsCollection::hasSameLayout(const RooAbsCollection& other) const {
   }
 
   return true;
+}
+
+void RooAbsCollection::throwAddTypedException(TClass *klass, RooAbsArg *arg)
+{
+   std::string typeName = klass->GetName();
+   std::stringstream msg;
+   msg << "RooAbsCollection::addTyped<" << typeName << ">() ERROR: component " << arg->GetName() << " is not of type "
+       << typeName;
+   oocoutE(nullptr, InputArguments) << msg.str() << std::endl;
+   throw std::invalid_argument(msg.str());
 }

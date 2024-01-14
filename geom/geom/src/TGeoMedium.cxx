@@ -9,7 +9,6 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
 /** \class TGeoMedium
 \ingroup Materials_classes
 
@@ -28,16 +27,6 @@ in context of GEANT (3 but also 4) or FLUKA interfaces.
 #include "TGeoMedium.h"
 #include "TList.h"
 
-static const Char_t *names[44] = {
-  "ISVOL",  "IFIELD",  "FIELDM",  "TMAXFD",  "STEMAX",
-  "DEEMAX",  "EPSIL",  "STMIN",   "Reserved",  "Reserved",
-  "CUTGAM","CUTELE","CUTNEU","CUTHAD","CUTMUO",
-  "BCUTE" ,"BCUTM" ,"DCUTE" ,"DCUTM" ,"PPCUTM",
-  "PAIR"  ,"COMP"  ,"PHOT"  ,"PFIS"  ,"DRAY"  ,
-  "ANNI"  ,"BREM"  ,"HADR"  ,"MUNU"  ,"DCAY"  ,
-  "LOSS"  ,"MULS"  ,"RAYL"  ,""      ,""      ,
-  "GHCOR1","BIRK1" ,"BIRK2" ,"BIRK3" ,""      ,
-  "LABS" , "SYNC" , "STRA" };
 ClassImp(TGeoMedium);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -45,24 +34,27 @@ ClassImp(TGeoMedium);
 
 TGeoMedium::TGeoMedium()
 {
-   fId      = 0;
-   for (Int_t i=0; i<44; i++) fParams[i] = 0.;
-   fMaterial= 0;
+   fId = 0;
+   for (Int_t i = 0; i < 20; i++)
+      fParams[i] = 0.;
+   fMaterial = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor
 
-TGeoMedium::TGeoMedium(const char *name, Int_t numed, const TGeoMaterial *mat, Double_t *params)
-             :TNamed(name,"")
+TGeoMedium::TGeoMedium(const char *name, Int_t numed, const TGeoMaterial *mat, Double_t *params) : TNamed(name, "")
 {
    fName = fName.Strip();
-   fId    = numed;
-   for (Int_t i=0; i<44; i++) fParams[i] = 0.;
-   fMaterial = (TGeoMaterial*)mat;
-   for (Int_t i=0;i<10;i++) {
-      if (params) fParams[i] = params[i];
-      else        fParams[i] = 0;
+   fId = numed;
+   for (Int_t i = 0; i < 20; i++)
+      fParams[i] = 0.;
+   fMaterial = (TGeoMaterial *)mat;
+   for (Int_t i = 0; i < 10; i++) {
+      if (params)
+         fParams[i] = params[i];
+      else
+         fParams[i] = 0;
    }
    gGeoManager->GetListOfMedia()->Add(this);
 }
@@ -70,24 +62,26 @@ TGeoMedium::TGeoMedium(const char *name, Int_t numed, const TGeoMaterial *mat, D
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor
 
-TGeoMedium::TGeoMedium(const char *name, Int_t numed, Int_t imat, Int_t isvol, Int_t ifield,
-              Double_t fieldm, Double_t tmaxfd, Double_t stemax, Double_t deemax, Double_t epsil, Double_t stmin)
-             :TNamed(name,"")
+TGeoMedium::TGeoMedium(const char *name, Int_t numed, Int_t imat, Int_t isvol, Int_t ifield, Double_t fieldm,
+                       Double_t tmaxfd, Double_t stemax, Double_t deemax, Double_t epsil, Double_t stmin)
+   : TNamed(name, "")
 {
    fName = fName.Strip();
-   fId    = numed;
-   for (Int_t i=0; i<44; i++) fParams[i] = 0.;
-   TIter next (gGeoManager->GetListOfMaterials());
+   fId = numed;
+   for (Int_t i = 0; i < 20; i++)
+      fParams[i] = 0.;
+   TIter next(gGeoManager->GetListOfMaterials());
    TGeoMaterial *mat;
-   while ((mat = (TGeoMaterial*)next())) {
-      if (mat->GetUniqueID() == (UInt_t)imat) break;
+   while ((mat = (TGeoMaterial *)next())) {
+      if (mat->GetUniqueID() == (UInt_t)imat)
+         break;
    }
    if (!mat || (mat->GetUniqueID() != (UInt_t)imat)) {
-      fMaterial = 0;
-      Error("TGeoMedium", "%s, material number %d does not exist",name,imat);
+      fMaterial = nullptr;
+      Error("TGeoMedium", "%s, material number %d does not exist", name, imat);
       return;
    }
-   fMaterial = (TGeoMaterial*)mat;
+   fMaterial = (TGeoMaterial *)mat;
    fParams[0] = isvol;
    fParams[1] = ifield;
    fParams[2] = fieldm;
@@ -100,26 +94,25 @@ TGeoMedium::TGeoMedium(const char *name, Int_t numed, Int_t imat, Int_t isvol, I
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///copy constructor
+/// copy constructor
 
-TGeoMedium::TGeoMedium(const TGeoMedium& gm) :
-  TNamed(gm),
-  fId(gm.fId),
-  fMaterial(gm.fMaterial)
+TGeoMedium::TGeoMedium(const TGeoMedium &gm) : TNamed(gm), fId(gm.fId), fMaterial(gm.fMaterial)
 {
-   for(Int_t i=0; i<44; i++) fParams[i]=gm.fParams[i];
+   for (Int_t i = 0; i < 20; i++)
+      fParams[i] = gm.fParams[i];
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///assignment operator
+/// assignment operator
 
-TGeoMedium& TGeoMedium::operator=(const TGeoMedium& gm)
+TGeoMedium &TGeoMedium::operator=(const TGeoMedium &gm)
 {
-   if(this!=&gm) {
+   if (this != &gm) {
       TNamed::operator=(gm);
-      fId=gm.fId;
-      for(Int_t i=0; i<44; i++) fParams[i]=gm.fParams[i];
-      fMaterial=gm.fMaterial;
+      fId = gm.fId;
+      for (Int_t i = 0; i < 20; i++)
+         fParams[i] = gm.fParams[i];
+      fMaterial = gm.fMaterial;
    }
    return *this;
 }
@@ -127,9 +120,7 @@ TGeoMedium& TGeoMedium::operator=(const TGeoMedium& gm)
 ////////////////////////////////////////////////////////////////////////////////
 /// Destructor
 
-TGeoMedium::~TGeoMedium()
-{
-}
+TGeoMedium::~TGeoMedium() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Provide a pointer name containing uid.
@@ -146,8 +137,9 @@ const char *TGeoMedium::GetPointerName() const
 
 void TGeoMedium::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
 {
-   if (TestBit(TGeoMedium::kMedSavePrimitive)) return;
-   fMaterial->SavePrimitive(out,option);
+   if (TestBit(TGeoMedium::kMedSavePrimitive))
+      return;
+   fMaterial->SavePrimitive(out, option);
    out << "// Medium: " << GetName() << std::endl;
    out << "   numed   = " << fId << ";  // medium number" << std::endl;
    out << "   par[0]  = " << fParams[0] << "; // isvol" << std::endl;
@@ -159,21 +151,7 @@ void TGeoMedium::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
    out << "   par[6]  = " << fParams[6] << "; // epsil" << std::endl;
    out << "   par[7]  = " << fParams[7] << "; // stmin" << std::endl;
 
-   out << "   auto " << GetPointerName() << " = new TGeoMedium(\"" << GetName() << "\", numed, " << fMaterial->GetPointerName() << ", par);" << std::endl;
+   out << "   auto " << GetPointerName() << " = new TGeoMedium(\"" << GetName() << "\", numed, "
+       << fMaterial->GetPointerName() << ", par);" << std::endl;
    SetBit(TGeoMedium::kMedSavePrimitive);
-}
-//_____________________________________________________________________________
-Int_t TGeoMedium::ParamId(const Char_t *name) {
-  TString Name(name);
-  Name.ToUpper();
-  Int_t Id = -1;
-  for (Int_t i = 0; i < 44; i++) {
-    if (Name == names[i]) {Id = i; break;}
-  }
-  return Id;
-}
-//_____________________________________________________________________________
-const Char_t *TGeoMedium::ParamName(Int_t id) {
-  if (id >= 0 && id < 44) return names[id];
-  return "Unknown";
 }

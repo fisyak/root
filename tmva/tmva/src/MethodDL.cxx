@@ -4,7 +4,7 @@
  * Project: TMVA - a Root-integrated toolkit for multivariate data analysis       *
  * Package: TMVA                                                                  *
  * Class  : MethodDL                                                              *
- * Web    : http://tmva.sourceforge.net                                           *
+ *                                             *
  *                                                                                *
  * Description:                                                                   *
  *      Deep Neural Network Method                                                *
@@ -22,7 +22,7 @@
  *                                                                                *
  * Redistribution and use in source and binary forms, with or without             *
  * modification, are permitted according to the terms listed in LICENSE           *
- * (http://tmva.sourceforge.net/LICENSE)                                          *
+ * (see tmva/doc/LICENSE)                                          *
  **********************************************************************************/
 
 #include "TFormula.h"
@@ -467,11 +467,11 @@ void MethodDL::ParseInputLayout()
    // when we will support 3D convolutions we would need to add extra 1's
    if (inputShape.size() == 2) {
       // case of dense layer where only width is specified
-      inputShape.insert(inputShape.begin() + 1, {1,1});
+      inputShape = {inputShape[0], 1, 1, inputShape[1]};
    }
    else if (inputShape.size() == 3) {
       //e.g. case of RNN T,W -> T,1,W
-      inputShape.insert(inputShape.begin() + 2, 1);
+      inputShape = {inputShape[0], inputShape[1], 1, inputShape[2]};
    }
 
    this->SetInputShape(inputShape);

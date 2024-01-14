@@ -114,7 +114,7 @@ public:
    }
    xRooNode(double value);
 
-   virtual ~xRooNode();
+   ~xRooNode() override;
 
    void SetName(const char *name) override;   // *MENU*
    void SetTitle(const char *title) override; // *MENU*
@@ -151,12 +151,13 @@ public:
          : std::vector<std::shared_ptr<xRooNode>>::const_iterator(itr)
       {
       }
-      std::shared_ptr<xRooNode> const &operator*() const
+      decltype(auto) operator*() const
       {
-         auto &&out = std::vector<std::shared_ptr<xRooNode>>::const_iterator::operator*();
-         if (out->get() && out->empty())
+         const std::shared_ptr<xRooNode> &out = std::vector<std::shared_ptr<xRooNode>>::const_iterator::operator*();
+         if (out->get() && out->empty()) {
             out->browse();
-         return std::move(out);
+         }
+         return std::vector<std::shared_ptr<xRooNode>>::const_iterator::operator*();
       }
       bool operator!=(xRooNodeIterator const &b) const
       {
@@ -421,7 +422,7 @@ public:
    int fTimes = 1;      // when the same comp appears multiple times in a parent node, this is increased to reflect that
    int fBinNumber = -1; // used by 'bin' nodes (a node that refers to a specific bin of a parent)
    std::shared_ptr<xRooNode> fParent; //!
-   std::string fFolder = "";          // folder to put this node in when 'organising' the parent
+   std::string fFolder;               // folder to put this node in when 'organising' the parent
 
    void SetRange(const char *range, double low = std::numeric_limits<double>::quiet_NaN(),
                  double high = std::numeric_limits<double>::quiet_NaN()); // *MENU*

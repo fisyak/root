@@ -25,10 +25,14 @@
 #include <TFile.h>
 #include <TKey.h>
 
+#include <xxhash.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <memory>
+#include <new>
 #include <string>
 #include <utility>
 #include <chrono>
@@ -119,25 +123,27 @@ public:
 
 constexpr std::int32_t ChecksumRNTupleClass() {
    const char ident[] = "ROOT::Experimental::RNTuple"
-                        "fChecksum"
-                        "int"
-                        "fVersion"
-                        "unsigned int"
-                        "fSize"
-                        "unsigned int"
+                        "fVersionEpoch"
+                        "unsigned short"
+                        "fVersionMajor"
+                        "unsigned short"
+                        "fVersionMinor"
+                        "unsigned short"
+                        "fVersionPatch"
+                        "unsigned short"
                         "fSeekHeader"
                         "unsigned long"
                         "fNBytesHeader"
-                        "unsigned int"
+                        "unsigned long"
                         "fLenHeader"
-                        "unsigned int"
+                        "unsigned long"
                         "fSeekFooter"
                         "unsigned long"
                         "fNBytesFooter"
-                        "unsigned int"
+                        "unsigned long"
                         "fLenFooter"
-                        "unsigned int"
-                        "fReserved"
+                        "unsigned long"
+                        "fChecksum"
                         "unsigned long";
    std::int32_t id = 0;
    for (unsigned i = 0; i < (sizeof(ident) - 1); i++)
@@ -433,67 +439,88 @@ struct RTFObject {
    explicit RTFObject(std::uint32_t bits) : fBits(bits) {}
 };
 
-/// Streamer info for data member RNTuple::fChecksum
-struct RTFStreamerElementChecksum {
-   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerElementChecksum) - sizeof(RUInt32BE))};
+/// Streamer info for data member RNTuple::fVersionEpoch
+struct RTFStreamerElementVersionEpoch {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerElementVersionEpoch) - sizeof(RUInt32BE))};
    RUInt16BE fVersion{4};
 
-   RUInt32BE fByteCountNamed{0x40000000 | (sizeof(RUInt16BE) + sizeof(RTFObject) + 11)};
+   RUInt32BE fByteCountNamed{0x40000000 | (sizeof(RUInt16BE) + sizeof(RTFObject) + 15)};
    RUInt16BE fVersionNamed{1};
    RTFObject fObjectNamed{0x02000000 | 0x01000000};
-   char fLName = 9;
-   char fName[9]{'f', 'C', 'h', 'e', 'c', 'k', 's', 'u', 'm'};
+   char fLName = 13;
+   char fName[13]{'f', 'V', 'e', 'r', 's', 'i', 'o', 'n', 'E', 'p', 'o', 'c', 'h'};
    char fLTitle = 0;
 
-   RUInt32BE fType{3};
-   RUInt32BE fSize{4};
+   RUInt32BE fType{12};
+   RUInt32BE fSize{2};
    RUInt32BE fArrLength{0};
    RUInt32BE fArrDim{0};
    char fMaxIndex[20]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-   char fLTypeName = 3;
-   char fTypeName[3]{'i', 'n', 't'};
+   char fLTypeName = 14;
+   char fTypeName[14]{'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 's', 'h', 'o', 'r', 't'};
 };
 
-/// Streamer info for data member RNTuple::fVersion
-struct RTFStreamerElementVersion {
-   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerElementVersion) - sizeof(RUInt32BE))};
+/// Streamer info for data member RNTuple::fVersionMajor
+struct RTFStreamerElementVersionMajor {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerElementVersionMajor) - sizeof(RUInt32BE))};
    RUInt16BE fVersion{4};
 
-   RUInt32BE fByteCountNamed{0x40000000 | (sizeof(RUInt16BE) + sizeof(RTFObject) + 10)};
+   RUInt32BE fByteCountNamed{0x40000000 | (sizeof(RUInt16BE) + sizeof(RTFObject) + 15)};
    RUInt16BE fVersionNamed{1};
    RTFObject fObjectNamed{0x02000000 | 0x01000000};
-   char fLName = 8;
-   char fName[8]{ 'f', 'V', 'e', 'r', 's', 'i', 'o', 'n' };
+   char fLName = 13;
+   char fName[13]{'f', 'V', 'e', 'r', 's', 'i', 'o', 'n', 'M', 'a', 'j', 'o', 'r'};
    char fLTitle = 0;
 
-   RUInt32BE fType{13};
-   RUInt32BE fSize{4};
+   RUInt32BE fType{12};
+   RUInt32BE fSize{2};
    RUInt32BE fArrLength{0};
    RUInt32BE fArrDim{0};
    char fMaxIndex[20]{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-   char fLTypeName = 12;
-   char fTypeName[12]{ 'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'i', 'n', 't' };
+   char fLTypeName = 14;
+   char fTypeName[14]{'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 's', 'h', 'o', 'r', 't'};
 };
 
-/// Streamer info for data member RNTuple::fSize
-struct RTFStreamerElementSize {
-   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerElementSize) - sizeof(RUInt32BE))};
+/// Streamer info for data member RNTuple::fVersionMajor
+struct RTFStreamerElementVersionMinor {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerElementVersionMinor) - sizeof(RUInt32BE))};
    RUInt16BE fVersion{4};
 
-   RUInt32BE fByteCountNamed{0x40000000 | (sizeof(RUInt16BE) + sizeof(RTFObject) + 7)};
+   RUInt32BE fByteCountNamed{0x40000000 | (sizeof(RUInt16BE) + sizeof(RTFObject) + 15)};
    RUInt16BE fVersionNamed{1};
    RTFObject fObjectNamed{0x02000000 | 0x01000000};
-   char fLName = 5;
-   char fName[5]{ 'f', 'S', 'i', 'z', 'e' };
+   char fLName = 13;
+   char fName[13]{'f', 'V', 'e', 'r', 's', 'i', 'o', 'n', 'M', 'i', 'n', 'o', 'r'};
    char fLTitle = 0;
 
-   RUInt32BE fType{13};
-   RUInt32BE fSize{4};
+   RUInt32BE fType{12};
+   RUInt32BE fSize{2};
    RUInt32BE fArrLength{0};
    RUInt32BE fArrDim{0};
    char fMaxIndex[20]{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-   char fLTypeName = 12;
-   char fTypeName[12]{ 'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'i', 'n', 't' };
+   char fLTypeName = 14;
+   char fTypeName[14]{'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 's', 'h', 'o', 'r', 't'};
+};
+
+/// Streamer info for data member RNTuple::fVersionPatch
+struct RTFStreamerElementVersionPatch {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerElementVersionPatch) - sizeof(RUInt32BE))};
+   RUInt16BE fVersion{4};
+
+   RUInt32BE fByteCountNamed{0x40000000 | (sizeof(RUInt16BE) + sizeof(RTFObject) + 15)};
+   RUInt16BE fVersionNamed{1};
+   RTFObject fObjectNamed{0x02000000 | 0x01000000};
+   char fLName = 13;
+   char fName[13]{'f', 'V', 'e', 'r', 's', 'i', 'o', 'n', 'P', 'a', 't', 'c', 'h'};
+   char fLTitle = 0;
+
+   RUInt32BE fType{12};
+   RUInt32BE fSize{2};
+   RUInt32BE fArrLength{0};
+   RUInt32BE fArrDim{0};
+   char fMaxIndex[20]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+   char fLTypeName = 14;
+   char fTypeName[14]{'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 's', 'h', 'o', 'r', 't'};
 };
 
 /// Streamer info for data member RNTuple::fSeekHeader
@@ -531,13 +558,13 @@ struct RTFStreamerElementNBytesHeader {
    char fName[13]{ 'f', 'N', 'B', 'y', 't', 'e', 's', 'H', 'e', 'a', 'd', 'e', 'r' };
    char fLTitle = 0;
 
-   RUInt32BE fType{13};
-   RUInt32BE fSize{4};
+   RUInt32BE fType{14};
+   RUInt32BE fSize{8};
    RUInt32BE fArrLength{0};
    RUInt32BE fArrDim{0};
    char fMaxIndex[20]{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-   char fLTypeName = 12;
-   char fTypeName[12]{ 'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'i', 'n', 't' };
+   char fLTypeName = 13;
+   char fTypeName[13]{'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'l', 'o', 'n', 'g'};
 };
 
 /// Streamer info for data member RNTuple::fLenHeader
@@ -553,13 +580,13 @@ struct RTFStreamerElementLenHeader {
    char fName[10]{ 'f', 'L', 'e', 'n', 'H', 'e', 'a', 'd', 'e', 'r' };
    char fLTitle = 0;
 
-   RUInt32BE fType{13};
-   RUInt32BE fSize{4};
+   RUInt32BE fType{14};
+   RUInt32BE fSize{8};
    RUInt32BE fArrLength{0};
    RUInt32BE fArrDim{0};
    char fMaxIndex[20]{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-   char fLTypeName = 12;
-   char fTypeName[12]{ 'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'i', 'n', 't' };
+   char fLTypeName = 13;
+   char fTypeName[13]{'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'l', 'o', 'n', 'g'};
 };
 
 /// Streamer info for data member RNTuple::fSeekFooter
@@ -596,13 +623,13 @@ struct RTFStreamerElementNBytesFooter {
    char fName[13]{ 'f', 'N', 'B', 'y', 't', 'e', 's', 'F', 'o', 'o', 't', 'e', 'r' };
    char fLTitle = 0;
 
-   RUInt32BE fType{13};
-   RUInt32BE fSize{4};
+   RUInt32BE fType{14};
+   RUInt32BE fSize{8};
    RUInt32BE fArrLength{0};
    RUInt32BE fArrDim{0};
    char fMaxIndex[20]{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-   char fLTypeName = 12;
-   char fTypeName[12]{ 'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'i', 'n', 't' };
+   char fLTypeName = 13;
+   char fTypeName[13]{'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'l', 'o', 'n', 'g'};
 };
 
 /// Streamer info for data member RNTuple::fLenFooter
@@ -617,18 +644,18 @@ struct RTFStreamerElementLenFooter {
    char fName[10]{ 'f', 'L', 'e', 'n', 'F', 'o', 'o', 't', 'e', 'r' };
    char fLTitle = 0;
 
-   RUInt32BE fType{13};
-   RUInt32BE fSize{4};
+   RUInt32BE fType{14};
+   RUInt32BE fSize{8};
    RUInt32BE fArrLength{0};
    RUInt32BE fArrDim{0};
    char fMaxIndex[20]{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-   char fLTypeName = 12;
-   char fTypeName[12]{ 'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'i', 'n', 't' };
+   char fLTypeName = 13;
+   char fTypeName[13]{'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'l', 'o', 'n', 'g'};
 };
 
-/// Streamer info for data member RNTuple::fReserved
-struct RTFStreamerElementReserved {
-   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerElementReserved) - sizeof(RUInt32BE))};
+/// Streamer info for data member RNTuple::fChecksum
+struct RTFStreamerElementChecksum {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerElementChecksum) - sizeof(RUInt32BE))};
    RUInt16BE fVersion{4};
 
    RUInt32BE fByteCountNamed{0x40000000 |
@@ -636,7 +663,7 @@ struct RTFStreamerElementReserved {
    RUInt16BE fVersionNamed{1};
    RTFObject fObjectNamed{0x02000000 | 0x01000000};
    char fLName = 9;
-   char fName[9]{ 'f', 'R', 'e', 's', 'e', 'r', 'v', 'e', 'd' };
+   char fName[9]{'f', 'C', 'h', 'e', 'c', 'k', 's', 'u', 'm'};
    char fLTitle = 0;
 
    RUInt32BE fType{14};
@@ -648,33 +675,42 @@ struct RTFStreamerElementReserved {
    char fTypeName[13]{ 'u', 'n', 's', 'i', 'g', 'n', 'e', 'd', ' ', 'l', 'o', 'n', 'g' };
 };
 
-/// Streamer info frame for data member RNTuple::fChecksum
-struct RTFStreamerChecksum {
-   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerChecksum) - sizeof(RUInt32BE))};
+/// Streamer info frame for data member RNTuple::fVersionEpoch
+struct RTFStreamerVersionEpoch {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerVersionEpoch) - sizeof(RUInt32BE))};
    RUInt32BE fNewClassTag{0xffffffff};
    char fClassName[19]{'T', 'S', 't', 'r', 'e', 'a', 'm', 'e', 'r', 'B', 'a', 's', 'i', 'c', 'T', 'y', 'p', 'e', '\0'};
-   RUInt32BE fByteCountRemaining{0x40000000 | (sizeof(RTFStreamerChecksum) - 2 * sizeof(RUInt32BE) -
+   RUInt32BE fByteCountRemaining{0x40000000 | (sizeof(RTFStreamerVersionEpoch) - 2 * sizeof(RUInt32BE) -
                                                19 /* strlen(fClassName) + 1 */ - sizeof(RUInt32BE))};
    RUInt16BE fVersion{2};
-   RTFStreamerElementChecksum fStreamerElementChecksum;
+   RTFStreamerElementVersionEpoch fStreamerElementVersionEpoch;
 };
 
-/// Streamer info frame for data member RNTuple::fVersion
-struct RTFStreamerVersion {
-   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerVersion) - sizeof(RUInt32BE))};
+/// Streamer info frame for data member RNTuple::fVersionMajor
+struct RTFStreamerVersionMajor {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerVersionMajor) - sizeof(RUInt32BE))};
    RUInt32BE fClassTag{0x80000000}; // Fix-up after construction, or'd with 0x80000000
-   RUInt32BE fByteCountRemaining{0x40000000 | (sizeof(RTFStreamerVersion) - 3 * sizeof(RUInt32BE))};
+   RUInt32BE fByteCountRemaining{0x40000000 | (sizeof(RTFStreamerVersionMajor) - 3 * sizeof(RUInt32BE))};
    RUInt16BE fVersion{2};
-   RTFStreamerElementVersion fStreamerElementVersion;
+   RTFStreamerElementVersionMajor fStreamerElementVersionMajor;
 };
 
-/// Streamer info frame for data member RNTuple::fSize
-struct RTFStreamerSize {
-   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerSize) - sizeof(RUInt32BE))};
-   RUInt32BE fClassTag{0x80000000};  // Fix-up after construction, or'd with 0x80000000
-   RUInt32BE fByteCountRemaining{0x40000000 | (sizeof(RTFStreamerSize) - 3 * sizeof(RUInt32BE))};
+/// Streamer info frame for data member RNTuple::fVersionMinor
+struct RTFStreamerVersionMinor {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerVersionMinor) - sizeof(RUInt32BE))};
+   RUInt32BE fClassTag{0x80000000}; // Fix-up after construction, or'd with 0x80000000
+   RUInt32BE fByteCountRemaining{0x40000000 | (sizeof(RTFStreamerVersionMinor) - 3 * sizeof(RUInt32BE))};
    RUInt16BE fVersion{2};
-   RTFStreamerElementSize fStreamerElementSize;
+   RTFStreamerElementVersionMinor fStreamerElementVersionMinor;
+};
+
+/// Streamer info frame for data member RNTuple::fVersionPatch
+struct RTFStreamerVersionPatch {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerVersionPatch) - sizeof(RUInt32BE))};
+   RUInt32BE fClassTag{0x80000000};  // Fix-up after construction, or'd with 0x80000000
+   RUInt32BE fByteCountRemaining{0x40000000 | (sizeof(RTFStreamerVersionPatch) - 3 * sizeof(RUInt32BE))};
+   RUInt16BE fVersion{2};
+   RTFStreamerElementVersionPatch fStreamerElementVersionPatch;
 };
 
 /// Streamer info frame for data member RNTuple::fSeekHeader
@@ -731,13 +767,13 @@ struct RTFStreamerLenFooter {
    RTFStreamerElementLenFooter fStreamerElementLenFooter;
 };
 
-/// Streamer info frame for data member RNTuple::fReserved
-struct RTFStreamerReserved {
-   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerReserved) - sizeof(RUInt32BE))};
+/// Streamer info frame for data member RNTuple::fChecksum
+struct RTFStreamerChecksum {
+   RUInt32BE fByteCount{0x40000000 | (sizeof(RTFStreamerChecksum) - sizeof(RUInt32BE))};
    RUInt32BE fClassTag{0x80000000};  // Fix-up after construction, or'd with 0x80000000
-   RUInt32BE fByteCountRemaining{0x40000000 | (sizeof(RTFStreamerReserved) - 3 * sizeof(RUInt32BE))};
+   RUInt32BE fByteCountRemaining{0x40000000 | (sizeof(RTFStreamerChecksum) - 3 * sizeof(RUInt32BE))};
    RUInt16BE fVersion{2};
-   RTFStreamerElementReserved fStreamerElementReserved;
+   RTFStreamerElementChecksum fStreamerElementChecksum;
 };
 
 /// Streamer info for class RNTuple
@@ -760,7 +796,7 @@ struct RTFStreamerInfoObject {
    char fLTitle = 0;
 
    RInt32BE fChecksum{ChecksumRNTupleClass()};
-   RUInt32BE fVersionRNTuple{1};
+   RUInt32BE fVersionRNTuple{4};
 
    RUInt32BE fByteCountObjArr{0x40000000 |
       (sizeof(RUInt32BE) + 10 /* strlen(TObjArray) + 1 */ + sizeof(RUInt32BE) +
@@ -775,20 +811,21 @@ struct RTFStreamerInfoObject {
    RTFObject fObjectObjArr{0x02000000};
    char fNameObjArr{0};
 
-   RUInt32BE fNObjects{10};
+   RUInt32BE fNObjects{11};
    RUInt32BE fLowerBound{0};
 
    struct {
-      RTFStreamerChecksum fStreamerChecksum;
-      RTFStreamerVersion fStreamerVersion;
-      RTFStreamerSize fStreamerSize;
+      RTFStreamerVersionEpoch fStreamerVersionEpoch;
+      RTFStreamerVersionMajor fStreamerVersionMajor;
+      RTFStreamerVersionMinor fStreamerVersionMinor;
+      RTFStreamerVersionPatch fStreamerVersionPatch;
       RTFStreamerSeekHeader fStreamerSeekHeader;
       RTFStreamerNBytesHeader fStreamerNBytesHeader;
       RTFStreamerLenHeader fStreamerLenHeader;
       RTFStreamerSeekFooter fStreamerSeekFooter;
       RTFStreamerNBytesFooter fStreamerNBytesFooter;
       RTFStreamerLenFooter fStreamerLenFooter;
-      RTFStreamerReserved fStreamerReserved;
+      RTFStreamerChecksum fStreamerChecksum;
    } fStreamers;
 };
 
@@ -877,47 +914,55 @@ struct RTFUUID {
 /// A streamed RNTuple class
 struct RTFNTuple {
    RUInt32BE fByteCount{0x40000000 | (sizeof(RTFNTuple) - sizeof(fByteCount))};
-   RUInt16BE fVersionClass{3};
-   RInt32BE fChecksum{ChecksumRNTupleClass()};
-   RUInt32BE fVersionInternal{0};
-   RUInt32BE fSize{sizeof(ROOT::Experimental::Internal::RFileNTupleAnchor)};
+   RUInt16BE fVersionClass{4};
+   RUInt16BE fVersionEpoch{0};
+   RUInt16BE fVersionMajor{0};
+   RUInt16BE fVersionMinor{0};
+   RUInt16BE fVersionPatch{0};
    RUInt64BE fSeekHeader{0};
-   RUInt32BE fNBytesHeader{0};
-   RUInt32BE fLenHeader{0};
+   RUInt64BE fNBytesHeader{0};
+   RUInt64BE fLenHeader{0};
    RUInt64BE fSeekFooter{0};
-   RUInt32BE fNBytesFooter{0};
-   RUInt32BE fLenFooter{0};
-   RUInt64BE fReserved{0};
+   RUInt64BE fNBytesFooter{0};
+   RUInt64BE fLenFooter{0};
+   RUInt64BE fChecksum{0};
 
    RTFNTuple() = default;
-   explicit RTFNTuple(const ROOT::Experimental::Internal::RFileNTupleAnchor &inMemoryAnchor)
+   explicit RTFNTuple(const ROOT::Experimental::RNTuple &inMemoryAnchor)
    {
-      fVersionInternal = inMemoryAnchor.fVersion;
-      fSize = inMemoryAnchor.fSize;
+      fVersionEpoch = inMemoryAnchor.fVersionEpoch;
+      fVersionMajor = inMemoryAnchor.fVersionMajor;
+      fVersionMinor = inMemoryAnchor.fVersionMinor;
+      fVersionPatch = inMemoryAnchor.fVersionPatch;
       fSeekHeader = inMemoryAnchor.fSeekHeader;
       fNBytesHeader = inMemoryAnchor.fNBytesHeader;
       fLenHeader = inMemoryAnchor.fLenHeader;
       fSeekFooter = inMemoryAnchor.fSeekFooter;
       fNBytesFooter = inMemoryAnchor.fNBytesFooter;
       fLenFooter = inMemoryAnchor.fLenFooter;
-      fReserved = inMemoryAnchor.fReserved;
+      fChecksum = XXH3_64bits(GetPtrCkData(), GetSizeCkData());
    }
    std::uint32_t GetSize() const { return sizeof(RTFNTuple); }
-   ROOT::Experimental::Internal::RFileNTupleAnchor ToAnchor() const
+   ROOT::Experimental::RNTuple ToAnchor() const
    {
-      ROOT::Experimental::Internal::RFileNTupleAnchor anchor;
-      anchor.fChecksum = fChecksum;
-      anchor.fVersion = fVersionInternal;
-      anchor.fSize = fSize;
+      ROOT::Experimental::RNTuple anchor;
+      anchor.fVersionEpoch = fVersionEpoch;
+      anchor.fVersionMajor = fVersionMajor;
+      anchor.fVersionMinor = fVersionMinor;
+      anchor.fVersionPatch = fVersionPatch;
       anchor.fSeekHeader = fSeekHeader;
       anchor.fNBytesHeader = fNBytesHeader;
       anchor.fLenHeader = fLenHeader;
       anchor.fSeekFooter = fSeekFooter;
       anchor.fNBytesFooter = fNBytesFooter;
       anchor.fLenFooter = fLenFooter;
-      anchor.fReserved = fReserved;
+      anchor.fChecksum = fChecksum;
       return anchor;
    }
+   // The byte count and class version members are not checksummed
+   std::uint32_t GetOffsetCkData() { return sizeof(fByteCount) + sizeof(fVersionClass); }
+   std::uint32_t GetSizeCkData() { return GetSize() - GetOffsetCkData() - sizeof(fChecksum); }
+   unsigned char *GetPtrCkData() { return reinterpret_cast<unsigned char *>(this) + GetOffsetCkData(); }
 };
 
 /// The bare file global header
@@ -934,9 +979,9 @@ struct RBareFileHeader {
 #pragma pack(pop)
 
 /// The artifical class name shown for opaque RNTuple keys (see TBasket)
-static constexpr char const *kBlobClassName = "RBlob";
+constexpr char const *kBlobClassName = "RBlob";
 /// The class name of the RNTuple anchor
-static constexpr char const *kNTupleClassName = "ROOT::Experimental::RNTuple";
+constexpr char const *kNTupleClassName = "ROOT::Experimental::RNTuple";
 
 /// The RKeyBlob writes an invisible key into a TFile.  That is, a key that is not indexed in the list of keys,
 /// like a TBasket.
@@ -980,7 +1025,7 @@ ROOT::Experimental::Internal::RMiniFileReader::RMiniFileReader(ROOT::Internal::R
 {
 }
 
-ROOT::Experimental::RResult<ROOT::Experimental::Internal::RFileNTupleAnchor>
+ROOT::Experimental::RResult<ROOT::Experimental::RNTuple>
 ROOT::Experimental::Internal::RMiniFileReader::GetNTuple(std::string_view ntupleName)
 {
    char ident[4];
@@ -991,7 +1036,7 @@ ROOT::Experimental::Internal::RMiniFileReader::GetNTuple(std::string_view ntuple
    return GetNTupleBare(ntupleName);
 }
 
-ROOT::Experimental::RResult<ROOT::Experimental::Internal::RFileNTupleAnchor>
+ROOT::Experimental::RResult<ROOT::Experimental::RNTuple>
 ROOT::Experimental::Internal::RMiniFileReader::GetNTupleProper(std::string_view ntupleName)
 {
    RTFHeader fileHeader;
@@ -1042,19 +1087,38 @@ ROOT::Experimental::Internal::RMiniFileReader::GetNTupleProper(std::string_view 
 
    ReadBuffer(&key, sizeof(key), key.GetSeekKey());
    offset = key.GetSeekKey() + key.fKeyLen;
-   RTFNTuple ntuple;
-   if (key.fObjLen > sizeof(ntuple)) {
-      return R__FAIL("invalid anchor size: " + std::to_string(key.fObjLen) + " > " + std::to_string(sizeof(ntuple)));
+
+   if (key.fObjLen < sizeof(RTFNTuple)) {
+      return R__FAIL("invalid anchor size: " + std::to_string(key.fObjLen) + " < " + std::to_string(sizeof(RTFNTuple)));
    }
-   ReadBuffer(&ntuple, key.fObjLen, offset);
-   if (sizeof(ntuple) != key.fObjLen) {
+   // The object length can be larger than the size of RTFNTuple if it comes from a future RNTuple class version.
+   auto bufAnchor = std::make_unique<unsigned char[]>(key.fObjLen);
+   RTFNTuple *ntuple = new (bufAnchor.get()) RTFNTuple;
+
+   auto objNbytes = key.GetSize() - key.fKeyLen;
+   ReadBuffer(ntuple, objNbytes, offset);
+   if (objNbytes != key.fObjLen) {
       ROOT::Experimental::Detail::RNTupleDecompressor decompressor;
-      decompressor.Unzip(&ntuple, sizeof(ntuple), key.fObjLen);
+      decompressor.Unzip(bufAnchor.get(), objNbytes, key.fObjLen);
    }
-   return ntuple.ToAnchor();
+
+   if (ntuple->fVersionClass < 4) {
+      return R__FAIL("invalid anchor, unsupported pre-release of RNTuple");
+   }
+
+   // We require that future class versions only append members and store the checksum in the last 8 bytes
+   // Checksum calculation: strip byte count, class version, fChecksum member
+   RUInt64BE *ckOnDisk = reinterpret_cast<RUInt64BE *>(bufAnchor.get() + key.fObjLen - sizeof(RUInt64BE));
+   auto lenCkData = ntuple->GetSizeCkData() + key.fObjLen - sizeof(RTFNTuple);
+   auto ckCalc = XXH3_64bits(ntuple->GetPtrCkData(), lenCkData);
+   if (ckCalc != (uint64_t)(*ckOnDisk)) {
+      return R__FAIL("RNTuple anchor checksum mismatch");
+   }
+
+   return ntuple->ToAnchor();
 }
 
-ROOT::Experimental::RResult<ROOT::Experimental::Internal::RFileNTupleAnchor>
+ROOT::Experimental::RResult<ROOT::Experimental::RNTuple>
 ROOT::Experimental::Internal::RMiniFileReader::GetNTupleBare(std::string_view ntupleName)
 {
    RBareFileHeader fileHeader;
@@ -1073,6 +1137,9 @@ ROOT::Experimental::Internal::RMiniFileReader::GetNTupleBare(std::string_view nt
 
    RTFNTuple ntuple;
    ReadBuffer(&ntuple, sizeof(ntuple), offset);
+   auto checksum = XXH3_64bits(ntuple.GetPtrCkData(), ntuple.GetSizeCkData());
+   if (checksum != static_cast<uint64_t>(ntuple.fChecksum))
+      return R__FAIL("RNTuple bare file: anchor checksum mismatch");
    return ntuple.ToAnchor();
 }
 
@@ -1260,8 +1327,7 @@ void ROOT::Experimental::Internal::RNTupleFileWriter::Commit()
 {
    if (fFileProper) {
       // Easy case, the ROOT file header and the RNTuple streaming is taken care of by TFile
-      ROOT::Experimental::RNTuple ntuple(fNTupleAnchor);
-      fFileProper.fFile->WriteObject(&ntuple, fNTupleName.c_str());
+      fFileProper.fFile->WriteObject(&fNTupleAnchor, fNTupleName.c_str());
       fFileProper.fFile->Write();
       return;
    }
@@ -1354,16 +1420,17 @@ void ROOT::Experimental::Internal::RNTupleFileWriter::WriteTFileStreamerInfo()
    RTFStreamerInfoList streamerInfo;
    auto classTagOffset = keyStreamerInfo.fKeyLen + offsetof(struct RTFStreamerInfoList, fStreamerInfo) +
                          offsetof(struct RTFStreamerInfoObject, fStreamers) +
-                         offsetof(struct RTFStreamerChecksum, fNewClassTag) + 2;
-   streamerInfo.fStreamerInfo.fStreamers.fStreamerVersion.fClassTag = 0x80000000 | classTagOffset;
-   streamerInfo.fStreamerInfo.fStreamers.fStreamerSize.fClassTag = 0x80000000 | classTagOffset;
+                         offsetof(struct RTFStreamerVersionEpoch, fNewClassTag) + 2;
+   streamerInfo.fStreamerInfo.fStreamers.fStreamerVersionMajor.fClassTag = 0x80000000 | classTagOffset;
+   streamerInfo.fStreamerInfo.fStreamers.fStreamerVersionMinor.fClassTag = 0x80000000 | classTagOffset;
+   streamerInfo.fStreamerInfo.fStreamers.fStreamerVersionPatch.fClassTag = 0x80000000 | classTagOffset;
    streamerInfo.fStreamerInfo.fStreamers.fStreamerSeekHeader.fClassTag = 0x80000000 | classTagOffset;
    streamerInfo.fStreamerInfo.fStreamers.fStreamerNBytesHeader.fClassTag = 0x80000000 | classTagOffset;
    streamerInfo.fStreamerInfo.fStreamers.fStreamerLenHeader.fClassTag = 0x80000000 | classTagOffset;
    streamerInfo.fStreamerInfo.fStreamers.fStreamerSeekFooter.fClassTag = 0x80000000 | classTagOffset;
    streamerInfo.fStreamerInfo.fStreamers.fStreamerNBytesFooter.fClassTag = 0x80000000 | classTagOffset;
    streamerInfo.fStreamerInfo.fStreamers.fStreamerLenFooter.fClassTag = 0x80000000 | classTagOffset;
-   streamerInfo.fStreamerInfo.fStreamers.fStreamerReserved.fClassTag = 0x80000000 | classTagOffset;
+   streamerInfo.fStreamerInfo.fStreamers.fStreamerChecksum.fClassTag = 0x80000000 | classTagOffset;
    Detail::RNTupleCompressor compressor;
    auto szStreamerInfo = compressor.Zip(&streamerInfo, streamerInfo.GetSize(), 1);
    fFileSimple.WriteKey(compressor.GetZipBuffer(), szStreamerInfo, streamerInfo.GetSize(),

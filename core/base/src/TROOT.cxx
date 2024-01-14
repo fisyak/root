@@ -2775,6 +2775,7 @@ void TROOT::SetWebDisplay(const char *webdisplay)
    const char *wd = webdisplay ? webdisplay : "";
 
    // store default values to set them back when needed
+   static TString canName = gEnv->GetValue("Canvas.Name", "");
    static TString brName = gEnv->GetValue("Browser.Name", "");
    static TString trName = gEnv->GetValue("TreeViewer.Name", "");
 
@@ -2806,9 +2807,9 @@ void TROOT::SetWebDisplay(const char *webdisplay)
    }
 
    if (fIsWebDisplay) {
-      // restore browser classes configured at the moment when gROOT->SetWebDisplay() was called for the first time
+      // restore canvas and browser classes configured at the moment when gROOT->SetWebDisplay() was called for the first time
       // This is necessary when SetWebDisplay() called several times and therefore current settings may differ
-      gEnv->SetValue("Canvas.Name", "TWebCanvas");
+      gEnv->SetValue("Canvas.Name", canName);
       gEnv->SetValue("Browser.Name", brName);
       gEnv->SetValue("TreeViewer.Name", "RTreeViewer");
    } else {

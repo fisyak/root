@@ -293,9 +293,9 @@ endif()
 if(NOT builtin_xxhash)
   message(STATUS "Looking for xxHash")
   if(fail-on-missing)
-    find_package(xxHash REQUIRED)
+    find_package(xxHash 0.8 REQUIRED)
   else()
-    find_package(xxHash)
+    find_package(xxHash 0.8)
     if(NOT xxHash_FOUND)
       message(STATUS "xxHash not found. Switching on builtin_xxhash option")
       set(builtin_xxhash ON CACHE BOOL "Enabled because xxHash not found (${builtin_xxhash_description})" FORCE)
@@ -457,7 +457,7 @@ if(builtin_afterimage)
       AFTERIMAGE
       DOWNLOAD_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/graf2d/asimage/src/libAfterImage AFTERIMAGE
       INSTALL_DIR ${CMAKE_BINARY_DIR}
-      CMAKE_ARGS -G ${CMAKE_GENERATOR} -DCMAKE_VERBOSE_MAKEFILE=ON -DFREETYPE_INCLUDE_DIR=${FREETYPE_INCLUDE_DIR}
+      CMAKE_ARGS -G ${CMAKE_GENERATOR} -DCMAKE_VERBOSE_MAKEFILE=ON -DFREETYPE_INCLUDE_DIR=${FREETYPE_INCLUDE_DIR} -DZLIB_INCLUDE_DIR=${ZLIB_INCLUDE_DIR}
       BUILD_COMMAND ${CMAKE_COMMAND} --build . --config ${astepbld}
       INSTALL_COMMAND  ${CMAKE_COMMAND} -E copy_if_different ${astepbld}/libAfterImage.lib <INSTALL_DIR>/lib/
       LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 BUILD_IN_SOURCE 0
@@ -489,7 +489,7 @@ if(builtin_afterimage)
     endif()
     if(builtin_freetype)
       set(_ttf_include --with-ttf-includes=-I${FREETYPE_INCLUDE_DIR})
-      set(_after_cflags "${_after_cflags} -DHAVE_FREETYPE_FREETYPE")
+      set(_after_cflags "${_after_cflags} -DHAVE_FREETYPE_FREETYPE -DPNG_ARM_NEON_OPT=0")
     endif()
     if(CMAKE_OSX_SYSROOT)
       set(_after_cflags "${_after_cflags} -isysroot ${CMAKE_OSX_SYSROOT}")
@@ -988,7 +988,7 @@ endforeach()
 
 if(xrootd AND NOT builtin_xrootd)
   message(STATUS "Looking for XROOTD")
-  find_package(XROOTD)
+  find_package(XRootD)
   if(NOT XROOTD_FOUND)
     if(fail-on-missing)
       message(FATAL_ERROR "XROOTD not found. Set environment variable XRDSYS to point to your XROOTD installation, "
@@ -998,8 +998,6 @@ if(xrootd AND NOT builtin_xrootd)
       message(STATUS "XROOTD not found, enabling 'builtin_xrootd' option")
       set(builtin_xrootd ON CACHE BOOL "Enabled because xrootd is enabled, but external xrootd was not found (${xrootd_description})" FORCE)
     endif()
-  else()
-    set(XROOTD_VERSIONNUM ${xrdversnum})  # variable used internally
   endif()
 endif()
 
@@ -1018,27 +1016,9 @@ if(builtin_xrootd)
   set(xrootd ON CACHE BOOL "Enabled because builtin_xrootd requested (${xrootd_description})" FORCE)
 endif()
 
-if(xrootd AND XROOTD_VERSIONNUM VERSION_GREATER_EQUAL 500000000)
-  if(xproofd)
-    if(fail-on-missing)
-      message(FATAL_ERROR "XROOTD is version 5 or greater. The legacy xproofd servers can not be built with this version. Use -Dxproofd:BOOL=OFF to disable.")
-    else()
-      message(STATUS "XROOTD is version 5 or greater. The legacy xproofd servers can not be built with this version. Disabling 'xproofd' option.")
-      set(xproofd OFF CACHE BOOL "Disabled because xrootd version is 5 or greater" FORCE)
-    endif()
-  endif()
-endif()
-
-#---check if netxng and netx can be built-------------------------------
-if(xrootd AND XROOTD_VERSIONNUM VERSION_GREATER 300030005)
+#---check if netxng can be built-------------------------------
+if(xrootd)
   set(netxng ON)
-else()
-  set(netxng OFF)
-endif()
-if(xrootd AND XROOTD_VERSIONNUM VERSION_LESS 500000000)
-  set(netx ON)
-else()
-  set(netx OFF)
 endif()
 
 #---make sure non-builtin xrootd is not using builtin_openssl-----------
@@ -1674,7 +1654,11 @@ endif()
 
 if(tmva-sofie)
   message(STATUS "Looking for Protobuf")
-  find_package(Protobuf)
+  set(protobuf_MODULE_COMPATIBLE TRUE)
+  find_package(Protobuf CONFIG)
+  if(NOT Protobuf_FOUND)
+    find_package(Protobuf MODULE)
+  endif()
   if(NOT Protobuf_FOUND)
     if(fail-on-missing)
       message(FATAL_ERROR "Protobuf libraries not found and they are required (tmva-sofie option enabled)")
@@ -1724,9 +1708,6 @@ if (cudnn)
 endif(cudnn)
 
 #---TMVA and its dependencies------------------------------------------------------------
-if (tmva AND NOT mlp)
-  message(FATAL_ERROR "The 'tmva' option requires 'mlp', please enable mlp with -Dmlp=ON")
-endif()
 if(tmva)
   if(tmva-cpu AND imt)
     message(STATUS "Looking for BLAS for optional parts of TMVA")

@@ -299,7 +299,9 @@ myTreeOrChain.GetTree()->PrintCacheStats();
 #include "TMath.h"
 #include "TBranchCacheInfo.h"
 #include "TVirtualPerfStats.h"
-#include <limits.h>
+#include <climits>
+
+#include <memory>
 
 Int_t TTreeCache::fgLearnEntries = 100;
 
@@ -331,10 +333,10 @@ TTreeCache::~TTreeCache()
 {
    // Informe the TFile that we have been deleted (in case
    // we are deleted explicitly by legacy user code).
-   if (fFile) fFile->SetCacheRead(0, fTree);
+   if (fFile) fFile->SetCacheRead(nullptr, fTree);
 
    delete fBranches;
-   if (fBrNames) {fBrNames->Delete(); delete fBrNames; fBrNames=0;}
+   if (fBrNames) {fBrNames->Delete(); delete fBrNames; fBrNames=nullptr;}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -479,7 +481,7 @@ Int_t TTreeCache::AddBranch(const char *bname, Bool_t subbranches /*= kFALSE*/)
          }
       }
    }
-   if (nb==0 && strchr(bname,'*')==0) {
+   if (nb==0 && strchr(bname,'*')==nullptr) {
       branch = fTree->GetBranch(bname);
       if (branch) {
          if (AddBranch(branch, subbranches)<0) {
@@ -497,14 +499,14 @@ Int_t TTreeCache::AddBranch(const char *bname, Bool_t subbranches /*= kFALSE*/)
       TString name;
       while ((fe = (TFriendElement*)nextf())) {
          TTree *t = fe->GetTree();
-         if (t==0) continue;
+         if (t==nullptr) continue;
 
          // If the alias is present replace it with the real name.
          char *subbranch = (char*)strstr(bname,fe->GetName());
-         if (subbranch!=bname) subbranch = 0;
+         if (subbranch!=bname) subbranch = nullptr;
          if (subbranch) {
             subbranch += strlen(fe->GetName());
-            if ( *subbranch != '.' ) subbranch = 0;
+            if ( *subbranch != '.' ) subbranch = nullptr;
             else subbranch ++;
          }
          if (subbranch) {
@@ -619,7 +621,7 @@ Int_t TTreeCache::DropBranch(const char *bname, Bool_t subbranches /*= kFALSE*/)
          }
       }
    }
-   if (nb==0 && strchr(bname,'*')==0) {
+   if (nb==0 && strchr(bname,'*')==nullptr) {
       branch = fTree->GetBranch(bname);
       if (branch) {
          if (DropBranch(branch, subbranches)<0) {
@@ -637,14 +639,14 @@ Int_t TTreeCache::DropBranch(const char *bname, Bool_t subbranches /*= kFALSE*/)
       TString name;
       while ((fe = (TFriendElement*)nextf())) {
          TTree *t = fe->GetTree();
-         if (t==0) continue;
+         if (t==nullptr) continue;
 
          // If the alias is present replace it with the real name.
          char *subbranch = (char*)strstr(bname,fe->GetName());
-         if (subbranch!=bname) subbranch = 0;
+         if (subbranch!=bname) subbranch = nullptr;
          if (subbranch) {
             subbranch += strlen(fe->GetName());
-            if ( *subbranch != '.' ) subbranch = 0;
+            if ( *subbranch != '.' ) subbranch = nullptr;
             else subbranch ++;
          }
          if (subbranch) {
@@ -699,7 +701,7 @@ void TTreeCache::ResetMissCache()
    fFirstMiss = -1;
 
    if (!fMissCache) {
-      fMissCache.reset(new MissCache());
+      fMissCache = std::make_unique<MissCache>();
    }
    fMissCache->clear();
 }
@@ -713,7 +715,7 @@ void TTreeCache::ResetMissCache()
 /// - On failure, IOPos.length will be set to 0.
 TTreeCache::IOPos TTreeCache::FindBranchBasketPos(TBranch &b, Long64_t entry)
 {
-   if (R__unlikely(b.GetDirectory() == 0)) {
+   if (R__unlikely(b.GetDirectory() == nullptr)) {
       // printf("Branch at %p has no valid directory.\n", &b);
       return IOPos{0, 0};
    }
@@ -816,7 +818,7 @@ TBranch *TTreeCache::CalculateMissEntries(Long64_t pos, Int_t len, Bool_t all)
          // Note that we continue to iterate; fills up the rest of the entries in the cache.
       }
       // At this point, we are ready to push back a new offset
-      fMissCache->fEntries.emplace_back(std::move(iopos));
+      fMissCache->fEntries.emplace_back(iopos);
 
       if (R__unlikely(perfStats)) {
          Int_t blistsize = b->GetWriteBasket();
@@ -1385,7 +1387,7 @@ Bool_t TTreeCache::FillBuffer()
          Bool_t filled = kFALSE;
          for (Int_t i = 0; i < fNbranches; ++i) {
             TBranch *b = (TBranch*)fBranches->UncheckedAt(i);
-            if (b->GetDirectory()==0 || b->TestBit(TBranch::kDoNotProcess))
+            if (b->GetDirectory()==nullptr || b->TestBit(TBranch::kDoNotProcess))
                continue;
             if (b->GetDirectory()->GetFile() != fFile)
                continue;
@@ -1995,7 +1997,7 @@ Int_t TTreeCache::ReadBufferPrefetch(char *buf, Long64_t pos, Int_t len)
    // try to prefetch a couple of times and if request is still not satisfied then
    // fall back to normal reading without prefetching for the current request
    Int_t counter = 0;
-   while (1) {
+   while (true) {
       if(TFileCacheRead::ReadBuffer(buf, pos, len)) {
          break;
       }
@@ -2039,7 +2041,7 @@ void TTreeCache::ResetCache()
 {
    for (Int_t i = 0; i < fNbranches; ++i) {
       TBranch *b = (TBranch*)fBranches->UncheckedAt(i);
-      if (b->GetDirectory()==0 || b->TestBit(TBranch::kDoNotProcess))
+      if (b->GetDirectory()==nullptr || b->TestBit(TBranch::kDoNotProcess))
          continue;
       if (b->GetDirectory()->GetFile() != fFile)
          continue;
@@ -2129,8 +2131,8 @@ void TTreeCache::SetFile(TFile *file, TFile::ECacheAction action)
    // calling SetFile (and also by setting fFile to zero before the calling).
    if (fFile) {
       TFile *prevFile = fFile;
-      fFile = 0;
-      prevFile->SetCacheRead(0, fTree, action);
+      fFile = nullptr;
+      prevFile->SetCacheRead(nullptr, fTree, action);
    }
    TFileCacheRead::SetFile(file, action);
 }

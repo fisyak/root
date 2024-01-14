@@ -50,7 +50,7 @@ void ROOT::Experimental::RNTupleInspector::CollectColumnInfo()
       auto colType = colDesc.GetModel().GetType();
       std::uint32_t elemSize = ROOT::Experimental::Detail::RColumnElementBase::Generate(colType)->GetSize();
       std::uint64_t nElems = 0;
-      std::uint64_t compressedSize = 0;
+      std::vector<std::uint64_t> compressedPageSizes{};
 
       for (const auto &clusterDescriptor : fDescriptor->GetClusterIterable()) {
          if (!clusterDescriptor.ContainsColumn(colId)) {
@@ -64,7 +64,7 @@ void ROOT::Experimental::RNTupleInspector::CollectColumnInfo()
             fCompressionSettings = columnRange.fCompressionSettings;
          } else if (fCompressionSettings != columnRange.fCompressionSettings) {
             // Note that currently all clusters and columns are compressed with the same settings and it is not yet
-            // possible to do otherwise. This measn that currently, this exception should never be thrown, but this
+            // possible to do otherwise. This means that currently, this exception should never be thrown, but this
             // could change in the future.
             throw RException(R__FAIL("compression setting mismatch between column ranges (" +
                                      std::to_string(fCompressionSettings) + " vs " +
@@ -74,24 +74,24 @@ void ROOT::Experimental::RNTupleInspector::CollectColumnInfo()
          const auto &pageRange = clusterDescriptor.GetPageRange(colId);
 
          for (const auto &page : pageRange.fPageInfos) {
-            compressedSize += page.fLocator.fBytesOnStorage;
-            fCompressedSize += page.fLocator.fBytesOnStorage;
+            compressedPageSizes.emplace_back(page.fLocator.fBytesOnStorage);
             fUncompressedSize += page.fNElements * elemSize;
          }
       }
 
-      fColumnInfo.emplace(colId, RColumnInfo(colDesc, compressedSize, elemSize, nElems));
+      fCompressedSize += std::accumulate(compressedPageSizes.begin(), compressedPageSizes.end(), 0);
+      fColumnInfo.emplace(colId, RColumnInspector(colDesc, compressedPageSizes, elemSize, nElems));
    }
 }
 
-ROOT::Experimental::RNTupleInspector::RFieldTreeInfo
+ROOT::Experimental::RNTupleInspector::RFieldTreeInspector
 ROOT::Experimental::RNTupleInspector::CollectFieldTreeInfo(DescriptorId_t fieldId)
 {
    std::uint64_t compressedSize = 0;
    std::uint64_t uncompressedSize = 0;
 
    for (const auto &colDescriptor : fDescriptor->GetColumnIterable(fieldId)) {
-      auto colInfo = GetColumnInfo(colDescriptor.GetPhysicalId());
+      auto colInfo = GetColumnInspector(colDescriptor.GetPhysicalId());
       compressedSize += colInfo.GetCompressedSize();
       uncompressedSize += colInfo.GetUncompressedSize();
    }
@@ -105,7 +105,7 @@ ROOT::Experimental::RNTupleInspector::CollectFieldTreeInfo(DescriptorId_t fieldI
       uncompressedSize += subFieldInfo.GetUncompressedSize();
    }
 
-   auto fieldInfo = RFieldTreeInfo(fDescriptor->GetFieldDescriptor(fieldId), compressedSize, uncompressedSize);
+   auto fieldInfo = RFieldTreeInspector(fDescriptor->GetFieldDescriptor(fieldId), compressedSize, uncompressedSize);
    fFieldTreeInfo.emplace(fieldId, fieldInfo);
    return fieldInfo;
 }
@@ -162,19 +162,8 @@ ROOT::Experimental::RNTupleInspector::Create(ROOT::Experimental::RNTuple *source
 std::unique_ptr<ROOT::Experimental::RNTupleInspector>
 ROOT::Experimental::RNTupleInspector::Create(std::string_view ntupleName, std::string_view sourceFileName)
 {
-   auto sourceFile = std::unique_ptr<TFile>(TFile::Open(std::string(sourceFileName).c_str()));
-   if (!sourceFile || sourceFile->IsZombie()) {
-      throw RException(R__FAIL("cannot open source file " + std::string(sourceFileName)));
-   }
-   auto ntuple = std::unique_ptr<ROOT::Experimental::RNTuple>(
-      sourceFile->Get<ROOT::Experimental::RNTuple>(std::string(ntupleName).c_str()));
-   if (!ntuple) {
-      throw RException(
-         R__FAIL("cannot read RNTuple " + std::string(ntupleName) + " from " + std::string(sourceFileName)));
-   }
-
-   auto inspector = std::unique_ptr<RNTupleInspector>(new RNTupleInspector(ntuple->MakePageSource()));
-   inspector->fSourceFile = std::move(sourceFile);
+   auto pageSource = ROOT::Experimental::Detail::RPageSource::Create(ntupleName, sourceFileName);
+   auto inspector = std::unique_ptr<RNTupleInspector>(new RNTupleInspector(std::move(pageSource)));
 
    inspector->CollectColumnInfo();
    inspector->CollectFieldTreeInfo(inspector->GetDescriptor()->GetFieldZeroId());
@@ -193,8 +182,8 @@ std::string ROOT::Experimental::RNTupleInspector::GetCompressionSettingsAsString
 
 //------------------------------------------------------------------------------
 
-const ROOT::Experimental::RNTupleInspector::RColumnInfo &
-ROOT::Experimental::RNTupleInspector::GetColumnInfo(DescriptorId_t physicalColumnId) const
+const ROOT::Experimental::RNTupleInspector::RColumnInspector &
+ROOT::Experimental::RNTupleInspector::GetColumnInspector(DescriptorId_t physicalColumnId) const
 {
    if (physicalColumnId > fDescriptor->GetNPhysicalColumns()) {
       throw RException(R__FAIL("No column with physical ID " + std::to_string(physicalColumnId) + " present"));
@@ -235,7 +224,7 @@ void ROOT::Experimental::RNTupleInspector::PrintColumnTypeInfo(ENTupleInspectorP
       std::uint32_t count;
       std::uint64_t nElems, compressedSize, uncompressedSize;
 
-      void operator+=(const RColumnInfo &colInfo)
+      void operator+=(const RColumnInspector &colInfo)
       {
          this->count++;
          this->nElems += colInfo.GetNElements();
@@ -275,7 +264,7 @@ std::unique_ptr<TH1D>
 ROOT::Experimental::RNTupleInspector::GetColumnTypeInfoAsHist(ROOT::Experimental::ENTupleInspectorHist histKind,
                                                               std::string_view histName, std::string_view histTitle)
 {
-   if (histName == "") {
+   if (histName.empty()) {
       switch (histKind) {
       case ENTupleInspectorHist::kCount: histName = "colTypeCountHist"; break;
       case ENTupleInspectorHist::kNElems: histName = "colTypeElemCountHist"; break;
@@ -285,7 +274,7 @@ ROOT::Experimental::RNTupleInspector::GetColumnTypeInfoAsHist(ROOT::Experimental
       }
    }
 
-   if (histTitle == "") {
+   if (histTitle.empty()) {
       switch (histKind) {
       case ENTupleInspectorHist::kCount: histTitle = "Column count by type"; break;
       case ENTupleInspectorHist::kNElems: histTitle = "Number of elements by column type"; break;
@@ -314,10 +303,65 @@ ROOT::Experimental::RNTupleInspector::GetColumnTypeInfoAsHist(ROOT::Experimental
    return hist;
 }
 
+std::unique_ptr<TH1D> ROOT::Experimental::RNTupleInspector::GetPageSizeDistribution(DescriptorId_t physicalColumnId,
+                                                                                    std::string histName,
+                                                                                    std::string histTitle, size_t nBins)
+{
+   if (histName.empty())
+      histName = "pageSizeHistCol" + std::to_string(physicalColumnId);
+
+   if (histTitle.empty())
+      histTitle = "Page size distribution for column with ID " + std::to_string(physicalColumnId);
+
+   auto colInfo = GetColumnInspector(physicalColumnId);
+   auto histMinMax =
+      std::minmax_element(colInfo.GetCompressedPageSizes().begin(), colInfo.GetCompressedPageSizes().end());
+   auto hist = std::make_unique<TH1D>(
+      std::string(histName).c_str(), std::string(histTitle).c_str(), nBins, *histMinMax.first,
+      *histMinMax.second + ((*histMinMax.second - *histMinMax.first) / static_cast<double>(nBins)));
+
+   for (const auto pageSize : colInfo.GetCompressedPageSizes()) {
+      hist->Fill(pageSize);
+   }
+
+   return hist;
+}
+
+std::unique_ptr<TH1D>
+ROOT::Experimental::RNTupleInspector::GetPageSizeDistribution(ROOT::Experimental::EColumnType colType,
+                                                              std::string histName, std::string histTitle, size_t nBins)
+{
+   if (histName.empty())
+      histName = "pageSizeHistCol" + Detail::RColumnElementBase::GetTypeName(colType);
+
+   if (histTitle.empty())
+      histTitle = "Page size distribution for columns with type " + Detail::RColumnElementBase::GetTypeName(colType);
+
+   auto colIds = GetColumnsByType(colType);
+
+   std::vector<std::uint64_t> pageSizes;
+   std::for_each(colIds.begin(), colIds.end(), [this, &pageSizes](const auto colId) {
+      auto colInfo = GetColumnInspector(colId);
+      pageSizes.insert(pageSizes.end(), colInfo.GetCompressedPageSizes().begin(),
+                       colInfo.GetCompressedPageSizes().end());
+   });
+
+   auto histMinMax = std::minmax_element(pageSizes.begin(), pageSizes.end());
+   auto hist = std::make_unique<TH1D>(
+      std::string(histName).c_str(), std::string(histTitle).c_str(), nBins, *histMinMax.first,
+      *histMinMax.second + ((*histMinMax.second - *histMinMax.first) / static_cast<double>(nBins)));
+
+   for (const auto pageSize : pageSizes) {
+      hist->Fill(pageSize);
+   }
+
+   return hist;
+}
+
 //------------------------------------------------------------------------------
 
-const ROOT::Experimental::RNTupleInspector::RFieldTreeInfo &
-ROOT::Experimental::RNTupleInspector::GetFieldTreeInfo(DescriptorId_t fieldId) const
+const ROOT::Experimental::RNTupleInspector::RFieldTreeInspector &
+ROOT::Experimental::RNTupleInspector::GetFieldTreeInspector(DescriptorId_t fieldId) const
 {
    if (fieldId >= fDescriptor->GetNFields()) {
       throw RException(R__FAIL("No field with ID " + std::to_string(fieldId) + " present"));
@@ -326,8 +370,8 @@ ROOT::Experimental::RNTupleInspector::GetFieldTreeInfo(DescriptorId_t fieldId) c
    return fFieldTreeInfo.at(fieldId);
 }
 
-const ROOT::Experimental::RNTupleInspector::RFieldTreeInfo &
-ROOT::Experimental::RNTupleInspector::GetFieldTreeInfo(std::string_view fieldName) const
+const ROOT::Experimental::RNTupleInspector::RFieldTreeInspector &
+ROOT::Experimental::RNTupleInspector::GetFieldTreeInspector(std::string_view fieldName) const
 {
    DescriptorId_t fieldId = fDescriptor->FindFieldId(fieldName);
 
@@ -335,7 +379,7 @@ ROOT::Experimental::RNTupleInspector::GetFieldTreeInfo(std::string_view fieldNam
       throw RException(R__FAIL("Could not find field `" + std::string(fieldName) + "`"));
    }
 
-   return GetFieldTreeInfo(fieldId);
+   return GetFieldTreeInspector(fieldId);
 }
 
 size_t ROOT::Experimental::RNTupleInspector::GetFieldCountByType(const std::regex &typeNamePattern,

@@ -1,27 +1,22 @@
 #include "ntuple_test.hxx"
 #include <TTree.h>
 
-namespace ROOT {
-namespace Experimental {
-namespace Internal {
-bool IsEqual(const ROOT::Experimental::Internal::RFileNTupleAnchor &a,
-             const ROOT::Experimental::Internal::RFileNTupleAnchor &b)
+namespace {
+bool IsEqual(const ROOT::Experimental::RNTuple &a, const ROOT::Experimental::RNTuple &b)
 {
-   return a.fVersion == b.fVersion && a.fSize == b.fSize && a.fSeekHeader == b.fSeekHeader &&
+   return a.fVersionEpoch == b.fVersionEpoch && a.fVersionMajor == b.fVersionMajor &&
+          a.fVersionMinor == b.fVersionMinor && a.fVersionPatch == b.fVersionPatch && a.fSeekHeader == b.fSeekHeader &&
           a.fNBytesHeader == b.fNBytesHeader && a.fLenHeader == b.fLenHeader && a.fSeekFooter == b.fSeekFooter &&
-          a.fNBytesFooter == b.fNBytesFooter && a.fLenFooter == b.fLenFooter && a.fReserved == b.fReserved;
+          a.fNBytesFooter == b.fNBytesFooter && a.fLenFooter == b.fLenFooter && a.fChecksum == b.fChecksum;
 }
 
 struct RNTupleTester {
    ROOT::Experimental::RNTuple fNtpl;
 
    explicit RNTupleTester(const ROOT::Experimental::RNTuple &ntpl) : fNtpl(ntpl) {}
-   Internal::RFileNTupleAnchor GetAnchor() const { return fNtpl.GetAnchor(); }
+   RNTuple GetAnchor() const { return fNtpl; }
 };
-
-} // namespace Internal
-} // namespace Experimental
-} // namespace ROOT
+} // namespace
 
 TEST(MiniFile, Raw)
 {
@@ -84,7 +79,7 @@ TEST(MiniFile, Stream)
    auto file = std::unique_ptr<TFile>(TFile::Open(fileGuard.GetPath().c_str(), "READ"));
    ASSERT_TRUE(file);
    auto k = std::unique_ptr<ROOT::Experimental::RNTuple>(file->Get<ROOT::Experimental::RNTuple>("MyNTuple"));
-   EXPECT_TRUE(IsEqual(ntuple, ROOT::Experimental::Internal::RNTupleTester(*k).GetAnchor()));
+   EXPECT_TRUE(IsEqual(ntuple, RNTupleTester(*k).GetAnchor()));
 }
 
 
@@ -187,7 +182,7 @@ TEST(MiniFile, Failures)
 
    auto rawFile = RRawFile::Create(fileGuard.GetPath());
    RMiniFileReader reader(rawFile.get());
-   ROOT::Experimental::Internal::RFileNTupleAnchor anchor;
+   ROOT::Experimental::RNTuple anchor;
    try {
       anchor = reader.GetNTuple("No such RNTuple").Inspect();
       FAIL() << "bad RNTuple names should throw";
@@ -229,52 +224,4 @@ TEST(MiniFile, DifferentTKeys)
    file->Close();
    auto ntuple = RNTupleReader::Open("Events", fileGuard.GetPath());
    EXPECT_EQ(1, ntuple->GetNEntries());
-}
-
-TEST(MiniFile, FailOnForwardIncompatibility)
-{
-   FileRaii fileGuard("test_ntuple_minifile_forward_incompat.root");
-
-   // First create a regular RNTuple
-   auto model = RNTupleModel::Create();
-   auto fldPt = model->MakeField<float>("pt", 42.0);
-   {
-      RNTupleWriteOptions options;
-      options.SetCompression(0);
-      auto writer = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath(), options);
-      writer->Fill();
-   }
-   {
-      auto reader = RNTupleReader::Open("ntuple", fileGuard.GetPath());
-      ASSERT_EQ(1U, reader->GetNEntries());
-      reader->LoadEntry(0);
-      EXPECT_EQ(42.0, *(reader->GetModel()->GetDefaultEntry()->Get<float>("pt")));
-   }
-
-   // Fix the version numbers in the header
-
-   // Figure out the header offset
-   auto rawFile = RRawFile::Create(fileGuard.GetPath());
-   RMiniFileReader reader(rawFile.get());
-   auto ntuple = reader.GetNTuple("ntuple").Inspect();
-   // Construct incompatible version numbers in little-endian binary format
-   std::uint16_t futureVersion = RNTupleSerializer::kEnvelopeCurrentVersion + 1;
-   unsigned char futureVersionLE[2];
-   futureVersionLE[0] = (futureVersion & 0x00FF);
-   futureVersionLE[1] = (futureVersion & 0xFF00) >> 8;
-   // Write out twice (min version and writer version)
-   FILE *f = fopen(fileGuard.GetPath().c_str(), "rb+");
-   ASSERT_TRUE(f != nullptr);
-   int posHeader = ntuple.fSeekHeader;
-   EXPECT_EQ(0, fseek(f, posHeader, SEEK_SET));
-   EXPECT_EQ(2u, fwrite(futureVersionLE, 1, 2, f));
-   EXPECT_EQ(2u, fwrite(futureVersionLE, 1, 2, f));
-   fclose(f);
-
-   try {
-      auto readerFail = RNTupleReader::Open("ntuple", fileGuard.GetPath());
-      FAIL() << "unsupported minimum version number should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("RNTuple format is too new"));
-   }
 }

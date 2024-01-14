@@ -19,7 +19,7 @@
 \class RooNLLVar
 \ingroup Roofitcore
 
-Class RooNLLVar implements a -log(likelihood) calculation from a dataset
+Implements a -log(likelihood) calculation from a dataset
 and a PDF. The NLL is calculated as
 \f[
  \sum_\mathrm{data} -\log( \mathrm{pdf}(x_\mathrm{data}))
@@ -122,15 +122,14 @@ RooNLLVar::RooNLLVar(const char *name, const char *title, RooAbsPdf& pdf, RooAbs
 /// Construct likelihood from given p.d.f and (binned or unbinned dataset)
 /// For internal use.
 
-RooNLLVar::RooNLLVar(const char *name, const char *title, RooAbsPdf& pdf, RooAbsData& indata,
-                     const RooArgSet& projDeps,
-                     bool extended, RooAbsTestStatistic::Configuration const& cfg) :
-  RooAbsOptTestStatistic(name,title,pdf,indata,projDeps, cfg),
-  _extended(extended)
+RooNLLVar::RooNLLVar(const char *name, const char *title, RooAbsPdf &pdf, RooAbsData &indata, const RooArgSet &projDeps,
+                     bool extended, RooAbsTestStatistic::Configuration const &cfg)
+   : RooAbsOptTestStatistic(name, title, pdf, indata, projDeps, cfg),
+     _extended(extended),
+     _binnedPdf(cfg.binnedL ? static_cast<RooRealSumPdf *>(_funcClone) : nullptr)
 {
   // If binned likelihood flag is set, pdf is a RooRealSumPdf representing a yield vector
   // for a binned likelihood calculation
-  _binnedPdf = cfg.binnedL ? static_cast<RooRealSumPdf*>(_funcClone) : nullptr ;
 
   // Retrieve and cache bin widths needed to convert un-normalized binnedPdf values back to yields
   if (_binnedPdf) {

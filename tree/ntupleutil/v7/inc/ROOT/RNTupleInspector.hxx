@@ -67,26 +67,34 @@ std::cout << "The compression factor is " << inspector->GetCompressionFactor()
 class RNTupleInspector {
 public:
    /////////////////////////////////////////////////////////////////////////////
-   /// \brief Holds column-level storage information.
+   /// \brief Provides column-level storage information.
    ///
-   /// The RColumnInfo class provides storage information for an individual column. This information is either
-   /// collected during the construction of the RNTupleInpector object, or can be accessed using
-   /// the RColumnDescriptor that belongs to this column.
-   class RColumnInfo {
+   /// The RColumnInspector class provides storage information for an individual column. This information is partly
+   /// collected during the construction of the RNTupleInspector object, and can partly be accessed using the
+   /// RColumnInspector that belongs to this field.
+   class RColumnInspector {
    private:
       const RColumnDescriptor &fColumnDescriptor;
-      std::uint64_t fCompressedSize = 0;
+      const std::vector<std::uint64_t> fCompressedPageSizes = {};
       std::uint32_t fElementSize = 0;
       std::uint64_t fNElements = 0;
 
    public:
-      RColumnInfo(const RColumnDescriptor &colDesc, std::uint64_t onDiskSize, std::uint32_t elemSize,
-                  std::uint64_t nElems)
-         : fColumnDescriptor(colDesc), fCompressedSize(onDiskSize), fElementSize(elemSize), fNElements(nElems){};
-      ~RColumnInfo() = default;
+      RColumnInspector(const RColumnDescriptor &colDesc, const std::vector<std::uint64_t> &compressedPageSizes,
+                       std::uint32_t elemSize, std::uint64_t nElems)
+         : fColumnDescriptor(colDesc),
+           fCompressedPageSizes(compressedPageSizes),
+           fElementSize(elemSize),
+           fNElements(nElems){};
+      ~RColumnInspector() = default;
 
       const RColumnDescriptor &GetDescriptor() const { return fColumnDescriptor; }
-      std::uint64_t GetCompressedSize() const { return fCompressedSize; }
+      const std::vector<std::uint64_t> &GetCompressedPageSizes() const { return fCompressedPageSizes; }
+      std::uint64_t GetNPages() const { return fCompressedPageSizes.size(); }
+      std::uint64_t GetCompressedSize() const
+      {
+         return std::accumulate(fCompressedPageSizes.begin(), fCompressedPageSizes.end(), 0);
+      }
       std::uint64_t GetUncompressedSize() const { return fElementSize * fNElements; }
       std::uint64_t GetElementSize() const { return fElementSize; }
       std::uint64_t GetNElements() const { return fNElements; }
@@ -94,21 +102,21 @@ public:
    };
 
    /////////////////////////////////////////////////////////////////////////////
-   /// \brief Holds field-level storage information.
+   /// \brief Provides field-level storage information.
    ///
-   /// The RFieldTreeInfo class provides storage information for a field **and** its subfields. This information is
-   /// either collected during the construction of the RNTupleInpector object, or can be accessed using
+   /// The RFieldTreeInspector class provides storage information for a field **and** its subfields. This information is
+   /// partly collected during the construction of the RNTupleInspector object, and can partly be accessed using
    /// the RFieldDescriptor that belongs to this field.
-   class RFieldTreeInfo {
+   class RFieldTreeInspector {
    private:
       const RFieldDescriptor &fRootFieldDescriptor;
       std::uint64_t fCompressedSize = 0;
       std::uint64_t fUncompressedSize = 0;
 
    public:
-      RFieldTreeInfo(const RFieldDescriptor &fieldDesc, std::uint64_t onDiskSize, std::uint64_t inMemSize)
+      RFieldTreeInspector(const RFieldDescriptor &fieldDesc, std::uint64_t onDiskSize, std::uint64_t inMemSize)
          : fRootFieldDescriptor(fieldDesc), fCompressedSize(onDiskSize), fUncompressedSize(inMemSize){};
-      ~RFieldTreeInfo() = default;
+      ~RFieldTreeInspector() = default;
 
       const RFieldDescriptor &GetDescriptor() const { return fRootFieldDescriptor; }
       std::uint64_t GetCompressedSize() const { return fCompressedSize; }
@@ -116,15 +124,14 @@ public:
    };
 
 private:
-   std::unique_ptr<TFile> fSourceFile;
    std::unique_ptr<Detail::RPageSource> fPageSource;
    std::unique_ptr<RNTupleDescriptor> fDescriptor;
    int fCompressionSettings = -1;
    std::uint64_t fCompressedSize = 0;
    std::uint64_t fUncompressedSize = 0;
 
-   std::map<int, RColumnInfo> fColumnInfo;
-   std::map<int, RFieldTreeInfo> fFieldTreeInfo;
+   std::map<int, RColumnInspector> fColumnInfo;
+   std::map<int, RFieldTreeInspector> fFieldTreeInfo;
 
    RNTupleInspector(std::unique_ptr<Detail::RPageSource> pageSource);
 
@@ -142,10 +149,10 @@ private:
    /// \param[in] fieldId The ID of the field from which to start the recursive traversal. Typically this is the "zero
    /// ID", i.e. the logical parent of all top-level fields.
    ///
-   /// \return The RFieldTreeInfo for the provided field ID.
+   /// \return The RFieldTreeInspector for the provided field ID.
    ///
-   // / This method iscalled when the RNTupleInpector is initially created.
-   RFieldTreeInfo CollectFieldTreeInfo(DescriptorId_t fieldId);
+   /// This method is called when the RNTupleInspector is initially created.
+   RFieldTreeInspector CollectFieldTreeInfo(DescriptorId_t fieldId);
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the columns that make up the given field, including its subfields.
@@ -244,7 +251,7 @@ public:
    /// \param[in] physicalColumnId The physical ID of the column for which to get the information.
    ///
    /// \return The storage information for the provided column.
-   const RColumnInfo &GetColumnInfo(DescriptorId_t physicalColumnId) const;
+   const RColumnInspector &GetColumnInspector(DescriptorId_t physicalColumnId) const;
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the number of columns of a given type present in the RNTuple.
@@ -280,7 +287,7 @@ public:
    /// auto inspector = RNTupleInspector::Create("myNTuple", "some/file.root");
    /// inspector->PrintColumnTypeInfo();
    /// ~~~
-   /// Ouput:
+   /// Output:
    /// ~~~
    ///  column type    | count   | # elements      | compressed bytes  | uncompressed bytes
    /// ----------------|---------|-----------------|-------------------|--------------------
@@ -298,7 +305,7 @@ public:
    /// auto inspector = RNTupleInspector::Create("myNTuple", "some/file.root");
    /// inspector->PrintColumnTypeInfo();
    /// ~~~
-   /// Ouput:
+   /// Output:
    /// ~~~
    /// columnType,count,nElements,compressedSize,uncompressedSize
    /// SplitIndex64,2,150,72,1200
@@ -323,20 +330,49 @@ public:
                                                  std::string_view histTitle = "");
 
    /////////////////////////////////////////////////////////////////////////////
+   /// \brief Get a histogram containing the size distribution of the compressed pages for an individual column.
+   ///
+   /// \param[in] physicalColumnId The physical ID of the column for which to get the page size distribution.
+   /// \param[in] histName The name of the histogram. An empty string means a default name will be used.
+   /// \param[in] histTitle The title of the histogram. An empty string means a default title will be used.
+   /// \param[in] nBins The desired number of histogram bins.
+   ///
+   /// \return A pointer to a `TH1D` containing the page size distribution.
+   ///
+   /// The x-axis will range from the smallest page size, to the largest (inclusive).
+   std::unique_ptr<TH1D> GetPageSizeDistribution(DescriptorId_t physicalColumnId, std::string histName = "",
+                                                 std::string histTitle = "", size_t nBins = 64);
+
+   /////////////////////////////////////////////////////////////////////////////
+   /// \brief Get a histogram containing the size distribution of the compressed pages for all columns of a given type.
+   ///
+   /// \param[in] colType The column type for which to get the size distribution, as defined by
+   /// ROOT::Experimental::EColumnType.
+   /// \param[in] histName The name of the histogram. An empty string means a default name will be used.
+   /// \param[in] histTitle The title of the histogram. An empty string means a default title will be used.
+   /// \param[in] nBins The desired number of histogram bins.
+   ///
+   /// \return A pointer to a `TH1D` containing the page size distribution.
+   ///
+   /// The x-axis will range from the smallest page size, to the largest (inclusive).
+   std::unique_ptr<TH1D> GetPageSizeDistribution(EColumnType colType, std::string histName = "",
+                                                 std::string histTitle = "", size_t nBins = 64);
+
+   /////////////////////////////////////////////////////////////////////////////
    /// \brief Get storage information for a given (sub)field by ID.
    ///
    /// \param[in] fieldId The ID of the (sub)field for which to get the information.
    ///
-   /// \return The storage information for the provided (sub)field.
-   const RFieldTreeInfo &GetFieldTreeInfo(DescriptorId_t fieldId) const;
+   /// \return The storage information inspector for the provided (sub)field tree.
+   const RFieldTreeInspector &GetFieldTreeInspector(DescriptorId_t fieldId) const;
 
    /////////////////////////////////////////////////////////////////////////////
-   /// \brief Get storage information for a given (sub)field by name.
+   /// \brief Get a storage information inspector for a given (sub)field by name, including its subfields.
    ///
    /// \param[in] fieldName The name of the (sub)field for which to get the information.
    ///
-   /// \return The storage information for the provided (sub)field.
-   const RFieldTreeInfo &GetFieldTreeInfo(std::string_view fieldName) const;
+   /// \return The storage information inspector for the provided (sub)field tree.
+   const RFieldTreeInspector &GetFieldTreeInspector(std::string_view fieldName) const;
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the number of fields of a given type or class present in the RNTuple.

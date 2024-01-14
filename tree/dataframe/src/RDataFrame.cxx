@@ -15,7 +15,7 @@
 #include "ROOT/RDF/RInterface.hxx"
 #include "ROOT/RDF/RLoopManager.hxx"
 #include "ROOT/RDF/Utils.hxx"
-#include "ROOT/RStringView.hxx"
+#include <string_view>
 #include "TChain.h"
 #include "TDirectory.h"
 #include "RtypesCore.h" // for ULong64_t
@@ -57,7 +57,7 @@ alt="DOI"></a>
 \endhtmlonly
 
 ## For the impatient user
-You can directly see RDataFrame in action in our [tutorials](https://root.cern.ch/doc/master/group__tutorial__dataframe.html), in C++ or Python.
+You can directly see RDataFrame in action in our [tutorials](https://root.cern/doc/master/group__tutorial__dataframe.html), in C++ or Python.
 
 ## Table of Contents
 - [Cheat sheet](\ref cheatsheet)
@@ -1693,7 +1693,7 @@ namespace Experimental {
 ROOT::RDataFrame FromSpec(const std::string &jsonFile)
 {
    const nlohmann::ordered_json fullData = nlohmann::ordered_json::parse(std::ifstream(jsonFile));
-   if (!fullData.contains("samples") || fullData["samples"].size() == 0) {
+   if (!fullData.contains("samples") || fullData["samples"].empty()) {
       throw std::runtime_error(
          R"(The input specification does not contain any samples. Please provide the samples in the specification like:
 {

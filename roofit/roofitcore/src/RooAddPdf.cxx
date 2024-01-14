@@ -156,10 +156,11 @@ RooAddPdf::RooAddPdf(const char *name, const char *title,
 /// If the recursiveFraction flag is true, the coefficients are interpreted as recursive
 /// coefficients as explained in the class description.
 
-RooAddPdf::RooAddPdf(const char *name, const char *title, const RooArgList& inPdfList, const RooArgList& inCoefList, bool recursiveFractions) :
-  RooAddPdf(name,title)
+RooAddPdf::RooAddPdf(const char *name, const char *title, const RooArgList &inPdfList, const RooArgList &inCoefList,
+                     bool recursiveFractions)
+   : RooAddPdf(name, title)
 {
-  _recursive = recursiveFractions;
+  setRecursiveFraction(recursiveFractions);
 
   if (inPdfList.size()>inCoefList.size()+1 || inPdfList.size()<inCoefList.size()) {
     std::stringstream errorMsg;
@@ -253,10 +254,10 @@ RooAddPdf::RooAddPdf(const char *name, const char *title, const RooArgList& inPd
 ///
 /// All PDFs must inherit from RooAbsPdf.
 
-RooAddPdf::RooAddPdf(const char *name, const char *title, const RooArgList& inPdfList) :
-  RooAddPdf(name,title)
+RooAddPdf::RooAddPdf(const char *name, const char *title, const RooArgList &inPdfList)
+   : RooAddPdf(name, title)
 {
-  _allExtendable = true;
+  setAllExtendable(true);
 
   // Constructor with N PDFs
   for (const auto pdfArg : inPdfList) {
@@ -286,19 +287,20 @@ RooAddPdf::RooAddPdf(const char *name, const char *title, const RooArgList& inPd
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy constructor
 
-RooAddPdf::RooAddPdf(const RooAddPdf& other, const char* name) :
-  RooAbsPdf(other,name),
-  _refCoefNorm("!refCoefNorm",this,other._refCoefNorm),
-  _refCoefRangeName((TNamed*)other._refCoefRangeName),
-  _projCacheMgr(other._projCacheMgr,this),
-  _codeReg(other._codeReg),
-  _pdfList("!pdfs",this,other._pdfList),
-  _coefList("!coefficients",this,other._coefList),
-  _haveLastCoef(other._haveLastCoef),
-  _allExtendable(other._allExtendable),
-  _recursive(other._recursive)
+RooAddPdf::RooAddPdf(const RooAddPdf &other, const char *name)
+   : RooAbsPdf(other, name),
+     _refCoefNorm("!refCoefNorm", this, other._refCoefNorm),
+     _refCoefRangeName((TNamed *)other._refCoefRangeName),
+     _projCacheMgr(other._projCacheMgr, this),
+     _codeReg(other._codeReg),
+     _pdfList("!pdfs", this, other._pdfList),
+     _coefList("!coefficients", this, other._coefList),
+     _haveLastCoef(other._haveLastCoef),
+     _allExtendable(other._allExtendable),
+     _recursive(other._recursive),
+     _coefErrCount(_errorCount)
 {
-  _coefErrCount = _errorCount ;
+
   finalizeConstruction();
   TRACE_CREATE;
 }

@@ -26,7 +26,7 @@ protected:
       // Initialized at the start of each test to expect diagnostic messages from TestSupport
       fRootDiags.requiredDiag(kWarning, "ROOT::Experimental::Detail::RPageSinkDaos::RPageSinkDaos",
                               "The DAOS backend is experimental and still under development.", false);
-      fRootDiags.requiredDiag(kWarning, "[ROOT.NTuple]", "Pre-release format version: RC 1", false);
+      fRootDiags.requiredDiag(kWarning, "[ROOT.NTuple]", "Pre-release format version: RC 2", false);
       fRootDiags.optionalDiag(kWarning, "in int daos_init()",
                               "This RNTuple build uses libdaos_mock. Use only for testing!");
    }
@@ -74,6 +74,13 @@ TEST_F(RPageStorageDaos, Basics)
    EXPECT_EQ(24.0, *rdPt);
    ntuple->LoadEntry(2);
    EXPECT_EQ(12.0, *rdPt);
+
+   try {
+      ntuple->LoadEntry(3);
+      FAIL() << "loading a non-existing entry should throw";
+   } catch (const RException &err) {
+      EXPECT_THAT(err.what(), testing::HasSubstr("entry with index 3 out of bounds"));
+   }
 }
 
 TEST_F(RPageStorageDaos, Extended)

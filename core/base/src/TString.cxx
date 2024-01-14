@@ -54,6 +54,11 @@ as a TString, construct a TString from it, eg:
 #include "TVirtualMutex.h"
 #include "ThreadLocalStorage.h"
 
+// Definition of the TString static data member. Declaration (even with
+// initialization) in the class body *is not* definition according to C++
+// standard. The definition must be explicitly done in one TU for ODR use. See
+// https://en.cppreference.com/w/cpp/language/definition
+const Ssiz_t TString::kNPOS;
 
 #if defined(R__WIN32)
 #define strtoull _strtoui64
@@ -2325,7 +2330,7 @@ again:
 ///   TString formatted;
 ///   formatted.Form("%s in <%s>: %s", type, location, msg);
 ///
-///   lines.emplace_back(TString::Format("Welcome to ROOT %s%%shttp://root.cern.ch",
+///   lines.emplace_back(TString::Format("Welcome to ROOT %s%%shttp://root.cern",
 ///                      gROOT->GetVersion()));
 /// ~~~
 ///
@@ -2345,7 +2350,7 @@ void TString::Form(const char *va_(fmt), ...)
 /// descriptor and return a TString. Similar to TString::Form() but it is
 /// not needed to first create a TString.
 /// ~~~ {.cpp}
-///   lines.emplace_back(TString::Format("Welcome to ROOT %s%%shttp://root.cern.ch",
+///   lines.emplace_back(TString::Format("Welcome to ROOT %s%%shttp://root.cern",
 ///                      gROOT->GetVersion()));
 ///   TString formatted;
 ///   formatted.Form("%s in <%s>: %s", type, location, msg);

@@ -33,6 +33,14 @@ inline double gaussianEvaluate(double x, double mean, double sigma)
    return std::exp(-0.5 * arg * arg / (sig * sig));
 }
 
+inline double bifurGaussEvaluate(double x, double mean, double sigmaL, double sigmaR)
+{
+   // Note: this simplification does not work with Clad as of v1.1!
+   // return gaussianEvaluate(x, mean, x < mean ? sigmaL : sigmaR);
+   if(x < mean) return gaussianEvaluate(x, mean, sigmaL);
+   return gaussianEvaluate(x, mean, sigmaR);
+}
+
 /// In pdfMode, a coefficient for the constant term of 1.0 is implied if lowestOrder > 0.
 template <bool pdfMode = false>
 inline double polynomialEvaluate(double const *coeffs, int nCoeffs, int lowestOrder, double x)
@@ -88,11 +96,11 @@ inline double poissonEvaluate(double x, double par)
    if (par < 0)
       return TMath::QuietNaN();
 
-   if (x < 0)
+   if (x < 0) {
       return 0;
-   else if (x == 0.0)
+   } else if (x == 0.0) {
       return std::exp(-par);
-   else {
+   } else {
       double out = x * std::log(par) - TMath::LnGamma(x + 1.) - par;
       return std::exp(out);
    }
@@ -149,16 +157,18 @@ flexibleInterp(unsigned int code, double low, double high, double boundary, doub
 {
    if (code == 0) {
       // piece-wise linear
-      if (paramVal > 0)
+      if (paramVal > 0) {
          return paramVal * (high - nominal);
-      else
+      } else {
          return paramVal * (nominal - low);
+      }
    } else if (code == 1) {
       // piece-wise log
-      if (paramVal >= 0)
+      if (paramVal >= 0) {
          return res * (std::pow(high / nominal, +paramVal) - 1);
-      else
+      } else {
          return res * (std::pow(low / nominal, -paramVal) - 1);
+      }
    } else if (code == 2) {
       // parabolic with linear
       double a = 0.5 * (high + low) - nominal;

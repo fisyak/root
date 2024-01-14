@@ -26,7 +26,7 @@
 #include "Rtypes.h"
 
 #include "TMathBase.h"
-#include "ROOT/RStringView.hxx"
+#include <string_view>
 #include "ROOT/TypeTraits.hxx"
 #include "snprintf.h"
 
@@ -309,15 +309,12 @@ public:
 
    // Type conversion
    operator const char*() const { return GetPointer(); }
-#if (__cplusplus >= 201700L) && !defined(_MSC_VER) && (!defined(__clang_major__) || __clang_major__ > 5)
+#if !defined(_MSC_VER) && (!defined(__clang_major__) || __clang_major__ > 5)
    // Clang 5.0 support for explicit conversion is still inadequate even in c++17 mode.
    // (It leads to extraneous ambiguous overload errors)
-   explicit operator std::string() const { return std::string(GetPointer(),Length()); }
-   explicit operator ROOT::Internal::TStringView() const { return ROOT::Internal::TStringView(GetPointer(),Length()); }
-   operator std::string_view() const { return std::string_view(GetPointer(),Length()); }
-#else
-   operator ROOT::Internal::TStringView() const { return ROOT::Internal::TStringView(GetPointer(),Length()); }
+   inline explicit operator std::string() const { return std::string(GetPointer(),Length()); }
 #endif
+   inline operator std::string_view() const { return std::string_view(GetPointer(),Length()); }
 
    // Assignment
    TString    &operator=(char s);                // Replace string
@@ -845,19 +842,6 @@ inline Bool_t operator!=(const TString &s1, const TSubString &s2)
 
 inline Bool_t operator!=(const char *s1, const TSubString &s2)
 { return !(s2 == s1); }
-
-#ifndef WIN32
-// To avoid ambiguities.
-inline Bool_t operator==(const char *s1, const std::string_view &s2)
-{
-  return std::string_view(s1) == s2;
-}
-
-inline Bool_t operator==(const std::string_view &s1, const char *s2)
-{
-  return s1 == std::string_view(s2);
-}
-#endif
 
 namespace llvm {
    class raw_ostream;

@@ -30,7 +30,7 @@
 
 #include <cassert>
 #include <iostream>
-#include <stdio.h>
+#include <cstdio>
 
 #include <gtest/gtest.h>
 
@@ -120,9 +120,9 @@ private:
    int _verb = 0;
 
 public:
-   PdfComparison(Int_t verbose = 0) : _verb{verbose}
+   PdfComparison(Int_t verbose = 0) : fOldDirectory(gSystem->pwd()), _verb{verbose}
    {
-      fOldDirectory = gSystem->pwd();
+
       bool ret = gSystem->Exec("tar -xf HistFactoryTest.tar") == 0;
       if (!ret)
          Error("PdfComparison", "Error unpacking test file HistFactoryTest.tar");
@@ -284,10 +284,7 @@ private:
       if (!CompareParameters(*set1, *set2))
          return false;
 
-      RooLinkedListIter it = set1->iterator();
-      RooAbsArg *arg = 0;
-      while ((arg = (RooAbsArg *)it.Next())) {
-         RooRealVar *par = dynamic_cast<RooRealVar *>(arg);
+      for (auto * par : dynamic_range_cast<RooRealVar *>(*set1)) {
          if (!par)
             continue; // do not test RooCategory
          if (!TMath::AreEqualAbs(rData1.mean(*par), rData2.mean(*par), fTolerance)) {
@@ -308,23 +305,18 @@ private:
 
    bool CompareParameters(const RooArgSet &rPars1, const RooArgSet &rPars2, bool bAllowForError = false)
    {
-      if (rPars1.getSize() != rPars2.getSize()) {
-         Warning("CompareParameters", "got different numbers of parameters: %d vs %d", rPars1.getSize(),
-                 rPars2.getSize());
+      if (rPars1.size() != rPars2.size()) {
+         Warning("CompareParameters", "got different numbers of parameters: %d vs %d", int(rPars1.size()),
+                 int(rPars2.size()));
          return false;
       }
 
-      RooLinkedListIter it = rPars1.iterator();
-      RooRealVar *arg1 = 0;
-      RooRealVar *arg2 = 0;
-      TObject *obj = 0;
-      while ((obj = it.Next())) {
+      for(auto *arg1 : dynamic_range_cast<RooRealVar *>(rPars1)) {
          // checks only for RooRealVars implemented
-         arg1 = dynamic_cast<RooRealVar *>(obj);
          if (!arg1)
             continue;
 
-         arg2 = (RooRealVar *)rPars2.find(arg1->GetName());
+         RooRealVar *arg2 = (RooRealVar *)rPars2.find(arg1->GetName());
 
          if (!arg2) {
             Warning("CompareParameters", "did not find observable with name \"%s\"", arg1->GetName());
@@ -400,7 +392,8 @@ private:
       std::unique_ptr<RooDataSet> pSamplingPoints{rPDF1.generate(rAllObservables, NumEvents(iSamplingPoints))};
       TH1F *h_diff = new TH1F("h_diff", "relative difference between both PDF;#Delta;Points / 1e-4", 200, -0.01, 0.01);
 
-      float fPDF1value, fPDF2value;
+      float fPDF1value;
+      float fPDF2value;
       for (Int_t i = 0; i < pSamplingPoints->numEntries(); ++i) {
          pVars1->assign(*pSamplingPoints->get(i));
          pVars2->assign(*pSamplingPoints->get(i));
@@ -451,7 +444,7 @@ private:
       if (minimizerType == "Minuit") {
          if (gMinuit) {
             delete gMinuit;
-            gMinuit = 0;
+            gMinuit = nullptr;
          }
       }
       std::unique_ptr<RooFitResult> r2{

@@ -1,4 +1,4 @@
-import { settings, gStyle, isStr, isFunc, clTH1D, createHistogram, setHistogramTitle, clTF1, clTF2, kNoStats } from '../core.mjs';
+import { settings, gStyle, isStr, isFunc, clTH1D, createHistogram, setHistogramTitle, clTF1, clTF2, clTF3, kNoStats } from '../core.mjs';
 import { floatToString } from '../base/BasePainter.mjs';
 import { getElementMainPainter, ObjectPainter } from '../base/ObjectPainter.mjs';
 import { THistPainter } from '../hist2d/THistPainter.mjs';
@@ -9,8 +9,8 @@ import * as jsroot_math from '../base/math.mjs';
 /** @summary Assign `evalPar` function for TF1 object
   * @private */
 
-function proivdeEvalPar(obj) {
-   obj._math = jsroot_math;
+function proivdeEvalPar(obj, check_save) {
+   obj.$math = jsroot_math;
 
    let _func = obj.fTitle, isformula = false, pprefix = '[';
    if (_func === 'gaus') _func = 'gaus(0)';
@@ -33,34 +33,50 @@ function proivdeEvalPar(obj) {
    }
 
    if (!_func)
-      return false;
+      return !check_save || (obj.fSave?.length > 2);
 
    obj.formulas?.forEach(entry => {
       _func = _func.replaceAll(entry.fName, entry.fTitle);
    });
 
-   _func = _func.replace(/\b(sin|SIN)\b/g, 'Math.sin')
-                .replace(/\b(cos|COS)\b/g, 'Math.cos')
-                .replace(/\b(tan|TAN)\b/g, 'Math.tan')
+   _func = _func.replace(/\b(TMath::SinH)\b/g, 'Math.sinh')
+                .replace(/\b(TMath::CosH)\b/g, 'Math.cosh')
+                .replace(/\b(TMath::TanH)\b/g, 'Math.tanh')
+                .replace(/\b(TMath::ASinH)\b/g, 'Math.asinh')
+                .replace(/\b(TMath::ACosH)\b/g, 'Math.acosh')
+                .replace(/\b(TMath::ATanH)\b/g, 'Math.atanh')
+                .replace(/\b(TMath::ASin)\b/g, 'Math.asin')
+                .replace(/\b(TMath::ACos)\b/g, 'Math.acos')
+                .replace(/\b(TMath::Atan)\b/g, 'Math.atan')
+                .replace(/\b(TMath::ATan2)\b/g, 'Math.atan2')
+                .replace(/\b(sin|SIN|TMath::Sin)\b/g, 'Math.sin')
+                .replace(/\b(cos|COS|TMath::Cos)\b/g, 'Math.cos')
+                .replace(/\b(tan|TAN|TMath::Tan)\b/g, 'Math.tan')
                 .replace(/\b(exp|EXP|TMath::Exp)\b/g, 'Math.exp')
-                .replace(/\b(log|LOG)\b/g, 'Math.log')
-                .replace(/\b(log10|LOG10)\b/g, 'Math.log10')
-                .replace(/\b(pow|POW)\b/g, 'Math.pow')
+                .replace(/\b(log|LOG|TMath::Log)\b/g, 'Math.log')
+                .replace(/\b(log10|LOG10|TMath::Log10)\b/g, 'Math.log10')
+                .replace(/\b(pow|POW|TMath::Power)\b/g, 'Math.pow')
                 .replace(/\b(pi|PI)\b/g, 'Math.PI')
                 .replace(/\b(abs|ABS|TMath::Abs)\b/g, 'Math.abs')
-                .replace(/\bxygaus\(/g, 'this._math.gausxy(this, x, y, ')
-                .replace(/\bgaus\(/g, 'this._math.gaus(this, x, ')
-                .replace(/\bgausn\(/g, 'this._math.gausn(this, x, ')
-                .replace(/\bexpo\(/g, 'this._math.expo(this, x, ')
-                .replace(/\blandau\(/g, 'this._math.landau(this, x, ')
-                .replace(/\blandaun\(/g, 'this._math.landaun(this, x, ')
-                .replace(/\bTMath::/g, 'this._math.')
-                .replace(/\bROOT::Math::/g, 'this._math.');
+                .replace(/\bxygaus\(/g, 'this.$math.gausxy(this, x, y, ')
+                .replace(/\bgaus\(/g, 'this.$math.gaus(this, x, ')
+                .replace(/\bgausn\(/g, 'this.$math.gausn(this, x, ')
+                .replace(/\bexpo\(/g, 'this.$math.expo(this, x, ')
+                .replace(/\blandau\(/g, 'this.$math.landau(this, x, ')
+                .replace(/\blandaun\(/g, 'this.$math.landaun(this, x, ')
+                .replace(/\b(TMath::|ROOT::Math::)/g, 'this.$math.');
 
    if (_func.match(/^pol[0-9]$/) && (parseInt(_func[3]) === obj.fNpar - 1)) {
       _func = '[0]';
       for (let k = 1; k < obj.fNpar; ++k)
          _func += ` + [${k}] * `+ ((k === 1) ? 'x' : `Math.pow(x,${k})`);
+   }
+
+   if (_func.match(/^chebyshev[0-9]$/) && (parseInt(_func[9]) === obj.fNpar - 1)) {
+      _func = `this.$math.ChebyshevN(${obj.fNpar-1}, x, `;
+      for (let k = 0; k < obj.fNpar; ++k)
+         _func += (k === 0 ? '[' : ', ') + `[${k}]`;
+      _func += '])';
    }
 
    for (let i = 0; i < obj.fNpar; ++i)
@@ -71,12 +87,18 @@ function proivdeEvalPar(obj) {
 
    if (isformula) {
       _func = _func.replace(/x\[0\]/g, 'x');
-      if (obj._typename === clTF2) {
+      if (obj._typename === clTF3) {
+         _func = _func.replace(/x\[1\]/g, 'y');
+         _func = _func.replace(/x\[2\]/g, 'z');
+         obj.evalPar = new Function('x', 'y', 'z', _func).bind(obj);
+      } else if (obj._typename === clTF2) {
          _func = _func.replace(/x\[1\]/g, 'y');
          obj.evalPar = new Function('x', 'y', _func).bind(obj);
       } else
          obj.evalPar = new Function('x', _func).bind(obj);
-   } else if (obj._typename === clTF2)
+   } else if (obj._typename === clTF3)
+      obj.evalPar = new Function('x', 'y', 'z', 'return ' + _func).bind(obj);
+   else if (obj._typename === clTF2)
       obj.evalPar = new Function('x', 'y', 'return ' + _func).bind(obj);
    else
       obj.evalPar = new Function('x', 'return ' + _func).bind(obj);
@@ -84,6 +106,61 @@ function proivdeEvalPar(obj) {
    return true;
 }
 
+
+/** @summary Get interpolation in saved buffer
+  * @desc Several checks must be done before function can be used
+  * @private */
+function _getTF1Save(func, x) {
+   const np = func.fSave.length - 3,
+         xmin = func.fSave[np + 1],
+        xmax = func.fSave[np + 2],
+        dx = (xmax - xmin) / np;
+    if (x < xmin)
+       return func.fSave[0];
+    if (x > xmax)
+       return func.fSave[np];
+
+    const bin = Math.min(np - 1, Math.floor((x - xmin) / dx));
+    let xlow = xmin + bin * dx,
+        xup = xlow + dx,
+        ylow = func.fSave[bin],
+        yup = func.fSave[bin + 1];
+
+    if (!Number.isFinite(ylow) && (bin < np - 1)) {
+       xlow += dx; xup += dx;
+       ylow = yup; yup = func.fSave[bin + 2];
+    } else if (!Number.isFinite(yup) && (bin > 0)) {
+       xup -= dx; xlow -= dx;
+       yup = ylow; ylow = func.fSave[bin - 1];
+    }
+
+    return ((xup * ylow - xlow * yup) + x * (yup - ylow)) / dx;
+}
+
+/** @summary Provide TF1 value
+  * @desc First try evaluate, if not possible - check saved buffer
+  * @private */
+function getTF1Value(func, x, skip_eval = undefined) {
+   let y = 0;
+   if (!func)
+      return 0;
+
+   if (!skip_eval && !func.evalPar)
+      proivdeEvalPar(func);
+
+   if (func.evalPar) {
+      try {
+         y = func.evalPar(x);
+         return y;
+      } catch {
+         y = 0;
+      }
+   }
+
+   const np = func.fSave.length - 3;
+   if ((np < 2) || (func.fSave[np + 1] === func.fSave[np + 2])) return 0;
+   return _getTF1Save(func, x);
+}
 
 /** @summary Create log scale for axis bins
   * @private */
@@ -95,7 +172,7 @@ function produceTAxisLogScale(axis, num, min, max) {
       lmin = min > 0 ? Math.log(min) : lmax - 5;
    } else {
       lmax = -10;
-      lmax = -15;
+      lmin = -15;
    }
 
    axis.fNbins = num;
@@ -123,7 +200,10 @@ class TF1Painter extends TH1Painter {
    /** @summary Returns true while function is drawn */
    isTF1() { return true; }
 
-   /** @summary Update histogram */
+   /** @summary Returns primary function which was then drawn as histogram */
+   getPrimaryObject() { return this.$func; }
+
+   /** @summary Update function */
    updateObject(obj /*, opt */) {
       if (!obj || (this.getClassName() !== obj._typename)) return false;
       delete obj.evalPar;
@@ -171,13 +251,15 @@ class TF1Painter extends TH1Painter {
          if (hist.fNcells !== num + 2) {
             hist.fNcells = num + 2;
             hist.fArray = new Float32Array(hist.fNcells);
-            hist.fArray.fill(0);
          }
+         hist.fArray.fill(0);
          hist.fXaxis.fNbins = num;
          hist.fXaxis.fXbins = [];
       };
 
       delete this._fail_eval;
+
+      // this._use_saved_points = true;
 
       if (!this._use_saved_points) {
          const np = Math.max(tf1.fNpx, 100);
@@ -218,40 +300,36 @@ class TF1Painter extends TH1Painter {
       // in the case there were points have saved and we cannot calculate function
       // if we don't have the user's function
       if (this._use_saved_points) {
-         let np = tf1.fSave.length - 2, custom_xaxis = null;
-         xmin = tf1.fSave[np];
-         xmax = tf1.fSave[np + 1];
+         const np = tf1.fSave.length - 3;
+         let custom_xaxis = null;
+         xmin = tf1.fSave[np + 1];
+         xmax = tf1.fSave[np + 2];
 
          if (xmin === xmax) {
-            xmin = tf1.fSave[--np];
+            // xmin = tf1.fSave[np];
             const mp = this.getMainPainter();
             if (isFunc(mp?.getHisto))
                custom_xaxis = mp?.getHisto()?.fXaxis;
-            else
-               console.error('Very special stored values, see TF1::Save, in TF1.cxx:3183', xmin, xmax);
-         } else {
-            const epsilon = 1e-10, dx = (tf1.fXmax - tf1.fXmin) / Math.max(1, tf1.fNpx),
-                  bad_save_buffer = (Math.abs(xmin - tf1.fXmin - 0.5*dx) < epsilon) && (Math.abs(tf1.fXmax - 0.5*dx - xmax) < epsilon);
-
-            // last point in saved buffer never used for bin content
-            // in case of buggy data also one more point has to be excluded
-            if (np >= tf1.fNpx)
-               np = bad_save_buffer ? tf1.fNpx - 1 : tf1.fNpx;
          }
 
-         ensureBins(np);
-
-         // TODO: try to detect such situation, should not happen with TWebCanvas
-         if (custom_xaxis)
+         if (custom_xaxis) {
+            ensureBins(hist.fXaxis.fNbins);
             Object.assign(hist.fXaxis, custom_xaxis);
-         else {
-            hist.fXaxis.fXmin = xmin;
-            hist.fXaxis.fXmax = xmax;
-         }
+            // TODO: find first bin
 
-         for (let n = 0; n < np; ++n) {
-            const y = tf1.fSave[n];
-            hist.setBinContent(n + 1, Number.isFinite(y) ? y : 0);
+            for (let n = 0; n < np; ++n) {
+               const y = tf1.fSave[n];
+               hist.setBinContent(n + 1, Number.isFinite(y) ? y : 0);
+            }
+         } else {
+            ensureBins(tf1.fNpx);
+            hist.fXaxis.fXmin = tf1.fXmin;
+            hist.fXaxis.fXmax = tf1.fXmax;
+
+            for (let n = 0; n < tf1.fNpx; ++n) {
+               const y = _getTF1Save(tf1, hist.fXaxis.GetBinCenter(n + 1));
+               hist.setBinContent(n + 1, Number.isFinite(y) ? y : 0);
+            }
          }
       }
 
@@ -270,6 +348,7 @@ class TF1Painter extends TH1Painter {
       hist.fBits |= kNoStats;
    }
 
+   /** @summary Extract function ranges */
    extractAxesProperties(ndim) {
       super.extractAxesProperties(ndim);
 
@@ -343,22 +422,26 @@ class TF1Painter extends TH1Painter {
       }
 
       const res = { name: this.$func?.fName, title: this.$func?.fTitle,
-                  x: pnt.x, y: pnt.y,
-                  color1: this.lineatt?.color ?? 'green',
-                  color2: this.fillatt?.getFillColorAlt('blue') ?? 'blue',
-                  lines: this.getTF1Tooltips(pnt), exact: true, menu: true };
+                    x: pnt.x, y: pnt.y,
+                    color1: this.lineatt?.color ?? 'green',
+                    color2: this.fillatt?.getFillColorAlt('blue') ?? 'blue',
+                    lines: this.getTF1Tooltips(pnt), exact: true, menu: true };
 
-      if (ttrect.empty()) {
-         ttrect = this.draw_g.append('svg:circle')
+      if (pnt.disabled)
+         ttrect.remove();
+      else {
+         if (ttrect.empty()) {
+            ttrect = this.draw_g.append('svg:circle')
                              .attr('class', 'tooltip_bin')
                              .style('pointer-events', 'none')
                              .style('fill', 'none')
                              .attr('r', (this.lineatt?.width ?? 1) + 4);
-      }
+         }
 
-      ttrect.attr('cx', pnt.x)
-            .attr('cy', this.$tmp_tooltip.gry ?? pnt.y)
-            .call(this.lineatt?.func);
+         ttrect.attr('cx', pnt.x)
+               .attr('cy', this.$tmp_tooltip.gry ?? pnt.y)
+               .call(this.lineatt?.func);
+      }
 
       return res;
    }
@@ -412,4 +495,4 @@ class TF1Painter extends TH1Painter {
 
 } // class TF1Painter
 
-export { TF1Painter, proivdeEvalPar, produceTAxisLogScale };
+export { TF1Painter, proivdeEvalPar, produceTAxisLogScale, getTF1Value };
