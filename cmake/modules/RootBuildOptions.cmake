@@ -1,4 +1,4 @@
- # Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.
+# Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.
 # All rights reserved.
 #
 # For the licensing terms see $ROOTSYS/LICENSE.
@@ -371,12 +371,6 @@ endif()
 
 #---Define at moment the options with the selected default values------------------------------
 ROOT_APPLY_OPTIONS()
-
-# RooFit multiprocess only works with Minuit2. In fact, it depends on it at build time.
-if(roofit_multiprocess AND NOT minuit2)
-    message(WARNING "Option 'roofit_multiprocess' requires option `minuit2`. We're setting `minuit2=ON` for you. Consider setting `minuit2=ON` yourself to silence this warning.")
-    set(minuit2 ON CACHE BOOL "" FORCE)
-endif()
 
 #---roottest option implies testing
 if(roottest OR rootbench)

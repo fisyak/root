@@ -26,7 +26,7 @@ public:
 
 protected:
    Int_t fId;               // unique Id
-   Double_t fParams[20];    // parameters
+   Double_t fParams[44];    // parameters
    TGeoMaterial *fMaterial; // pointer to material
 
    // methods
@@ -44,6 +44,8 @@ public:
    virtual Int_t GetByteCount() const { return sizeof(*this); }
    Int_t GetId() const { return fId; }
    Double_t GetParam(Int_t i) const { return fParams[i]; }
+   static Int_t             ParamId(const Char_t *name);
+   static const Char_t     *ParamName(Int_t id);
    void SetParam(Int_t i, Double_t val) { fParams[i] = val; }
    const char *GetPointerName() const;
    TGeoMaterial *GetMaterial() const { return fMaterial; }
@@ -51,7 +53,7 @@ public:
    void SetId(Int_t id) { fId = id; }
    void SetMaterial(TGeoMaterial *mat) { fMaterial = mat; }
    virtual void SetCerenkovProperties(TObject *cerenkov) { fMaterial->SetCerenkovProperties(cerenkov); }
-   ClassDefOverride(TGeoMedium, 1) // tracking medium
+   ClassDefOverride(TGeoMedium, 2) // tracking medium
 };
 
 #endif
