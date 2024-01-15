@@ -75,11 +75,6 @@
 #include "TreeReadBuffer.h"
 #include "ValueChecking.h"
 
-#ifdef ROOFIT_LEGACY_EVAL_BACKEND
-#include "RooChi2Var.h"
-#include "RooXYChi2Var.h"
-#endif
-
 #include "ROOT/StringUtils.hxx"
 #include "Compression.h"
 #include "Math/IFunction.h"
@@ -4195,7 +4190,6 @@ RooFit::OwningPtr<RooFitResult> RooAbsReal::chi2FitTo(RooDataHist& data, const R
   l.Add((TObject*)&arg5) ;  l.Add((TObject*)&arg6) ;
   l.Add((TObject*)&arg7) ;  l.Add((TObject*)&arg8) ;
   return chi2FitTo(data,l) ;
-
 }
 
 
@@ -4203,32 +4197,46 @@ RooFit::OwningPtr<RooFitResult> RooAbsReal::chi2FitTo(RooDataHist& data, const R
 ////////////////////////////////////////////////////////////////////////////////
 /// Calls RooAbsReal::createChi2(RooDataSet& data, const RooLinkedList& cmdList) and returns fit result.
 ///
-/// For the list of possible commands in the `cmdList`, see
-/// RooAbsReal::chi2FitTo(RooDataHist&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&) and
-/// RooAbsPdf::chi2FitTo(RooDataHist&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&).
+/// List of possible commands in the `cmdList`:
+///
+///  <table>
+///  <tr><th> Type of CmdArg    <th>    Effect on \f$ \chi^2 \f$
+///  <tr><td>
+///  <tr><td> `DataError()`  <td>  Choose between:
+///  - RooAbsData::Expected: Expected Poisson error (\f$ \sqrt{n_\text{expected}} \f$ from the PDF).
+///  - RooAbsData::SumW2: The observed error from the square root of the sum of weights,
+///    i.e., symmetric errors calculated with the standard deviation of a Poisson distribution.
+///  - RooAbsData::Poisson: Asymmetric errors from the central 68 % interval around a Poisson distribution with mean \f$ n_\text{observed} \f$.
+///    If for a given bin \f$ n_\text{expected} \f$ is lower than the \f$ n_\text{observed} \f$, the lower uncertainty is taken
+///    (e.g., the difference between the mean and the 16 % quantile).
+///    If \f$ n_\text{expected} \f$ is higher than \f$ n_\text{observed} \f$, the higher uncertainty is taken
+///    (e.g., the difference between the 84 % quantile and the mean).
+///  - RooAbsData::Auto (default): RooAbsData::Expected for unweighted data, RooAbsData::SumW2 for weighted data.
+///  <tr><td>
+///  `Extended()` <td>  Use expected number of events of an extended p.d.f as normalization
+///  <tr><td>
+///  NumCPU()     <td> Activate parallel processing feature
+///  <tr><td>
+///  Range()      <td> Calculate \f$ \chi^2 \f$ only in selected region
+///  <tr><td>
+///  Verbose()    <td> Verbose output of GOF framework
+///  <tr><td>
+///  IntegrateBins()  <td> Integrate PDF within each bin. This sets the desired precision. Only useful for binned fits.
+/// <tr><td> `SumCoefRange()` <td>  Set the range in which to interpret the coefficients of RooAddPdf components
+/// <tr><td> `SplitRange()`   <td>  Fit ranges used in different categories get named after the category.
+/// Using `Range("range"), SplitRange()` as switches, different ranges could be set like this:
+/// ```
+/// myVariable.setRange("range_pi0", 135, 210);
+/// myVariable.setRange("range_gamma", 50, 210);
+/// ```
+/// <tr><td> `ConditionalObservables(Args_t &&... argsOrArgSet)`  <td>  Define projected observables.
+///                                Arguments can either be multiple RooRealVar or a single RooArgSet containing them.
+///
+/// </table>
 
 RooFit::OwningPtr<RooFitResult> RooAbsReal::chi2FitTo(RooDataHist &data, const RooLinkedList &cmdList)
 {
-   // Select the pdf-specific commands
-   RooCmdConfig pc("RooAbsPdf::chi2FitTo(" + std::string(GetName()) + ")");
-
-   // Pull arguments to be passed to chi2 construction from list
-   RooLinkedList fitCmdList(cmdList);
-
-   auto createChi2DataHistCmdArgs = "Range,RangeWithName,NumCPU,Optimize,IntegrateBins,ProjectedObservables,"
-                                    "AddCoefRange,SplitRange,DataError,Extended";
-   RooLinkedList chi2CmdList = pc.filterCmdList(fitCmdList, createChi2DataHistCmdArgs);
-
-   RooFit::FitHelpers::defineMinimizationOptions(pc);
-
-   // Process and check varargs
-   pc.process(fitCmdList);
-   if (!pc.ok(true)) {
-      return nullptr;
-   }
-
-   std::unique_ptr<RooAbsReal> chi2{createChi2(data, chi2CmdList)};
-   return RooFit::makeOwningPtr(RooFit::FitHelpers::minimize(*this, *chi2, data, pc));
+   return RooFit::makeOwningPtr(RooFit::FitHelpers::fitTo(*this, data, cmdList, true));
 }
 
 
@@ -4250,27 +4258,17 @@ RooFit::OwningPtr<RooAbsReal> RooAbsReal::createChi2(RooDataHist &data, const Ro
                                                      const RooCmdArg &arg5, const RooCmdArg &arg6,
                                                      const RooCmdArg &arg7, const RooCmdArg &arg8)
 {
-#ifdef ROOFIT_LEGACY_EVAL_BACKEND
-   // Construct Chi2
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::CollectErrors);
-   std::string baseName = "chi2_" + std::string(GetName()) + "_" + data.GetName();
-
-   // Clear possible range attributes from previous fits.
-   removeStringAttribute("fitrange");
-
-   auto chi2 = std::make_unique<RooChi2Var>(baseName.c_str(), baseName.c_str(), *this, data, arg1, arg2, arg3, arg4,
-                                            arg5, arg6, arg7, arg8);
-   RooAbsReal::setEvalErrorLoggingMode(RooAbsReal::PrintErrors);
-
-   return RooFit::makeOwningPtr<RooAbsReal>(std::move(chi2));
-#else
-   throw std::runtime_error("createChi2() is not supported without the legacy evaluation backend");
-   return nullptr;
-#endif
+   RooLinkedList l;
+   l.Add((TObject *)&arg1);
+   l.Add((TObject *)&arg2);
+   l.Add((TObject *)&arg3);
+   l.Add((TObject *)&arg4);
+   l.Add((TObject *)&arg5);
+   l.Add((TObject *)&arg6);
+   l.Add((TObject *)&arg7);
+   l.Add((TObject *)&arg8);
+   return createChi2(data, l);
 }
-
-
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// \see RooAbsReal::createChi2(RooDataHist&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&,const RooCmdArg&)
@@ -4279,23 +4277,8 @@ RooFit::OwningPtr<RooAbsReal> RooAbsReal::createChi2(RooDataHist &data, const Ro
 
 RooFit::OwningPtr<RooAbsReal> RooAbsReal::createChi2(RooDataHist& data, const RooLinkedList& cmdList)
 {
-  // Fill array of commands
-  const RooCmdArg* cmds[8] ;
-  Int_t i(0) ;
-  for(auto * arg : static_range_cast<RooCmdArg*>(cmdList)) {
-    cmds[i++] = arg ;
-  }
-  for (;i<8 ; i++) {
-    cmds[i] = &RooCmdArg::none() ;
-  }
-
-  return createChi2(data,*cmds[0],*cmds[1],*cmds[2],*cmds[3],*cmds[4],*cmds[5],*cmds[6],*cmds[7]) ;
-
+   return RooFit::makeOwningPtr(RooFit::FitHelpers::createChi2(*this, data, cmdList));
 }
-
-
-
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Perform a 2-D \f$ \chi^2 \f$ fit using a series of x and y values stored in the dataset `xydata`.
@@ -4348,24 +4331,7 @@ RooFit::OwningPtr<RooFitResult> RooAbsReal::chi2FitTo(RooDataSet& xydata, const 
 
 RooFit::OwningPtr<RooFitResult> RooAbsReal::chi2FitTo(RooDataSet &xydata, const RooLinkedList &cmdList)
 {
-   // Select the pdf-specific commands
-   RooCmdConfig pc("RooAbsPdf::chi2FitTo(" + std::string(GetName()) + ")");
-
-   // Pull arguments to be passed to chi2 construction from list
-   RooLinkedList fitCmdList(cmdList);
-   auto createChi2DataSetCmdArgs = "YVar,Integrate,RangeWithName,NumCPU,Verbose";
-   RooLinkedList chi2CmdList = pc.filterCmdList(fitCmdList, createChi2DataSetCmdArgs);
-
-   RooFit::FitHelpers::defineMinimizationOptions(pc);
-
-   // Process and check varargs
-   pc.process(fitCmdList);
-   if (!pc.ok(true)) {
-      return nullptr;
-   }
-
-   std::unique_ptr<RooAbsReal> xychi2{createChi2(xydata, chi2CmdList)};
-   return RooFit::makeOwningPtr(RooFit::FitHelpers::minimize(*this, *xychi2, xydata, pc));
+   return RooFit::makeOwningPtr(RooFit::FitHelpers::fitTo(*this, xydata, cmdList, true));
 }
 
 
@@ -4403,53 +4369,7 @@ RooFit::OwningPtr<RooAbsReal> RooAbsReal::createChi2(RooDataSet& data, const Roo
 
 RooFit::OwningPtr<RooAbsReal> RooAbsReal::createChi2(RooDataSet &data, const RooLinkedList &cmdList)
 {
-#ifdef ROOFIT_LEGACY_EVAL_BACKEND
-   // Select the pdf-specific commands
-   RooCmdConfig pc("RooAbsReal::createChi2(" + std::string(GetName()) + ")");
-
-   pc.defineInt("integrate", "Integrate", 0, 0);
-   pc.defineObject("yvar", "YVar", 0, nullptr);
-   pc.defineString("rangeName", "RangeWithName", 0, "", true);
-   pc.defineInt("numcpu", "NumCPU", 0, 1);
-   pc.defineInt("interleave", "NumCPU", 1, 0);
-   pc.defineInt("verbose", "Verbose", 0, 0);
-
-   // Process and check varargs
-   pc.process(cmdList);
-   if (!pc.ok(true)) {
-      return nullptr;
-   }
-
-   // Decode command line arguments
-   bool integrate = pc.getInt("integrate");
-   RooRealVar *yvar = static_cast<RooRealVar *>(pc.getObject("yvar"));
-   const char *rangeName = pc.getString("rangeName", nullptr, true);
-   Int_t numcpu = pc.getInt("numcpu");
-   Int_t numcpu_strategy = pc.getInt("interleave");
-   // strategy 3 works only for RooSimultaneous.
-   if (numcpu_strategy == 3 && !this->InheritsFrom("RooSimultaneous")) {
-      coutW(Minimization) << "Cannot use a NumCpu Strategy = 3 when the pdf is not a RooSimultaneous, "
-                             "falling back to default strategy = 0"
-                          << endl;
-      numcpu_strategy = 0;
-   }
-   RooFit::MPSplit interl = (RooFit::MPSplit)numcpu_strategy;
-   bool verbose = pc.getInt("verbose");
-
-   RooAbsTestStatistic::Configuration cfg;
-   cfg.rangeName = rangeName ? rangeName : "";
-   cfg.nCPU = numcpu;
-   cfg.interleave = interl;
-   cfg.verbose = verbose;
-   cfg.verbose = false;
-
-   std::string name = "chi2_" + std::string(GetName()) + "_" + data.GetName();
-
-   return RooFit::makeOwningPtr<RooAbsReal>(
-      std::make_unique<RooXYChi2Var>(name.c_str(), name.c_str(), *this, data, yvar, integrate, cfg));
-#else
-   throw std::runtime_error("createChi2() is not supported without the legacy evaluation backend");
-#endif
+   return RooFit::makeOwningPtr(RooFit::FitHelpers::createChi2(*this, data, cmdList));
 }
 
 

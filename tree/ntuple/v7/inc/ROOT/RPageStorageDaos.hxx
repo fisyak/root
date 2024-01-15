@@ -34,6 +34,7 @@ namespace ROOT {
 namespace Experimental {
 
 namespace Internal {
+class RPagePool;
 enum EDaosLocatorFlags {
    // Indicates that the referenced page is "caged", i.e. it is stored in a larger blob that contains multiple pages.
    kCagedPage = 0x01,
@@ -45,7 +46,6 @@ namespace Detail {
 class RCluster;
 class RClusterPool;
 class RPageAllocatorHeap;
-class RPagePool;
 class RDaosPool;
 class RDaosContainer;
 
@@ -128,11 +128,11 @@ struct RDaosContainerNTupleLocator {
       return (hash == kReservedIndex) ? kReservedIndex + 1 : hash;
    }
 
-   int InitNTupleDescriptorBuilder(RDaosContainer &cont, RNTupleDecompressor &decompressor,
+   int InitNTupleDescriptorBuilder(RDaosContainer &cont, Internal::RNTupleDecompressor &decompressor,
                                    RNTupleDescriptorBuilder &builder);
 
    static std::pair<RDaosContainerNTupleLocator, RNTupleDescriptorBuilder>
-   LocateNTuple(RDaosContainer &cont, const std::string &ntupleName, RNTupleDecompressor &decompressor);
+   LocateNTuple(RDaosContainer &cont, const std::string &ntupleName, Internal::RNTupleDecompressor &decompressor);
 };
 
 // clang-format off
@@ -173,7 +173,7 @@ protected:
    RNTupleLocator
    CommitSealedPageImpl(DescriptorId_t physicalColumnId, const RPageStorage::RSealedPage &sealedPage) final;
    std::vector<RNTupleLocator> CommitSealedPageVImpl(std::span<RPageStorage::RSealedPageGroup> ranges) final;
-   std::uint64_t CommitClusterImpl(NTupleSize_t nEntries) final;
+   std::uint64_t CommitClusterImpl() final;
    RNTupleLocator CommitClusterGroupImpl(unsigned char *serializedPageList, std::uint32_t length) final;
    void CommitDatasetImpl(unsigned char *serializedFooter, std::uint32_t length) final;
    void WriteNTupleHeader(const void *data, size_t nbytes, size_t lenHeader);
@@ -210,7 +210,7 @@ private:
    ntuple_index_t fNTupleIndex{0};
 
    /// Populated pages might be shared; the page pool might, at some point, be used by multiple page sources
-   std::shared_ptr<RPagePool> fPagePool;
+   std::shared_ptr<Internal::RPagePool> fPagePool;
    /// The last cluster from which a page got populated.  Points into fClusterPool->fPool
    RCluster *fCurrentCluster = nullptr;
    /// A container that stores object data (header/footer, pages, etc.)

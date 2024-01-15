@@ -41,14 +41,16 @@ namespace Experimental {
 class RNTupleModel;
 // TODO(jblomer): factory methods to create tree sinks and sources outside Detail namespace
 
+namespace Internal {
+class RNTupleCompressor;
+class RNTupleDecompressor;
+} // namespace Internal
+
 namespace Detail {
 
 class RColumn;
 class RColumnElementBase;
-class RNTupleCompressor;
-class RNTupleDecompressor;
 struct RNTupleModelChangeset;
-class RPagePool;
 class RFieldBase;
 
 enum class EPageStorageType {
@@ -187,7 +189,7 @@ protected:
    /// Helper to zip pages and header/footer; includes a 16MB (kMAXZIPBUF) zip buffer.
    /// There could be concrete page sinks that don't need a compressor.  Therefore, and in order to stay consistent
    /// with the page source, we leave it up to the derived class whether or not the compressor gets constructed.
-   std::unique_ptr<RNTupleCompressor> fCompressor;
+   std::unique_ptr<Internal::RNTupleCompressor> fCompressor;
 
    /// Helper for streaming a page. This is commonly used in derived, concrete page sinks. Note that if
    /// compressionSetting is 0 (uncompressed) and the page is mappable, the returned sealed page will
@@ -197,8 +199,8 @@ protected:
    RSealedPage SealPage(const RPage &page, const RColumnElementBase &element, int compressionSetting);
 
    /// Seal a page using the provided buffer.
-   static RSealedPage SealPage(const RPage &page, const RColumnElementBase &element,
-      int compressionSetting, void *buf);
+   static RSealedPage SealPage(const RPage &page, const RColumnElementBase &element, int compressionSetting, void *buf,
+                               bool allowAlias = true);
 
 public:
    RPageSink(std::string_view ntupleName, const RNTupleWriteOptions &options);
@@ -235,7 +237,7 @@ public:
    virtual void CommitSealedPageV(std::span<RPageStorage::RSealedPageGroup> ranges) = 0;
    /// Finalize the current cluster and create a new one for the following data.
    /// Returns the number of bytes written to storage (excluding meta-data).
-   virtual std::uint64_t CommitCluster(NTupleSize_t nEntries) = 0;
+   virtual std::uint64_t CommitCluster(NTupleSize_t nNewEntries) = 0;
    /// Write out the page locations (page list envelope) for all the committed clusters since the last call of
    /// CommitClusterGroup (or the beginning of writing).
    virtual void CommitClusterGroup() = 0;
@@ -296,7 +298,7 @@ protected:
    /// optimized implementation though.
    virtual std::vector<RNTupleLocator> CommitSealedPageVImpl(std::span<RPageStorage::RSealedPageGroup> ranges);
    /// Returns the number of bytes written to storage (excluding metadata)
-   virtual std::uint64_t CommitClusterImpl(NTupleSize_t nEntries) = 0;
+   virtual std::uint64_t CommitClusterImpl() = 0;
    /// Returns the locator of the page list envelope of the given buffer that contains the serialized page list.
    /// Typically, the implementation takes care of compressing and writing the provided buffer.
    virtual RNTupleLocator CommitClusterGroupImpl(unsigned char *serializedPageList, std::uint32_t length) = 0;
@@ -445,7 +447,7 @@ protected:
    /// Helper to unzip pages and header/footer; comprises a 16MB (kMAXZIPBUF) unzip buffer.
    /// Not all page sources need a decompressor (e.g. virtual ones for chains and friends don't), thus we
    /// leave it up to the derived class whether or not the decompressor gets constructed.
-   std::unique_ptr<RNTupleDecompressor> fDecompressor;
+   std::unique_ptr<Internal::RNTupleDecompressor> fDecompressor;
 
    virtual RNTupleDescriptor AttachImpl() = 0;
    // Only called if a task scheduler is set. No-op be default.

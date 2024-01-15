@@ -59,7 +59,6 @@ namespace Experimental {
 class RCollectionField;
 class RCollectionNTupleWriter;
 class REntry;
-class RNTupleModel;
 
 namespace Internal {
 struct RFieldCallbackInjector;
@@ -171,7 +170,7 @@ public:
       }
       ~RValue() { DestroyIfOwning(); }
 
-      RValue GetNonOwningCopy() { return RValue(fField, fObjPtr, false); }
+      RValue GetNonOwningCopy() const { return RValue(fField, fObjPtr, false); }
 
       template <typename T>
       void *Release()
@@ -602,8 +601,9 @@ public:
    ENTupleStructure GetStructure() const { return fStructure; }
    std::size_t GetNRepetitions() const { return fNRepetitions; }
    NTupleSize_t GetNElements() const { return fPrincipalColumn->GetNElements(); }
-   RFieldBase *GetParent() const { return fParent; }
-   std::vector<RFieldBase *> GetSubFields() const;
+   const RFieldBase *GetParent() const { return fParent; }
+   std::vector<RFieldBase *> GetSubFields();
+   std::vector<const RFieldBase *> GetSubFields() const;
    bool IsSimple() const { return fIsSimple; }
    /// Get the field's description
    std::string GetDescription() const { return fDescription; }
@@ -1404,7 +1404,7 @@ public:
 class RCollectionField : public ROOT::Experimental::Detail::RFieldBase {
 private:
    /// Save the link to the collection ntuple in order to reset the offset counter when committing the cluster
-   std::shared_ptr<RCollectionNTupleWriter> fCollectionNTuple;
+   std::shared_ptr<RCollectionNTupleWriter> fCollectionWriter;
 
 protected:
    std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const final;
@@ -1417,9 +1417,8 @@ protected:
 
 public:
    static std::string TypeName() { return ""; }
-   RCollectionField(std::string_view name,
-                    std::shared_ptr<RCollectionNTupleWriter> collectionNTuple,
-                    std::unique_ptr<RNTupleModel> collectionModel);
+   RCollectionField(std::string_view name, std::shared_ptr<RCollectionNTupleWriter> collectionWriter,
+                    std::unique_ptr<RFieldZero> collectionParent);
    RCollectionField(RCollectionField&& other) = default;
    RCollectionField& operator =(RCollectionField&& other) = default;
    ~RCollectionField() override = default;

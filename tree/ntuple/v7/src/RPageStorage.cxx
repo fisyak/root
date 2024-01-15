@@ -350,8 +350,8 @@ std::unique_ptr<ROOT::Experimental::Detail::RPageSink> ROOT::Experimental::Detai
 }
 
 ROOT::Experimental::Detail::RPageStorage::RSealedPage
-ROOT::Experimental::Detail::RPageSink::SealPage(const RPage &page,
-   const RColumnElementBase &element, int compressionSetting, void *buf)
+ROOT::Experimental::Detail::RPageSink::SealPage(const RPage &page, const RColumnElementBase &element,
+                                                int compressionSetting, void *buf, bool allowAlias)
 {
    unsigned char *pageBuf = reinterpret_cast<unsigned char *>(page.GetBuffer());
    bool isAdoptedBuffer = true;
@@ -365,8 +365,8 @@ ROOT::Experimental::Detail::RPageSink::SealPage(const RPage &page,
    }
    auto zippedBytes = packedBytes;
 
-   if ((compressionSetting != 0) || !element.IsMappable()) {
-      zippedBytes = RNTupleCompressor::Zip(pageBuf, packedBytes, compressionSetting, buf);
+   if ((compressionSetting != 0) || !element.IsMappable() || !allowAlias) {
+      zippedBytes = Internal::RNTupleCompressor::Zip(pageBuf, packedBytes, compressionSetting, buf);
       if (!isAdoptedBuffer)
          delete[] pageBuf;
       pageBuf = reinterpret_cast<unsigned char *>(buf);
@@ -539,16 +539,15 @@ void ROOT::Experimental::Detail::RPagePersistentSink::CommitSealedPageV(
    }
 }
 
-std::uint64_t ROOT::Experimental::Detail::RPagePersistentSink::CommitCluster(ROOT::Experimental::NTupleSize_t nEntries)
+std::uint64_t
+ROOT::Experimental::Detail::RPagePersistentSink::CommitCluster(ROOT::Experimental::NTupleSize_t nNewEntries)
 {
-   auto nbytes = CommitClusterImpl(nEntries);
+   auto nbytes = CommitClusterImpl();
 
-   R__ASSERT((nEntries - fPrevClusterNEntries) < ClusterSize_t(-1));
-   auto nEntriesInCluster = ClusterSize_t(nEntries - fPrevClusterNEntries);
    RClusterDescriptorBuilder clusterBuilder;
    clusterBuilder.ClusterId(fDescriptorBuilder.GetDescriptor().GetNActiveClusters())
       .FirstEntryIndex(fPrevClusterNEntries)
-      .NEntries(nEntriesInCluster);
+      .NEntries(nNewEntries);
    for (unsigned int i = 0; i < fOpenColumnRanges.size(); ++i) {
       RClusterDescriptor::RPageRange fullRange;
       fullRange.fPhysicalColumnId = i;
@@ -559,7 +558,7 @@ std::uint64_t ROOT::Experimental::Detail::RPagePersistentSink::CommitCluster(ROO
       fOpenColumnRanges[i].fNElements = 0;
    }
    fDescriptorBuilder.AddCluster(clusterBuilder.MoveDescriptor().Unwrap());
-   fPrevClusterNEntries = nEntries;
+   fPrevClusterNEntries += nNewEntries;
    return nbytes;
 }
 

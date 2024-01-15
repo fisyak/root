@@ -342,7 +342,7 @@ ROOT::Experimental::Detail::RFieldBase::~RFieldBase()
 std::string ROOT::Experimental::Detail::RFieldBase::GetQualifiedFieldName() const
 {
    std::string result = GetName();
-   RFieldBase *parent = GetParent();
+   auto parent = GetParent();
    while (parent && !parent->GetName().empty()) {
       result = parent->GetName() + "." + result;
       parent = parent->GetParent();
@@ -645,9 +645,19 @@ ROOT::Experimental::Detail::RFieldBase::EntryToColumnElementIndex(ROOT::Experime
    return result;
 }
 
-std::vector<ROOT::Experimental::Detail::RFieldBase *> ROOT::Experimental::Detail::RFieldBase::GetSubFields() const
+std::vector<ROOT::Experimental::Detail::RFieldBase *> ROOT::Experimental::Detail::RFieldBase::GetSubFields()
 {
    std::vector<RFieldBase *> result;
+   result.reserve(fSubFields.size());
+   for (const auto &f : fSubFields) {
+      result.emplace_back(f.get());
+   }
+   return result;
+}
+
+std::vector<const ROOT::Experimental::Detail::RFieldBase *> ROOT::Experimental::Detail::RFieldBase::GetSubFields() const
+{
+   std::vector<const RFieldBase *> result;
    result.reserve(fSubFields.size());
    for (const auto &f : fSubFields) {
       result.emplace_back(f.get());
@@ -3055,18 +3065,15 @@ void ROOT::Experimental::RTupleField::DestroyValue(void *objPtr, bool dtorOnly) 
 
 //------------------------------------------------------------------------------
 
-ROOT::Experimental::RCollectionField::RCollectionField(
-   std::string_view name,
-   std::shared_ptr<RCollectionNTupleWriter> collectionNTuple,
-   std::unique_ptr<RNTupleModel> collectionModel)
-   : RFieldBase(name, "", ENTupleStructure::kCollection, true /* isSimple */)
-   , fCollectionNTuple(collectionNTuple)
+ROOT::Experimental::RCollectionField::RCollectionField(std::string_view name,
+                                                       std::shared_ptr<RCollectionNTupleWriter> collectionWriter,
+                                                       std::unique_ptr<RFieldZero> collectionParent)
+   : RFieldBase(name, "", ENTupleStructure::kCollection, true /* isSimple */), fCollectionWriter(collectionWriter)
 {
-   for (unsigned i = 0; i < collectionModel->GetFieldZero()->fSubFields.size(); ++i) {
-      auto& subField = collectionModel->GetFieldZero()->fSubFields[i];
-      Attach(std::move(subField));
+   const std::size_t N = collectionParent->fSubFields.size();
+   for (std::size_t i = 0; i < N; ++i) {
+      Attach(std::move(collectionParent->fSubFields[i]));
    }
-   SetDescription(collectionModel->GetDescription());
 }
 
 const ROOT::Experimental::Detail::RFieldBase::RColumnRepresentations &
@@ -3093,17 +3100,16 @@ void ROOT::Experimental::RCollectionField::GenerateColumnsImpl(const RNTupleDesc
 std::unique_ptr<ROOT::Experimental::Detail::RFieldBase>
 ROOT::Experimental::RCollectionField::CloneImpl(std::string_view newName) const
 {
-   auto result = std::make_unique<RCollectionField>(newName, fCollectionNTuple, RNTupleModel::Create());
+   auto parent = std::make_unique<RFieldZero>();
    for (auto& f : fSubFields) {
-      auto clone = f->Clone(f->GetName());
-      result->Attach(std::move(clone));
+      parent->Attach(f->Clone(f->GetName()));
    }
-   return result;
+   return std::make_unique<RCollectionField>(newName, fCollectionWriter, std::move(parent));
 }
 
 void ROOT::Experimental::RCollectionField::CommitClusterImpl()
 {
-   *fCollectionNTuple->GetOffsetPtr() = 0;
+   *fCollectionWriter->GetOffsetPtr() = 0;
 }
 
 //------------------------------------------------------------------------------

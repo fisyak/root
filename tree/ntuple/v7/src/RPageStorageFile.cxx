@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <utility>
 
 #include <atomic>
@@ -50,7 +51,7 @@ ROOT::Experimental::Detail::RPageSinkFile::RPageSinkFile(std::string_view ntuple
 {
    R__LOG_WARNING(NTupleLog()) << "The RNTuple file format will change. " <<
       "Do not store real data with this version of RNTuple!";
-   fCompressor = std::make_unique<RNTupleCompressor>();
+   fCompressor = std::make_unique<Internal::RNTupleCompressor>();
    EnableDefaultMetrics("RPageSinkFile");
 }
 
@@ -90,7 +91,7 @@ void ROOT::Experimental::Detail::RPageSinkFile::CreateImpl(const RNTupleModel & 
 {
    auto zipBuffer = std::make_unique<unsigned char[]>(length);
    auto szZipHeader = fCompressor->Zip(serializedHeader, length, GetWriteOptions().GetCompression(),
-                                       RNTupleCompressor::MakeMemCopyWriter(zipBuffer.get()));
+                                       Internal::RNTupleCompressor::MakeMemCopyWriter(zipBuffer.get()));
    fWriter->WriteNTupleHeader(zipBuffer.get(), szZipHeader, length);
 }
 
@@ -140,9 +141,54 @@ ROOT::Experimental::Detail::RPageSinkFile::CommitSealedPageImpl(DescriptorId_t p
    return WriteSealedPage(sealedPage, bytesPacked);
 }
 
+std::vector<ROOT::Experimental::RNTupleLocator>
+ROOT::Experimental::Detail::RPageSinkFile::CommitSealedPageVImpl(std::span<RPageStorage::RSealedPageGroup> ranges)
+{
+   size_t size = 0, bytesPacked = 0;
+   for (auto &range : ranges) {
+      if (range.fFirst == range.fLast) {
+         // Skip empty ranges, they might not have a physical column ID!
+         continue;
+      }
 
-std::uint64_t
-ROOT::Experimental::Detail::RPageSinkFile::CommitClusterImpl(ROOT::Experimental::NTupleSize_t /* nEntries */)
+      const auto bitsOnStorage = RColumnElementBase::GetBitsOnStorage(
+         fDescriptorBuilder.GetDescriptor().GetColumnDescriptor(range.fPhysicalColumnId).GetModel().GetType());
+      for (auto sealedPageIt = range.fFirst; sealedPageIt != range.fLast; ++sealedPageIt) {
+         size += sealedPageIt->fSize;
+         bytesPacked += (bitsOnStorage * sealedPageIt->fNElements + 7) / 8;
+      }
+   }
+   if (size >= std::numeric_limits<std::int32_t>::max() || bytesPacked >= std::numeric_limits<std::int32_t>::max()) {
+      // Cannot fit it into one key, fall back to one key per page.
+      // TODO: Remove once there is support for large keys.
+      return RPagePersistentSink::CommitSealedPageVImpl(ranges);
+   }
+
+   RNTupleAtomicTimer timer(fCounters->fTimeWallWrite, fCounters->fTimeCpuWrite);
+   // Reserve a blob that is large enough to hold all pages.
+   std::uint64_t offset = fWriter->ReserveBlob(size, bytesPacked);
+
+   // Now write the individual pages and record their locators.
+   std::vector<ROOT::Experimental::RNTupleLocator> locators;
+   for (auto &range : ranges) {
+      for (auto sealedPageIt = range.fFirst; sealedPageIt != range.fLast; ++sealedPageIt) {
+         fWriter->WriteIntoReservedBlob(sealedPageIt->fBuffer, sealedPageIt->fSize, offset);
+         RNTupleLocator locator;
+         locator.fPosition = offset;
+         locator.fBytesOnStorage = sealedPageIt->fSize;
+         locators.push_back(locator);
+         offset += sealedPageIt->fSize;
+      }
+   }
+
+   fCounters->fNPageCommitted.Add(locators.size());
+   fCounters->fSzWritePayload.Add(size);
+   fNBytesCurrentCluster += size;
+
+   return locators;
+}
+
+std::uint64_t ROOT::Experimental::Detail::RPageSinkFile::CommitClusterImpl()
 {
    auto result = fNBytesCurrentCluster;
    fNBytesCurrentCluster = 0;
@@ -155,7 +201,7 @@ ROOT::Experimental::Detail::RPageSinkFile::CommitClusterGroupImpl(unsigned char 
 {
    auto bufPageListZip = std::make_unique<unsigned char[]>(length);
    auto szPageListZip = fCompressor->Zip(serializedPageList, length, GetWriteOptions().GetCompression(),
-                                         RNTupleCompressor::MakeMemCopyWriter(bufPageListZip.get()));
+                                         Internal::RNTupleCompressor::MakeMemCopyWriter(bufPageListZip.get()));
 
    RNTupleLocator result;
    result.fBytesOnStorage = szPageListZip;
@@ -167,7 +213,7 @@ void ROOT::Experimental::Detail::RPageSinkFile::CommitDatasetImpl(unsigned char 
 {
    auto bufFooterZip = std::make_unique<unsigned char[]>(length);
    auto szFooterZip = fCompressor->Zip(serializedFooter, length, GetWriteOptions().GetCompression(),
-                                       RNTupleCompressor::MakeMemCopyWriter(bufFooterZip.get()));
+                                       Internal::RNTupleCompressor::MakeMemCopyWriter(bufFooterZip.get()));
    fWriter->WriteNTupleFooter(bufFooterZip.get(), szFooterZip, length);
    fWriter->Commit();
 }
@@ -192,10 +238,10 @@ void ROOT::Experimental::Detail::RPageSinkFile::ReleasePage(RPage &page)
 ROOT::Experimental::Detail::RPageSourceFile::RPageSourceFile(std::string_view ntupleName,
                                                              const RNTupleReadOptions &options)
    : RPageSource(ntupleName, options),
-     fPagePool(std::make_shared<RPagePool>()),
+     fPagePool(std::make_shared<Internal::RPagePool>()),
      fClusterPool(std::make_unique<RClusterPool>(*this, options.GetClusterBunchSize()))
 {
-   fDecompressor = std::make_unique<RNTupleDecompressor>();
+   fDecompressor = std::make_unique<Internal::RNTupleDecompressor>();
    EnableDefaultMetrics("RPageSourceFile");
 }
 

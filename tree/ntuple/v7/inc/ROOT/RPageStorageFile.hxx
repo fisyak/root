@@ -40,12 +40,14 @@ class RRawFile;
 namespace Experimental {
 class RNTuple; // for making RPageSourceFile a friend of RNTuple
 
+namespace Internal {
+class RPagePool;
+}
+
 namespace Detail {
 
 class RClusterPool;
 class RPageAllocatorHeap;
-class RPagePool;
-
 
 // clang-format off
 /**
@@ -73,7 +75,8 @@ protected:
    RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) final;
    RNTupleLocator
    CommitSealedPageImpl(DescriptorId_t physicalColumnId, const RPageStorage::RSealedPage &sealedPage) final;
-   std::uint64_t CommitClusterImpl(NTupleSize_t nEntries) final;
+   std::vector<RNTupleLocator> CommitSealedPageVImpl(std::span<RPageStorage::RSealedPageGroup> ranges) final;
+   std::uint64_t CommitClusterImpl() final;
    RNTupleLocator CommitClusterGroupImpl(unsigned char *serializedPageList, std::uint32_t length) final;
    void CommitDatasetImpl(unsigned char *serializedFooter, std::uint32_t length) final;
 
@@ -114,7 +117,7 @@ private:
    };
 
    /// Populated pages might be shared; the page pool might, at some point, be used by multiple page sources
-   std::shared_ptr<RPagePool> fPagePool;
+   std::shared_ptr<Internal::RPagePool> fPagePool;
    /// The last cluster from which a page got populated.  Points into fClusterPool->fPool
    RCluster *fCurrentCluster = nullptr;
    /// An RRawFile is used to request the necessary byte ranges from a local or a remote file

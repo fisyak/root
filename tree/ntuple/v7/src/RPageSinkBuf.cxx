@@ -26,7 +26,9 @@
 void ROOT::Experimental::Detail::RPageSinkBuf::RColumnBuf::DropBufferedPages()
 {
    for (auto &bufPage : fBufferedPages) {
-      fCol.fColumn->GetPageSink()->ReleasePage(bufPage.fPage);
+      if (!bufPage.fPage.IsNull()) {
+         fCol.fColumn->GetPageSink()->ReleasePage(bufPage.fPage);
+      }
    }
    fBufferedPages.clear();
    // Each RSealedPage points to the same region as `fBuf` for some element in `fBufferedPages`; thus, no further
@@ -123,28 +125,37 @@ void ROOT::Experimental::Detail::RPageSinkBuf::UpdateSchema(const RNTupleModelCh
 
 void ROOT::Experimental::Detail::RPageSinkBuf::CommitPage(ColumnHandle_t columnHandle, const RPage &page)
 {
-   // TODO avoid frequent (de)allocations by holding on to allocated buffers in RColumnBuf
-   RPage bufPage = ReservePage(columnHandle, page.GetNElements());
-   // make sure the page is aware of how many elements it will have
-   bufPage.GrowUnchecked(page.GetNElements());
-   memcpy(bufPage.GetBuffer(), page.GetBuffer(), page.GetNBytes());
+   auto colId = columnHandle.fPhysicalId;
+   const auto &element = *columnHandle.fColumn->GetElement();
+
    // Safety: References are guaranteed to be valid until the
    // element is destroyed. In other words, all buffered page elements are
    // valid until the return value of DrainBufferedPages() goes out of scope in
    // CommitCluster().
-   auto &zipItem = fBufferedColumns.at(columnHandle.fPhysicalId).BufferPage(columnHandle, bufPage);
+   auto &zipItem = fBufferedColumns.at(colId).BufferPage(columnHandle);
+   zipItem.AllocateSealedPageBuf(page.GetNBytes());
+   R__ASSERT(zipItem.fBuf);
+   auto &sealedPage = fBufferedColumns.at(colId).RegisterSealedPage();
+
    if (!fTaskScheduler) {
+      // Seal the page right now, avoiding the allocation and copy, but making sure that the page buffer is not aliased.
+      sealedPage =
+         SealPage(page, element, GetWriteOptions().GetCompression(), zipItem.fBuf.get(), /*allowAlias=*/false);
+      zipItem.fSealedPage = &sealedPage;
       return;
    }
+
+   // TODO avoid frequent (de)allocations by holding on to allocated buffers in RColumnBuf
+   zipItem.fPage = ReservePage(columnHandle, page.GetNElements());
+   // make sure the page is aware of how many elements it will have
+   zipItem.fPage.GrowUnchecked(page.GetNElements());
+   memcpy(zipItem.fPage.GetBuffer(), page.GetBuffer(), page.GetNBytes());
+
    fCounters->fParallelZip.SetValue(1);
    // Thread safety: Each thread works on a distinct zipItem which owns its
    // compression buffer.
-   zipItem.AllocateSealedPageBuf();
-   R__ASSERT(zipItem.fBuf);
-   auto &sealedPage = fBufferedColumns.at(columnHandle.fPhysicalId).RegisterSealedPage();
-   fTaskScheduler->AddTask([this, &zipItem, &sealedPage, colId = columnHandle.fPhysicalId] {
-      sealedPage = SealPage(zipItem.fPage, *fBufferedColumns.at(colId).GetHandle().fColumn->GetElement(),
-                            GetWriteOptions().GetCompression(), zipItem.fBuf.get());
+   fTaskScheduler->AddTask([this, &zipItem, &sealedPage, &element] {
+      sealedPage = SealPage(zipItem.fPage, element, GetWriteOptions().GetCompression(), zipItem.fBuf.get());
       zipItem.fSealedPage = &sealedPage;
    });
 }
@@ -160,48 +171,22 @@ void ROOT::Experimental::Detail::RPageSinkBuf::CommitSealedPageV(std::span<RPage
    throw RException(R__FAIL("should never commit sealed pages to RPageSinkBuf"));
 }
 
-std::uint64_t ROOT::Experimental::Detail::RPageSinkBuf::CommitCluster(ROOT::Experimental::NTupleSize_t nEntries)
+std::uint64_t ROOT::Experimental::Detail::RPageSinkBuf::CommitCluster(ROOT::Experimental::NTupleSize_t nNewEntries)
 {
    WaitForAllTasks();
 
-   // If we have only sealed pages in all buffered columns, commit them in a single `CommitSealedPageV()` call
-   bool singleCommitCall = std::all_of(fBufferedColumns.begin(), fBufferedColumns.end(),
-                                       [](auto &bufColumn) { return bufColumn.HasSealedPagesOnly(); });
-   if (singleCommitCall) {
-      std::vector<RSealedPageGroup> toCommit;
-      toCommit.reserve(fBufferedColumns.size());
-      for (auto &bufColumn : fBufferedColumns) {
-         const auto &sealedPages = bufColumn.GetSealedPages();
-         toCommit.emplace_back(bufColumn.GetHandle().fPhysicalId, sealedPages.cbegin(), sealedPages.cend());
-      }
-      fInnerSink->CommitSealedPageV(toCommit);
-
-      for (auto &bufColumn : fBufferedColumns)
-         bufColumn.DropBufferedPages();
-      return fInnerSink->CommitCluster(nEntries);
-   }
-
-   // Otherwise, try to do it per column
+   std::vector<RSealedPageGroup> toCommit;
+   toCommit.reserve(fBufferedColumns.size());
    for (auto &bufColumn : fBufferedColumns) {
-      // In practice, either all (see above) or none of the buffered pages have been sealed, depending on whether
-      // a task scheduler is available. The rare condition of a few columns consisting only of sealed pages should
-      // not happen unless the API is misused.
-      if (!bufColumn.IsEmpty() && bufColumn.HasSealedPagesOnly())
-         throw RException(R__FAIL("only a few columns have all pages sealed"));
-
-      // Slow path: if the buffered column contains both sealed and unsealed pages, commit them one by one.
-      // TODO(jalopezg): coalesce contiguous sealed pages and commit via `CommitSealedPageV()`.
-      auto drained = bufColumn.DrainBufferedPages();
-      for (auto &bufPage : std::get<std::deque<RColumnBuf::RPageZipItem>>(drained)) {
-         if (bufPage.IsSealed()) {
-            fInnerSink->CommitSealedPage(bufColumn.GetHandle().fPhysicalId, *bufPage.fSealedPage);
-         } else {
-            fInnerSink->CommitPage(bufColumn.GetHandle(), bufPage.fPage);
-         }
-         ReleasePage(bufPage.fPage);
-      }
+      R__ASSERT(bufColumn.HasSealedPagesOnly());
+      const auto &sealedPages = bufColumn.GetSealedPages();
+      toCommit.emplace_back(bufColumn.GetHandle().fPhysicalId, sealedPages.cbegin(), sealedPages.cend());
    }
-   return fInnerSink->CommitCluster(nEntries);
+   fInnerSink->CommitSealedPageV(toCommit);
+
+   for (auto &bufColumn : fBufferedColumns)
+      bufColumn.DropBufferedPages();
+   return fInnerSink->CommitCluster(nNewEntries);
 }
 
 void ROOT::Experimental::Detail::RPageSinkBuf::CommitClusterGroup()

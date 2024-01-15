@@ -296,7 +296,7 @@ std::unique_ptr<RooDataSet> makeDataSetFromDataHist(RooDataHist const &hist)
 ///
 /// <table>
 /// <tr><th> %RooCmdArg <th> Effect
-/// <tr><td> Import(TTree*)              <td> Import contents of given TTree. Only branches of the TTree that have names
+/// <tr><td> Import(TTree&)   <td> Import contents of given TTree. Only branches of the TTree that have names
 ///                                corresponding to those of the RooAbsArgs that define the RooDataSet are
 ///                                imported.
 /// <tr><td> ImportFromFile(const char* fileName, const char* treeName) <td> Import tree with given name from file with given name.
@@ -529,7 +529,7 @@ RooDataSet::RooDataSet(RooStringView name, RooStringView title, const RooArgSet&
          impData = impDataSet.get();
       }
       if (cutSpec) {
-         cutVarTmp = std::make_unique<RooFormulaVar>(cutSpec, cutSpec, *impData->get());
+         cutVarTmp = std::make_unique<RooFormulaVar>(cutSpec, cutSpec, *impData->get(), /*checkVariables=*/false);
          cutVar = cutVarTmp.get();
       }
       _dstore->loadValues(impData->store(), cutVar, cutRange);
@@ -561,7 +561,7 @@ RooDataSet::RooDataSet(RooStringView name, RooStringView title, const RooArgSet&
       }
 
       if (cutSpec) {
-         cutVarTmp = std::make_unique<RooFormulaVar>(cutSpec, cutSpec, _vars);
+         cutVarTmp = std::make_unique<RooFormulaVar>(cutSpec, cutSpec, _vars, /*checkVariables=*/false);
          cutVar = cutVarTmp.get();
       }
 
@@ -1916,7 +1916,7 @@ void RooDataSet::loadValuesFromSlices(RooCategory &indexCat, std::map<std::strin
       indexCatInData.setLabel(item.first.c_str());
       std::unique_ptr<RooFormulaVar> cutVarTmp;
       if (cutSpec) {
-         cutVarTmp = std::make_unique<RooFormulaVar>(cutSpec, cutSpec, *sliceData->get());
+         cutVarTmp = std::make_unique<RooFormulaVar>(cutSpec, cutSpec, *sliceData->get(), /*checkVariables=*/false);
          cutVar = cutVarTmp.get();
       }
       _dstore->loadValues(sliceData->store(), cutVar, rangeName);
