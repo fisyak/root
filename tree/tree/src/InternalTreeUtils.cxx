@@ -21,7 +21,6 @@
 #include "TTree.h"
 #include "TVirtualIndex.h"
 
-#include <cstdint> // std::uint64_t
 #include <limits>
 #include <utility> // std::pair
 #include <vector>
@@ -176,7 +175,7 @@ ROOT::TreeUtils::RFriendInfo GetFriendInfo(const TTree &tree, bool retrieveEntri
    std::vector<std::pair<std::string, std::string>> friendNames;
    std::vector<std::vector<std::string>> friendFileNames;
    std::vector<std::vector<std::string>> friendChainSubNames;
-   std::vector<std::vector<std::int64_t>> nEntriesPerTreePerFriend;
+   std::vector<std::vector<Long64_t>> nEntriesPerTreePerFriend;
    std::vector<std::unique_ptr<TVirtualIndex>> treeIndexes;
 
    // Reserve space for all friends
@@ -211,7 +210,7 @@ ROOT::TreeUtils::RFriendInfo GetFriendInfo(const TTree &tree, bool retrieveEntri
       auto *treeIndex = frTree->GetTreeIndex();
       treeIndexes.emplace_back(static_cast<TVirtualIndex *>(treeIndex ? treeIndex->Clone() : nullptr));
 
-      // If the current tree is a TChain
+      // If the friend tree is a TChain
       if (auto frChain = dynamic_cast<const TChain *>(frTree)) {
          // Note that each TChainElement returned by TChain::GetListOfFiles has a name
          // equal to the tree name of this TChain and a title equal to the filename.
@@ -265,7 +264,7 @@ ROOT::TreeUtils::RFriendInfo GetFriendInfo(const TTree &tree, bool retrieveEntri
                nEntriesInThisFriend.emplace_back(maxEntries);
             }
          }
-      } else {
+      } else { // frTree is not a chain but a simple TTree
          // Get name of the tree
          const auto realName = GetTreeFullPaths(*frTree)[0];
          friendNames.emplace_back(std::make_pair(realName, alias));

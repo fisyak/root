@@ -120,7 +120,7 @@ ROOT::Experimental::RNTupleModel::RProjectedFields::Clone(const RNTupleModel *ne
    for (const auto &[k, v] : fFieldMap) {
       for (const auto &f : *clone->GetFieldZero()) {
          if (f.GetQualifiedFieldName() == k->GetQualifiedFieldName()) {
-            clone->fFieldMap[&f] = clone->fModel->GetField(v->GetQualifiedFieldName());
+            clone->fFieldMap[&f] = clone->fModel->FindField(v->GetQualifiedFieldName());
             break;
          }
       }
@@ -191,27 +191,29 @@ void ROOT::Experimental::RNTupleModel::EnsureNotBare() const
       throw RException(R__FAIL("invalid attempt to use default entry of bare model"));
 }
 
-ROOT::Experimental::RNTupleModel::RNTupleModel()
-  : fFieldZero(std::make_unique<RFieldZero>())
+ROOT::Experimental::RNTupleModel::RNTupleModel(std::unique_ptr<RFieldZero> fieldZero) : fFieldZero(std::move(fieldZero))
 {}
 
-std::unique_ptr<ROOT::Experimental::RNTupleModel> ROOT::Experimental::RNTupleModel::CreateBare()
+std::unique_ptr<ROOT::Experimental::RNTupleModel>
+ROOT::Experimental::RNTupleModel::CreateBare(std::unique_ptr<RFieldZero> fieldZero)
 {
-   auto model = std::unique_ptr<RNTupleModel>(new RNTupleModel());
+   auto model = std::unique_ptr<RNTupleModel>(new RNTupleModel(std::move(fieldZero)));
    model->fProjectedFields = std::make_unique<RProjectedFields>(model.get());
    return model;
 }
 
-std::unique_ptr<ROOT::Experimental::RNTupleModel> ROOT::Experimental::RNTupleModel::Create()
+std::unique_ptr<ROOT::Experimental::RNTupleModel>
+ROOT::Experimental::RNTupleModel::Create(std::unique_ptr<RFieldZero> fieldZero)
 {
-   auto model = CreateBare();
+   auto model = CreateBare(std::move(fieldZero));
    model->fDefaultEntry = std::unique_ptr<REntry>(new REntry());
    return model;
 }
 
 std::unique_ptr<ROOT::Experimental::RNTupleModel> ROOT::Experimental::RNTupleModel::Clone() const
 {
-   auto cloneModel = std::unique_ptr<RNTupleModel>(new RNTupleModel());
+   auto cloneModel = std::unique_ptr<RNTupleModel>(
+      new RNTupleModel(std::unique_ptr<RFieldZero>(static_cast<RFieldZero *>(fFieldZero->Clone("").release()))));
    auto cloneFieldZero = fFieldZero->Clone("");
    cloneModel->fModelId = fModelId;
    cloneModel->fFieldZero = std::unique_ptr<RFieldZero>(static_cast<RFieldZero *>(cloneFieldZero.release()));
@@ -227,6 +229,26 @@ std::unique_ptr<ROOT::Experimental::RNTupleModel> ROOT::Experimental::RNTupleMod
    return cloneModel;
 }
 
+ROOT::Experimental::Detail::RFieldBase *ROOT::Experimental::RNTupleModel::FindField(std::string_view fieldName) const
+{
+   if (fieldName.empty())
+      return nullptr;
+
+   auto *field = static_cast<ROOT::Experimental::Detail::RFieldBase *>(fFieldZero.get());
+   for (auto subfieldName : ROOT::Split(fieldName, ".")) {
+      const auto subfields = field->GetSubFields();
+      auto it =
+         std::find_if(subfields.begin(), subfields.end(), [&](const auto *f) { return f->GetName() == subfieldName; });
+      if (it != subfields.end()) {
+         field = *it;
+      } else {
+         field = nullptr;
+         break;
+      }
+   }
+
+   return field;
+}
 
 void ROOT::Experimental::RNTupleModel::AddField(std::unique_ptr<Detail::RFieldBase> field)
 {
@@ -250,12 +272,12 @@ ROOT::Experimental::RNTupleModel::AddProjectedField(std::unique_ptr<Detail::RFie
    auto fieldName = field->GetName();
 
    RProjectedFields::FieldMap_t fieldMap;
-   auto sourceField = GetField(mapping(fieldName));
+   auto sourceField = FindField(mapping(fieldName));
    if (!sourceField)
       return R__FAIL("no such field: " + mapping(fieldName));
    fieldMap[field.get()] = sourceField;
    for (const auto &subField : *field) {
-      sourceField = GetField(mapping(subField.GetQualifiedFieldName()));
+      sourceField = FindField(mapping(subField.GetQualifiedFieldName()));
       if (!sourceField)
          return R__FAIL("no such field: " + mapping(fieldName));
       fieldMap[&subField] = sourceField;
@@ -291,26 +313,21 @@ std::shared_ptr<ROOT::Experimental::RCollectionNTupleWriter> ROOT::Experimental:
    return collectionWriter;
 }
 
-const ROOT::Experimental::Detail::RFieldBase *
+ROOT::Experimental::RFieldZero &ROOT::Experimental::RNTupleModel::GetFieldZero()
+{
+   if (!IsFrozen())
+      throw RException(R__FAIL("invalid attempt to get mutable zero field of unfrozen model"));
+   return *fFieldZero;
+}
+
+const ROOT::Experimental::Detail::RFieldBase &
 ROOT::Experimental::RNTupleModel::GetField(std::string_view fieldName) const
 {
-   if (fieldName.empty())
-      return nullptr;
+   auto f = FindField(fieldName);
+   if (!f)
+      throw RException(R__FAIL("invalid field: " + std::string(fieldName)));
 
-   auto *field = static_cast<ROOT::Experimental::Detail::RFieldBase *>(fFieldZero.get());
-   for (auto subfieldName : ROOT::Split(fieldName, ".")) {
-      const auto subfields = field->GetSubFields();
-      auto it =
-         std::find_if(subfields.begin(), subfields.end(), [&](const auto *f) { return f->GetName() == subfieldName; });
-      if (it != subfields.end()) {
-         field = *it;
-      } else {
-         field = nullptr;
-         break;
-      }
-   }
-
-   return field;
+   return *f;
 }
 
 ROOT::Experimental::REntry *ROOT::Experimental::RNTupleModel::GetDefaultEntry() const

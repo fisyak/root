@@ -9,6 +9,7 @@ TEST(RNTuple, ReconstructModel)
    auto fieldKlass = model->MakeField<CustomStruct>("klass");
    auto fieldArray = model->MakeField<std::array<double, 2>>("array");
    auto fieldVariant = model->MakeField<std::variant<double, std::variant<std::string, double>>>("variant");
+   model->Freeze();
    {
       RPageSinkFile sink("myNTuple", fileGuard.GetPath(), RNTupleWriteOptions());
       sink.Create(*model.get());
@@ -413,16 +414,27 @@ TEST(RNTupleModel, GetField)
    auto m = RNTupleModel::Create();
    m->MakeField<int>("x");
    m->MakeField<CustomStruct>("cs");
-   EXPECT_EQ(m->GetField("x")->GetName(), "x");
-   EXPECT_EQ(m->GetField("x")->GetType(), "std::int32_t");
-   EXPECT_EQ(m->GetField("cs.v1")->GetName(), "v1");
-   EXPECT_EQ(m->GetField("cs.v1")->GetType(), "std::vector<float>");
-   EXPECT_EQ(m->GetField("nonexistent"), nullptr);
-   EXPECT_EQ(m->GetField(""), nullptr);
-   EXPECT_EQ("", m->GetFieldZero()->GetQualifiedFieldName());
-   EXPECT_EQ("x", m->GetField("x")->GetQualifiedFieldName());
-   EXPECT_EQ("cs", m->GetField("cs")->GetQualifiedFieldName());
-   EXPECT_EQ("cs.v1", m->GetField("cs.v1")->GetQualifiedFieldName());
+   m->Freeze();
+   EXPECT_EQ(m->GetField("x").GetName(), "x");
+   EXPECT_EQ(m->GetField("x").GetType(), "std::int32_t");
+   EXPECT_EQ(m->GetField("cs.v1").GetName(), "v1");
+   EXPECT_EQ(m->GetField("cs.v1").GetType(), "std::vector<float>");
+   try {
+      m->GetField("nonexistent");
+      FAIL() << "invalid field name should throw";
+   } catch (const RException &err) {
+      EXPECT_THAT(err.what(), testing::HasSubstr("invalid field"));
+   }
+   try {
+      m->GetField("");
+      FAIL() << "empty field name should throw";
+   } catch (const RException &err) {
+      EXPECT_THAT(err.what(), testing::HasSubstr("invalid field"));
+   }
+   EXPECT_EQ("", m->GetFieldZero().GetQualifiedFieldName());
+   EXPECT_EQ("x", m->GetField("x").GetQualifiedFieldName());
+   EXPECT_EQ("cs", m->GetField("cs").GetQualifiedFieldName());
+   EXPECT_EQ("cs.v1", m->GetField("cs.v1").GetQualifiedFieldName());
 }
 
 TEST(RNTuple, EmptyString)

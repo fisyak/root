@@ -361,6 +361,15 @@ add_custom_target(move_artifacts DEPENDS ${stamp_file} ${artifact_files_builddir
 
 add_subdirectory (interpreter)
 
+# Update etc/gitinfo.txt for every build.
+add_custom_target(gitinfotxt
+  ALL
+  COMMAND ${CMAKE_COMMAND} -DSRCDIR=${CMAKE_SOURCE_DIR} -DBINDIR=${CMAKE_BINARY_DIR} -P ${CMAKE_SOURCE_DIR}/cmake/modules/UpdateGitInfo.cmake
+  COMMENT "Updating etc/gitinfo.txt."
+  BYPRODUCTS ${CMAKE_BINARY_DIR}/etc/gitinfo.txt
+)
+install(FILES ${CMAKE_BINARY_DIR}/etc/gitinfo.txt DESTINATION ${CMAKE_INSTALL_SYSCONFDIR})
+
 #---CXX MODULES-----------------------------------------------------------------------------------
 if(cxxmodules)
   # Copy-pasted from HandleLLVMOptions.cmake, please keep up to date.
@@ -437,7 +446,7 @@ ROOT_ADD_TEST_SUBDIRECTORY(tutorials)
 
 get_property(__allHeaders GLOBAL PROPERTY ROOT_HEADER_TARGETS)
 get_property(__allBuiltins GLOBAL PROPERTY ROOT_BUILTIN_TARGETS)
-add_custom_target(move_headers ALL DEPENDS ${__allHeaders} ${__allBuiltins})
+add_custom_target(move_headers ALL DEPENDS ${__allHeaders} ${__allBuiltins} gitinfotxt)
 
 #---CXX MODULES-----------------------------------------------------------------------------------
 if(MSVC)
@@ -757,18 +766,24 @@ endif()
 cmake_host_system_information(RESULT PROCESSOR QUERY PROCESSOR_DESCRIPTION)
 
 message(STATUS "ROOT Configuration \n
-System          ${CMAKE_SYSTEM}
-Processor       ${PROCESSOR} (${CMAKE_SYSTEM_PROCESSOR})
-Build type      ${CMAKE_BUILD_TYPE}
-Install path    ${CMAKE_INSTALL_PREFIX}
-Compiler        ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}
+System:            ${CMAKE_SYSTEM}
+ROOT Platform:     ${ROOT_PLATFORM}
+ROOT Architecture: ${ROOT_ARCHITECTURE}
+Processor:         ${PROCESSOR} (${CMAKE_SYSTEM_PROCESSOR})
+Build type:        ${CMAKE_BUILD_TYPE}
+Install path:      ${CMAKE_INSTALL_PREFIX}
+Compiler:          ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}
+C++ standard:      ${CMAKE_CXX_STANDARD}
 Compiler flags:
-C               ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${_BUILD_TYPE_UPPER}}
-C++             ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_BUILD_TYPE_UPPER}}
+ - C:                         ${CMAKE_C_FLAGS}
+ - C (built type specific):   ${CMAKE_C_FLAGS_${_BUILD_TYPE_UPPER}}
+ - C++:                       ${CMAKE_CXX_FLAGS}
+ - C++ (built type specific): ${CMAKE_CXX_FLAGS_${_BUILD_TYPE_UPPER}}
 Linker flags:
-Executable      ${CMAKE_EXE_LINKER_FLAGS}
-Module          ${CMAKE_MODULE_LINKER_FLAGS}
-Shared          ${CMAKE_SHARED_LINKER_FLAGS}\n")
+ - Executable:     ${CMAKE_EXE_LINKER_FLAGS}
+ - Module:         ${CMAKE_MODULE_LINKER_FLAGS}
+ - Shared:         ${CMAKE_SHARED_LINKER_FLAGS}\n")
+
 
 ROOT_SHOW_ENABLED_OPTIONS()
 

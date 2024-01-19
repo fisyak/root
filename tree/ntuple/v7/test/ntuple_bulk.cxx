@@ -15,9 +15,8 @@ TEST(RNTupleBulk, Simple)
 
    auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
    // TODO(jblomer): find a better way to expose the GenerateBulk method of the target field
-   auto fieldZero = reader->GetModel()->GetFieldZero();
    std::unique_ptr<RFieldBase::RBulk> bulk;
-   for (auto &f : *fieldZero) {
+   for (auto &f : reader->GetModel()->GetFieldZero()) {
       if (f.GetName() != "int")
          continue;
       bulk = std::make_unique<RFieldBase::RBulk>(f.GenerateBulk());
@@ -54,14 +53,12 @@ TEST(RNTupleBulk, Complex)
    }
 
    auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
-   auto fieldZero = reader->GetModel()->GetFieldZero();
    std::unique_ptr<RFieldBase::RBulk> bulk;
-   for (auto &f : *fieldZero) {
+   for (auto &f : reader->GetModel()->GetFieldZero()) {
       if (f.GetName() != "S")
          continue;
       bulk = std::make_unique<RFieldBase::RBulk>(f.GenerateBulk());
    }
-
    auto mask = std::make_unique<bool[]>(10);
    for (unsigned int i = 0; i < 10; ++i)
       mask[i] = (i % 2 == 0);
@@ -109,10 +106,9 @@ TEST(RNTupleBulk, CardinalityField)
 
    auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
 
-   auto fieldZero = reader->GetModel()->GetFieldZero();
    std::unique_ptr<RFieldBase::RBulk> bulk32;
    std::unique_ptr<RFieldBase::RBulk> bulk64;
-   for (auto &f : *fieldZero) {
+   for (auto &f : reader->GetModel()->GetFieldZero()) {
       if (f.GetName() == "card32")
          bulk32 = std::make_unique<RFieldBase::RBulk>(f.GenerateBulk());
       if (f.GetName() == "card64")
@@ -157,11 +153,10 @@ TEST(RNTupleBulk, RVec)
 
    auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
 
-   auto fieldZero = reader->GetModel()->GetFieldZero();
    std::unique_ptr<RFieldBase::RBulk> bulkI;
    std::unique_ptr<RFieldBase::RBulk> bulkS;
    std::unique_ptr<RFieldBase::RBulk> bulkVI;
-   for (auto &f : *fieldZero) {
+   for (auto &f : reader->GetModel()->GetFieldZero()) {
       if (f.GetName() == "vint")
          bulkI = std::make_unique<RFieldBase::RBulk>(f.GenerateBulk());
       if (f.GetName() == "vs")

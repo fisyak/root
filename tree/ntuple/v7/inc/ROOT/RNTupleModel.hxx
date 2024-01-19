@@ -38,6 +38,7 @@ class RNTupleModel;
 class RNTupleWriter;
 
 namespace Detail {
+class RPageSinkBuf;
 
 // clang-format off
 /**
@@ -70,8 +71,12 @@ struct RNTupleModelChangeset {
 \brief The RNTupleModel encapulates the schema of an ntuple.
 
 The ntuple model comprises a collection of hierarchically organized fields. From a model, "entries"
-can be extracted. For convenience, the model provides a default entry. Models have a unique model identifier
-that faciliates checking whether entries are compatible with it (i.e.: have been extracted from that model).
+can be extracted. For convenience, the model provides a default entry unless it is created as a "bare model".
+Models have a unique model identifier that faciliates checking whether entries are compatible with it
+(i.e.: have been extracted from that model).
+
+A model is subject to a state transition during its lifetime: it starts in a building state, in which fields can be
+added and modified.  Once the schema is finalized, the model gets frozen.  Only frozen models can create entries.
 */
 // clang-format on
 class RNTupleModel {
@@ -157,7 +162,7 @@ public:
       void AddField(const NameWithDescription_t &fieldNameDesc, T *fromWhere)
       {
          fOpenChangeset.fModel.AddField<T>(fieldNameDesc, fromWhere);
-         auto fieldZero = fOpenChangeset.fModel.GetFieldZero();
+         auto fieldZero = fOpenChangeset.fModel.fFieldZero.get();
          auto it = std::find_if(fieldZero->begin(), fieldZero->end(),
                                 [&](const auto &f) { return f.GetName() == fieldNameDesc.fName; });
          R__ASSERT(it != fieldZero->end());
@@ -193,7 +198,10 @@ private:
    /// Throws an RException if fDefaultEntry is nullptr
    void EnsureNotBare() const;
 
-   RNTupleModel();
+   /// The field name can be a top-level field or a nested field. Returns nullptr if the field is not in the model.
+   Detail::RFieldBase *FindField(std::string_view fieldName) const;
+
+   RNTupleModel(std::unique_ptr<RFieldZero> fieldZero);
 
 public:
    RNTupleModel(const RNTupleModel&) = delete;
@@ -201,12 +209,13 @@ public:
    ~RNTupleModel() = default;
 
    std::unique_ptr<RNTupleModel> Clone() const;
-   static std::unique_ptr<RNTupleModel> Create();
+   static std::unique_ptr<RNTupleModel> Create(std::unique_ptr<RFieldZero> fieldZero = std::make_unique<RFieldZero>());
    /// A bare model has no default entry
-   static std::unique_ptr<RNTupleModel> CreateBare();
+   static std::unique_ptr<RNTupleModel>
+   CreateBare(std::unique_ptr<RFieldZero> fieldZero = std::make_unique<RFieldZero>());
 
    /// Creates a new field given a `name` or `{name, description}` pair and a
-   /// corresponding tree value that is managed by a shared pointer.
+   /// corresponding value that is managed by a shared pointer.
    ///
    /// **Example: create some fields and fill an %RNTuple**
    /// ~~~ {.cpp}
@@ -222,11 +231,11 @@ public:
    ///
    /// // The RNTuple is written to disk when the RNTupleWriter goes out of scope
    /// {
-   ///    auto ntuple = RNTupleWriter::Recreate(std::move(model), "myNTuple", "myFile.root");
+   ///    auto writer = RNTupleWriter::Recreate(std::move(model), "myNTuple", "myFile.root");
    ///    for (int i = 0; i < 100; i++) {
    ///       *pt = static_cast<float>(i);
    ///       *vec = {i, i+1, i+2};
-   ///       ntuple->Fill();
+   ///       writer->Fill();
    ///    }
    /// }
    /// ~~~
@@ -318,8 +327,11 @@ public:
    std::unique_ptr<REntry> CreateBareEntry() const;
    REntry *GetDefaultEntry() const;
 
-   RFieldZero *GetFieldZero() const { return fFieldZero.get(); }
-   const Detail::RFieldBase *GetField(std::string_view fieldName) const;
+   /// Non-const access to the root field is used to commit clusters during writing
+   /// and to set the on-disk field IDs when connecting a model to a page source or sink.
+   RFieldZero &GetFieldZero();
+   const RFieldZero &GetFieldZero() const { return *fFieldZero; }
+   const Detail::RFieldBase &GetField(std::string_view fieldName) const;
 
    std::string GetDescription() const { return fDescription; }
    void SetDescription(std::string_view description);
