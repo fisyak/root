@@ -47,6 +47,7 @@ public:
    static Int_t             ParamId(const Char_t *name);
    static const Char_t     *ParamName(Int_t id);
    void SetParam(Int_t i, Double_t val) { fParams[i] = val; }
+   void SetParam(const Char_t *name, Double_t val) {Int_t id = ParamId(name); if (id >= 0 && id < 44) SetParam(id, val);}
    const char *GetPointerName() const;
    TGeoMaterial *GetMaterial() const { return fMaterial; }
    void SavePrimitive(std::ostream &out, Option_t *option = "") override;
