@@ -86,12 +86,38 @@ class RFieldBase {
    friend struct ROOT::Experimental::Internal::RFieldCallbackInjector; // used for unit tests
    using ReadCallback_t = std::function<void(void *)>;
 
+protected:
+   /// A functor to release the memory acquired by GenerateValue (memory and constructor).
+   /// This implementation works for types with a trivial destructor. More complex fields implement a derived deleter.
+   /// The deleter is operational without the field object and thus can be used to destruct/release a value after
+   /// the field has been destructed.
+   class RDeleter {
+   public:
+      virtual ~RDeleter() = default;
+      virtual void operator()(void *objPtr, bool dtorOnly)
+      {
+         if (!dtorOnly)
+            operator delete(objPtr);
+      }
+   };
+
+   /// A deleter for templated RFieldBase descendents where the value type is known.
+   template <typename T>
+   class RTypedDeleter : public RDeleter {
+   public:
+      void operator()(void *objPtr, bool dtorOnly) final
+      {
+         std::destroy_at(static_cast<T *>(objPtr));
+         RDeleter::operator()(objPtr, dtorOnly);
+      }
+   };
+
 public:
    static constexpr std::uint32_t kInvalidTypeVersion = -1U;
    /// No constructor needs to be called, i.e. any bit pattern in the allocated memory represents a valid type
    /// A trivially constructible field has a no-op GenerateValue() implementation
    static constexpr int kTraitTriviallyConstructible = 0x01;
-   /// The type is cleaned up just by freeing its memory. I.e. DestroyValue() is a no-op.
+   /// The type is cleaned up just by freeing its memory. I.e. the destructor performs a no-op.
    static constexpr int kTraitTriviallyDestructible = 0x02;
    /// A field of a fundamental type that can be directly mapped via `RField<T>::Map()`, i.e. maps as-is to a single
    /// column
@@ -143,27 +169,35 @@ public:
 
    private:
       RFieldBase *fField = nullptr; ///< The field that created the RValue
+      std::unique_ptr<RFieldBase::RDeleter> fDeleter;
       /// Created by RFieldBase::GenerateValue() or a non-owning pointer from SplitValue() or BindValue()
       void *fObjPtr = nullptr;
       bool fIsOwning = false; ///< If true, fObjPtr is destroyed in the destructor
 
-      RValue(RFieldBase *field, void *objPtr, bool isOwning) : fField(field), fObjPtr(objPtr), fIsOwning(isOwning) {}
+      RValue(RFieldBase *field, void *objPtr, bool isOwning)
+         : fField(field), fDeleter(fField->GetDeleter()), fObjPtr(objPtr), fIsOwning(isOwning)
+      {
+      }
 
       void DestroyIfOwning()
       {
          if (fIsOwning)
-            fField->DestroyValue(fObjPtr);
+            fDeleter->operator()(fObjPtr, false /* dtorOnly */);
       }
 
    public:
       RValue(const RValue &) = delete;
       RValue &operator=(const RValue &) = delete;
-      RValue(RValue &&other) : fField(other.fField), fObjPtr(other.fObjPtr) { std::swap(fIsOwning, other.fIsOwning); }
+      RValue(RValue &&other) : fField(other.fField), fDeleter(fField->GetDeleter()), fObjPtr(other.fObjPtr)
+      {
+         std::swap(fIsOwning, other.fIsOwning);
+      }
       RValue &operator=(RValue &&other)
       {
          DestroyIfOwning();
          fIsOwning = false;
          std::swap(fField, other.fField);
+         std::swap(fDeleter, other.fDeleter);
          std::swap(fObjPtr, other.fObjPtr);
          std::swap(fIsOwning, other.fIsOwning);
          return *this;
@@ -184,7 +218,7 @@ public:
 
       std::size_t Append() { return fField->Append(fObjPtr); }
       void Read(NTupleSize_t globalIndex) { fField->Read(globalIndex, fObjPtr); }
-      void Read(const RClusterIndex &clusterIndex) { fField->Read(clusterIndex, fObjPtr); }
+      void Read(RClusterIndex clusterIndex) { fField->Read(clusterIndex, fObjPtr); }
       void Bind(void *objPtr)
       {
          DestroyIfOwning();
@@ -211,6 +245,7 @@ public:
       friend class RFieldBase;
 
       RFieldBase *fField = nullptr;       ///< The field that created the array of values
+      std::unique_ptr<RFieldBase::RDeleter> fDeleter; /// Cached deleter of fField
       void *fValues = nullptr;            ///< Pointer to the start of the array
       std::size_t fValueSize = 0;         ///< Cached copy of fField->GetValueSize()
       std::size_t fCapacity = 0;          ///< The size of the array memory block in number of values
@@ -226,10 +261,10 @@ public:
       void ReleaseValues();
       /// Sets a new range for the bulk. If there is enough capacity, the fValues array will be reused.
       /// Otherwise a new array is allocated. After reset, fMaskAvail is false for all values.
-      void Reset(const RClusterIndex &firstIndex, std::size_t size);
+      void Reset(RClusterIndex firstIndex, std::size_t size);
       void CountValidValues();
 
-      bool ContainsRange(const RClusterIndex &firstIndex, std::size_t size) const
+      bool ContainsRange(RClusterIndex firstIndex, std::size_t size) const
       {
          if (firstIndex.GetClusterId() != fFirstIndex.GetClusterId())
             return false;
@@ -242,7 +277,10 @@ public:
          return reinterpret_cast<unsigned char *>(fValues) + idx * fValueSize;
       }
 
-      explicit RBulk(RFieldBase *field) : fField(field), fValueSize(field->GetValueSize()) {}
+      explicit RBulk(RFieldBase *field)
+         : fField(field), fDeleter(field->GetDeleter()), fValueSize(field->GetValueSize())
+      {
+      }
 
    public:
       ~RBulk();
@@ -255,7 +293,7 @@ public:
       /// relative to a certain cluster. The return value points to the array of read objects.
       /// The 'maskReq' parameter is a bool array of at least 'size' elements. Only objects for which the mask is
       /// true are guaranteed to be read in the returned value array.
-      void *ReadBulk(const RClusterIndex &firstIndex, const bool *maskReq, std::size_t size)
+      void *ReadBulk(RClusterIndex firstIndex, const bool *maskReq, std::size_t size)
       {
          if (!ContainsRange(firstIndex, size))
             Reset(firstIndex, size);
@@ -386,21 +424,16 @@ protected:
 
    /// Constructs value in a given location of size at least GetValueSize(). Called by the base class' GenerateValue().
    virtual void GenerateValue(void *where) const = 0;
-   /// Releases the resources acquired during GenerateValue (memory and constructor)
-   /// This implementation works for types with a trivial destructor and should be overwritten otherwise.
-   virtual void DestroyValue(void *objPtr, bool dtorOnly = false) const;
-   /// Allow derived classes to call GenerateValue(void *) and DestroyValue on other (sub) fields.
+   virtual std::unique_ptr<RDeleter> GetDeleter() const { return std::make_unique<RDeleter>(); }
+   /// Allow derived classes to call GenerateValue(void *) and GetDeleter on other (sub) fields.
    static void CallGenerateValueOn(const RFieldBase &other, void *where) { other.GenerateValue(where); }
-   static void CallDestroyValueOn(const RFieldBase &other, void *objPtr, bool dtorOnly = false)
-   {
-      other.DestroyValue(objPtr, dtorOnly);
-   }
+   static std::unique_ptr<RDeleter> GetDeleterOf(const RFieldBase &other) { return other.GetDeleter(); }
 
    /// Operations on values of complex types, e.g. ones that involve multiple columns or for which no direct
    /// column type exists.
    virtual std::size_t AppendImpl(const void *from);
    virtual void ReadGlobalImpl(NTupleSize_t globalIndex, void *to);
-   virtual void ReadInClusterImpl(const RClusterIndex &clusterIndex, void *to)
+   virtual void ReadInClusterImpl(RClusterIndex clusterIndex, void *to)
    {
       ReadGlobalImpl(fPrincipalColumn->GetGlobalIndex(clusterIndex), to);
    }
@@ -432,7 +465,7 @@ protected:
          InvokeReadCallbacks(to);
    }
 
-   void Read(const RClusterIndex &clusterIndex, void *to)
+   void Read(RClusterIndex clusterIndex, void *to)
    {
       if (fIsSimple)
          return (void)fPrincipalColumn->Read(clusterIndex, to);
@@ -467,10 +500,7 @@ protected:
 
    /// Allow derived classes to call Append and Read on other (sub) fields.
    static std::size_t CallAppendOn(RFieldBase &other, const void *from) { return other.Append(from); }
-   static void CallReadOn(RFieldBase &other, const RClusterIndex &clusterIndex, void *to)
-   {
-      other.Read(clusterIndex, to);
-   }
+   static void CallReadOn(RFieldBase &other, RClusterIndex clusterIndex, void *to) { other.Read(clusterIndex, to); }
    static void CallReadOn(RFieldBase &other, NTupleSize_t globalIndex, void *to) { other.Read(globalIndex, to); }
 
    /// Fields may need direct access to the principal column of their sub fields, e.g. in RRVecField::ReadBulk
@@ -693,6 +723,15 @@ private:
    /// Prefix used in the subfield names generated for base classes
    static constexpr const char *kPrefixInherited{":"};
 
+   class RClassDeleter : public RDeleter {
+   private:
+      TClass *fClass;
+
+   public:
+      explicit RClassDeleter(TClass *cl) : fClass(cl) {}
+      void operator()(void *objPtr, bool dtorOnly) final;
+   };
+
    TClass* fClass;
    /// Additional information kept for each entry in `fSubFields`
    std::vector<RSubFieldInfo> fSubFieldsInfo;
@@ -711,11 +750,11 @@ protected:
    void GenerateColumnsImpl(const RNTupleDescriptor &) final {}
 
    void GenerateValue(void *where) const override;
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final;
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RClassDeleter>(fClass); }
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
-   void ReadInClusterImpl(const RClusterIndex &clusterIndex, void *to) final;
+   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final;
    void OnConnectPageSource() final;
 
 public:
@@ -747,10 +786,7 @@ protected:
 
    std::size_t AppendImpl(const void *from) final { return CallAppendOn(*fSubFields[0], from); }
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final { CallReadOn(*fSubFields[0], globalIndex, to); }
-   void ReadInClusterImpl(const RClusterIndex &clusterIndex, void *to) final
-   {
-      CallReadOn(*fSubFields[0], clusterIndex, to);
-   }
+   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final { CallReadOn(*fSubFields[0], clusterIndex, to); }
 
 public:
    REnumField(std::string_view fieldName, std::string_view enumName);
@@ -843,9 +879,28 @@ protected:
 
       RIterator begin() { return RIterator(*this, fBegin); }
       RIterator end() { return fStride ? RIterator(*this, fEnd) : RIterator(*this); }
+   }; // class RCollectionIterableOnce
+
+   class RProxiedCollectionDeleter : public RDeleter {
+   private:
+      std::shared_ptr<TVirtualCollectionProxy> fProxy;
+      std::unique_ptr<RDeleter> fItemDeleter;
+      std::size_t fItemSize = 0;
+      RCollectionIterableOnce::RIteratorFuncs fIFuncsWrite;
+
+   public:
+      explicit RProxiedCollectionDeleter(std::shared_ptr<TVirtualCollectionProxy> proxy) : fProxy(proxy) {}
+      RProxiedCollectionDeleter(std::shared_ptr<TVirtualCollectionProxy> proxy, std::unique_ptr<RDeleter> itemDeleter,
+                                size_t itemSize)
+         : fProxy(proxy), fItemDeleter(std::move(itemDeleter)), fItemSize(itemSize)
+      {
+         fIFuncsWrite = RCollectionIterableOnce::GetIteratorFuncs(fProxy.get(), false /* readFromDisk */);
+      }
+      void operator()(void *objPtr, bool dtorOnly) final;
    };
 
-   std::unique_ptr<TVirtualCollectionProxy> fProxy;
+   /// The collection proxy is needed by the deleters and thus defined as a shared pointer
+   std::shared_ptr<TVirtualCollectionProxy> fProxy;
    Int_t fProperties;
    Int_t fCollectionType;
    /// Two sets of functions to operate on iterators, to be used depending on the access type.  The direction preserves
@@ -869,7 +924,7 @@ protected:
    void GenerateColumnsImpl(const RNTupleDescriptor &desc) final;
 
    void GenerateValue(void *where) const override;
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const override;
+   std::unique_ptr<RDeleter> GetDeleter() const override;
 
    std::size_t AppendImpl(const void *from) override;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) override;
@@ -891,7 +946,7 @@ public:
    {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(const RClusterIndex &clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
    {
       fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
    }
@@ -900,6 +955,20 @@ public:
 /// The field for an untyped record. The subfields are stored consequitively in a memory block, i.e.
 /// the memory layout is identical to one that a C++ struct would have
 class RRecordField : public Detail::RFieldBase {
+private:
+   class RRecordDeleter : public RDeleter {
+   private:
+      std::vector<std::unique_ptr<RDeleter>> fItemDeleters;
+      std::vector<std::size_t> fOffsets;
+
+   public:
+      RRecordDeleter(std::vector<std::unique_ptr<RDeleter>> &itemDeleters, const std::vector<std::size_t> &offsets)
+         : fItemDeleters(std::move(itemDeleters)), fOffsets(offsets)
+      {
+      }
+      void operator()(void *objPtr, bool dtorOnly) final;
+   };
+
 protected:
    std::size_t fMaxAlignment = 1;
    std::size_t fSize = 0;
@@ -913,11 +982,11 @@ protected:
    void GenerateColumnsImpl(const RNTupleDescriptor &) final {}
 
    void GenerateValue(void *where) const override;
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const override;
+   std::unique_ptr<RDeleter> GetDeleter() const override;
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
-   void ReadInClusterImpl(const RClusterIndex &clusterIndex, void *to) final;
+   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final;
 
    RRecordField(std::string_view fieldName, std::vector<std::unique_ptr<Detail::RFieldBase>> &&itemFields,
                 const std::vector<std::size_t> &offsets, std::string_view typeName = "");
@@ -955,8 +1024,23 @@ public:
 /// The generic field for a (nested) std::vector<Type> except for std::vector<bool>
 class RVectorField : public Detail::RFieldBase {
 private:
+   class RVectorDeleter : public RDeleter {
+   private:
+      std::size_t fItemSize = 0;
+      std::unique_ptr<RDeleter> fItemDeleter;
+
+   public:
+      RVectorDeleter() = default;
+      RVectorDeleter(std::size_t itemSize, std::unique_ptr<RDeleter> itemDeleter)
+         : fItemSize(itemSize), fItemDeleter(std::move(itemDeleter))
+      {
+      }
+      void operator()(void *objPtr, bool dtorOnly) final;
+   };
+
    std::size_t fItemSize;
    ClusterSize_t fNWritten;
+   std::unique_ptr<RDeleter> fItemDeleter;
 
 protected:
    std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const final;
@@ -965,8 +1049,8 @@ protected:
    void GenerateColumnsImpl() final;
    void GenerateColumnsImpl(const RNTupleDescriptor &desc) final;
 
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final;
    void GenerateValue(void *where) const override { new (where) std::vector<char>(); }
+   std::unique_ptr<RDeleter> GetDeleter() const final;
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
@@ -987,13 +1071,33 @@ public:
    void GetCollectionInfo(NTupleSize_t globalIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(const RClusterIndex &clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const {
+   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   {
       fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
    }
 };
 
 /// The type-erased field for a RVec<Type>
 class RRVecField : public Detail::RFieldBase {
+public:
+   /// the RRVecDeleter is also used by RArrayAsRVecField and therefore declared public
+   class RRVecDeleter : public RDeleter {
+   private:
+      std::size_t fItemAlignment;
+      std::size_t fItemSize = 0;
+      std::unique_ptr<RDeleter> fItemDeleter;
+
+   public:
+      explicit RRVecDeleter(std::size_t itemAlignment) : fItemAlignment(itemAlignment) {}
+      RRVecDeleter(std::size_t itemAlignment, std::size_t itemSize, std::unique_ptr<RDeleter> itemDeleter)
+         : fItemAlignment(itemAlignment), fItemSize(itemSize), fItemDeleter(std::move(itemDeleter))
+      {
+      }
+      void operator()(void *objPtr, bool dtorOnly) final;
+   };
+
+   std::unique_ptr<RDeleter> fItemDeleter;
+
 protected:
    std::size_t fItemSize;
    ClusterSize_t fNWritten;
@@ -1005,7 +1109,7 @@ protected:
    void GenerateColumnsImpl(const RNTupleDescriptor &desc) final;
 
    void GenerateValue(void *where) const override;
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const override;
+   std::unique_ptr<RDeleter> GetDeleter() const override;
 
    std::size_t AppendImpl(const void *from) override;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) override;
@@ -1030,7 +1134,7 @@ public:
    {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(const RClusterIndex &clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
    {
       fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
    }
@@ -1039,6 +1143,20 @@ public:
 /// The generic field for fixed size arrays, which do not need an offset column
 class RArrayField : public Detail::RFieldBase {
 private:
+   class RArrayDeleter : public RDeleter {
+   private:
+      std::size_t fItemSize = 0;
+      std::size_t fArrayLength = 0;
+      std::unique_ptr<RDeleter> fItemDeleter;
+
+   public:
+      RArrayDeleter(std::size_t itemSize, std::size_t arrayLength, std::unique_ptr<RDeleter> itemDeleter)
+         : fItemSize(itemSize), fArrayLength(arrayLength), fItemDeleter(std::move(itemDeleter))
+      {
+      }
+      void operator()(void *objPtr, bool dtorOnly) final;
+   };
+
    std::size_t fItemSize;
    std::size_t fArrayLength;
 
@@ -1049,11 +1167,11 @@ protected:
    void GenerateColumnsImpl(const RNTupleDescriptor &) final {}
 
    void GenerateValue(void *where) const override;
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final;
+   std::unique_ptr<RDeleter> GetDeleter() const final;
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
-   void ReadInClusterImpl(const RClusterIndex &clusterIndex, void *to) final;
+   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final;
 
 public:
    RArrayField(std::string_view fieldName, std::unique_ptr<Detail::RFieldBase> itemField, std::size_t arrayLength);
@@ -1078,9 +1196,10 @@ arbitrarily-nested std::array on-disk fields as RVecs for usage in RDataFrame.
 */
 class RArrayAsRVecField final : public Detail::RFieldBase {
 private:
-   std::size_t fItemSize;    /// The size of a child field's item
-   std::size_t fArrayLength; /// The length of the arrays in this field
-   std::size_t fValueSize;   /// The size of a value of this field, i.e. an RVec
+   std::unique_ptr<RDeleter> fItemDeleter; /// Sub field deleter or nullptr for simple fields
+   std::size_t fItemSize;                  /// The size of a child field's item
+   std::size_t fArrayLength;               /// The length of the arrays in this field
+   std::size_t fValueSize;                 /// The size of a value of this field, i.e. an RVec
 
 protected:
    std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const final;
@@ -1089,10 +1208,11 @@ protected:
    void GenerateColumnsImpl(const RNTupleDescriptor &) final {}
 
    void GenerateValue(void *where) const final;
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final;
+   /// Returns an RRVecField::RRVecDeleter
+   std::unique_ptr<RDeleter> GetDeleter() const final;
 
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
-   void ReadInClusterImpl(const RClusterIndex &clusterIndex, void *to) final;
+   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final;
 
 public:
    /**
@@ -1158,6 +1278,19 @@ public:
 /// The generic field for std::variant types
 class RVariantField : public Detail::RFieldBase {
 private:
+   class RVariantDeleter : public RDeleter {
+   private:
+      std::size_t fTagOffset;
+      std::vector<std::unique_ptr<RDeleter>> fItemDeleters;
+
+   public:
+      RVariantDeleter(std::size_t tagOffset, std::vector<std::unique_ptr<RDeleter>> &itemDeleters)
+         : fTagOffset(tagOffset), fItemDeleters(std::move(itemDeleters))
+      {
+      }
+      void operator()(void *objPtr, bool dtorOnly) final;
+   };
+
    size_t fMaxItemSize = 0;
    size_t fMaxAlignment = 1;
    /// In the std::variant memory layout, at which byte number is the index stored
@@ -1166,8 +1299,8 @@ private:
 
    static std::string GetTypeList(const std::vector<Detail::RFieldBase *> &itemFields);
    /// Extracts the index from an std::variant and transforms it into the 1-based index used for the switch column
-   std::uint32_t GetTag(const void *variantPtr) const;
-   void SetTag(void *variantPtr, std::uint32_t tag) const;
+   static std::uint32_t GetTag(const void *variantPtr, std::size_t tagOffset);
+   static void SetTag(void *variantPtr, std::size_t tagOffset, std::uint32_t tag);
 
 protected:
    std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const final;
@@ -1177,7 +1310,7 @@ protected:
    void GenerateColumnsImpl(const RNTupleDescriptor &desc) final;
 
    void GenerateValue(void *where) const override;
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final;
+   std::unique_ptr<RDeleter> GetDeleter() const final;
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
@@ -1275,11 +1408,22 @@ public:
 };
 
 class RUniquePtrField : public RNullableField {
+   class RUniquePtrDeleter : public RDeleter {
+   private:
+      std::unique_ptr<RDeleter> fItemDeleter;
+
+   public:
+      explicit RUniquePtrDeleter(std::unique_ptr<RDeleter> itemDeleter) : fItemDeleter(std::move(itemDeleter)) {}
+      void operator()(void *objPtr, bool dtorOnly) final;
+   };
+
+   std::unique_ptr<RDeleter> fItemDeleter;
+
 protected:
    std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const final;
 
    void GenerateValue(void *where) const final { new (where) std::unique_ptr<char>(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final;
+   std::unique_ptr<RDeleter> GetDeleter() const final;
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
@@ -1304,17 +1448,11 @@ protected:
    void GenerateColumnsImpl(const RNTupleDescriptor &) final {}
 
    void GenerateValue(void *where) const final { CallGenerateValueOn(*fSubFields[0], where); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final
-   {
-      CallDestroyValueOn(*fSubFields[0], objPtr, dtorOnly);
-   }
+   std::unique_ptr<RDeleter> GetDeleter() const final { return GetDeleterOf(*fSubFields[0]); }
 
    std::size_t AppendImpl(const void *from) final { return CallAppendOn(*fSubFields[0], from); }
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final { CallReadOn(*fSubFields[0], globalIndex, to); }
-   void ReadInClusterImpl(const RClusterIndex &clusterIndex, void *to) final
-   {
-      CallReadOn(*fSubFields[0], clusterIndex, to);
-   }
+   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final { CallReadOn(*fSubFields[0], clusterIndex, to); }
 
 public:
    RAtomicField(std::string_view fieldName, std::string_view typeName, std::unique_ptr<Detail::RFieldBase> itemField);
@@ -1480,6 +1618,15 @@ public:
 /// The generic field for `std::pair<T1, T2>` types
 class RPairField : public RRecordField {
 private:
+   class RPairDeleter : public RDeleter {
+   private:
+      TClass *fClass;
+
+   public:
+      explicit RPairDeleter(TClass *cl) : fClass(cl) {}
+      void operator()(void *objPtr, bool dtorOnly) final;
+   };
+
    TClass *fClass = nullptr;
    static std::string GetTypeList(const std::array<std::unique_ptr<Detail::RFieldBase>, 2> &itemFields);
 
@@ -1487,7 +1634,7 @@ protected:
    std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const override;
 
    void GenerateValue(void *where) const override;
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const override;
+   std::unique_ptr<RDeleter> GetDeleter() const override { return std::make_unique<RPairDeleter>(fClass); }
 
    RPairField(std::string_view fieldName, std::array<std::unique_ptr<Detail::RFieldBase>, 2> &&itemFields,
               const std::array<std::size_t, 2> &offsets);
@@ -1504,6 +1651,15 @@ public:
 /// The generic field for `std::tuple<Ts...>` types
 class RTupleField : public RRecordField {
 private:
+   class RTupleDeleter : public RDeleter {
+   private:
+      TClass *fClass;
+
+   public:
+      explicit RTupleDeleter(TClass *cl) : fClass(cl) {}
+      void operator()(void *objPtr, bool dtorOnly) final;
+   };
+
    TClass *fClass = nullptr;
    static std::string GetTypeList(const std::vector<std::unique_ptr<Detail::RFieldBase>> &itemFields);
 
@@ -1511,7 +1667,7 @@ protected:
    std::unique_ptr<Detail::RFieldBase> CloneImpl(std::string_view newName) const override;
 
    void GenerateValue(void *where) const override;
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const override;
+   std::unique_ptr<RDeleter> GetDeleter() const override { return std::make_unique<RTupleDeleter>(fClass); }
 
    RTupleField(std::string_view fieldName, std::vector<std::unique_ptr<Detail::RFieldBase>> &&itemFields,
                const std::vector<std::size_t> &offsets);
@@ -1583,13 +1739,12 @@ public:
    ClusterSize_t *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<ClusterSize_t>(globalIndex);
    }
-   ClusterSize_t *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<ClusterSize_t>(clusterIndex);
-   }
+   ClusterSize_t *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<ClusterSize_t>(clusterIndex); }
    ClusterSize_t *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<ClusterSize_t>(globalIndex, nItems);
    }
-   ClusterSize_t *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   ClusterSize_t *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<ClusterSize_t>(clusterIndex, nItems);
    }
 
@@ -1601,7 +1756,8 @@ public:
    void GetCollectionInfo(NTupleSize_t globalIndex, RClusterIndex *collectionStart, ClusterSize_t *size) {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(const RClusterIndex &clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) {
+   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size)
+   {
       fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
    }
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
@@ -1637,7 +1793,7 @@ public:
    }
 
    /// Get the number of elements of the collection identified by clusterIndex
-   void ReadInClusterImpl(const RClusterIndex &clusterIndex, void *to) final
+   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final
    {
       RClusterIndex collectionStart;
       ClusterSize_t size;
@@ -1698,13 +1854,12 @@ public:
    bool *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<bool>(globalIndex);
    }
-   bool *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<bool>(clusterIndex);
-   }
+   bool *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<bool>(clusterIndex); }
    bool *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<bool>(globalIndex, nItems);
    }
-   bool *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   bool *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<bool>(clusterIndex, nItems);
    }
 
@@ -1740,13 +1895,12 @@ public:
    float *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<float>(globalIndex);
    }
-   float *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<float>(clusterIndex);
-   }
+   float *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<float>(clusterIndex); }
    float *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<float>(globalIndex, nItems);
    }
-   float *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   float *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<float>(clusterIndex, nItems);
    }
 
@@ -1784,13 +1938,12 @@ public:
    double *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<double>(globalIndex);
    }
-   double *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<double>(clusterIndex);
-   }
+   double *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<double>(clusterIndex); }
    double *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<double>(globalIndex, nItems);
    }
-   double *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   double *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<double>(clusterIndex, nItems);
    }
 
@@ -1828,12 +1981,12 @@ public:
    ~RField() override = default;
 
    std::byte *Map(NTupleSize_t globalIndex) { return fPrincipalColumn->Map<std::byte>(globalIndex); }
-   std::byte *Map(const RClusterIndex &clusterIndex) { return fPrincipalColumn->Map<std::byte>(clusterIndex); }
+   std::byte *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<std::byte>(clusterIndex); }
    std::byte *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems)
    {
       return fPrincipalColumn->MapV<std::byte>(globalIndex, nItems);
    }
-   std::byte *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems)
+   std::byte *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
    {
       return fPrincipalColumn->MapV<std::byte>(clusterIndex, nItems);
    }
@@ -1870,13 +2023,12 @@ public:
    char *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<char>(globalIndex);
    }
-   char *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<char>(clusterIndex);
-   }
+   char *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<char>(clusterIndex); }
    char *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<char>(globalIndex, nItems);
    }
-   char *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   char *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<char>(clusterIndex, nItems);
    }
 
@@ -1912,13 +2064,12 @@ public:
    std::int8_t *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<std::int8_t>(globalIndex);
    }
-   std::int8_t *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<std::int8_t>(clusterIndex);
-   }
+   std::int8_t *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<std::int8_t>(clusterIndex); }
    std::int8_t *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<std::int8_t>(globalIndex, nItems);
    }
-   std::int8_t *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   std::int8_t *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<std::int8_t>(clusterIndex, nItems);
    }
 
@@ -1954,13 +2105,12 @@ public:
    std::uint8_t *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<std::uint8_t>(globalIndex);
    }
-   std::uint8_t *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<std::uint8_t>(clusterIndex);
-   }
+   std::uint8_t *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<std::uint8_t>(clusterIndex); }
    std::uint8_t *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<std::uint8_t>(globalIndex, nItems);
    }
-   std::uint8_t *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   std::uint8_t *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<std::uint8_t>(clusterIndex, nItems);
    }
 
@@ -1996,13 +2146,12 @@ public:
    std::int16_t *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<std::int16_t>(globalIndex);
    }
-   std::int16_t *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<std::int16_t>(clusterIndex);
-   }
+   std::int16_t *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<std::int16_t>(clusterIndex); }
    std::int16_t *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<std::int16_t>(globalIndex, nItems);
    }
-   std::int16_t *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   std::int16_t *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<std::int16_t>(clusterIndex, nItems);
    }
 
@@ -2038,13 +2187,12 @@ public:
    std::uint16_t *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<std::uint16_t>(globalIndex);
    }
-   std::uint16_t *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<std::uint16_t>(clusterIndex);
-   }
+   std::uint16_t *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<std::uint16_t>(clusterIndex); }
    std::uint16_t *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<std::uint16_t>(globalIndex, nItems);
    }
-   std::uint16_t *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   std::uint16_t *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<std::uint16_t>(clusterIndex, nItems);
    }
 
@@ -2080,13 +2228,12 @@ public:
    std::int32_t *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<std::int32_t>(globalIndex);
    }
-   std::int32_t *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<std::int32_t>(clusterIndex);
-   }
+   std::int32_t *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<std::int32_t>(clusterIndex); }
    std::int32_t *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<std::int32_t>(globalIndex, nItems);
    }
-   std::int32_t *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   std::int32_t *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<std::int32_t>(clusterIndex, nItems);
    }
 
@@ -2128,7 +2275,8 @@ public:
    std::uint32_t *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<std::uint32_t>(globalIndex, nItems);
    }
-   std::uint32_t *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   std::uint32_t *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<std::uint32_t>(clusterIndex, nItems);
    }
 
@@ -2164,13 +2312,12 @@ public:
    std::uint64_t *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<std::uint64_t>(globalIndex);
    }
-   std::uint64_t *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<std::uint64_t>(clusterIndex);
-   }
+   std::uint64_t *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<std::uint64_t>(clusterIndex); }
    std::uint64_t *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<std::uint64_t>(globalIndex, nItems);
    }
-   std::uint64_t *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   std::uint64_t *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<std::uint64_t>(clusterIndex, nItems);
    }
 
@@ -2206,13 +2353,12 @@ public:
    std::int64_t *Map(NTupleSize_t globalIndex) {
       return fPrincipalColumn->Map<std::int64_t>(globalIndex);
    }
-   std::int64_t *Map(const RClusterIndex &clusterIndex) {
-      return fPrincipalColumn->Map<std::int64_t>(clusterIndex);
-   }
+   std::int64_t *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<std::int64_t>(clusterIndex); }
    std::int64_t *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) {
       return fPrincipalColumn->MapV<std::int64_t>(globalIndex, nItems);
    }
-   std::int64_t *MapV(const RClusterIndex &clusterIndex, NTupleSize_t &nItems) {
+   std::int64_t *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   {
       return fPrincipalColumn->MapV<std::int64_t>(clusterIndex, nItems);
    }
 
@@ -2236,7 +2382,7 @@ private:
    void GenerateColumnsImpl(const RNTupleDescriptor &desc) final;
 
    void GenerateValue(void *where) const final { new (where) std::string(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const override;
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<std::string>>(); }
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(ROOT::Experimental::NTupleSize_t globalIndex, void *to) final;
@@ -2295,11 +2441,7 @@ class RField<std::set<ItemT>> : public RSetField {
 
 protected:
    void GenerateValue(void *where) const final { new (where) ContainerT(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final
-   {
-      std::destroy_at(static_cast<ContainerT *>(objPtr));
-      Detail::RFieldBase::DestroyValue(objPtr, dtorOnly);
-   }
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<ContainerT>>(); }
 
 public:
    static std::string TypeName() { return "std::set<" + RField<ItemT>::TypeName() + ">"; }
@@ -2320,11 +2462,7 @@ class RField<std::unordered_set<ItemT>> : public RSetField {
 
 protected:
    void GenerateValue(void *where) const final { new (where) ContainerT(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final
-   {
-      std::destroy_at(static_cast<ContainerT *>(objPtr));
-      Detail::RFieldBase::DestroyValue(objPtr, dtorOnly);
-   }
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<ContainerT>>(); }
 
 public:
    static std::string TypeName() { return "std::unordered_set<" + RField<ItemT>::TypeName() + ">"; }
@@ -2345,11 +2483,7 @@ class RField<std::map<KeyT, ValueT>> : public RMapField {
 
 protected:
    void GenerateValue(void *where) const final { new (where) ContainerT(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final
-   {
-      std::destroy_at(static_cast<ContainerT *>(objPtr));
-      Detail::RFieldBase::DestroyValue(objPtr, dtorOnly);
-   }
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<ContainerT>>(); }
 
 public:
    static std::string TypeName()
@@ -2376,11 +2510,7 @@ class RField<std::unordered_map<KeyT, ValueT>> : public RMapField {
 
 protected:
    void GenerateValue(void *where) const final { new (where) ContainerT(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final
-   {
-      std::destroy_at(static_cast<ContainerT *>(objPtr));
-      Detail::RFieldBase::DestroyValue(objPtr, dtorOnly);
-   }
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<ContainerT>>(); }
 
 public:
    static std::string TypeName()
@@ -2475,7 +2605,7 @@ protected:
    void GenerateColumnsImpl(const RNTupleDescriptor &desc) final;
 
    void GenerateValue(void *where) const final { new (where) std::vector<bool>(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final;
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<std::vector<bool>>>(); }
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
@@ -2498,7 +2628,7 @@ public:
    void GetCollectionInfo(NTupleSize_t globalIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(const RClusterIndex &clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
    {
       fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
    }
@@ -2514,11 +2644,7 @@ protected:
    }
 
    void GenerateValue(void *where) const final { new (where) ContainerT(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final
-   {
-      std::destroy_at(static_cast<ContainerT *>(objPtr));
-      Detail::RFieldBase::DestroyValue(objPtr, dtorOnly);
-   }
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<ContainerT>>(); }
 
    std::size_t AppendImpl(const void *from) final
    {
@@ -2592,11 +2718,7 @@ protected:
    }
 
    void GenerateValue(void *where) const final { new (where) ContainerT(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final
-   {
-      std::destroy_at(static_cast<ContainerT *>(objPtr));
-      Detail::RFieldBase::DestroyValue(objPtr, dtorOnly);
-   }
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<ContainerT>>(); }
 
 public:
    static std::string TypeName() {
@@ -2671,11 +2793,7 @@ protected:
    }
 
    void GenerateValue(void *where) const final { new (where) ContainerT(); }
-   void DestroyValue(void *objPtr, bool dtorOnly = false) const final
-   {
-      std::destroy_at(static_cast<ContainerT *>(objPtr));
-      Detail::RFieldBase::DestroyValue(objPtr, dtorOnly);
-   }
+   std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<ContainerT>>(); }
 
 public:
    static std::string TypeName() { return "std::tuple<" + BuildItemTypes<ItemTs...>() + ">"; }

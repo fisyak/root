@@ -630,24 +630,24 @@ TEST(RNTuple, BareEntry)
    FileRaii fileGuard("test_ntuple_bare_entry.root");
    {
       auto ntuple = RNTupleWriter::Recreate(std::move(m), "ntpl", fileGuard.GetPath());
-      const auto model = ntuple->GetModel();
+      const auto &model = ntuple->GetModel();
       try {
-         model->GetDefaultEntry();
+         model.GetDefaultEntry();
          FAIL() << "accessing default entry of bare model should throw";
       } catch (const RException &err) {
          EXPECT_THAT(err.what(), testing::HasSubstr("invalid attempt to use default entry of bare model"));
       }
       try {
-         model->Get<float>("pt");
+         model.Get<float>("pt");
          FAIL() << "accessing default entry of bare model should throw";
       } catch (const RException &err) {
          EXPECT_THAT(err.what(), testing::HasSubstr("invalid attempt to use default entry of bare model"));
       }
 
-      auto e1 = model->CreateEntry();
+      auto e1 = model.CreateEntry();
       ASSERT_NE(nullptr, e1->Get<float>("pt"));
       *(e1->Get<float>("pt")) = 1.0;
-      auto e2 = model->CreateBareEntry();
+      auto e2 = model.CreateBareEntry();
       EXPECT_EQ(nullptr, e2->Get<float>("pt"));
       float pt = 2.0;
       e2->CaptureValueUnsafe("pt", &pt);
@@ -751,4 +751,23 @@ TEST(RNTuple, FillBytesWritten)
    RNTupleWriteOptions optsSmall;
    optsSmall.SetHasSmallClusters(true);
    checkFillReturnValue(optsSmall);
+}
+
+TEST(RNTuple, RFieldDeleter)
+{
+   auto f1 = RFieldBase::Create("f1", "CustomStruct").Unwrap();
+   auto f2 = RFieldBase::Create("f2", "std::vector<std::vector<std::variant<std::string, float>>>").Unwrap();
+   auto f3 = RFieldBase::Create("f3", "std::variant<std::unique_ptr<CustomStruct>, ComplexStruct>>").Unwrap();
+   auto v1 = f1->GenerateValue();
+   auto v2 = f2->GenerateValue();
+   auto v3 = f3->GenerateValue();
+
+   // Destruct fields to check if the deleters work without the fields
+   f1 = nullptr;
+   f2 = nullptr;
+   f3 = nullptr;
+
+   // The deleters are called in the destructors of the values
+
+   // TODO(jblomer): this becomes more explicit when the RValues contain shared pointers
 }

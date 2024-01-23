@@ -78,12 +78,12 @@ void Convert() {
    // The new ntuple takes ownership of the model
    auto ntuple = RNTupleWriter::Recreate(std::move(model), "DecayTree", kNTupleFileName);
 
-   auto entry = ntuple->GetModel()->CreateEntry();
+   auto entry = ntuple->GetModel().CreateEntry();
    for (auto b : TRangeDynCast<TBranch>(*tree->GetListOfBranches())) {
       auto l = static_cast<TLeaf *>(b->GetListOfLeaves()->First());
       // We connect the model's default entry's memory location for the new field to the branch, so that we can
       // fill the ntuple with the data read from the TTree
-      void *fieldDataPtr = entry->GetRawPtr(l->GetName());
+      void *fieldDataPtr = entry->Get<void>(l->GetName());
       tree->SetBranchAddress(b->GetName(), fieldDataPtr);
    }
 
