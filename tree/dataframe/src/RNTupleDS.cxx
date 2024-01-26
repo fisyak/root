@@ -26,6 +26,7 @@
 #include <TError.h>
 
 #include <cassert>
+#include <memory>
 #include <string>
 #include <vector>
 #include <typeinfo>
@@ -158,7 +159,7 @@ class RNTupleColumnReader : public ROOT::Detail::RDF::RColumnReaderBase {
    RFieldBase *fProtoField;                    ///< The prototype field from which fField is cloned
    std::unique_ptr<RFieldBase> fField;         ///< The field backing the RDF column
    std::unique_ptr<RFieldBase::RValue> fValue; ///< The memory location used to read from fField
-   void *fValuePtr = nullptr;                  ///< Used to reuse the object created by fValue when reconnecting sources
+   std::shared_ptr<void> fValuePtr;            ///< Used to reuse the object created by fValue when reconnecting sources
    Long64_t fLastEntry = -1;                   ///< Last entry number that was read
    /// For chains, the logical entry and the physical entry in any particular file can be different.
    /// The entry offset stores the logical entry number (sum of all previous physical entries) when a file of the corresponding
@@ -196,7 +197,6 @@ public:
       if (fValuePtr) {
          // When the reader reconnects to a new file, the fValuePtr is already set
          fValue = std::make_unique<RFieldBase::RValue>(fField->BindValue(fValuePtr));
-         fValue->TakeOwnership();
          fValuePtr = nullptr;
       } else {
          // For the first file, create a new object for this field (reader)
@@ -207,7 +207,7 @@ public:
    void Disconnect(bool keepValue)
    {
       if (fValue && keepValue) {
-         fValuePtr = fValue->Release<void>();
+         fValuePtr = fValue->GetPtr<void>();
       }
       fValue = nullptr;
       fField = nullptr;
@@ -220,7 +220,7 @@ public:
          fValue->Read(entry - fEntryOffset);
          fLastEntry = entry;
       }
-      return fValue->GetRawPtr();
+      return fValue->GetPtr<void>().get();
    }
 };
 

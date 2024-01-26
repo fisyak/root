@@ -112,6 +112,14 @@ protected:
       }
    };
 
+   // We cannot directly use RFieldBase::RDeleter as a shared pointer deleter due to splicing. We use this
+   // wrapper class to store a polymorphic pointer to the actual deleter.
+   struct RSharedPtrDeleter {
+      std::unique_ptr<RFieldBase::RDeleter> fDeleter;
+      void operator()(void *objPtr) { fDeleter->operator()(objPtr, false /* dtorOnly*/); }
+      explicit RSharedPtrDeleter(std::unique_ptr<RFieldBase::RDeleter> deleter) : fDeleter(std::move(deleter)) {}
+   };
+
 public:
    static constexpr std::uint32_t kInvalidTypeVersion = -1U;
    /// No constructor needs to be called, i.e. any bit pattern in the allocated memory represents a valid type
@@ -169,69 +177,34 @@ public:
 
    private:
       RFieldBase *fField = nullptr; ///< The field that created the RValue
-      std::unique_ptr<RFieldBase::RDeleter> fDeleter;
-      /// Created by RFieldBase::GenerateValue() or a non-owning pointer from SplitValue() or BindValue()
-      void *fObjPtr = nullptr;
-      bool fIsOwning = false; ///< If true, fObjPtr is destroyed in the destructor
+      std::shared_ptr<void> fObjPtr; ///< Set by Bind() or by RFieldBase::GenerateValue(), SplitValue() or BindValue()
 
-      RValue(RFieldBase *field, void *objPtr, bool isOwning)
-         : fField(field), fDeleter(fField->GetDeleter()), fObjPtr(objPtr), fIsOwning(isOwning)
-      {
-      }
-
-      void DestroyIfOwning()
-      {
-         if (fIsOwning)
-            fDeleter->operator()(fObjPtr, false /* dtorOnly */);
-      }
+      RValue(RFieldBase *field, std::shared_ptr<void> objPtr) : fField(field), fObjPtr(objPtr) {}
 
    public:
-      RValue(const RValue &) = delete;
-      RValue &operator=(const RValue &) = delete;
-      RValue(RValue &&other) : fField(other.fField), fDeleter(fField->GetDeleter()), fObjPtr(other.fObjPtr)
-      {
-         std::swap(fIsOwning, other.fIsOwning);
-      }
-      RValue &operator=(RValue &&other)
-      {
-         DestroyIfOwning();
-         fIsOwning = false;
-         std::swap(fField, other.fField);
-         std::swap(fDeleter, other.fDeleter);
-         std::swap(fObjPtr, other.fObjPtr);
-         std::swap(fIsOwning, other.fIsOwning);
-         return *this;
-      }
-      ~RValue() { DestroyIfOwning(); }
+      RValue(const RValue &) = default;
+      RValue &operator=(const RValue &) = default;
+      RValue(RValue &&other) = default;
+      RValue &operator=(RValue &&other) = default;
+      ~RValue() = default;
 
-      RValue GetNonOwningCopy() const { return RValue(fField, fObjPtr, false); }
+      std::size_t Append() { return fField->Append(fObjPtr.get()); }
+      void Read(NTupleSize_t globalIndex) { fField->Read(globalIndex, fObjPtr.get()); }
+      void Read(RClusterIndex clusterIndex) { fField->Read(clusterIndex, fObjPtr.get()); }
+      void Bind(std::shared_ptr<void> objPtr) { fObjPtr = objPtr; }
 
       template <typename T>
-      void *Release()
+      std::shared_ptr<T> GetPtr() const
       {
-         fIsOwning = false;
-         void *result = nullptr;
-         std::swap(result, fObjPtr);
-         return static_cast<T *>(result);
-      }
-      void TakeOwnership() { fIsOwning = true; }
-
-      std::size_t Append() { return fField->Append(fObjPtr); }
-      void Read(NTupleSize_t globalIndex) { fField->Read(globalIndex, fObjPtr); }
-      void Read(RClusterIndex clusterIndex) { fField->Read(clusterIndex, fObjPtr); }
-      void Bind(void *objPtr)
-      {
-         DestroyIfOwning();
-         fObjPtr = objPtr;
-         fIsOwning = false;
+         return std::static_pointer_cast<T>(fObjPtr);
       }
 
       template <typename T>
-      T *Get() const
+      const T &GetRef() const
       {
-         return static_cast<T *>(fObjPtr);
+         return *static_cast<T *>(fObjPtr.get());
       }
-      void *GetRawPtr() const { return fObjPtr; }
+
       const RFieldBase &GetField() const { return *fField; }
    }; // class RValue
 
@@ -613,7 +586,7 @@ public:
    /// The returned bulk is initially empty; RBulk::ReadBulk will construct the array of values
    RBulk GenerateBulk() { return RBulk(this); }
    /// Creates a value from a memory location with an already constructed object
-   RValue BindValue(void *where) { return RValue(this, where, false /* isOwning */); }
+   RValue BindValue(std::shared_ptr<void> objPtr) { return RValue(this, objPtr); }
    /// Creates the list of direct child values given a value for this field.  E.g. a single value for the
    /// correct variant or all the elements of a collection.  The default implementation assumes no sub values
    /// and returns an empty vector.

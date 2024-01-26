@@ -155,15 +155,23 @@ constexpr std::int32_t ChecksumRNTupleClass() {
 #pragma pack(push, 1)
 /// A name (type, identifies, ...) in the TFile binary format
 struct RTFString {
-   char fLName{0};
+   unsigned char fLName{0};
    char fData[255];
    RTFString() = default;
    RTFString(const std::string &str) {
-      R__ASSERT(str.length() < 256);
+      // The length of strings with 255 characters and longer are encoded with a 32-bit integer following the first
+      // byte. This is currently not handled.
+      R__ASSERT(str.length() < 255);
       fLName = str.length();
       memcpy(fData, str.data(), fLName);
    }
-   char GetSize() const { return 1 + fLName; }
+   std::size_t GetSize() const
+   {
+      // A length of 255 is special and means that the first byte is followed by a 32-bit integer with the actual
+      // length.
+      R__ASSERT(fLName != 255);
+      return 1 + fLName;
+   }
 };
 
 /// The timestamp format used in TFile; the default constructor initializes with the current time
@@ -1048,7 +1056,9 @@ ROOT::Experimental::Internal::RMiniFileReader::GetNTupleProper(std::string_view 
    RTFKey key;
    RTFString name;
    ReadBuffer(&key, sizeof(key), fileHeader.fBEGIN);
+   // Skip over the entire key length, including the class name, object name, and title stored in it.
    std::uint64_t offset = fileHeader.fBEGIN + key.fKeyLen;
+   // Skip over the name and title of the TNamed preceding the TFile entry.
    ReadBuffer(&name, 1, offset);
    offset += name.GetSize();
    ReadBuffer(&name, 1, offset);
@@ -1493,6 +1503,7 @@ void ROOT::Experimental::Internal::RNTupleFileWriter::WriteTFileKeysList()
    fFileSimple.Write(&strEmpty, strEmpty.GetSize());
    fFileSimple.Write(&keyList, keyList.GetSize());
    fFileSimple.Write(&keyRNTuple, keyRNTuple.fKeyHeaderSize);
+   // Write class name, object name, and title for this key.
    fFileSimple.Write(&strRNTupleClass, strRNTupleClass.GetSize());
    fFileSimple.Write(&strRNTupleName, strRNTupleName.GetSize());
    fFileSimple.Write(&strEmpty, strEmpty.GetSize());
@@ -1548,9 +1559,11 @@ void ROOT::Experimental::Internal::RNTupleFileWriter::WriteTFileSkeleton(int def
    fFileSimple.fControlBlock->fHeader.SetNbytesName(nbytesName);
 
    fFileSimple.Write(&keyRoot, keyRoot.fKeyHeaderSize, 100);
+   // Write class name, object name, and title for the TFile key.
    fFileSimple.Write(&strTFile, strTFile.GetSize());
    fFileSimple.Write(&strFileName, strFileName.GetSize());
    fFileSimple.Write(&strEmpty, strEmpty.GetSize());
+   // Write the name and title of the TNamed preceding the TFile entry.
    fFileSimple.Write(&strFileName, strFileName.GetSize());
    fFileSimple.Write(&strEmpty, strEmpty.GetSize());
    // Will be overwritten on commit

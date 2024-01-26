@@ -290,7 +290,7 @@ public:
 
       auto field = std::make_unique<RField<T>>(fieldNameDesc.fName);
       field->SetDescription(fieldNameDesc.fDescription);
-      fDefaultEntry->AddValue(field->BindValue(fromWhere));
+      fDefaultEntry->AddValue(field->BindValue(std::shared_ptr<void>(fromWhere, [](void *) {})));
       fFieldZero->Attach(std::move(field));
    }
 
@@ -304,7 +304,7 @@ public:
    T *Get(std::string_view fieldName) const
    {
       EnsureNotBare();
-      return fDefaultEntry->Get<T>(fieldName);
+      return fDefaultEntry->GetPtr<T>(fieldName).get();
    }
 
    const RProjectedFields &GetProjectedFields() const { return *fProjectedFields; }
@@ -322,7 +322,7 @@ public:
       std::unique_ptr<RNTupleModel> collectionModel);
 
    std::unique_ptr<REntry> CreateEntry() const;
-   /// In a bare entry, all values point to nullptr. The resulting entry shall use CaptureValueUnsafe() in order
+   /// In a bare entry, all values point to nullptr. The resulting entry shall use BindValue() in order
    /// set memory addresses to be serialized / deserialized
    std::unique_ptr<REntry> CreateBareEntry() const;
    REntry *GetDefaultEntry() const;

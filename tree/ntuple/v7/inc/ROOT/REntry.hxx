@@ -65,7 +65,7 @@ class REntry {
    template<typename T, typename... ArgsT>
    std::shared_ptr<T> AddValue(RField<T>* field, ArgsT&&... args) {
       auto ptr = std::make_shared<T>(std::forward<ArgsT>(args)...);
-      fValues.emplace_back(field->BindValue(ptr.get()));
+      fValues.emplace_back(field->BindValue(ptr));
       fValuePtrs.emplace_back(ptr);
       return ptr;
    }
@@ -95,23 +95,46 @@ public:
    REntry &operator=(REntry &&other) = default;
    ~REntry() = default;
 
-   void CaptureValueUnsafe(std::string_view fieldName, void *where);
+   template <typename T>
+   void BindValue(std::string_view fieldName, std::shared_ptr<T> objPtr)
+   {
+      for (auto &v : fValues) {
+         if (v.GetField().GetName() != fieldName)
+            continue;
+
+         if constexpr (!std::is_void_v<T>) {
+            if (v.GetField().GetType() != RField<T>::TypeName()) {
+               throw RException(R__FAIL("type mismatch for field " + std::string(fieldName) + ": " +
+                                        v.GetField().GetType() + " vs. " + RField<T>::TypeName()));
+            }
+         }
+         v.Bind(objPtr);
+         return;
+      }
+      throw RException(R__FAIL("invalid field name: " + std::string(fieldName)));
+   }
 
    template <typename T>
-   T *Get(std::string_view fieldName) const
+   void BindRawPtr(std::string_view fieldName, T *rawPtr)
+   {
+      BindValue(fieldName, std::shared_ptr<T>(rawPtr, [](T *) {}));
+   }
+
+   template <typename T>
+   std::shared_ptr<T> GetPtr(std::string_view fieldName) const
    {
       for (auto &v : fValues) {
          if (v.GetField().GetName() != fieldName)
             continue;
 
          if constexpr (std::is_void_v<T>)
-            return v.Get<T>();
+            return v.GetPtr<void>();
 
          if (v.GetField().GetType() != RField<T>::TypeName()) {
             throw RException(R__FAIL("type mismatch for field " + std::string(fieldName) + ": " +
                                      v.GetField().GetType() + " vs. " + RField<T>::TypeName()));
          }
-         return v.Get<T>();
+         return std::static_pointer_cast<T>(v.GetPtr<void>());
       }
       throw RException(R__FAIL("invalid field name: " + std::string(fieldName)));
    }

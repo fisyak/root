@@ -22,14 +22,3 @@ void ROOT::Experimental::REntry::AddValue(Detail::RFieldBase::RValue &&value)
 {
    fValues.emplace_back(std::move(value));
 }
-
-void ROOT::Experimental::REntry::CaptureValueUnsafe(std::string_view fieldName, void *where)
-{
-   for (std::size_t i = 0; i < fValues.size(); ++i) {
-      if (fValues[i].GetField().GetName() != fieldName)
-         continue;
-      fValues[i].Bind(where);
-      return;
-   }
-   throw RException(R__FAIL("invalid field name: " + std::string(fieldName)));
-}

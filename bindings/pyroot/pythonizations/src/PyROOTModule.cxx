@@ -14,7 +14,6 @@
 #include "PyROOTStrings.h"
 #include "PyROOTWrapper.h"
 #include "RPyROOTApplication.h"
-#include "FacadeHelpers.hxx"
 
 // Cppyy
 #include "CPyCppyy.h"
@@ -45,20 +44,14 @@ static PyMethodDef gPyROOTMethods[] = {
     (char *)"Allow to use seamlessly from Python the templated TDirectory::WriteObject method"},
    {(char *)"AddCPPInstancePickling", (PyCFunction)PyROOT::AddCPPInstancePickling, METH_VARARGS,
     (char *)"Add a custom pickling mechanism for Cppyy Python proxy objects"},
-   {(char *)"AddDirectoryGetAttrPyz", (PyCFunction)PyROOT::AddDirectoryGetAttrPyz, METH_VARARGS,
-    (char *)"Attr syntax for TDirectory, TDirectoryFile and TFile"},
    {(char *)"AddBranchAttrSyntax", (PyCFunction)PyROOT::AddBranchAttrSyntax, METH_VARARGS,
     (char *)"Allow to access branches as tree attributes"},
-   {(char *)"AddFileOpenPyz", (PyCFunction)PyROOT::AddFileOpenPyz, METH_VARARGS,
-    (char *)"Make TFile::Open a constructor, adjusting for example the reference count"},
    {(char *)"AddTDirectoryFileGetPyz", (PyCFunction)PyROOT::AddTDirectoryFileGetPyz, METH_VARARGS,
     (char *)"Get objects inside TDirectoryFile and TFile instantiations"},
    {(char *)"AddTClassDynamicCastPyz", (PyCFunction)PyROOT::AddTClassDynamicCastPyz, METH_VARARGS,
     (char *)"Cast the void* returned by TClass::DynamicCast to the right type"},
    {(char *)"AddTObjectEqNePyz", (PyCFunction)PyROOT::AddTObjectEqNePyz, METH_VARARGS,
     (char *)"Add equality and inequality comparison operators to TObject"},
-   {(char *)"AddUsingToClass", (PyCFunction)PyROOT::AddUsingToClass, METH_VARARGS,
-    (char *)"Add 'using' overloads for a given method to a class"},
    {(char *)"SetBranchAddressPyz", (PyCFunction)PyROOT::SetBranchAddressPyz, METH_VARARGS,
     (char *)"Fully enable the use of TTree::SetBranchAddress from Python"},
    {(char *)"BranchPyz", (PyCFunction)PyROOT::BranchPyz, METH_VARARGS,
@@ -85,8 +78,6 @@ static PyMethodDef gPyROOTMethods[] = {
     (char *)"Deserialize a pickled object"},
    {(char *)"ClearProxiedObjects", (PyCFunction)PyROOT::ClearProxiedObjects, METH_NOARGS,
     (char *)"Clear proxied objects regulated by PyROOT"},
-   {(char *)"CreateBufferFromAddress", (PyCFunction)PyROOT::CreateBufferFromAddress, METH_O,
-    (char *)"Create a LowLevelView object on the received address"},
    {NULL, NULL, 0, NULL}};
 
 #define QuoteIdent(ident) #ident

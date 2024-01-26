@@ -33,6 +33,11 @@ inline double gaussianEvaluate(double x, double mean, double sigma)
    return std::exp(-0.5 * arg * arg / (sig * sig));
 }
 
+// RooRatio evaluate function.
+inline double ratioEvaluate(double numerator, double denominator) {
+   return numerator / denominator;
+}
+
 inline double bifurGaussEvaluate(double x, double mean, double sigmaL, double sigmaR)
 {
    // Note: this simplification does not work with Clad as of v1.1!
@@ -226,6 +231,10 @@ inline double logNormalEvaluate(double x, double k, double m0)
 inline double logNormalEvaluateStandard(double x, double sigma, double mu)
 {
    return ROOT::Math::lognormal_pdf(x, mu, std::abs(sigma));
+}
+
+inline double effProdEvaluate(double eff, double pdf) {
+   return eff * pdf;
 }
 
 } // namespace EvaluateFuncs
