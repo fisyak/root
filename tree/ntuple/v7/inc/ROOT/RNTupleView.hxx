@@ -147,25 +147,19 @@ private:
    /// fFieldId has fParent always set to null; views access nested fields without looking at the parent
    FieldT fField;
    /// Used as a Read() destination for fields that are not mappable
-   Detail::RFieldBase::RValue fValue;
+   RFieldBase::RValue fValue;
 
 public:
    using FieldTypeT = T;
 
    RNTupleView(DescriptorId_t fieldId, Detail::RPageSource *pageSource)
       : fField(pageSource->GetSharedDescriptorGuard()->GetFieldDescriptor(fieldId).GetFieldName()),
-        fValue(fField.GenerateValue())
+        fValue(fField.CreateValue())
    {
       fField.SetOnDiskId(fieldId);
       fField.ConnectPageSource(*pageSource);
-      if ((fField.GetTraits() & Detail::RFieldBase::kTraitMappable) && fField.HasReadCallbacks())
+      if ((fField.GetTraits() & RFieldBase::kTraitMappable) && fField.HasReadCallbacks())
          throw RException(R__FAIL("view disallowed on field with mappable type and read callback"));
-      for (auto &f : fField) {
-         auto subFieldId =
-            pageSource->GetSharedDescriptorGuard()->FindFieldId(f.GetName(), f.GetParent()->GetOnDiskId());
-         f.SetOnDiskId(subFieldId);
-         f.ConnectPageSource(*pageSource);
-      }
    }
 
    RNTupleView(const RNTupleView& other) = delete;

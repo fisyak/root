@@ -200,12 +200,12 @@ public:
    std::unique_ptr<RNTupleReader> Clone() { return std::make_unique<RNTupleReader>(fSource->Clone()); }
    ~RNTupleReader();
 
-   RNTupleModel *GetModel();
    NTupleSize_t GetNEntries() const { return fSource->GetNEntries(); }
+   const RNTupleModel &GetModel();
 
    /// Returns a cached copy of the page source descriptor. The returned pointer remains valid until the next call
    /// to LoadEntry or to any of the views returned from the reader.
-   const RNTupleDescriptor *GetDescriptor();
+   const RNTupleDescriptor &GetDescriptor();
 
    /// Prints a detailed summary of the ntuple, including a list of fields.
    ///
@@ -247,10 +247,10 @@ public:
    void LoadEntry(NTupleSize_t index) {
       // TODO(jblomer): can be templated depending on the factory method / constructor
       if (R__unlikely(!fModel)) {
-         fModel = fSource->GetSharedDescriptorGuard()->GenerateModel();
+         fModel = fSource->GetSharedDescriptorGuard()->CreateModel();
          ConnectModel(*fModel);
       }
-      LoadEntry(index, *fModel->GetDefaultEntry());
+      LoadEntry(index, fModel->GetDefaultEntry());
    }
    /// Fills a user provided entry after checking that the entry has been instantiated from the ntuple model
    void LoadEntry(NTupleSize_t index, REntry &entry) { entry.Read(index); }
@@ -463,7 +463,7 @@ public:
 
    /// The simplest user interface if the default entry that comes with the ntuple model is used.
    /// \return The number of uncompressed bytes written.
-   std::size_t Fill() { return fFillContext.Fill(*fFillContext.fModel->GetDefaultEntry()); }
+   std::size_t Fill() { return fFillContext.Fill(fFillContext.fModel->GetDefaultEntry()); }
    /// Multiple entries can have been instantiated from the ntuple model.  This method will perform
    /// a light check whether the entry comes from the ntuple's own model.
    /// \return The number of uncompressed bytes written.

@@ -49,24 +49,21 @@ class REntry {
    /// The entry must be linked to a specific model (or one if its clones), identified by a model ID
    std::uint64_t fModelId = 0;
    /// Corresponds to the top-level fields of the linked model
-   std::vector<Detail::RFieldBase::RValue> fValues;
-   /// The objects involed in serialization and deserialization might be used long after the entry is gone:
-   /// hence the shared pointer
-   std::vector<std::shared_ptr<void>> fValuePtrs;
+   std::vector<RFieldBase::RValue> fValues;
 
    // Creation of entries is done by the RNTupleModel class
 
    REntry() = default;
    explicit REntry(std::uint64_t modelId) : fModelId(modelId) {}
 
-   void AddValue(Detail::RFieldBase::RValue &&value);
+   void AddValue(RFieldBase::RValue &&value) { fValues.emplace_back(std::move(value)); }
 
    /// While building the entry, adds a new value to the list and return the value's shared pointer
-   template<typename T, typename... ArgsT>
-   std::shared_ptr<T> AddValue(RField<T>* field, ArgsT&&... args) {
+   template <typename T, typename... ArgsT>
+   std::shared_ptr<T> AddValue(RField<T> &field, ArgsT &&...args)
+   {
       auto ptr = std::make_shared<T>(std::forward<ArgsT>(args)...);
-      fValues.emplace_back(field->BindValue(ptr));
-      fValuePtrs.emplace_back(ptr);
+      fValues.emplace_back(field.BindValue(ptr));
       return ptr;
    }
 
@@ -99,13 +96,13 @@ public:
    void BindValue(std::string_view fieldName, std::shared_ptr<T> objPtr)
    {
       for (auto &v : fValues) {
-         if (v.GetField().GetName() != fieldName)
+         if (v.GetField().GetFieldName() != fieldName)
             continue;
 
          if constexpr (!std::is_void_v<T>) {
-            if (v.GetField().GetType() != RField<T>::TypeName()) {
+            if (v.GetField().GetTypeName() != RField<T>::TypeName()) {
                throw RException(R__FAIL("type mismatch for field " + std::string(fieldName) + ": " +
-                                        v.GetField().GetType() + " vs. " + RField<T>::TypeName()));
+                                        v.GetField().GetTypeName() + " vs. " + RField<T>::TypeName()));
             }
          }
          v.Bind(objPtr);
@@ -124,15 +121,15 @@ public:
    std::shared_ptr<T> GetPtr(std::string_view fieldName) const
    {
       for (auto &v : fValues) {
-         if (v.GetField().GetName() != fieldName)
+         if (v.GetField().GetFieldName() != fieldName)
             continue;
 
          if constexpr (std::is_void_v<T>)
             return v.GetPtr<void>();
 
-         if (v.GetField().GetType() != RField<T>::TypeName()) {
+         if (v.GetField().GetTypeName() != RField<T>::TypeName()) {
             throw RException(R__FAIL("type mismatch for field " + std::string(fieldName) + ": " +
-                                     v.GetField().GetType() + " vs. " + RField<T>::TypeName()));
+                                     v.GetField().GetTypeName() + " vs. " + RField<T>::TypeName()));
          }
          return std::static_pointer_cast<T>(v.GetPtr<void>());
       }

@@ -40,7 +40,7 @@ R__LOAD_LIBRARY(ROOTNTuple)
 
 // Import classes from experimental namespace for the time being
 using RNTupleModel = ROOT::Experimental::RNTupleModel;
-using RFieldBase = ROOT::Experimental::Detail::RFieldBase;
+using RFieldBase = ROOT::Experimental::RFieldBase;
 using RNTupleReader = ROOT::Experimental::RNTupleReader;
 using RNTupleWriter = ROOT::Experimental::RNTupleWriter;
 
@@ -68,7 +68,8 @@ void Convert() {
       // Create an ntuple field with the same name and type than the tree branch
       auto field = RFieldBase::Create(l->GetName(), l->GetTypeName()).Unwrap();
       std::cout << "Convert leaf " << l->GetName() << " [" << l->GetTypeName() << "]"
-                << " --> " << "field " << field->GetName() << " [" << field->GetType() << "]" << std::endl;
+                << " --> "
+                << "field " << field->GetFieldName() << " [" << field->GetTypeName() << "]" << std::endl;
 
       // Hand over ownership of the field to the ntuple model.  This will also create a memory location attached
       // to the model's default entry, that will be used to place the data supposed to be written

@@ -25,7 +25,7 @@
 #include <utility>
 
 ROOT::Experimental::RResult<void>
-ROOT::Experimental::RNTupleModel::RProjectedFields::EnsureValidMapping(const Detail::RFieldBase *target,
+ROOT::Experimental::RNTupleModel::RProjectedFields::EnsureValidMapping(const RFieldBase *target,
                                                                        const FieldMap_t &fieldMap)
 {
    auto source = fieldMap.at(target);
@@ -33,17 +33,17 @@ ROOT::Experimental::RNTupleModel::RProjectedFields::EnsureValidMapping(const Det
       (source->GetStructure() == target->GetStructure()) ||
       ((source->GetStructure() == ENTupleStructure::kCollection) && dynamic_cast<const RCardinalityField *>(target));
    if (!hasCompatibleStructure)
-      return R__FAIL("field mapping structural mismatch: " + source->GetName() + " --> " + target->GetName());
+      return R__FAIL("field mapping structural mismatch: " + source->GetFieldName() + " --> " + target->GetFieldName());
    if (source->GetStructure() == ENTupleStructure::kLeaf) {
-      if (target->GetType() != source->GetType())
-         return R__FAIL("field mapping type mismatch: " + source->GetName() + " --> " + target->GetName());
+      if (target->GetTypeName() != source->GetTypeName())
+         return R__FAIL("field mapping type mismatch: " + source->GetFieldName() + " --> " + target->GetFieldName());
    }
 
    // We support projections only across records and collections. In the following, we check that the projected
    // field is on the same path of collection fields in the field tree than the source field.
 
    // Finds the first non-record parent field of the input field
-   auto fnBreakPoint = [](const Detail::RFieldBase *f) -> const Detail::RFieldBase * {
+   auto fnBreakPoint = [](const RFieldBase *f) -> const RFieldBase * {
       auto parent = f->GetParent();
       while (parent) {
          if (parent->GetStructure() != ENTupleStructure::kRecord)
@@ -76,16 +76,15 @@ ROOT::Experimental::RNTupleModel::RProjectedFields::EnsureValidMapping(const Det
          return RResult<void>::Success();
       }
       // Source and target are children of different collections
-      return R__FAIL("field mapping structure mismatch: " + source->GetName() + " --> " + target->GetName());
+      return R__FAIL("field mapping structure mismatch: " + source->GetFieldName() + " --> " + target->GetFieldName());
    }
 
    // Either source or target have no collection as a parent, but the other one has; that doesn't fit
-   return R__FAIL("field mapping structure mismatch: " + source->GetName() + " --> " + target->GetName());
+   return R__FAIL("field mapping structure mismatch: " + source->GetFieldName() + " --> " + target->GetFieldName());
 }
 
 ROOT::Experimental::RResult<void>
-ROOT::Experimental::RNTupleModel::RProjectedFields::Add(std::unique_ptr<Detail::RFieldBase> field,
-                                                        const FieldMap_t &fieldMap)
+ROOT::Experimental::RNTupleModel::RProjectedFields::Add(std::unique_ptr<RFieldBase> field, const FieldMap_t &fieldMap)
 {
    auto result = EnsureValidMapping(field.get(), fieldMap);
    if (!result)
@@ -101,8 +100,8 @@ ROOT::Experimental::RNTupleModel::RProjectedFields::Add(std::unique_ptr<Detail::
    return RResult<void>::Success();
 }
 
-const ROOT::Experimental::Detail::RFieldBase *
-ROOT::Experimental::RNTupleModel::RProjectedFields::GetSourceField(const Detail::RFieldBase *target) const
+const ROOT::Experimental::RFieldBase *
+ROOT::Experimental::RNTupleModel::RProjectedFields::GetSourceField(const RFieldBase *target) const
 {
    if (auto it = fFieldMap.find(target); it != fFieldMap.end())
       return it->second;
@@ -149,7 +148,7 @@ void ROOT::Experimental::RNTupleModel::RUpdater::CommitUpdate()
    fWriter.GetSink().UpdateSchema(toCommit, fWriter.GetNEntries());
 }
 
-void ROOT::Experimental::RNTupleModel::RUpdater::AddField(std::unique_ptr<Detail::RFieldBase> field)
+void ROOT::Experimental::RNTupleModel::RUpdater::AddField(std::unique_ptr<RFieldBase> field)
 {
    auto fieldp = field.get();
    fOpenChangeset.fModel.AddField(std::move(field));
@@ -157,7 +156,7 @@ void ROOT::Experimental::RNTupleModel::RUpdater::AddField(std::unique_ptr<Detail
 }
 
 ROOT::Experimental::RResult<void>
-ROOT::Experimental::RNTupleModel::RUpdater::AddProjectedField(std::unique_ptr<Detail::RFieldBase> field,
+ROOT::Experimental::RNTupleModel::RUpdater::AddProjectedField(std::unique_ptr<RFieldBase> field,
                                                               std::function<std::string(const std::string &)> mapping)
 {
    auto fieldp = field.get();
@@ -169,7 +168,7 @@ ROOT::Experimental::RNTupleModel::RUpdater::AddProjectedField(std::unique_ptr<De
 
 void ROOT::Experimental::RNTupleModel::EnsureValidFieldName(std::string_view fieldName)
 {
-   RResult<void> nameValid = Detail::RFieldBase::EnsureValidFieldName(fieldName);
+   RResult<void> nameValid = RFieldBase::EnsureValidFieldName(fieldName);
    if (!nameValid) {
       nameValid.Throw();
    }
@@ -223,22 +222,22 @@ std::unique_ptr<ROOT::Experimental::RNTupleModel> ROOT::Experimental::RNTupleMod
    if (fDefaultEntry) {
       cloneModel->fDefaultEntry = std::unique_ptr<REntry>(new REntry(fModelId));
       for (const auto &f : cloneModel->fFieldZero->GetSubFields()) {
-         cloneModel->fDefaultEntry->AddValue(f->GenerateValue());
+         cloneModel->fDefaultEntry->AddValue(f->CreateValue());
       }
    }
    return cloneModel;
 }
 
-ROOT::Experimental::Detail::RFieldBase *ROOT::Experimental::RNTupleModel::FindField(std::string_view fieldName) const
+ROOT::Experimental::RFieldBase *ROOT::Experimental::RNTupleModel::FindField(std::string_view fieldName) const
 {
    if (fieldName.empty())
       return nullptr;
 
-   auto *field = static_cast<ROOT::Experimental::Detail::RFieldBase *>(fFieldZero.get());
+   auto *field = static_cast<ROOT::Experimental::RFieldBase *>(fFieldZero.get());
    for (auto subfieldName : ROOT::Split(fieldName, ".")) {
       const auto subfields = field->GetSubFields();
-      auto it =
-         std::find_if(subfields.begin(), subfields.end(), [&](const auto *f) { return f->GetName() == subfieldName; });
+      auto it = std::find_if(subfields.begin(), subfields.end(),
+                             [&](const auto *f) { return f->GetFieldName() == subfieldName; });
       if (it != subfields.end()) {
          field = *it;
       } else {
@@ -250,26 +249,26 @@ ROOT::Experimental::Detail::RFieldBase *ROOT::Experimental::RNTupleModel::FindFi
    return field;
 }
 
-void ROOT::Experimental::RNTupleModel::AddField(std::unique_ptr<Detail::RFieldBase> field)
+void ROOT::Experimental::RNTupleModel::AddField(std::unique_ptr<RFieldBase> field)
 {
    EnsureNotFrozen();
    if (!field)
       throw RException(R__FAIL("null field"));
-   EnsureValidFieldName(field->GetName());
+   EnsureValidFieldName(field->GetFieldName());
 
    if (fDefaultEntry)
-      fDefaultEntry->AddValue(field->GenerateValue());
+      fDefaultEntry->AddValue(field->CreateValue());
    fFieldZero->Attach(std::move(field));
 }
 
 ROOT::Experimental::RResult<void>
-ROOT::Experimental::RNTupleModel::AddProjectedField(std::unique_ptr<Detail::RFieldBase> field,
+ROOT::Experimental::RNTupleModel::AddProjectedField(std::unique_ptr<RFieldBase> field,
                                                     std::function<std::string(const std::string &)> mapping)
 {
    EnsureNotFrozen();
    if (!field)
       return R__FAIL("null field");
-   auto fieldName = field->GetName();
+   auto fieldName = field->GetFieldName();
 
    RProjectedFields::FieldMap_t fieldMap;
    auto sourceField = FindField(mapping(fieldName));
@@ -320,8 +319,7 @@ ROOT::Experimental::RFieldZero &ROOT::Experimental::RNTupleModel::GetFieldZero()
    return *fFieldZero;
 }
 
-const ROOT::Experimental::Detail::RFieldBase &
-ROOT::Experimental::RNTupleModel::GetField(std::string_view fieldName) const
+const ROOT::Experimental::RFieldBase &ROOT::Experimental::RNTupleModel::GetField(std::string_view fieldName) const
 {
    auto f = FindField(fieldName);
    if (!f)
@@ -330,12 +328,20 @@ ROOT::Experimental::RNTupleModel::GetField(std::string_view fieldName) const
    return *f;
 }
 
-ROOT::Experimental::REntry *ROOT::Experimental::RNTupleModel::GetDefaultEntry() const
+ROOT::Experimental::REntry &ROOT::Experimental::RNTupleModel::GetDefaultEntry()
 {
    if (!IsFrozen())
       throw RException(R__FAIL("invalid attempt to get default entry of unfrozen model"));
    EnsureNotBare();
-   return fDefaultEntry.get();
+   return *fDefaultEntry;
+}
+
+const ROOT::Experimental::REntry &ROOT::Experimental::RNTupleModel::GetDefaultEntry() const
+{
+   if (!IsFrozen())
+      throw RException(R__FAIL("invalid attempt to get default entry of unfrozen model"));
+   EnsureNotBare();
+   return *fDefaultEntry;
 }
 
 std::unique_ptr<ROOT::Experimental::REntry> ROOT::Experimental::RNTupleModel::CreateEntry() const
@@ -345,7 +351,7 @@ std::unique_ptr<ROOT::Experimental::REntry> ROOT::Experimental::RNTupleModel::Cr
 
    auto entry = std::unique_ptr<REntry>(new REntry(fModelId));
    for (const auto &f : fFieldZero->GetSubFields()) {
-      entry->AddValue(f->GenerateValue());
+      entry->AddValue(f->CreateValue());
    }
    return entry;
 }
@@ -360,6 +366,17 @@ std::unique_ptr<ROOT::Experimental::REntry> ROOT::Experimental::RNTupleModel::Cr
       entry->AddValue(f->BindValue(nullptr));
    }
    return entry;
+}
+
+ROOT::Experimental::RFieldBase::RBulk ROOT::Experimental::RNTupleModel::CreateBulk(std::string_view fieldName) const
+{
+   if (!IsFrozen())
+      throw RException(R__FAIL("invalid attempt to create bulk of unfrozen model"));
+
+   auto f = FindField(fieldName);
+   if (!f)
+      throw RException(R__FAIL("no such field: " + std::string(fieldName)));
+   return f->CreateBulk();
 }
 
 void ROOT::Experimental::RNTupleModel::Unfreeze()

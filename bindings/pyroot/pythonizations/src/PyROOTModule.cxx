@@ -11,7 +11,6 @@
 
 // Bindings
 #include "PyROOTPythonize.h"
-#include "PyROOTStrings.h"
 #include "PyROOTWrapper.h"
 #include "RPyROOTApplication.h"
 
@@ -40,8 +39,6 @@ PyObject *gRootModule = 0;
 
 // Methods offered by the interface
 static PyMethodDef gPyROOTMethods[] = {
-   {(char *)"AddDirectoryWritePyz", (PyCFunction)PyROOT::AddDirectoryWritePyz, METH_VARARGS,
-    (char *)"Allow to use seamlessly from Python the templated TDirectory::WriteObject method"},
    {(char *)"AddCPPInstancePickling", (PyCFunction)PyROOT::AddCPPInstancePickling, METH_VARARGS,
     (char *)"Add a custom pickling mechanism for Cppyy Python proxy objects"},
    {(char *)"AddBranchAttrSyntax", (PyCFunction)PyROOT::AddBranchAttrSyntax, METH_VARARGS,
@@ -86,7 +83,6 @@ static PyMethodDef gPyROOTMethods[] = {
 #define CONCAT(a, b, c, d) a##b##c##d
 #define LIBROOTPYZ_INIT_FUNCTION(a, b, c, d) CONCAT(a, b, c, d)
 
-#if PY_VERSION_HEX >= 0x03000000
 struct module_state {
    PyObject *error;
 };
@@ -113,23 +109,11 @@ static struct PyModuleDef moduledef = {PyModuleDef_HEAD_INIT,       LIBROOTPYZ_N
 
 #define PYROOT_INIT_ERROR return NULL
 LIBROOTPYZ_INIT_FUNCTION(extern "C" PyObject* PyInit_libROOTPythonizations, PY_MAJOR_VERSION, _, PY_MINOR_VERSION) ()
-#else // PY_VERSION_HEX >= 0x03000000
-#define PYROOT_INIT_ERROR return
-LIBROOTPYZ_INIT_FUNCTION(extern "C" void initlibROOTPythonizations, PY_MAJOR_VERSION, _, PY_MINOR_VERSION) ()
-#endif
 {
    using namespace PyROOT;
 
-   // load commonly used python strings
-   if (!PyROOT::CreatePyStrings())
-      PYROOT_INIT_ERROR;
-
 // setup PyROOT
-#if PY_VERSION_HEX >= 0x03000000
    gRootModule = PyModule_Create(&moduledef);
-#else
-   gRootModule = Py_InitModule(const_cast<char *>(LIBROOTPYZ_NAME), gPyROOTMethods);
-#endif
    if (!gRootModule)
       PYROOT_INIT_ERROR;
 
@@ -148,8 +132,6 @@ LIBROOTPYZ_INIT_FUNCTION(extern "C" void initlibROOTPythonizations, PY_MAJOR_VER
    // inject ROOT namespace for convenience
    PyModule_AddObject(gRootModule, (char *)"ROOT", CreateScopeProxy("ROOT"));
 
-#if PY_VERSION_HEX >= 0x03000000
    Py_INCREF(gRootModule);
    return gRootModule;
-#endif
 }

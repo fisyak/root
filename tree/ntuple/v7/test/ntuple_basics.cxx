@@ -29,21 +29,21 @@ TEST(RNTuple, ReconstructModel)
    // Should not throw
    source.SetEntryRange({0, source.GetNEntries()});
 
-   auto modelReconstructed = source.GetSharedDescriptorGuard()->GenerateModel();
+   auto modelReconstructed = source.GetSharedDescriptorGuard()->CreateModel();
    try {
-      modelReconstructed->GetDefaultEntry()->GetPtr<float>("xyz");
+      modelReconstructed->GetDefaultEntry().GetPtr<float>("xyz");
       FAIL() << "invalid field name should throw";
    } catch (const RException &err) {
       EXPECT_THAT(err.what(), testing::HasSubstr("invalid field name"));
    }
-   auto vecPtr = modelReconstructed->GetDefaultEntry()->GetPtr<std::vector<std::vector<float>>>("nnlo");
+   auto vecPtr = modelReconstructed->GetDefaultEntry().GetPtr<std::vector<std::vector<float>>>("nnlo");
    EXPECT_TRUE(vecPtr != nullptr);
    // Don't crash
    vecPtr->push_back(std::vector<float>{1.0});
-   auto array = modelReconstructed->GetDefaultEntry()->GetPtr<std::array<double, 2>>("array");
+   auto array = modelReconstructed->GetDefaultEntry().GetPtr<std::array<double, 2>>("array");
    EXPECT_TRUE(array != nullptr);
    auto variant =
-      modelReconstructed->GetDefaultEntry()->GetPtr<std::variant<double, std::variant<std::string, double>>>("variant");
+      modelReconstructed->GetDefaultEntry().GetPtr<std::variant<double, std::variant<std::string, double>>>("variant");
    EXPECT_TRUE(variant != nullptr);
 }
 
@@ -105,6 +105,7 @@ TEST(RNTuple, WriteRead)
    auto wrKlass = modelWrite->MakeField<CustomStruct>("klass");
    wrKlass->s = "abc";
 
+   modelWrite->Freeze();
    auto modelRead = modelWrite->Clone();
 
    {
@@ -113,13 +114,13 @@ TEST(RNTuple, WriteRead)
       ntuple.Fill();
    }
 
-   auto rdSignal = modelRead->Get<bool>("signal");
-   auto rdPt = modelRead->Get<float>("pt");
-   auto rdEnergy = modelRead->Get<float>("energy");
-   auto rdTag = modelRead->Get<std::string>("tag");
-   auto rdJets = modelRead->Get<std::vector<float>>("jets");
-   auto rdNnlo = modelRead->Get<std::vector<std::vector<float>>>("nnlo");
-   auto rdKlass = modelRead->Get<CustomStruct>("klass");
+   auto rdSignal = modelRead->GetDefaultEntry().GetPtr<bool>("signal");
+   auto rdPt = modelRead->GetDefaultEntry().GetPtr<float>("pt");
+   auto rdEnergy = modelRead->GetDefaultEntry().GetPtr<float>("energy");
+   auto rdTag = modelRead->GetDefaultEntry().GetPtr<std::string>("tag");
+   auto rdJets = modelRead->GetDefaultEntry().GetPtr<std::vector<float>>("jets");
+   auto rdNnlo = modelRead->GetDefaultEntry().GetPtr<std::vector<std::vector<float>>>("nnlo");
+   auto rdKlass = modelRead->GetDefaultEntry().GetPtr<CustomStruct>("klass");
 
    RNTupleReader ntuple(std::move(modelRead),
       std::make_unique<RPageSourceFile>("myNTuple", fileGuard.GetPath(), RNTupleReadOptions()));
@@ -178,8 +179,8 @@ TEST(RNTuple, FileAnchor)
    EXPECT_EQ(1U, readerA->GetNEntries());
    EXPECT_EQ(1U, readerB->GetNEntries());
 
-   auto a = readerA->GetModel()->Get<int>("a");
-   auto b = readerB->GetModel()->Get<int>("b");
+   auto a = readerA->GetModel().GetDefaultEntry().GetPtr<int>("a");
+   auto b = readerB->GetModel().GetDefaultEntry().GetPtr<int>("b");
    readerA->LoadEntry(0);
    readerB->LoadEntry(0);
    EXPECT_EQ(42, *a);
@@ -203,6 +204,7 @@ TEST(RNTuple, Clusters)
    wrFourVec->at(2) = 2.0;
    wrFourVec->at(3) = 3.0;
 
+   modelWrite->Freeze();
    auto modelRead = modelWrite->Clone();
 
    {
@@ -222,10 +224,10 @@ TEST(RNTuple, Clusters)
       ntuple.Fill();
    }
 
-   auto rdPt = modelRead->Get<float>("pt");
-   auto rdTag = modelRead->Get<std::string>("tag");
-   auto rdNnlo = modelRead->Get<std::vector<std::vector<float>>>("nnlo");
-   auto rdFourVec = modelRead->Get<std::array<float, 4>>("fourVec");
+   auto rdPt = modelRead->GetDefaultEntry().GetPtr<float>("pt");
+   auto rdTag = modelRead->GetDefaultEntry().GetPtr<std::string>("tag");
+   auto rdNnlo = modelRead->GetDefaultEntry().GetPtr<std::vector<std::vector<float>>>("nnlo");
+   auto rdFourVec = modelRead->GetDefaultEntry().GetPtr<std::array<float, 4>>("fourVec");
 
    RNTupleReader ntuple(std::move(modelRead),
       std::make_unique<RPageSourceFile>("myNTuple", fileGuard.GetPath(), RNTupleReadOptions()));
@@ -281,7 +283,7 @@ TEST(RNTuple, ClusterEntries)
 
    auto ntuple = RNTupleReader::Open("ntuple", fileGuard.GetPath());
    // 100 entries / 5 entries per cluster
-   EXPECT_EQ(20, ntuple->GetDescriptor()->GetNClusters());
+   EXPECT_EQ(20, ntuple->GetDescriptor().GetNClusters());
 }
 
 TEST(RNTuple, PageSize)
@@ -302,7 +304,7 @@ TEST(RNTuple, PageSize)
    }
 
    auto ntuple = RNTupleReader::Open("ntuple", fileGuard.GetPath());
-   const auto &col0_pages = ntuple->GetDescriptor()->GetClusterDescriptor(0).GetPageRange(0);
+   const auto &col0_pages = ntuple->GetDescriptor().GetClusterDescriptor(0).GetPageRange(0);
    // 1000 column elements / 50 elements per page
    EXPECT_EQ(20, col0_pages.fPageInfos.size());
 }
@@ -340,13 +342,6 @@ TEST(RNTupleModel, EnforceValidFieldNames)
    } catch (const RException& err) {
       EXPECT_THAT(err.what(), testing::HasSubstr("field name 'pt' already exists"));
    }
-   try {
-      float num = 10.0;
-      model->AddField("pt", &num);
-      FAIL() << "repeated field names should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("field name 'pt' already exists"));
-   }
 
    // MakeCollection
    try {
@@ -370,9 +365,6 @@ TEST(RNTupleModel, FieldDescriptions)
 
    auto pt = model->MakeField<float>({"pt", "transverse momentum"}, 42.0);
 
-   float num = 10.0;
-   model->AddField({"mass", "mass"}, &num);
-
    auto charge = std::make_unique<RField<float>>(RField<float>("charge"));
    charge->SetDescription("electric charge");
    model->AddField(std::move(charge));
@@ -383,13 +375,12 @@ TEST(RNTupleModel, FieldDescriptions)
 
    auto ntuple = RNTupleReader::Open("ntuple", fileGuard.GetPath());
    std::vector<std::string> fieldDescriptions;
-   for (auto &f : ntuple->GetDescriptor()->GetTopLevelFields()) {
+   for (auto &f : ntuple->GetDescriptor().GetTopLevelFields()) {
       fieldDescriptions.push_back(f.GetFieldDescription());
    }
-   ASSERT_EQ(3, fieldDescriptions.size());
+   ASSERT_EQ(2u, fieldDescriptions.size());
    EXPECT_EQ(std::string("transverse momentum"), fieldDescriptions[0]);
-   EXPECT_EQ(std::string("mass"), fieldDescriptions[1]);
-   EXPECT_EQ(std::string("electric charge"), fieldDescriptions[2]);
+   EXPECT_EQ(std::string("electric charge"), fieldDescriptions[1]);
 }
 
 TEST(RNTupleModel, CollectionFieldDescriptions)
@@ -405,7 +396,7 @@ TEST(RNTupleModel, CollectionFieldDescriptions)
    }
 
    auto ntuple = RNTupleReader::Open("ntuple", fileGuard.GetPath());
-   const auto &muon_desc = *ntuple->GetDescriptor()->GetTopLevelFields().begin();
+   const auto &muon_desc = *ntuple->GetDescriptor().GetTopLevelFields().begin();
    EXPECT_EQ(std::string("muons after basic selection"), muon_desc.GetFieldDescription());
 }
 
@@ -415,10 +406,10 @@ TEST(RNTupleModel, GetField)
    m->MakeField<int>("x");
    m->MakeField<CustomStruct>("cs");
    m->Freeze();
-   EXPECT_EQ(m->GetField("x").GetName(), "x");
-   EXPECT_EQ(m->GetField("x").GetType(), "std::int32_t");
-   EXPECT_EQ(m->GetField("cs.v1").GetName(), "v1");
-   EXPECT_EQ(m->GetField("cs.v1").GetType(), "std::vector<float>");
+   EXPECT_EQ(m->GetField("x").GetFieldName(), "x");
+   EXPECT_EQ(m->GetField("x").GetTypeName(), "std::int32_t");
+   EXPECT_EQ(m->GetField("cs.v1").GetFieldName(), "v1");
+   EXPECT_EQ(m->GetField("cs.v1").GetTypeName(), "std::vector<float>");
    try {
       m->GetField("nonexistent");
       FAIL() << "invalid field name should throw";
@@ -485,12 +476,6 @@ TEST(RNTuple, NullSafety)
       FAIL() << "null fields should throw";
    } catch (const RException& err) {
       EXPECT_THAT(err.what(), testing::HasSubstr("null field"));
-   }
-   try {
-      model->AddField<float>("pt", nullptr);
-      FAIL() << "null fields should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("null field fromWhere"));
    }
 
    // RNTupleReader and RNTupleWriter
@@ -571,13 +556,6 @@ TEST(RNTuple, ModelId)
    } catch (const RException &err) {
       EXPECT_THAT(err.what(), testing::HasSubstr("invalid attempt to modify frozen model"));
    }
-   try {
-      float dummy;
-      m1->AddField<float>("pt", &dummy);
-      FAIL() << "changing frozen model should throw";
-   } catch (const RException &err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("invalid attempt to modify frozen model"));
-   }
 
    EXPECT_NE(m1->GetModelId(), m2->GetModelId());
    // Freeze() should be idempotent call
@@ -638,7 +616,7 @@ TEST(RNTuple, BareEntry)
          EXPECT_THAT(err.what(), testing::HasSubstr("invalid attempt to use default entry of bare model"));
       }
       try {
-         model.Get<float>("pt");
+         model.GetDefaultEntry().GetPtr<float>("pt");
          FAIL() << "accessing default entry of bare model should throw";
       } catch (const RException &err) {
          EXPECT_THAT(err.what(), testing::HasSubstr("invalid attempt to use default entry of bare model"));
@@ -659,15 +637,15 @@ TEST(RNTuple, BareEntry)
    auto ntuple = RNTupleReader::Open("ntpl", fileGuard.GetPath());
    ASSERT_EQ(2U, ntuple->GetNEntries());
    ntuple->LoadEntry(0);
-   EXPECT_EQ(1.0, *ntuple->GetModel()->GetDefaultEntry()->GetPtr<float>("pt"));
+   EXPECT_EQ(1.0, *ntuple->GetModel().GetDefaultEntry().GetPtr<float>("pt"));
    ntuple->LoadEntry(1);
-   EXPECT_EQ(2.0, *ntuple->GetModel()->GetDefaultEntry()->GetPtr<float>("pt"));
+   EXPECT_EQ(2.0, *ntuple->GetModel().GetDefaultEntry().GetPtr<float>("pt"));
 }
 
 namespace ROOT::Experimental::Internal {
 struct RFieldCallbackInjector {
    template <typename FieldT>
-   static void Inject(FieldT &field, ROOT::Experimental::Detail::RFieldBase::ReadCallback_t func)
+   static void Inject(FieldT &field, ROOT::Experimental::RFieldBase::ReadCallback_t func)
    {
       field.AddReadCallback(func);
    }
@@ -713,7 +691,7 @@ TEST(RNTuple, ReadCallback)
    model->AddField(std::move(fieldKlass));
 
    auto ntuple = RNTupleReader::Open(std::move(model), "f", fileGuard.GetPath());
-   auto rdKlass = ntuple->GetModel()->GetDefaultEntry()->GetPtr<CustomStruct>("klass");
+   auto rdKlass = ntuple->GetModel().GetDefaultEntry().GetPtr<CustomStruct>("klass");
    EXPECT_EQ(2U, ntuple->GetNEntries());
    ntuple->LoadEntry(0);
    EXPECT_EQ(1337.0, rdKlass->a);
@@ -753,14 +731,18 @@ TEST(RNTuple, FillBytesWritten)
    checkFillReturnValue(optsSmall);
 }
 
-TEST(RNTuple, RFieldDeleter)
+TEST(RNTuple, RValue)
 {
    auto f1 = RFieldBase::Create("f1", "CustomStruct").Unwrap();
    auto f2 = RFieldBase::Create("f2", "std::vector<std::vector<std::variant<std::string, float>>>").Unwrap();
    auto f3 = RFieldBase::Create("f3", "std::variant<std::unique_ptr<CustomStruct>, ComplexStruct>>").Unwrap();
-   auto v1 = f1->GenerateValue();
-   auto v2 = f2->GenerateValue();
-   auto v3 = f3->GenerateValue();
+   auto v1 = f1->CreateValue();
+   auto v2 = f2->CreateValue();
+   auto v3 = f3->CreateValue();
+
+   auto p = v3.GetPtr<void>();
+   v3.EmplaceNew();
+   EXPECT_NE(p.get(), v3.GetPtr<void>().get());
 
    // Destruct fields to check if the deleters work without the fields
    f1 = nullptr;
@@ -768,6 +750,4 @@ TEST(RNTuple, RFieldDeleter)
    f3 = nullptr;
 
    // The deleters are called in the destructors of the values
-
-   // TODO(jblomer): this becomes more explicit when the RValues contain shared pointers
 }

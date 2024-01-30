@@ -47,10 +47,13 @@
 
 ROOT::Experimental::Detail::RPageSinkFile::RPageSinkFile(std::string_view ntupleName,
                                                          const RNTupleWriteOptions &options)
-   : RPagePersistentSink(ntupleName, options), fPageAllocator(std::make_unique<RPageAllocatorHeap>())
+   : RPagePersistentSink(ntupleName, options), fPageAllocator(std::make_unique<Internal::RPageAllocatorHeap>())
 {
-   R__LOG_WARNING(NTupleLog()) << "The RNTuple file format will change. " <<
-      "Do not store real data with this version of RNTuple!";
+   static std::once_flag once;
+   std::call_once(once, []() {
+      R__LOG_WARNING(NTupleLog()) << "The RNTuple file format will change. "
+                                  << "Do not store real data with this version of RNTuple!";
+   });
    fCompressor = std::make_unique<Internal::RNTupleCompressor>();
    EnableDefaultMetrics("RPageSinkFile");
 }
@@ -262,7 +265,10 @@ void ROOT::Experimental::Detail::RPageSourceFile::InitDescriptor(const RNTuple &
       throw RException(R__FAIL("unsupported RNTuple epoch version: " + std::to_string(anchor.fVersionEpoch)));
    }
    if (anchor.fVersionEpoch == 0) {
-      R__LOG_WARNING(NTupleLog()) << "Pre-release format version: RC " << anchor.fVersionMajor;
+      static std::once_flag once;
+      std::call_once(once, [&anchor]() {
+         R__LOG_WARNING(NTupleLog()) << "Pre-release format version: RC " << anchor.fVersionMajor;
+      });
    }
 
    fDescriptorBuilder.SetOnDiskHeaderSize(anchor.fNBytesHeader);
@@ -364,7 +370,7 @@ ROOT::Experimental::Detail::RPageSourceFile::PopulatePageFromCluster(ColumnHandl
       pageZero.GrowUnchecked(pageInfo.fNElements);
       pageZero.SetWindow(clusterInfo.fColumnOffset + pageInfo.fFirstInPage,
                          RPage::RClusterInfo(clusterId, clusterInfo.fColumnOffset));
-      fPagePool->RegisterPage(pageZero, RPageDeleter([](const RPage &, void *) {}, nullptr));
+      fPagePool->RegisterPage(pageZero, Internal::RPageDeleter([](const RPage &, void *) {}, nullptr));
       return pageZero;
    }
 
@@ -401,7 +407,8 @@ ROOT::Experimental::Detail::RPageSourceFile::PopulatePageFromCluster(ColumnHandl
                      RPage::RClusterInfo(clusterId, clusterInfo.fColumnOffset));
    fPagePool->RegisterPage(
       newPage,
-      RPageDeleter([](const RPage &page, void * /*userData*/) { RPageAllocatorHeap::DeletePage(page); }, nullptr));
+      Internal::RPageDeleter([](const RPage &page, void *) { Internal::RPageAllocatorHeap::DeletePage(page); },
+                             nullptr));
    fCounters->fNPagePopulated.Inc();
    return newPage;
 }
@@ -671,8 +678,8 @@ void ROOT::Experimental::Detail::RPageSourceFile::UnzipClusterImpl(RCluster *clu
             newPage.SetWindow(indexOffset + firstInPage, RPage::RClusterInfo(clusterId, indexOffset));
             fPagePool->PreloadPage(
                newPage,
-               RPageDeleter([](const RPage &page, void * /*userData*/) { RPageAllocatorHeap::DeletePage(page); },
-                            nullptr));
+               Internal::RPageDeleter([](const RPage &page, void *) { Internal::RPageAllocatorHeap::DeletePage(page); },
+                                      nullptr));
          };
 
          fTaskScheduler->AddTask(taskFunc);

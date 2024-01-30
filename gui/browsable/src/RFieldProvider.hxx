@@ -82,7 +82,7 @@ class RFieldProvider : public RProvider {
       template<typename T>
       void FillHistogram(const RField<T> &field)
       {
-         std::string title = "Drawing of RField "s + field.GetName();
+         std::string title = "Drawing of RField "s + field.GetFieldName();
 
          fHist = std::make_unique<TH1F>("hdraw", title.c_str(), 100, 0, 0);
          fHist->SetDirectory(nullptr);
@@ -126,7 +126,7 @@ class RFieldProvider : public RProvider {
 
          // now create histogram with labels
 
-         std::string title = "Drawing of RField "s + field.GetName();
+         std::string title = "Drawing of RField "s + field.GetFieldName();
          fHist = std::make_unique<TH1F>("h",title.c_str(),3,0,3);
          fHist->SetDirectory(nullptr);
          fHist->SetStats(0);
@@ -148,7 +148,7 @@ class RFieldProvider : public RProvider {
          return fHist.release();
       }
 
-      void VisitField(const ROOT::Experimental::Detail::RFieldBase & /* field */) final {}
+      void VisitField(const ROOT::Experimental::RFieldBase & /* field */) final {}
       void VisitBoolField(const RField<bool> &field) final { FillHistogram(field); }
       void VisitFloatField(const RField<float> &field) final { FillHistogram(field); }
       void VisitDoubleField(const RField<double> &field) final { FillHistogram(field); }
@@ -182,12 +182,12 @@ public:
       auto ntplSource = holder->GetNtplSource();
       std::string name = holder->GetParentName();
 
-      std::unique_ptr<ROOT::Experimental::Detail::RFieldBase> field;
+      std::unique_ptr<ROOT::Experimental::RFieldBase> field;
       {
          auto descriptorGuard = ntplSource->GetSharedDescriptorGuard();
          field = descriptorGuard->GetFieldDescriptor(holder->GetId()).CreateField(descriptorGuard.GetRef());
       }
-      name.append(field->GetName());
+      name.append(field->GetFieldName());
 
       RDrawVisitor drawVisitor(ntplSource);
       field->AcceptVisitor(drawVisitor);

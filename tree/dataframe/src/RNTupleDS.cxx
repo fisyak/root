@@ -57,18 +57,20 @@ namespace Internal {
 /// This field owns the collection offset field but instead of exposing the collection offsets it exposes
 /// the collection sizes (offset(N+1) - offset(N)).  For the time being, we offer this functionality only in RDataFrame.
 /// TODO(jblomer): consider providing a general set of useful virtual fields as part of RNTuple.
-class RRDFCardinalityField : public ROOT::Experimental::Detail::RFieldBase {
+class RRDFCardinalityField : public ROOT::Experimental::RFieldBase {
 protected:
-   std::unique_ptr<ROOT::Experimental::Detail::RFieldBase> CloneImpl(std::string_view /* newName */) const final
+   std::unique_ptr<ROOT::Experimental::RFieldBase> CloneImpl(std::string_view /* newName */) const final
    {
       return std::make_unique<RRDFCardinalityField>();
    }
-   void GenerateValue(void *where) const final { *static_cast<std::size_t *>(where) = 0; }
+   void CreateValue(void *where) const final { *static_cast<std::size_t *>(where) = 0; }
 
 public:
    static std::string TypeName() { return "std::size_t"; }
    RRDFCardinalityField()
-      : ROOT::Experimental::Detail::RFieldBase("", TypeName(), ENTupleStructure::kLeaf, false /* isSimple */) {}
+      : ROOT::Experimental::RFieldBase("", TypeName(), ENTupleStructure::kLeaf, false /* isSimple */)
+   {
+   }
    RRDFCardinalityField(RRDFCardinalityField &&other) = default;
    RRDFCardinalityField &operator=(RRDFCardinalityField &&other) = default;
    ~RRDFCardinalityField() = default;
@@ -117,11 +119,11 @@ public:
  * This is the implementation of `R_rdf_sizeof_column` in case `column` contains
  * fixed-size arrays on disk.
  */
-class RArraySizeField final : public ROOT::Experimental::Detail::RFieldBase {
+class RArraySizeField final : public ROOT::Experimental::RFieldBase {
 private:
    std::size_t fArrayLength;
 
-   std::unique_ptr<ROOT::Experimental::Detail::RFieldBase> CloneImpl(std::string_view) const final
+   std::unique_ptr<ROOT::Experimental::RFieldBase> CloneImpl(std::string_view) const final
    {
       return std::make_unique<RArraySizeField>(fArrayLength);
    }
@@ -135,7 +137,7 @@ private:
 
 public:
    RArraySizeField(std::size_t arrayLength)
-      : ROOT::Experimental::Detail::RFieldBase("", "std::size_t", ENTupleStructure::kLeaf, false /* isSimple */),
+      : ROOT::Experimental::RFieldBase("", "std::size_t", ENTupleStructure::kLeaf, false /* isSimple */),
         fArrayLength(arrayLength)
    {
    }
@@ -145,14 +147,14 @@ public:
    RArraySizeField &operator=(RArraySizeField &&other) = default;
    ~RArraySizeField() final = default;
 
-   void GenerateValue(void *where) const final { *static_cast<std::size_t *>(where) = 0; }
+   void CreateValue(void *where) const final { *static_cast<std::size_t *>(where) = 0; }
    std::size_t GetValueSize() const final { return sizeof(std::size_t); }
    std::size_t GetAlignment() const final { return alignof(std::size_t); }
 };
 
 /// Every RDF column is represented by exactly one RNTuple field
 class RNTupleColumnReader : public ROOT::Detail::RDF::RColumnReaderBase {
-   using RFieldBase = ROOT::Experimental::Detail::RFieldBase;
+   using RFieldBase = ROOT::Experimental::RFieldBase;
    using RPageSource = ROOT::Experimental::Detail::RPageSource;
 
    RNTupleDS *fDataSource;                     ///< The data source that owns this column reader
@@ -177,7 +179,7 @@ public:
       fEntryOffset = entryOffset;
 
       // Create a new, real field from the prototype and set its field ID in the context of the given page source
-      fField = fProtoField->Clone(fProtoField->GetName());
+      fField = fProtoField->Clone(fProtoField->GetFieldName());
       {
          auto descGuard = source.GetSharedDescriptorGuard();
          // Set the on-disk field IDs for the field and the subfield
@@ -191,8 +193,6 @@ public:
       }
 
       fField->ConnectPageSource(source);
-      for (auto &f : *fField)
-         f.ConnectPageSource(source);
 
       if (fValuePtr) {
          // When the reader reconnects to a new file, the fValuePtr is already set
@@ -200,7 +200,7 @@ public:
          fValuePtr = nullptr;
       } else {
          // For the first file, create a new object for this field (reader)
-         fValue = std::make_unique<RFieldBase::RValue>(fField->GenerateValue());
+         fValue = std::make_unique<RFieldBase::RValue>(fField->CreateValue());
       }
    }
 
@@ -280,7 +280,7 @@ void RNTupleDS::AddField(const RNTupleDescriptor &desc, std::string_view colName
          auto cardinalityField = std::make_unique<ROOT::Experimental::Internal::RRDFCardinalityField>();
          cardinalityField->SetOnDiskId(fieldId);
          fColumnNames.emplace_back("R_rdf_sizeof_" + std::string(colName));
-         fColumnTypes.emplace_back(cardinalityField->GetType());
+         fColumnTypes.emplace_back(cardinalityField->GetTypeName());
          fProtoFields.emplace_back(std::move(cardinalityField));
 
          for (const auto &f : desc.GetFieldIterable(fieldDesc.GetId())) {
@@ -310,15 +310,15 @@ void RNTupleDS::AddField(const RNTupleDescriptor &desc, std::string_view colName
 
    // The fieldID could be the root field or the class of fieldId might not be loaded.
    // In these cases, only the inner fields are exposed as RDF columns.
-   auto fieldOrException = Detail::RFieldBase::Create(fieldDesc.GetFieldName(), fieldDesc.GetTypeName());
+   auto fieldOrException = RFieldBase::Create(fieldDesc.GetFieldName(), fieldDesc.GetTypeName());
    if (!fieldOrException)
       return;
    auto valueField = fieldOrException.Unwrap();
    valueField->SetOnDiskId(fieldId);
    for (auto &f : *valueField) {
-      f.SetOnDiskId(desc.FindFieldId(f.GetName(), f.GetParent()->GetOnDiskId()));
+      f.SetOnDiskId(desc.FindFieldId(f.GetFieldName(), f.GetParent()->GetOnDiskId()));
    }
-   std::unique_ptr<Detail::RFieldBase> cardinalityField;
+   std::unique_ptr<RFieldBase> cardinalityField;
    // Collections get the additional "number of" RDF column (e.g. "R_rdf_sizeof_tracks")
    if (!fieldInfos.empty()) {
       const auto &info = fieldInfos.back();
@@ -362,13 +362,13 @@ void RNTupleDS::AddField(const RNTupleDescriptor &desc, std::string_view colName
 
    if (cardinalityField) {
       fColumnNames.emplace_back("R_rdf_sizeof_" + std::string(colName));
-      fColumnTypes.emplace_back(cardinalityField->GetType());
+      fColumnTypes.emplace_back(cardinalityField->GetTypeName());
       fProtoFields.emplace_back(std::move(cardinalityField));
    }
 
    fieldInfos.emplace_back(fieldId, nRepetitions);
    fColumnNames.emplace_back(colName);
-   fColumnTypes.emplace_back(valueField->GetType());
+   fColumnTypes.emplace_back(valueField->GetTypeName());
    fProtoFields.emplace_back(std::move(valueField));
 }
 

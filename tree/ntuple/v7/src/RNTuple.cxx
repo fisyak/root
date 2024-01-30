@@ -69,15 +69,17 @@ void ROOT::Experimental::RNTupleReader::ConnectModel(RNTupleModel &model)
 {
    auto &fieldZero = model.GetFieldZero();
    // We must not use the descriptor guard to prevent recursive locking in field.ConnectPageSource
-   fieldZero.SetOnDiskId(fSource->GetSharedDescriptorGuard()->GetFieldZeroId());
-   for (auto &field : fieldZero) {
-      // If the model has been created from the descritor, the on-disk IDs are already set.
+   DescriptorId_t fieldZeroId = fSource->GetSharedDescriptorGuard()->GetFieldZeroId();
+   fieldZero.SetOnDiskId(fieldZeroId);
+   // Iterate only over fieldZero's direct subfields; their descendants are recursively handled in
+   // RFieldBase::ConnectPageSource
+   for (auto &field : fieldZero.GetSubFields()) {
+      // If the model has been created from the descriptor, the on-disk IDs are already set.
       // User-provided models instead need to find their corresponding IDs in the descriptor.
-      if (field.GetOnDiskId() == kInvalidDescriptorId) {
-         field.SetOnDiskId(
-            fSource->GetSharedDescriptorGuard()->FindFieldId(field.GetName(), field.GetParent()->GetOnDiskId()));
+      if (field->GetOnDiskId() == kInvalidDescriptorId) {
+         field->SetOnDiskId(fSource->GetSharedDescriptorGuard()->FindFieldId(field->GetFieldName(), fieldZeroId));
       }
-      field.ConnectPageSource(*fSource);
+      field->ConnectPageSource(*fSource);
    }
 }
 
@@ -152,13 +154,13 @@ ROOT::Experimental::RNTupleReader::OpenFriends(std::span<ROpenSpec> ntuples)
    return std::make_unique<RNTupleReader>(std::make_unique<Detail::RPageSourceFriends>("_friends", sources));
 }
 
-ROOT::Experimental::RNTupleModel *ROOT::Experimental::RNTupleReader::GetModel()
+const ROOT::Experimental::RNTupleModel &ROOT::Experimental::RNTupleReader::GetModel()
 {
    if (!fModel) {
-      fModel = fSource->GetSharedDescriptorGuard()->GenerateModel();
+      fModel = fSource->GetSharedDescriptorGuard()->CreateModel();
       ConnectModel(*fModel);
    }
-   return fModel.get();
+   return *fModel;
 }
 
 void ROOT::Experimental::RNTupleReader::PrintInfo(const ENTupleInfo what, std::ostream &output)
@@ -180,7 +182,7 @@ void ROOT::Experimental::RNTupleReader::PrintInfo(const ENTupleInfo what, std::o
       {
          auto descriptorGuard = fSource->GetSharedDescriptorGuard();
          name = descriptorGuard->GetName();
-         fullModel = descriptorGuard->GenerateModel();
+         fullModel = descriptorGuard->CreateModel();
       }
 
       for (int i = 0; i < (width / 2 + width % 2 - 4); ++i)
@@ -235,16 +237,16 @@ ROOT::Experimental::RNTupleReader *ROOT::Experimental::RNTupleReader::GetDisplay
 void ROOT::Experimental::RNTupleReader::Show(NTupleSize_t index, std::ostream &output)
 {
    auto reader = GetDisplayReader();
-   auto entry = reader->GetModel()->GetDefaultEntry();
+   const auto &entry = reader->GetModel().GetDefaultEntry();
 
    reader->LoadEntry(index);
    output << "{";
-   for (auto iValue = entry->begin(); iValue != entry->end();) {
+   for (auto iValue = entry.begin(); iValue != entry.end();) {
       output << std::endl;
       RPrintValueVisitor visitor(*iValue, output, 1 /* level */);
       iValue->GetField().AcceptVisitor(visitor);
 
-      if (++iValue == entry->end()) {
+      if (++iValue == entry.end()) {
          output << std::endl;
          break;
       } else {
@@ -254,12 +256,12 @@ void ROOT::Experimental::RNTupleReader::Show(NTupleSize_t index, std::ostream &o
    output << "}" << std::endl;
 }
 
-const ROOT::Experimental::RNTupleDescriptor *ROOT::Experimental::RNTupleReader::GetDescriptor()
+const ROOT::Experimental::RNTupleDescriptor &ROOT::Experimental::RNTupleReader::GetDescriptor()
 {
    auto descriptorGuard = fSource->GetSharedDescriptorGuard();
    if (!fCachedDescriptor || fCachedDescriptor->GetGeneration() != descriptorGuard->GetGeneration())
       fCachedDescriptor = descriptorGuard->Clone();
-   return fCachedDescriptor.get();
+   return *fCachedDescriptor;
 }
 
 //------------------------------------------------------------------------------
