@@ -71,7 +71,7 @@ private:
                                                 std::size_t bytesPacked);
 
 protected:
-   void CreateImpl(const RNTupleModel &model, unsigned char *serializedHeader, std::uint32_t length) final;
+   void InitImpl(unsigned char *serializedHeader, std::uint32_t length) final;
    RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) final;
    RNTupleLocator
    CommitSealedPageImpl(DescriptorId_t physicalColumnId, const RPageStorage::RSealedPage &sealedPage) final;
@@ -82,8 +82,6 @@ protected:
 
 public:
    RPageSinkFile(std::string_view ntupleName, std::string_view path, const RNTupleWriteOptions &options);
-   RPageSinkFile(std::string_view ntupleName, std::string_view path, const RNTupleWriteOptions &options,
-                 std::unique_ptr<TFile> &file);
    RPageSinkFile(std::string_view ntupleName, TFile &file, const RNTupleWriteOptions &options);
    RPageSinkFile(const RPageSinkFile&) = delete;
    RPageSinkFile& operator=(const RPageSinkFile&) = delete;

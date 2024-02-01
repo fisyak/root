@@ -76,21 +76,11 @@ ROOT::Experimental::Detail::RPageSinkFile::RPageSinkFile(std::string_view ntuple
 }
 
 
-ROOT::Experimental::Detail::RPageSinkFile::RPageSinkFile(std::string_view ntupleName, std::string_view path,
-   const RNTupleWriteOptions &options, std::unique_ptr<TFile> &file)
-   : RPageSinkFile(ntupleName, options)
-{
-   fWriter = std::unique_ptr<Internal::RNTupleFileWriter>(
-      Internal::RNTupleFileWriter::Recreate(ntupleName, path, file));
-}
-
-
 ROOT::Experimental::Detail::RPageSinkFile::~RPageSinkFile()
 {
 }
 
-void ROOT::Experimental::Detail::RPageSinkFile::CreateImpl(const RNTupleModel & /* model */,
-                                                           unsigned char *serializedHeader, std::uint32_t length)
+void ROOT::Experimental::Detail::RPageSinkFile::InitImpl(unsigned char *serializedHeader, std::uint32_t length)
 {
    auto zipBuffer = std::make_unique<unsigned char[]>(length);
    auto szZipHeader = fCompressor->Zip(serializedHeader, length, GetWriteOptions().GetCompression(),

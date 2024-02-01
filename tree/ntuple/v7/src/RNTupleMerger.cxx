@@ -29,16 +29,6 @@ Long64_t ROOT::Experimental::RNTuple::Merge(TCollection *inputs, TFileMergeInfo 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-ROOT::Experimental::RResult<ROOT::Experimental::RFieldMerger>
-ROOT::Experimental::RFieldMerger::Merge(const ROOT::Experimental::RFieldDescriptor &lhs,
-                                        const ROOT::Experimental::RFieldDescriptor &rhs)
-{
-   return R__FAIL("couldn't merge field " + lhs.GetFieldName() + " with field " + rhs.GetFieldName() +
-                  " (unimplemented!)");
-}
-
-////////////////////////////////////////////////////////////////////////////////
 void ROOT::Experimental::RNTupleMerger::BuildColumnIdMap(
    std::vector<ROOT::Experimental::RNTupleMerger::RColumnInfo> &columns)
 {
@@ -124,7 +114,7 @@ void ROOT::Experimental::RNTupleMerger::Merge(std::span<Detail::RPageSource *> s
       // Create sink from the input model of the very first input file
       if (isFirstSource) {
          auto model = descriptor->CreateModel();
-         destination.Create(*model.get());
+         destination.Init(*model.get());
          isFirstSource = false;
       }
 
