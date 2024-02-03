@@ -29,6 +29,7 @@
 
 #include <RVersion.h>
 #include <TError.h>
+#include <TFile.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -251,35 +252,41 @@ ROOT::Experimental::Detail::RPageSourceFile::RPageSourceFile(std::string_view nt
 void ROOT::Experimental::Detail::RPageSourceFile::InitDescriptor(const RNTuple &anchor)
 {
    // TOOD(jblomer): can the epoch check be factored out across anchors?
-   if (anchor.fVersionEpoch != RNTuple::kVersionEpoch) {
-      throw RException(R__FAIL("unsupported RNTuple epoch version: " + std::to_string(anchor.fVersionEpoch)));
+   if (anchor.GetVersionEpoch() != RNTuple::kVersionEpoch) {
+      throw RException(R__FAIL("unsupported RNTuple epoch version: " + std::to_string(anchor.GetVersionEpoch())));
    }
-   if (anchor.fVersionEpoch == 0) {
+   if (anchor.GetVersionEpoch() == 0) {
       static std::once_flag once;
       std::call_once(once, [&anchor]() {
-         R__LOG_WARNING(NTupleLog()) << "Pre-release format version: RC " << anchor.fVersionMajor;
+         R__LOG_WARNING(NTupleLog()) << "Pre-release format version: RC " << anchor.GetVersionMajor();
       });
    }
 
-   fDescriptorBuilder.SetOnDiskHeaderSize(anchor.fNBytesHeader);
-   auto buffer = std::make_unique<unsigned char[]>(anchor.fLenHeader);
-   auto zipBuffer = std::make_unique<unsigned char[]>(anchor.fNBytesHeader);
-   fReader.ReadBuffer(zipBuffer.get(), anchor.fNBytesHeader, anchor.fSeekHeader);
-   fDecompressor->Unzip(zipBuffer.get(), anchor.fNBytesHeader, anchor.fLenHeader, buffer.get());
-   Internal::RNTupleSerializer::DeserializeHeader(buffer.get(), anchor.fLenHeader, fDescriptorBuilder);
+   fDescriptorBuilder.SetOnDiskHeaderSize(anchor.GetNBytesHeader());
+   auto buffer = std::make_unique<unsigned char[]>(anchor.GetLenHeader());
+   auto zipBuffer = std::make_unique<unsigned char[]>(anchor.GetNBytesHeader());
+   fReader.ReadBuffer(zipBuffer.get(), anchor.GetNBytesHeader(), anchor.GetSeekHeader());
+   fDecompressor->Unzip(zipBuffer.get(), anchor.GetNBytesHeader(), anchor.GetLenHeader(), buffer.get());
+   Internal::RNTupleSerializer::DeserializeHeader(buffer.get(), anchor.GetLenHeader(), fDescriptorBuilder);
 
-   fDescriptorBuilder.AddToOnDiskFooterSize(anchor.fNBytesFooter);
-   buffer = std::make_unique<unsigned char[]>(anchor.fLenFooter);
-   zipBuffer = std::make_unique<unsigned char[]>(anchor.fNBytesFooter);
-   fReader.ReadBuffer(zipBuffer.get(), anchor.fNBytesFooter, anchor.fSeekFooter);
-   fDecompressor->Unzip(zipBuffer.get(), anchor.fNBytesFooter, anchor.fLenFooter, buffer.get());
-   Internal::RNTupleSerializer::DeserializeFooter(buffer.get(), anchor.fLenFooter, fDescriptorBuilder);
+   fDescriptorBuilder.AddToOnDiskFooterSize(anchor.GetNBytesFooter());
+   buffer = std::make_unique<unsigned char[]>(anchor.GetLenFooter());
+   zipBuffer = std::make_unique<unsigned char[]>(anchor.GetNBytesFooter());
+   fReader.ReadBuffer(zipBuffer.get(), anchor.GetNBytesFooter(), anchor.GetSeekFooter());
+   fDecompressor->Unzip(zipBuffer.get(), anchor.GetNBytesFooter(), anchor.GetLenFooter(), buffer.get());
+   Internal::RNTupleSerializer::DeserializeFooter(buffer.get(), anchor.GetLenFooter(), fDescriptorBuilder);
 }
 
 std::unique_ptr<ROOT::Experimental::Detail::RPageSourceFile>
-ROOT::Experimental::Detail::RPageSourceFile::CreateFromAnchor(const RNTuple &anchor, std::string_view path,
-                                                              const RNTupleReadOptions &options)
+ROOT::Experimental::Detail::RPageSourceFile::CreateFromAnchor(const RNTuple &anchor, const RNTupleReadOptions &options)
 {
+   if (!anchor.fFile)
+      throw RException(R__FAIL("This RNTuple object was not streamed from a ROOT file (TFile or descendant)"));
+
+   // TODO(jblomer): Add RRawFile factory that create a raw file from a TFile. This may then duplicate the file
+   // descriptor (to avoid re-open).  There could also be a raw file that uses a TFile as a "backend" for TFile cases
+   // that are unsupported by raw file.
+   auto path = anchor.fFile->GetEndpointUrl()->GetFile();
    auto pageSource = std::make_unique<RPageSourceFile>("", path, options);
    pageSource->InitDescriptor(anchor);
    pageSource->fNTupleName = pageSource->fDescriptorBuilder.GetDescriptor().GetName();

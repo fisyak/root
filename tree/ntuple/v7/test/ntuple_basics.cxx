@@ -109,9 +109,8 @@ TEST(RNTuple, WriteRead)
    auto modelRead = modelWrite->Clone();
 
    {
-      RNTupleWriter ntuple(std::move(modelWrite),
-         std::make_unique<RPageSinkFile>("myNTuple", fileGuard.GetPath(), RNTupleWriteOptions()));
-      ntuple.Fill();
+      auto writer = RNTupleWriter::Recreate(std::move(modelWrite), "myNTuple", fileGuard.GetPath());
+      writer->Fill();
    }
 
    auto rdSignal = modelRead->GetDefaultEntry().GetPtr<bool>("signal");
@@ -122,10 +121,9 @@ TEST(RNTuple, WriteRead)
    auto rdNnlo = modelRead->GetDefaultEntry().GetPtr<std::vector<std::vector<float>>>("nnlo");
    auto rdKlass = modelRead->GetDefaultEntry().GetPtr<CustomStruct>("klass");
 
-   RNTupleReader ntuple(std::move(modelRead),
-      std::make_unique<RPageSourceFile>("myNTuple", fileGuard.GetPath(), RNTupleReadOptions()));
-   EXPECT_EQ(1U, ntuple.GetNEntries());
-   ntuple.LoadEntry(0);
+   auto reader = RNTupleReader::Open(std::move(modelRead), "myNTuple", fileGuard.GetPath());
+   EXPECT_EQ(1U, reader->GetNEntries());
+   reader->LoadEntry(0);
 
    EXPECT_TRUE(*rdSignal);
    EXPECT_EQ(42.0, *rdPt);
@@ -208,20 +206,19 @@ TEST(RNTuple, Clusters)
    auto modelRead = modelWrite->Clone();
 
    {
-      RNTupleWriter ntuple(std::move(modelWrite),
-         std::make_unique<RPageSinkFile>("myNTuple", fileGuard.GetPath(), RNTupleWriteOptions()));
-      ntuple.Fill();
-      ntuple.CommitCluster();
+      auto writer = RNTupleWriter::Recreate(std::move(modelWrite), "myNTuple", fileGuard.GetPath());
+      writer->Fill();
+      writer->CommitCluster();
       *wrPt = 24.0;
       wrNnlo->clear();
       *wrTag = "";
       wrFourVec->at(2) = 42.0;
-      ntuple.Fill();
+      writer->Fill();
       *wrPt = 12.0;
       wrNnlo->push_back(std::vector<float>{42.0});
       *wrTag = "12345";
       wrFourVec->at(1) = 24.0;
-      ntuple.Fill();
+      writer->Fill();
    }
 
    auto rdPt = modelRead->GetDefaultEntry().GetPtr<float>("pt");
@@ -229,11 +226,10 @@ TEST(RNTuple, Clusters)
    auto rdNnlo = modelRead->GetDefaultEntry().GetPtr<std::vector<std::vector<float>>>("nnlo");
    auto rdFourVec = modelRead->GetDefaultEntry().GetPtr<std::array<float, 4>>("fourVec");
 
-   RNTupleReader ntuple(std::move(modelRead),
-      std::make_unique<RPageSourceFile>("myNTuple", fileGuard.GetPath(), RNTupleReadOptions()));
-   EXPECT_EQ(3U, ntuple.GetNEntries());
+   auto reader = RNTupleReader::Open(std::move(modelRead), "myNTuple", fileGuard.GetPath());
+   EXPECT_EQ(3U, reader->GetNEntries());
 
-   ntuple.LoadEntry(0);
+   reader->LoadEntry(0);
    EXPECT_EQ(42.0, *rdPt);
    EXPECT_STREQ("xyz", rdTag->c_str());
    EXPECT_EQ(3U, rdNnlo->size());
@@ -250,13 +246,13 @@ TEST(RNTuple, Clusters)
    EXPECT_EQ(2.0, (*rdFourVec)[2]);
    EXPECT_EQ(3.0, (*rdFourVec)[3]);
 
-   ntuple.LoadEntry(1);
+   reader->LoadEntry(1);
    EXPECT_EQ(24.0, *rdPt);
    EXPECT_STREQ("", rdTag->c_str());
    EXPECT_TRUE(rdNnlo->empty());
    EXPECT_EQ(42.0, (*rdFourVec)[2]);
 
-   ntuple.LoadEntry(2);
+   reader->LoadEntry(2);
    EXPECT_EQ(12.0, *rdPt);
    EXPECT_STREQ("12345", rdTag->c_str());
    EXPECT_EQ(1U, rdNnlo->size());
@@ -476,61 +472,6 @@ TEST(RNTuple, NullSafety)
       FAIL() << "null fields should throw";
    } catch (const RException& err) {
       EXPECT_THAT(err.what(), testing::HasSubstr("null field"));
-   }
-
-   // RNTupleReader and RNTupleWriter
-   FileRaii fileGuard("test_ntuple_null_safety.root");
-   try {
-      RNTupleWriter ntuple(nullptr,
-         std::make_unique<RPageSinkFile>("myNTuple", fileGuard.GetPath(), RNTupleWriteOptions()));
-      FAIL() << "null models should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("null model"));
-   }
-   try {
-      RNTupleWriter ntuple(std::move(model), nullptr);
-      FAIL() << "null sinks should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("null sink"));
-   }
-   try {
-      auto ntuple = RNTupleWriter::Recreate(nullptr, "myNtuple", fileGuard.GetPath());
-      FAIL() << "null models should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("null model"));
-   }
-   try {
-      auto file = std::make_unique<TFile>(fileGuard.GetPath().c_str(), "RECREATE", "", 101);
-      auto ntuple = RNTupleWriter::Append(nullptr, "myNtuple", *file);
-      FAIL() << "null models should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("null model"));
-   }
-
-   try {
-      auto ntuple = RNTupleReader::Open(nullptr, "myNTuple", fileGuard.GetPath());
-      FAIL() << "null models should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("null model"));
-   }
-   try {
-      RNTupleReader ntuple(nullptr,
-         std::make_unique<RPageSourceFile>("myNTuple", fileGuard.GetPath(), RNTupleReadOptions()));
-      FAIL() << "null models should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("null model"));
-   }
-   try {
-      RNTupleReader ntuple(RNTupleModel::Create(), nullptr);
-      FAIL() << "null sources should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("null source"));
-   }
-   try {
-      RNTupleReader ntuple(nullptr);
-      FAIL() << "null sources should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("null source"));
    }
 }
 

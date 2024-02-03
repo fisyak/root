@@ -120,6 +120,10 @@ private:
    std::unique_ptr<RNTupleDescriptor> fCachedDescriptor;
    Detail::RNTupleMetrics fMetrics;
 
+   RNTupleReader(std::unique_ptr<RNTupleModel> model, std::unique_ptr<Detail::RPageSource> source);
+   /// The model is generated from the ntuple metadata on storage.
+   explicit RNTupleReader(std::unique_ptr<Detail::RPageSource> source);
+
    void ConnectModel(RNTupleModel &model);
    RNTupleReader *GetDisplayReader();
    void InitPageSource();
@@ -159,11 +163,6 @@ public:
       ROpenSpec(std::string_view n, std::string_view s) : fNTupleName(n), fStorage(s) {}
    };
 
-   /// Throws an exception if the model is null.
-   static std::unique_ptr<RNTupleReader> Open(std::unique_ptr<RNTupleModel> model,
-                                              std::string_view ntupleName,
-                                              std::string_view storage,
-                                              const RNTupleReadOptions &options = RNTupleReadOptions());
    /// Open an RNTuple for reading.
    ///
    /// Throws an RException if there is no RNTuple with the given name.
@@ -183,21 +182,20 @@ public:
                                               const RNTupleReadOptions &options = RNTupleReadOptions());
    static std::unique_ptr<RNTupleReader>
    Open(RNTuple *ntuple, const RNTupleReadOptions &options = RNTupleReadOptions());
+   /// The caller imposes a model, which must be compatible with the model found in the data on storage.
+   static std::unique_ptr<RNTupleReader> Open(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
+                                              std::string_view storage,
+                                              const RNTupleReadOptions &options = RNTupleReadOptions());
+   static std::unique_ptr<RNTupleReader>
+   Open(std::unique_ptr<RNTupleModel> model, RNTuple *ntuple, const RNTupleReadOptions &options = RNTupleReadOptions());
    /// Open RNTuples as one virtual, horizontally combined ntuple.  The underlying RNTuples must
    /// have an identical number of entries.  Fields in the combined RNTuple are named with the ntuple name
    /// as a prefix, e.g. myNTuple1.px and myNTuple2.pt (see tutorial ntpl006_friends)
    static std::unique_ptr<RNTupleReader> OpenFriends(std::span<ROpenSpec> ntuples);
-
-   /// The user imposes an ntuple model, which must be compatible with the model found in the data on
-   /// storage.
-   ///
-   /// Throws an exception if the model or the source is null.
-   RNTupleReader(std::unique_ptr<RNTupleModel> model, std::unique_ptr<Detail::RPageSource> source);
-   /// The model is generated from the ntuple metadata on storage
-   ///
-   /// Throws an exception if the source is null.
-   explicit RNTupleReader(std::unique_ptr<Detail::RPageSource> source);
-   std::unique_ptr<RNTupleReader> Clone() { return std::make_unique<RNTupleReader>(fSource->Clone()); }
+   std::unique_ptr<RNTupleReader> Clone()
+   {
+      return std::unique_ptr<RNTupleReader>(new RNTupleReader(fSource->Clone()));
+   }
    ~RNTupleReader();
 
    NTupleSize_t GetNEntries() const { return fSource->GetNEntries(); }
@@ -414,6 +412,12 @@ public:
    const Detail::RNTupleMetrics &GetMetrics() const { return fMetrics; }
 };
 
+namespace Internal {
+// Non-public factory method for an RNTuple writer that uses an already constructed page sink
+std::unique_ptr<RNTupleWriter>
+CreateRNTupleWriter(std::unique_ptr<RNTupleModel> model, std::unique_ptr<Detail::RPageSink> sink);
+} // namespace Internal
+
 // clang-format off
 /**
 \class ROOT::Experimental::RNTupleWriter
@@ -428,6 +432,8 @@ triggered by CommitCluster() or by destructing the writer.  On I/O errors, an ex
 // clang-format on
 class RNTupleWriter {
    friend RNTupleModel::RUpdater;
+   friend std::unique_ptr<RNTupleWriter>
+      Internal::CreateRNTupleWriter(std::unique_ptr<RNTupleModel>, std::unique_ptr<Detail::RPageSink>);
 
 private:
    /// The page sink's parallel page compression scheduler if IMT is on.
@@ -437,6 +443,8 @@ private:
    Detail::RNTupleMetrics fMetrics;
 
    NTupleSize_t fLastCommittedClusterGroup = 0;
+
+   RNTupleWriter(std::unique_ptr<RNTupleModel> model, std::unique_ptr<Detail::RPageSink> sink);
 
    RNTupleModel &GetUpdatableModel() { return *fFillContext.fModel; }
    Detail::RPageSink &GetSink() { return *fFillContext.fSink; }
@@ -451,12 +459,9 @@ public:
                                                   std::string_view storage,
                                                   const RNTupleWriteOptions &options = RNTupleWriteOptions());
    /// Throws an exception if the model is null.
-   static std::unique_ptr<RNTupleWriter> Append(std::unique_ptr<RNTupleModel> model,
-                                                std::string_view ntupleName,
+   static std::unique_ptr<RNTupleWriter> Append(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
                                                 TFile &file,
                                                 const RNTupleWriteOptions &options = RNTupleWriteOptions());
-   /// Throws an exception if the model or the sink is null.
-   RNTupleWriter(std::unique_ptr<RNTupleModel> model, std::unique_ptr<Detail::RPageSink> sink);
    RNTupleWriter(const RNTupleWriter&) = delete;
    RNTupleWriter& operator=(const RNTupleWriter&) = delete;
    ~RNTupleWriter();
@@ -513,7 +518,7 @@ public:
    {
       return std::make_unique<RNTupleModel::RUpdater>(*this);
    }
-};
+}; // class RNTupleWriter
 
 // clang-format off
 /**
