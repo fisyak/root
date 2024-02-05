@@ -1,12 +1,12 @@
 /// \file
 /// \ingroup tutorial_ntuple
 /// \notebook
-/// Example of multi-threaded writes using multiple REntry objects
+/// Example of multi-threaded writes using RNTupleParallelWriter.  Adapted from the ntpl007_mtFill tutorial.
 ///
 /// \macro_image
 /// \macro_code
 ///
-/// \date July 2021
+/// \date Feburary 2024
 /// \author The ROOT Team
 
 // NOTE: The RNTuple classes are experimental at this point.
@@ -20,6 +20,7 @@ R__LOAD_LIBRARY(ROOTNTuple)
 
 #include <ROOT/RNTuple.hxx>
 #include <ROOT/RNTupleModel.hxx>
+#include <ROOT/RNTupleParallelWriter.hxx>
 
 #include <TCanvas.h>
 #include <TH1F.h>
@@ -37,13 +38,13 @@ R__LOAD_LIBRARY(ROOTNTuple)
 #include <utility>
 
 // Import classes from experimental namespace for the time being
-using ROOT::Experimental::REntry;
 using ROOT::Experimental::RNTupleModel;
+using ROOT::Experimental::RNTupleParallelWriter;
 using ROOT::Experimental::RNTupleReader;
-using ROOT::Experimental::RNTupleWriter;
+using ROOT::Experimental::RNTupleWriteOptions;
 
 // Where to store the ntuple of this example
-constexpr char const *kNTupleFileName = "ntpl007_mtFill.root";
+constexpr char const *kNTupleFileName = "ntpl009_parallelWriter.root";
 
 // Number of parallel threads to fill the ntuple
 constexpr int kNWriterThreads = 4;
@@ -52,15 +53,16 @@ constexpr int kNWriterThreads = 4;
 constexpr int kNEventsPerThread = 25000;
 
 // Thread function to generate and write events
-void FillData(std::unique_ptr<REntry> entry, RNTupleWriter *writer) {
-   // Protect the ntuple->Fill() call
-   static std::mutex gLock;
-
+void FillData(RNTupleParallelWriter *writer)
+{
    static std::atomic<std::uint32_t> gThreadId;
    const auto threadId = ++gThreadId;
 
    auto prng = std::make_unique<TRandom3>();
    prng->SetSeed();
+
+   auto fillContext = writer->CreateFillContext();
+   auto entry = fillContext->CreateEntry();
 
    auto id = entry->GetPtr<std::uint32_t>("id");
    *id = threadId;
@@ -78,15 +80,14 @@ void FillData(std::unique_ptr<REntry> entry, RNTupleWriter *writer) {
       for (int j = 0; j < npx; ++j) {
          float px, py, pz;
          prng->Rannor(px, py);
-         pz = px*px + py*py;
+         pz = px * px + py * py;
 
          vpx->emplace_back(px);
          vpy->emplace_back(py);
          vpz->emplace_back(pz);
       }
 
-      std::lock_guard<std::mutex> guard(gLock);
-      writer->Fill(*entry);
+      fillContext->Fill(*entry);
    }
 }
 
@@ -94,28 +95,29 @@ void FillData(std::unique_ptr<REntry> entry, RNTupleWriter *writer) {
 void Write()
 {
    // Create the data model
-   auto model = RNTupleModel::Create();
+   auto model = RNTupleModel::CreateBare();
    model->MakeField<std::uint32_t>("id");
    model->MakeField<std::vector<float>>("vpx");
    model->MakeField<std::vector<float>>("vpy");
    model->MakeField<std::vector<float>>("vpz");
 
-   // We hand-over the data model to a newly created ntuple of name "NTuple", stored in kNTupleFileName
-   auto writer = RNTupleWriter::Recreate(std::move(model), "NTuple", kNTupleFileName);
+   // Create RNTupleWriteOptions to make the writing commit multiple clusters (so that "Entry Id vs Thread Id" shows the
+   // interleaved clusters).
+   RNTupleWriteOptions options;
+   options.SetApproxZippedClusterSize(1024 * 1024);
 
-   std::vector<std::unique_ptr<REntry>> entries;
+   // We hand-over the data model to a newly created ntuple of name "NTuple", stored in kNTupleFileName
+   auto writer = RNTupleParallelWriter::Recreate(std::move(model), "NTuple", kNTupleFileName, options);
+
    std::vector<std::thread> threads;
    for (int i = 0; i < kNWriterThreads; ++i)
-      entries.emplace_back(writer->CreateEntry());
-   for (int i = 0; i < kNWriterThreads; ++i)
-      threads.emplace_back(FillData, std::move(entries[i]), writer.get());
+      threads.emplace_back(FillData, writer.get());
    for (int i = 0; i < kNWriterThreads; ++i)
       threads[i].join();
 
    // The writer unique pointer goes out of scope here.  On destruction, the writer flushes unwritten data to disk
    // and closes the attached ROOT file.
 }
-
 
 // For all of the events, histogram only one of the written vectors
 void Read()
@@ -147,8 +149,7 @@ void Read()
    hFillSequence.DrawCopy();
 }
 
-
-void ntpl007_mtFill()
+void ntpl009_parallelWriter()
 {
    Write();
    Read();
