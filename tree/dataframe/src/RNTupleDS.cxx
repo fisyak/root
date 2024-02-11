@@ -193,7 +193,7 @@ public:
          }
       }
 
-      fField->ConnectPageSource(source);
+      ROOT::Experimental::Internal::CallConnectPageSourceOnField(*fField, source);
 
       if (fValuePtr) {
          // When the reader reconnects to a new file, the fValuePtr is already set
@@ -380,6 +380,16 @@ RNTupleDS::RNTupleDS(std::unique_ptr<Detail::RPageSource> pageSource) : fPrincip
 
    AddField(*fPrincipalDescriptor, "", fPrincipalDescriptor->GetFieldZeroId(),
             std::vector<ROOT::Experimental::RNTupleDS::RFieldInfo>());
+}
+
+RNTupleDS::RNTupleDS(std::string_view ntupleName, std::string_view fileName)
+   : RNTupleDS(ROOT::Experimental::Detail::RPageSource::Create(ntupleName, fileName))
+{
+}
+
+RNTupleDS::RNTupleDS(RNTuple *ntuple)
+   : RNTupleDS(ROOT::Experimental::Detail::RPageSourceFile::CreateFromAnchor(*ntuple))
+{
 }
 
 RNTupleDS::RNTupleDS(std::string_view ntupleName, const std::vector<std::string> &fileNames)
@@ -642,21 +652,16 @@ void RNTupleDS::SetNSlots(unsigned int nSlots)
 
 ROOT::RDataFrame ROOT::RDF::Experimental::FromRNTuple(std::string_view ntupleName, std::string_view fileName)
 {
-   auto pageSource = ROOT::Experimental::Detail::RPageSource::Create(ntupleName, fileName);
-   ROOT::RDataFrame rdf(std::make_unique<ROOT::Experimental::RNTupleDS>(std::move(pageSource)));
-   return rdf;
-}
-
-ROOT::RDataFrame ROOT::RDF::Experimental::FromRNTuple(ROOT::Experimental::RNTuple *ntuple)
-{
-   auto pageSource = ROOT::Experimental::Detail::RPageSourceFile::CreateFromAnchor(*ntuple);
-   ROOT::RDataFrame rdf(std::make_unique<ROOT::Experimental::RNTupleDS>(std::move(pageSource)));
-   return rdf;
+   return ROOT::RDataFrame(std::make_unique<ROOT::Experimental::RNTupleDS>(ntupleName, fileName));
 }
 
 ROOT::RDataFrame
 ROOT::RDF::Experimental::FromRNTuple(std::string_view ntupleName, const std::vector<std::string> &fileNames)
 {
-   ROOT::RDataFrame rdf(std::make_unique<ROOT::Experimental::RNTupleDS>(ntupleName, fileNames));
-   return rdf;
+   return ROOT::RDataFrame(std::make_unique<ROOT::Experimental::RNTupleDS>(ntupleName, fileNames));
+}
+
+ROOT::RDataFrame ROOT::RDF::Experimental::FromRNTuple(ROOT::Experimental::RNTuple *ntuple)
+{
+   return ROOT::RDataFrame(std::make_unique<ROOT::Experimental::RNTupleDS>(ntuple));
 }

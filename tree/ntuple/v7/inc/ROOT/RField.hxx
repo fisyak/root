@@ -53,6 +53,7 @@ class TEnum;
 namespace ROOT {
 
 class TSchemaRule;
+class RFieldBase;
 
 namespace Experimental {
 
@@ -62,6 +63,10 @@ class REntry;
 
 namespace Internal {
 struct RFieldCallbackInjector;
+// TODO(jblomer): find a better way to not have these three methods in the RFieldBase public API
+void CallCommitClusterOnField(RFieldBase &);
+void CallConnectPageSinkOnField(RFieldBase &, Detail::RPageSink &, NTupleSize_t firstEntry = 0);
+void CallConnectPageSourceOnField(RFieldBase &, Detail::RPageSource &);
 } // namespace Internal
 
 namespace Detail {
@@ -84,6 +89,9 @@ The field knows based on its type and the field name the type(s) and name(s) of 
 class RFieldBase {
    friend class ROOT::Experimental::RCollectionField; // to move the fields from the collection model
    friend struct ROOT::Experimental::Internal::RFieldCallbackInjector; // used for unit tests
+   friend void Internal::CallCommitClusterOnField(RFieldBase &);
+   friend void Internal::CallConnectPageSinkOnField(RFieldBase &, Detail::RPageSink &, NTupleSize_t);
+   friend void Internal::CallConnectPageSourceOnField(RFieldBase &, Detail::RPageSource &);
    using ReadCallback_t = std::function<void(void *)>;
 
 protected:
@@ -333,6 +341,18 @@ private:
    /// The column element index also depends on the number of repetitions of each field in the hierarchy, e.g., given a
    /// field with type `std::array<std::array<float, 4>, 2>`, this function returns 8 for the inner-most field.
    NTupleSize_t EntryToColumnElementIndex(NTupleSize_t globalIndex) const;
+
+   /// Flushes data from active columns to disk and calls CommitClusterImpl
+   void CommitCluster();
+   /// Fields and their columns live in the void until connected to a physical page storage.  Only once connected, data
+   /// can be read or written.  In order to find the field in the page storage, the field's on-disk ID has to be set.
+   /// \param firstEntry The global index of the first entry with on-disk data for the connected field
+   void ConnectPageSink(Detail::RPageSink &pageSink, NTupleSize_t firstEntry = 0);
+   /// Connects the field and its sub field tree to the given page source. Once connected, data can be read.
+   /// Only unconnected fields may be connected, i.e. the method is not idempotent. The field ID has to be set prior to
+   /// calling this function. For sub fields, a field ID may or may not be set. If the field ID is unset, it will be
+   /// determined using the page source descriptor, based on the parent field ID and the sub field name.
+   void ConnectPageSource(Detail::RPageSource &pageSource);
 
 protected:
    /// Input parameter to ReadBulk() and ReadBulkImpl(). See RBulk class for more information
@@ -599,9 +619,6 @@ public:
    int GetTraits() const { return fTraits; }
    bool HasReadCallbacks() const { return !fReadCallbacks.empty(); }
 
-   /// Flushes data from active columns to disk and calls CommitClusterImpl
-   void CommitCluster();
-
    std::string GetFieldName() const { return fName; }
    /// Returns the field name and parent field names separated by dots ("grandparent.parent.child")
    std::string GetQualifiedFieldName() const;
@@ -631,16 +648,6 @@ public:
    /// Whether or not an explicit column representative was set
    bool HasDefaultColumnRepresentative() const { return fColumnRepresentative == nullptr; }
 
-   /// Fields and their columns live in the void until connected to a physical page storage.  Only once connected, data
-   /// can be read or written.  In order to find the field in the page storage, the field's on-disk ID has to be set.
-   /// \param firstEntry The global index of the first entry with on-disk data for the connected field
-   void ConnectPageSink(Detail::RPageSink &pageSink, NTupleSize_t firstEntry = 0);
-   /// Connects the field and its sub field tree to the given page source. Once connected, data can be read.
-   /// Only unconnected fields may be connected, i.e. the method is not idempotent. The field ID has to be set prior to
-   /// calling this function. For sub fields, a field ID may or may not be set. If the field ID is unset, it will be
-   /// determined using the page source descriptor, based on the parent field ID and the sub field name.
-   void ConnectPageSource(Detail::RPageSource &pageSource);
-
    /// Indicates an evolution of the mapping scheme from C++ type to columns
    virtual std::uint32_t GetFieldVersion() const { return 0; }
    /// Indicates an evolution of the C++ type itself
@@ -660,7 +667,7 @@ public:
    RConstSchemaIterator cend() const { return RConstSchemaIterator(this, -1); }
 
    virtual void AcceptVisitor(Detail::RFieldVisitor &visitor) const;
-};
+}; // class RFieldBase
 
 /// The container field for an ntuple model, which itself has no physical representation.
 /// Therefore, the zero field must not be connected to a page source or sink.
@@ -1570,6 +1577,9 @@ protected:
    void GenerateColumnsImpl() final;
    void GenerateColumnsImpl(const RNTupleDescriptor &desc) final;
    void CreateValue(void *) const final {}
+
+   std::size_t AppendImpl(const void *from) final;
+   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
 
    void CommitClusterImpl() final;
 

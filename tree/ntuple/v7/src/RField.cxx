@@ -300,6 +300,20 @@ void DestroyRVecWithChecks(std::size_t alignOfT, void **beginPtr, char *begin, s
 
 } // anonymous namespace
 
+void ROOT::Experimental::Internal::CallCommitClusterOnField(RFieldBase &field)
+{
+   field.CommitCluster();
+}
+void ROOT::Experimental::Internal::CallConnectPageSinkOnField(RFieldBase &field, Detail::RPageSink &sink,
+                                                              NTupleSize_t firstEntry)
+{
+   field.ConnectPageSink(sink, firstEntry);
+}
+void ROOT::Experimental::Internal::CallConnectPageSourceOnField(RFieldBase &field, Detail::RPageSource &source)
+{
+   field.ConnectPageSource(source);
+}
+
 //------------------------------------------------------------------------------
 
 ROOT::Experimental::RFieldBase::RColumnRepresentations::RColumnRepresentations()
@@ -3263,7 +3277,7 @@ void ROOT::Experimental::RTupleField::RTupleDeleter::operator()(void *objPtr, bo
 ROOT::Experimental::RCollectionField::RCollectionField(std::string_view name,
                                                        std::shared_ptr<RCollectionNTupleWriter> collectionWriter,
                                                        std::unique_ptr<RFieldZero> collectionParent)
-   : RFieldBase(name, "", ENTupleStructure::kCollection, true /* isSimple */), fCollectionWriter(collectionWriter)
+   : RFieldBase(name, "", ENTupleStructure::kCollection, false /* isSimple */), fCollectionWriter(collectionWriter)
 {
    const std::size_t N = collectionParent->fSubFields.size();
    for (std::size_t i = 0; i < N; ++i) {
@@ -3299,6 +3313,22 @@ ROOT::Experimental::RCollectionField::CloneImpl(std::string_view newName) const
       parent->Attach(f->Clone(f->GetFieldName()));
    }
    return std::make_unique<RCollectionField>(newName, fCollectionWriter, std::move(parent));
+}
+
+std::size_t ROOT::Experimental::RCollectionField::AppendImpl(const void *from)
+{
+   // RCollectionFields are almost simple, but they return the bytes written by their subfields as accumulated by the
+   // RCollectionNTupleWriter.
+   std::size_t bytesWritten = fCollectionWriter->fBytesWritten;
+   fCollectionWriter->fBytesWritten = 0;
+
+   fColumns[0]->Append(from);
+   return bytesWritten + fColumns[0]->GetElement()->GetPackedSize();
+}
+
+void ROOT::Experimental::RCollectionField::ReadGlobalImpl(NTupleSize_t, void *)
+{
+   R__ASSERT(false && "should never read an RCollectionField");
 }
 
 void ROOT::Experimental::RCollectionField::CommitClusterImpl()
