@@ -339,7 +339,8 @@ ROOT::Experimental::RResult<void> ROOT::Experimental::RNTupleImporter::PrepareSc
       for (auto idx : c.fImportFieldIndexes) {
          const auto name = fImportFields[idx].fField->GetFieldName();
          auto projectedField =
-            RFieldBase::Create(name, "ROOT::RVec<" + fImportFields[idx].fField->GetTypeName() + ">").Unwrap();
+            RFieldBase::Create(name, "ROOT::VecOps::RVec<" + fImportFields[idx].fField->GetTypeName() + ">").Unwrap();
+         R__ASSERT(dynamic_cast<RRVecField *>(projectedField.get()));
          fModel->AddProjectedField(std::move(projectedField), [&name, &c](const std::string &fieldName) {
             if (fieldName == name)
                return c.fFieldName;
@@ -378,13 +379,13 @@ void ROOT::Experimental::RNTupleImporter::Import()
 
    PrepareSchema();
 
-   std::unique_ptr<Detail::RPageSink> sink =
-      std::make_unique<Detail::RPageSinkFile>(fNTupleName, *fDestFile, fWriteOptions);
+   std::unique_ptr<Internal::RPageSink> sink =
+      std::make_unique<Internal::RPageSinkFile>(fNTupleName, *fDestFile, fWriteOptions);
    sink->GetMetrics().Enable();
    auto ctrZippedBytes = sink->GetMetrics().GetCounter("RPageSinkFile.szWritePayload");
 
    if (fWriteOptions.GetUseBufferedWrite()) {
-      sink = std::make_unique<Detail::RPageSinkBuf>(std::move(sink));
+      sink = std::make_unique<Internal::RPageSinkBuf>(std::move(sink));
    }
 
    auto ntplWriter = Internal::CreateRNTupleWriter(std::move(fModel), std::move(sink));
