@@ -24,22 +24,23 @@ Wraps a RooFit::Evaluator that evaluates a RooAbsReal back into a RooAbsReal.
 #include "RooEvaluatorWrapper.h"
 
 #include <RooAbsData.h>
+#include <RooAbsPdf.h>
 #include <RooAbsReal.h>
-#include <RooRealVar.h>
 #include <RooHelpers.h>
 #include <RooMsgService.h>
+#include <RooRealVar.h>
 #include <RooSimultaneous.h>
 
 #include <TList.h>
 
 RooEvaluatorWrapper::RooEvaluatorWrapper(RooAbsReal &topNode, std::unique_ptr<RooFit::Evaluator> evaluator,
-                                         std::string const &rangeName, RooSimultaneous const *simPdf,
+                                         std::string const &rangeName, RooAbsPdf const *pdf,
                                          bool takeGlobalObservablesFromData)
    : RooAbsReal{"RooEvaluatorWrapper", "RooEvaluatorWrapper"},
      _evaluator{std::move(evaluator)},
      _topNode("topNode", "top node", this, topNode),
      _rangeName{rangeName},
-     _simPdf{simPdf},
+     _pdf{pdf},
      _takeGlobalObservablesFromData{takeGlobalObservablesFromData}
 {
 }
@@ -50,8 +51,9 @@ RooEvaluatorWrapper::RooEvaluatorWrapper(const RooEvaluatorWrapper &other, const
      _topNode("topNode", this, other._topNode),
      _data{other._data},
      _rangeName{other._rangeName},
-     _simPdf{other._simPdf},
-     _takeGlobalObservablesFromData{other._takeGlobalObservablesFromData}
+     _pdf{other._pdf},
+     _takeGlobalObservablesFromData{other._takeGlobalObservablesFromData},
+     _dataSpans{other._dataSpans}
 {
 }
 
@@ -60,7 +62,7 @@ bool RooEvaluatorWrapper::getParameters(const RooArgSet *observables, RooArgSet 
 {
    outputSet.add(_evaluator->getParameters());
    if (observables) {
-      outputSet.remove(*observables);
+      outputSet.remove(*observables, /*silent*/ false, /*matchByNameOnly*/ true);
    }
    // Exclude the data variables from the parameters which are not global observables
    for (auto const &item : _dataSpans) {
@@ -86,8 +88,10 @@ bool RooEvaluatorWrapper::setData(RooAbsData &data, bool /*cloneData*/)
 {
    _data = &data;
    std::stack<std::vector<double>>{}.swap(_vectorBuffers);
+   bool skipZeroWeights = !_pdf->getAttribute("BinnedLikelihoodActive");
    _dataSpans = RooFit::Detail::BatchModeDataHelpers::getDataSpans(
-      *_data, _rangeName, _simPdf, /*skipZeroWeights=*/true, _takeGlobalObservablesFromData, _vectorBuffers);
+      *_data, _rangeName, dynamic_cast<RooSimultaneous const *>(_pdf), skipZeroWeights, _takeGlobalObservablesFromData,
+      _vectorBuffers);
    for (auto const &item : _dataSpans) {
       _evaluator->setInput(item.first->GetName(), item.second, false);
    }
