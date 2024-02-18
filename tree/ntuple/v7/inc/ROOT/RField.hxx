@@ -199,6 +199,7 @@ public:
       void Read(NTupleSize_t globalIndex) { fField->Read(globalIndex, fObjPtr.get()); }
       void Read(RClusterIndex clusterIndex) { fField->Read(clusterIndex, fObjPtr.get()); }
       void Bind(std::shared_ptr<void> objPtr) { fObjPtr = objPtr; }
+      void BindRawPtr(void *rawPtr);
       /// Replace the current object pointer by a pointer to a new object constructed by the field
       void EmplaceNew() { fObjPtr = fField->CreateValue().GetPtr<void>(); }
 
