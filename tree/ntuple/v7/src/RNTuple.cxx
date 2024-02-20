@@ -17,14 +17,12 @@
 
 #include <ROOT/RFieldVisitor.hxx>
 #include <ROOT/RNTupleAnchor.hxx>
+#include <ROOT/RNTupleImtTaskScheduler.hxx>
 #include <ROOT/RNTupleModel.hxx>
 #include <ROOT/RPageSourceFriends.hxx>
 #include <ROOT/RPageStorage.hxx>
 #include <ROOT/RPageSinkBuf.hxx>
 #include <ROOT/RPageStorageFile.hxx>
-#ifdef R__USE_IMT
-#include <ROOT/TTaskGroup.hxx>
-#endif
 
 #include <TBuffer.h>
 #include <TError.h>
@@ -40,30 +38,6 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
-
-#ifdef R__USE_IMT
-ROOT::Experimental::RNTupleImtTaskScheduler::RNTupleImtTaskScheduler()
-{
-   Reset();
-}
-
-void ROOT::Experimental::RNTupleImtTaskScheduler::Reset()
-{
-   fTaskGroup = std::make_unique<TTaskGroup>();
-}
-
-void ROOT::Experimental::RNTupleImtTaskScheduler::AddTask(const std::function<void(void)> &taskFunc)
-{
-   fTaskGroup->Run(taskFunc);
-}
-
-void ROOT::Experimental::RNTupleImtTaskScheduler::Wait()
-{
-   fTaskGroup->Wait();
-}
-#endif
-
-//------------------------------------------------------------------------------
 
 void ROOT::Experimental::RNTupleReader::ConnectModel(RNTupleModel &model)
 {
@@ -87,7 +61,7 @@ void ROOT::Experimental::RNTupleReader::InitPageSource()
 {
 #ifdef R__USE_IMT
    if (IsImplicitMTEnabled()) {
-      fUnzipTasks = std::make_unique<RNTupleImtTaskScheduler>();
+      fUnzipTasks = std::make_unique<Internal::RNTupleImtTaskScheduler>();
       fSource->SetTaskScheduler(fUnzipTasks.get());
    }
 #endif
@@ -329,7 +303,7 @@ ROOT::Experimental::RNTupleWriter::RNTupleWriter(std::unique_ptr<ROOT::Experimen
 {
 #ifdef R__USE_IMT
    if (IsImplicitMTEnabled()) {
-      fZipTasks = std::make_unique<RNTupleImtTaskScheduler>();
+      fZipTasks = std::make_unique<Internal::RNTupleImtTaskScheduler>();
       fFillContext.fSink->SetTaskScheduler(fZipTasks.get());
    }
 #endif
@@ -362,6 +336,22 @@ ROOT::Experimental::RNTupleWriter::Recreate(std::unique_ptr<RNTupleModel> model,
                                             std::string_view storage, const RNTupleWriteOptions &options)
 {
    auto sink = Internal::RPagePersistentSink::Create(ntupleName, storage, options);
+   return Create(std::move(model), std::move(sink), options);
+}
+
+std::unique_ptr<ROOT::Experimental::RNTupleWriter>
+ROOT::Experimental::RNTupleWriter::Recreate(std::initializer_list<std::pair<std::string_view, std::string_view>> fields,
+                                            std::string_view ntupleName, std::string_view storage,
+                                            const RNTupleWriteOptions &options)
+{
+   auto sink = Internal::RPagePersistentSink::Create(ntupleName, storage, options);
+   auto model = RNTupleModel::Create();
+   for (const auto &fieldDesc : fields) {
+      std::string typeName(fieldDesc.first);
+      std::string fieldName(fieldDesc.second);
+      auto field = RFieldBase::Create(fieldName, typeName);
+      model->AddField(field.Unwrap());
+   }
    return Create(std::move(model), std::move(sink), options);
 }
 

@@ -59,20 +59,6 @@ enum class ENTupleInfo {
    kMetrics, // internals performance counters, requires that EnableMetrics() was called
 };
 
-#ifdef R__USE_IMT
-class TTaskGroup;
-class RNTupleImtTaskScheduler : public Internal::RPageStorage::RTaskScheduler {
-private:
-   std::unique_ptr<TTaskGroup> fTaskGroup;
-public:
-   RNTupleImtTaskScheduler();
-   ~RNTupleImtTaskScheduler() override = default;
-   void Reset() final;
-   void AddTask(const std::function<void(void)> &taskFunc) final;
-   void Wait() final;
-};
-#endif
-
 // clang-format off
 /**
 \class ROOT::Experimental::RNTupleReader
@@ -473,6 +459,9 @@ public:
                                                   std::string_view ntupleName,
                                                   std::string_view storage,
                                                   const RNTupleWriteOptions &options = RNTupleWriteOptions());
+   static std::unique_ptr<RNTupleWriter>
+   Recreate(std::initializer_list<std::pair<std::string_view, std::string_view>> fields, std::string_view ntupleName,
+            std::string_view storage, const RNTupleWriteOptions &options = RNTupleWriteOptions());
    /// Throws an exception if the model is null.
    static std::unique_ptr<RNTupleWriter> Append(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
                                                 TFile &file,

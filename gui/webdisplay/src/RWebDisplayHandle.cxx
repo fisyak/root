@@ -28,6 +28,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <filesystem>
 #include <memory>
 #include <regex>
 
@@ -107,17 +108,19 @@ class RWebBrowserHandle : public RWebDisplayHandle {
    typedef pid_t browser_process_id;
 #endif
    std::string fTmpDir;         ///< temporary directory to delete at the end
+   std::string fTmpFile;        ///< temporary file to remove
    bool fHasPid{false};
    browser_process_id fPid;
 
 public:
-   RWebBrowserHandle(const std::string &url, const std::string &tmpdir, const std::string &dump) : RWebDisplayHandle(url), fTmpDir(tmpdir)
+   RWebBrowserHandle(const std::string &url, const std::string &tmpdir, const std::string &tmpfile, const std::string &dump) :
+      RWebDisplayHandle(url), fTmpDir(tmpdir), fTmpFile(tmpfile)
    {
       SetContent(dump);
    }
 
-   RWebBrowserHandle(const std::string &url, const std::string &tmpdir, browser_process_id pid)
-      : RWebDisplayHandle(url), fTmpDir(tmpdir), fHasPid(true), fPid(pid)
+   RWebBrowserHandle(const std::string &url, const std::string &tmpdir, const std::string &tmpfile, browser_process_id pid)
+      : RWebDisplayHandle(url), fTmpDir(tmpdir), fTmpFile(tmpfile), fHasPid(true), fPid(pid)
    {
    }
 
@@ -126,16 +129,18 @@ public:
 #ifdef _MSC_VER
       if (fHasPid)
          gSystem->Exec(("taskkill /F /PID "s + std::to_string(fPid) + " >NUL 2>NUL").c_str());
-      std::string rmdir = "rmdir /S /Q ";
+      std::string rmdir = "rmdir /S /Q ", rmfile = "del /F ";
 #else
       if (fHasPid)
          kill(fPid, SIGKILL);
-      std::string rmdir = "rm -rf ";
+      std::string rmdir = "rm -rf ", rmfile = "rm -f ";
 #endif
       if (!fTmpDir.empty())
          gSystem->Exec((rmdir + fTmpDir).c_str());
+      if (!fTmpFile.empty())
+         gSystem->Exec((rmfile + fTmpFile).c_str());
    }
-   
+
 };
 
 } // namespace ROOT
@@ -216,7 +221,7 @@ RWebDisplayHandle::BrowserCreator::Display(const RWebDisplayArgs &args)
 
    if(args.GetBrowserKind() == RWebDisplayArgs::kServer) {
       std::cout << "New web window: " << url << std::endl;
-      return std::make_unique<RWebBrowserHandle>(url, "", "");
+      return std::make_unique<RWebBrowserHandle>(url, "", "", "");
    }
 
    std::string exec;
@@ -240,6 +245,45 @@ RWebDisplayHandle::BrowserCreator::Display(const RWebDisplayArgs &args)
    ProcessGeometry(exec, args);
 
    std::string rmdir = MakeProfile(exec, args.IsBatchMode() || args.IsHeadless());
+
+   std::string tmpfile;
+
+   // these are secret parameters, hide them in temp file
+   if ((url.find("token=") || url.find("key=")) && !args.IsBatchMode() && !args.IsHeadless()) {
+      gRandom->SetSeed(0);
+
+      tmpfile = gSystem->TempDirectory();
+
+      if (tmpfile.back() != std::filesystem::path::preferred_separator)
+         tmpfile += std::filesystem::path::preferred_separator;
+      tmpfile += "root_start_"s + std::to_string(gRandom->Integer(0x100000)) + ".html";
+
+      std::ofstream os(tmpfile);
+      if (os) {
+         os << std::regex_replace(
+            "<!DOCTYPE html>\n"
+            "<html lang=\"en\">\n"
+            "<head>\n"
+            "   <meta charset=\"utf-8\">\n"
+            "   <meta http-equiv=\"refresh\" content=\"0;url=$url\"/>\n"
+            "   <title>Opening ROOT widget</title>\n"
+            "</head>\n"
+            "<body>\n"
+            "<p>\n"
+            "  This page should redirect you to a ROOT widget. If it doesn't,\n"
+            "  <a href=\"$url\">click here to go to ROOT</a>.\n"
+            "</p>\n"
+            "</body>\n"
+            "</html>\n", std::regex("\\$url"), url);
+         url = "file://"s + tmpfile;
+
+         os.close();
+         gSystem->Chmod(tmpfile.c_str(), 0400); // only read for user itself
+      } else {
+         R__LOG_ERROR(WebGUILog()) << "Fail to create temporary HTML file to startup widget";
+         return nullptr;
+      }
+   }
 
    exec = std::regex_replace(exec, std::regex("\\$rootetcdir"), TROOT::GetEtcDir().Data());
    exec = std::regex_replace(exec, std::regex("\\$url"), url);
@@ -281,7 +325,7 @@ RWebDisplayHandle::BrowserCreator::Display(const RWebDisplayArgs &args)
 
       // add processid and rm dir
 
-      return std::make_unique<RWebBrowserHandle>(url, rmdir, pid);
+      return std::make_unique<RWebBrowserHandle>(url, rmdir, tmpfile, pid);
 
 #else
 
@@ -305,7 +349,7 @@ RWebDisplayHandle::BrowserCreator::Display(const RWebDisplayArgs &args)
       }
 
       // add processid and rm dir
-      return std::make_unique<RWebBrowserHandle>(url, rmdir, pid);
+      return std::make_unique<RWebBrowserHandle>(url, rmdir, tmpfile, pid);
 #endif
    }
 
@@ -332,7 +376,7 @@ RWebDisplayHandle::BrowserCreator::Display(const RWebDisplayArgs &args)
 
       _spawnv(_P_NOWAIT, gSystem->UnixPathName(fProg.c_str()), argv.data());
 
-      return std::make_unique<RWebBrowserHandle>(url, rmdir, ""s);
+      return std::make_unique<RWebBrowserHandle>(url, rmdir, tmpfile, ""s);
    }
 
    std::string prog = "\""s + gSystem->UnixPathName(fProg.c_str()) + "\""s;
@@ -368,8 +412,7 @@ RWebDisplayHandle::BrowserCreator::Display(const RWebDisplayArgs &args)
       gSystem->Unlink(redirect.c_str());
    }
 
-   // add rmdir if required
-   return std::make_unique<RWebBrowserHandle>(url, rmdir, dump_content);
+   return std::make_unique<RWebBrowserHandle>(url, rmdir, tmpfile, dump_content);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -460,7 +503,7 @@ std::string RWebDisplayHandle::ChromeCreator::MakeProfile(std::string &exec, boo
 #else
       char slash = '/';
 #endif
-      if (!profile_arg.empty() && (profile_arg[profile_arg.length()-1] != slash)) 
+      if (!profile_arg.empty() && (profile_arg[profile_arg.length()-1] != slash))
          profile_arg += slash;
       profile_arg += "root_chrome_profile_"s + std::to_string(gRandom->Integer(0x100000));
 
@@ -522,10 +565,10 @@ void RWebDisplayHandle::FirefoxCreator::ProcessGeometry(std::string &exec, const
 std::string RWebDisplayHandle::FirefoxCreator::MakeProfile(std::string &exec, bool batch_mode)
 {
    std::string rmdir, profile_arg;
-  
+
    if (exec.find("$profile") == std::string::npos)
       return rmdir;
-   
+
    const char *ff_profile = gEnv->GetValue("WebGui.FirefoxProfile", "");
    const char *ff_profilepath = gEnv->GetValue("WebGui.FirefoxProfilePath", "");
    Int_t ff_randomprofile = gEnv->GetValue("WebGui.FirefoxRandomProfile", (Int_t) 1);
@@ -543,7 +586,7 @@ std::string RWebDisplayHandle::FirefoxCreator::MakeProfile(std::string &exec, bo
 #else
       char slash = '/';
 #endif
-      if (!profile_dir.empty() && (profile_dir[profile_dir.length()-1] != slash)) 
+      if (!profile_dir.empty() && (profile_dir[profile_dir.length()-1] != slash))
          profile_dir += slash;
       profile_dir += "root_ff_profile_"s + std::to_string(gRandom->Integer(0x100000));
 
@@ -581,9 +624,9 @@ std::string RWebDisplayHandle::FirefoxCreator::MakeProfile(std::string &exec, bo
             times_json << "}" << std::endl;
             if (gSystem->mkdir((profile_dir + "/chrome").c_str()) == 0) {
                std::ofstream style(profile_dir + "/chrome/userChrome.css", std::ios::trunc);
-               // do not show tabs 
+               // do not show tabs
                style << "#TabsToolbar { visibility: collapse; }" << std::endl;
-               // do not show URL 
+               // do not show URL
                style << "#nav-bar, #urlbar-container, #searchbar { visibility: collapse !important; }" << std::endl;
             }
          }
