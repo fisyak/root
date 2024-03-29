@@ -1889,7 +1889,8 @@ void TMinuit::mncros(Double_t &aopt, Int_t &iercr)
    fYpt[ipt-1]  = fnext;
    fChpt[ipt-1] = charal[ipt-1];
    flsb[1]      = fnext;
-   dfda         = (flsb[1] - flsb[0]) / (alsb[1] - alsb[0]);
+   dfda         = 0;
+   if (alsb[1] != alsb[0]) dfda         = (flsb[1] - flsb[0]) / (alsb[1] - alsb[0]);
 //*-*-                  DFDA must be positive on the contour
    if (dfda > 0) goto L460;
 L300:
@@ -1917,7 +1918,8 @@ L300:
       fYpt[ipt-1]  = fnext;
       fChpt[ipt-1] = charal[ipt-1];
       flsb[1]      = fnext;
-      dfda         = (flsb[1] - flsb[0]) / (alsb[1] - alsb[0]);
+      dfda         = 0;
+      if (alsb[1] != alsb[0]) dfda         = (flsb[1] - flsb[0]) / (alsb[1] - alsb[0]);
       if (dfda > 0) goto L450;
    }
    mnwarn("W", "MNCROS    ", "Cannot find slope of the right sign");
@@ -1925,7 +1927,8 @@ L300:
 L450:
 //*-*-                   we have two points with the right slope
 L460:
-   aopt  = alsb[1] + (aim - flsb[1]) / dfda;
+   aopt = 0;
+   if (TMath::Abs(dfda) > 0) aopt  = alsb[1] + (aim - flsb[1]) / dfda;
    fdist = TMath::Min(TMath::Abs(aim - flsb[0]),TMath::Abs(aim - flsb[1]));
    adist = TMath::Min(TMath::Abs(aopt - alsb[0]),TMath::Abs(aopt - alsb[1]));
    tla = .01;
@@ -1980,7 +1983,8 @@ L460:
 //*-*-          in other cases, new straight line thru last two points
    alsb[iworst-1] = alsb[2];
    flsb[iworst-1] = flsb[2];
-   dfda = (flsb[1] - flsb[0]) / (alsb[1] - alsb[0]);
+   dfda = 0;
+   if (alsb[1] != alsb[0]) dfda = (flsb[1] - flsb[0]) / (alsb[1] - alsb[0]);
    goto L460;
 //*-*-               parabola fit
 L500:
