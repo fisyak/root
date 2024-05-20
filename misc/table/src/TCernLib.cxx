@@ -1567,9 +1567,11 @@ L40:
 L42:
          if (j != i__) b[kpiv] = sum * r__;
          else {
+	   if (sum < 0) sum = 0;
             dc = TMath::Sqrt(sum);
             b[kpiv] = dc;
-            if (r__ > 0.)  r__ = (double)1. / dc;
+            if (r__ > 0. && dc > 0.0)  r__ = (double)1. / dc;
+	    else                       r__ = 0;
          }
          kpiv += j;
       }
