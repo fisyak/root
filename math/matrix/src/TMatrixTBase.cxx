@@ -841,8 +841,8 @@ void TMatrixTBase<Element>::Print(Option_t *option) const
 
    printf("\n%dx%d matrix is as follows",fNrows,fNcols);
 
-   Int_t cols_per_sheet = 5;
-   if (nch <= 8) cols_per_sheet =10;
+   Int_t cols_per_sheet = 10; // 5;
+   if (nch <= 8) cols_per_sheet = 20; // 10;
    const Int_t ncols  = fNcols;
    const Int_t nrows  = fNrows;
    const Int_t collwb = fColLwb;
