@@ -1999,8 +1999,12 @@ L500:
    }
 //*-*-               Find which root is the right one
    rt = TMath::Sqrt(determ);
-   x1 = (-coeff[1] + rt) / (coeff[2]*2);
-   x2 = (-coeff[1] - rt) / (coeff[2]*2);
+   if (coeff[2]) {
+     x1 = (-coeff[1] + rt) / (coeff[2]*2);
+     x2 = (-coeff[1] - rt) / (coeff[2]*2);
+   } else {
+     x1 = x2 = 0;
+   }
    s1 = coeff[1] + x1*2*coeff[2];
    s2 = coeff[1] + x2*2*coeff[2];
    if (s1*s2 > 0) {
