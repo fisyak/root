@@ -166,9 +166,9 @@ TWebCanvas::~TWebCanvas()
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 /// Add font to static list of fonts upported by the canvas
-/// Name specifies name of the font, second is font file with .ttf or .woff2 extension 
+/// Name specifies name of the font, second is font file with .ttf or .woff2 extension
 /// Only True Type Fonts (ttf) are supported by PDF
-/// Returns font index which can be used in 
+/// Returns font index which can be used in
 ///   auto font_indx = TWebCanvas::AddFont("test", "test.ttf", 2);
 ///   gStyle->SetStatFont(font_indx);
 
@@ -219,7 +219,7 @@ Font_t TWebCanvas::AddFont(const char *name, const char *fontfile, Int_t precisi
    TString base64 = TBase64::Encode(res.c_str(), res.length());
 
    maxindx++;
-   
+
    gWebFonts.emplace_back(maxindx, name, fmt, base64);
 
    return precision > 0 ? maxindx*10 + precision : maxindx;
@@ -1324,7 +1324,9 @@ Bool_t TWebCanvas::DecodePadOptions(const std::string &msg, bool process_execs)
          }
       }
 
-      if (r.active && (pad != gPad)) gPad = pad;
+      // only if get OPTIONS message from client allow to change gPad
+      if (r.active && (pad != gPad) && process_execs)
+         gPad = pad;
 
       if ((pad->GetTickx() != r.tickx) || (pad->GetTicky() != r.ticky))
          pad->SetTicks(r.tickx, r.ticky);
@@ -1881,7 +1883,7 @@ Bool_t TWebCanvas::ProcessData(unsigned connid, const std::string &arg)
          std::stringstream exec;
          exec << "((" << obj->ClassName() << " *) " << std::hex << std::showbase << (size_t)obj
               << ")->" << buf << ";";
-         if (gDebug > 1)
+         if (gDebug > 0)
             Info("ProcessData", "Obj %s Exec %s", obj->GetName(), exec.str().c_str());
 
          auto res = gROOT->ProcessLine(exec.str().c_str());
@@ -2076,7 +2078,12 @@ UInt_t TWebCanvas::GetWindowGeometry(Int_t &x, Int_t &y, UInt_t &w, UInt_t &h)
 
 Bool_t TWebCanvas::PerformUpdate(Bool_t async)
 {
-   CheckCanvasModified();
+   if (CheckCanvasModified()) {
+      // configure selected pad that method like TPad::WaitPrimitive() can correctly work
+      // can be removed again once WaitPrimitive implemented differently
+      if (gPad && (gPad->GetCanvas() == Canvas()))
+         gROOT->SetSelectedPad(gPad);
+   }
 
    CheckDataToSend();
 
@@ -2319,7 +2326,8 @@ TPad *TWebCanvas::ProcessObjectOptions(TWebObjectOptions &item, TPad *pad, int i
          std::stringstream exec;
          exec << "((" << obj->ClassName() << " *) " << std::hex << std::showbase
                       << (size_t)obj << ")->" << item.opt << ";";
-         Info("ProcessObjectOptions", "Obj %s Execute %s", obj->GetName(), exec.str().c_str());
+         if (gDebug > 0)
+            Info("ProcessObjectOptions", "Obj %s Execute %s", obj->GetName(), exec.str().c_str());
          gROOT->ProcessLine(exec.str().c_str());
       } else {
          Error("ProcessObjectOptions", "Fail to execute %s for object %p %s", item.opt.c_str(), obj, obj ? obj->ClassName() : "---");
@@ -2334,7 +2342,7 @@ TPad *TWebCanvas::ProcessObjectOptions(TWebObjectOptions &item, TPad *pad, int i
       auto pos = item.opt.find(";;use_"); // special coding of extra options
       if (pos != std::string::npos) item.opt.resize(pos);
 
-      if (gDebug > 1)
+      if (gDebug > 0)
          Info("ProcessObjectOptions", "Set draw option %s for object %s %s", item.opt.c_str(),
                obj->ClassName(), obj->GetName());
 

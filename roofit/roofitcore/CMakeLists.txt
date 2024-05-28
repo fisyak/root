@@ -129,12 +129,11 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooFirstMoment.h
     RooFit.h
     RooFit/Config.h
-    RooFit/Detail/AnalyticalIntegrals.h
     RooFit/Detail/BatchModeDataHelpers.h
     RooFit/Detail/CodeSquashContext.h
-    RooFit/Detail/DataMap.h
-    RooFit/Detail/EvaluateFuncs.h
+    RooFit/Detail/MathFuncs.h
     RooFit/Detail/NormalizationHelpers.h
+    RooFit/EvalContext.h
     RooFit/Evaluator.h
     RooFit/Floats.h
     RooFit/ModelConfig.h
@@ -147,6 +146,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RooFit/TestStatistics/RooSumL.h
     RooFit/TestStatistics/RooUnbinnedL.h
     RooFit/TestStatistics/buildLikelihood.h
+    RooFit/TestStatistics/SharedOffset.h
     RooFitLegacy/RooCatTypeLegacy.h
     RooFitLegacy/RooCategorySharedProperties.h
     RooFitLegacy/RooTreeData.h
@@ -339,7 +339,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/RooFactoryWSTool.cxx
     src/RooFirstMoment.cxx
     src/RooFit/Detail/CodeSquashContext.cxx
-    src/RooFit/Detail/DataMap.cxx
+    src/RooFit/EvalContext.cxx
     src/RooFit/Evaluator.cxx
     src/RooFitImplHelpers.cxx
     src/RooFitLegacy/RooCatTypeLegacy.cxx
@@ -455,6 +455,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/TestStatistics/RooSumL.cxx
     src/TestStatistics/RooUnbinnedL.cxx
     src/TestStatistics/buildLikelihood.cxx
+    src/TestStatistics/SharedOffset.cxx
     ${LegacyEvalBackendSources}
     ${RooFitMPTestStatisticsSources}
   DICTIONARY_OPTIONS

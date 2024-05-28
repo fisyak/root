@@ -193,7 +193,7 @@ namespace cling {
 
     // Disable suggestions for ROOT
     bool showSuggestions =
-        !llvm::StringRef(ClingStringify(CLING_VERSION)).startswith("ROOT");
+        !llvm::StringRef(ClingStringify(CLING_VERSION)).starts_with("ROOT");
 
     std::unique_ptr<InterpreterCallbacks> AutoLoadCB(
         new AutoloadCallback(&Interp, showSuggestions));
@@ -215,10 +215,26 @@ namespace cling {
     if (handleSimpleOptions(m_Opts))
       return;
 
-    m_LLVMContext.reset(new llvm::LLVMContext);
+    auto LLVMCtx = std::make_unique<llvm::LLVMContext>();
+    TSCtx = std::make_unique<llvm::orc::ThreadSafeContext>(std::move(LLVMCtx));
     m_IncrParser.reset(new IncrementalParser(this, llvmdir, moduleExtensions));
     if (!m_IncrParser->isValid(false))
       return;
+
+    // Load any requested plugins.
+    getCI()->LoadRequestedPlugins();
+
+    // Honor set of `-mllvm` options. This should happen AFTER plugins have been
+    // loaded!
+    if (!m_Opts.CompilerOpts.LLVMArgs.empty()) {
+      unsigned NumArgs = m_Opts.CompilerOpts.LLVMArgs.size();
+      auto Args = std::make_unique<const char*[]>(NumArgs + 2);
+      Args[0] = "cling (LLVM option parsing)";
+      for (unsigned i = 0; i != NumArgs; ++i)
+        Args[i + 1] = m_Opts.CompilerOpts.LLVMArgs[i].c_str();
+      Args[NumArgs + 1] = nullptr;
+      llvm::cl::ParseCommandLineOptions(NumArgs + 1, Args.get());
+    }
 
     // Initialize the opt level to what CodeGenOpts says.
     if (m_OptLevel == -1)
@@ -340,7 +356,7 @@ namespace cling {
 
     m_IncrParser->SetTransformers(parentInterp);
 
-    if (!m_LLVMContext) {
+    if (!TSCtx->getContext()) {
       // Never true, but don't tell the compiler.
       // Force symbols needed by runtime to be included in binaries.
       // Prevents stripping the symbol due to dead-code optimization.
@@ -1125,7 +1141,7 @@ namespace cling {
   }
 
   bool Interpreter::isUniqueName(llvm::StringRef name) {
-    return name.startswith(utils::Synthesize::UniquePrefix);
+    return name.starts_with(utils::Synthesize::UniquePrefix);
   }
 
   clang::SourceLocation Interpreter::getSourceLocation(bool skipWrapper) const {

@@ -18,7 +18,7 @@
 
 #include <ROOT/RError.hxx>
 #include <ROOT/RPageStorage.hxx>
-#include <ROOT/RNTupleAnchor.hxx>
+#include <ROOT/RNTuple.hxx>
 #include <ROOT/RNTupleSerialize.hxx>
 #include <ROOT/RNTupleZip.hxx>
 #include <string_view>
@@ -122,6 +122,7 @@ private:
    uint32_t fCageSizeLimit{};
 
 protected:
+   using RPagePersistentSink::InitImpl;
    void InitImpl(unsigned char *serializedHeader, std::uint32_t length) final;
    RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) final;
    RNTupleLocator

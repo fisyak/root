@@ -314,9 +314,60 @@ TEST(RNTuple, ClusterEntries)
       auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath(), opt);
       for (int i = 0; i < 100; i++) {
          ntuple->Fill();
-         if (i && ((i % 5) == 0))
+         if (((i + 1) % 5) == 0)
             ntuple->CommitCluster();
       }
+   }
+
+   auto ntuple = RNTupleReader::Open("ntuple", fileGuard.GetPath());
+   // 100 entries / 5 entries per cluster
+   EXPECT_EQ(20, ntuple->GetDescriptor().GetNClusters());
+}
+
+TEST(RNTuple, ClusterEntriesAuto)
+{
+   FileRaii fileGuard("test_ntuple_cluster_entries_auto.root");
+   auto model = RNTupleModel::Create();
+   auto field = model->MakeField<float>({"pt", "transverse momentum"}, 42.0);
+
+   {
+      RNTupleWriteOptions options;
+      options.SetCompression(0);
+      options.SetApproxZippedClusterSize(5 * sizeof(float));
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath(), options);
+      for (int i = 0; i < 100; i++) {
+         ntuple->Fill();
+      }
+   }
+
+   auto ntuple = RNTupleReader::Open("ntuple", fileGuard.GetPath());
+   // 100 entries / 5 entries per cluster
+   EXPECT_EQ(20, ntuple->GetDescriptor().GetNClusters());
+}
+
+TEST(RNTuple, ClusterEntriesAutoStatus)
+{
+   FileRaii fileGuard("test_ntuple_cluster_entries_auto_status.root");
+   {
+      auto model = RNTupleModel::CreateBare();
+      auto field = model->MakeField<float>({"pt", "transverse momentum"}, 42.0);
+
+      int CommitClusterCalled = 0;
+      RNTupleFillStatus status;
+
+      RNTupleWriteOptions options;
+      options.SetCompression(0);
+      options.SetApproxZippedClusterSize(5 * sizeof(float));
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath(), options);
+      auto entry = ntuple->CreateEntry();
+      for (int i = 0; i < 100; i++) {
+         ntuple->FillNoCommit(*entry, status);
+         if (status.ShouldCommitCluster()) {
+            ntuple->CommitCluster();
+            CommitClusterCalled++;
+         }
+      }
+      EXPECT_EQ(20, CommitClusterCalled);
    }
 
    auto ntuple = RNTupleReader::Open("ntuple", fileGuard.GetPath());
@@ -351,15 +402,7 @@ TEST(RNTupleModel, EnforceValidFieldNames)
 {
    auto model = RNTupleModel::Create();
 
-   auto field = model->MakeField<float>("pt", 42.0);
-
    // MakeField
-   try {
-      auto field2 = model->MakeField<float>("pt", 42.0);
-      FAIL() << "repeated field names should throw";
-   } catch (const RException& err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("field name 'pt' already exists"));
-   }
    try {
       auto field3 = model->MakeField<float>("", 42.0);
       FAIL() << "empty string as field name should throw";
@@ -373,9 +416,19 @@ TEST(RNTupleModel, EnforceValidFieldNames)
       EXPECT_THAT(err.what(), testing::HasSubstr("name 'pt.pt' cannot contain dot characters '.'"));
    }
 
+   // Previous failures to create 'pt' should not block the name
+   auto field = model->MakeField<float>("pt", 42.0);
+
+   try {
+      auto field2 = model->MakeField<float>("pt", 42.0);
+      FAIL() << "repeated field names should throw";
+   } catch (const RException &err) {
+      EXPECT_THAT(err.what(), testing::HasSubstr("field name 'pt' already exists"));
+   }
+
    // AddField
    try {
-      model->AddField(std::make_unique<RField<float>>(RField<float>("pt")));
+      model->AddField(std::make_unique<RField<float>>("pt"));
       FAIL() << "repeated field names should throw";
    } catch (const RException& err) {
       EXPECT_THAT(err.what(), testing::HasSubstr("field name 'pt' already exists"));
@@ -786,6 +839,7 @@ TEST(REntry, Basics)
 
    EXPECT_THROW(e->GetToken(""), ROOT::Experimental::RException);
    EXPECT_THROW(e->GetToken("eta"), ROOT::Experimental::RException);
+   EXPECT_THROW(model->GetToken("eta"), ROOT::Experimental::RException);
 
    std::shared_ptr<float> ptrPt;
    e->BindValue("pt", ptrPt);
@@ -800,7 +854,7 @@ TEST(REntry, Basics)
    e->BindRawPtr("pt", &pt);
    EXPECT_EQ(&pt, e->GetPtr<void>("pt").get());
 
-   e->EmplaceNewValue("pt");
+   e->EmplaceNewValue(model->GetToken("pt"));
    EXPECT_NE(&pt, e->GetPtr<void>("pt").get());
 }
 

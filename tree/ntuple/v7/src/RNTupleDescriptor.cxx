@@ -38,7 +38,8 @@ bool ROOT::Experimental::RFieldDescriptor::operator==(const RFieldDescriptor &ot
    return fFieldId == other.fFieldId && fFieldVersion == other.fFieldVersion && fTypeVersion == other.fTypeVersion &&
           fFieldName == other.fFieldName && fFieldDescription == other.fFieldDescription &&
           fTypeName == other.fTypeName && fTypeAlias == other.fTypeAlias && fNRepetitions == other.fNRepetitions &&
-          fStructure == other.fStructure && fParentId == other.fParentId && fLinkIds == other.fLinkIds;
+          fStructure == other.fStructure && fParentId == other.fParentId && fLinkIds == other.fLinkIds &&
+          fLogicalColumnIds == other.fLogicalColumnIds;
 }
 
 ROOT::Experimental::RFieldDescriptor
@@ -56,12 +57,17 @@ ROOT::Experimental::RFieldDescriptor::Clone() const
    clone.fStructure = fStructure;
    clone.fParentId = fParentId;
    clone.fLinkIds = fLinkIds;
+   clone.fLogicalColumnIds = fLogicalColumnIds;
    return clone;
 }
 
 std::unique_ptr<ROOT::Experimental::RFieldBase>
 ROOT::Experimental::RFieldDescriptor::CreateField(const RNTupleDescriptor &ntplDesc) const
 {
+   if (GetStructure() == ENTupleStructure::kUnsplit) {
+      return std::make_unique<RUnsplitField>(GetFieldName(), GetTypeName());
+   }
+
    if (GetTypeName().empty()) {
       // For untyped records or collections, we have no class available to collect all the sub fields.
       // Therefore, we create an untyped record field as an artificial binder for the record itself, and in the case of
@@ -221,6 +227,7 @@ bool ROOT::Experimental::RNTupleDescriptor::operator==(const RNTupleDescriptor &
           fDescription == other.fDescription &&
           fNEntries == other.fNEntries &&
           fGeneration == other.fGeneration &&
+          fFieldZeroId == other.fFieldZeroId &&
           fFieldDescriptors == other.fFieldDescriptors &&
           fColumnDescriptors == other.fColumnDescriptors &&
           fClusterGroupDescriptors == other.fClusterGroupDescriptors &&
@@ -252,9 +259,12 @@ ROOT::Experimental::RNTupleDescriptor::FindFieldId(std::string_view fieldName, D
       leafName = leafName.substr(posDot + 1);
       parentId = FindFieldId(parentName, parentId);
    }
-   for (const auto &fd : fFieldDescriptors) {
-      if (fd.second.GetParentId() == parentId && fd.second.GetFieldName() == leafName)
-         return fd.second.GetId();
+   auto itrFieldDesc = fFieldDescriptors.find(parentId);
+   if (itrFieldDesc == fFieldDescriptors.end())
+      return kInvalidDescriptorId;
+   for (const auto linkId : itrFieldDesc->second.GetLinkIds()) {
+      if (fFieldDescriptors.at(linkId).GetFieldName() == leafName)
+         return linkId;
    }
    return kInvalidDescriptorId;
 }
@@ -272,14 +282,6 @@ std::string ROOT::Experimental::RNTupleDescriptor::GetQualifiedFieldName(Descrip
    return prefix + "." + fieldDescriptor.GetFieldName();
 }
 
-
-ROOT::Experimental::DescriptorId_t
-ROOT::Experimental::RNTupleDescriptor::GetFieldZeroId() const
-{
-   return FindFieldId("", kInvalidDescriptorId);
-}
-
-
 ROOT::Experimental::DescriptorId_t
 ROOT::Experimental::RNTupleDescriptor::FindFieldId(std::string_view fieldName) const
 {
@@ -289,11 +291,12 @@ ROOT::Experimental::RNTupleDescriptor::FindFieldId(std::string_view fieldName) c
 ROOT::Experimental::DescriptorId_t
 ROOT::Experimental::RNTupleDescriptor::FindLogicalColumnId(DescriptorId_t fieldId, std::uint32_t columnIndex) const
 {
-   for (const auto &cd : fColumnDescriptors) {
-      if (cd.second.GetFieldId() == fieldId && cd.second.GetIndex() == columnIndex)
-         return cd.second.GetLogicalId();
-   }
-   return kInvalidDescriptorId;
+   auto itr = fFieldDescriptors.find(fieldId);
+   if (itr == fFieldDescriptors.cend())
+      return kInvalidDescriptorId;
+   if (itr->second.GetLogicalColumnIds().size() <= columnIndex)
+      return kInvalidDescriptorId;
+   return itr->second.GetLogicalColumnIds().at(columnIndex);
 }
 
 ROOT::Experimental::DescriptorId_t
@@ -479,6 +482,7 @@ std::unique_ptr<ROOT::Experimental::RNTupleDescriptor> ROOT::Experimental::RNTup
    clone->fNEntries = fNEntries;
    clone->fNClusters = fNClusters;
    clone->fNPhysicalColumns = fNPhysicalColumns;
+   clone->fFieldZeroId = fFieldZeroId;
    clone->fGeneration = fGeneration;
    for (const auto &d : fFieldDescriptors)
       clone->fFieldDescriptors.emplace(d.first, d.second.Clone());
@@ -765,6 +769,9 @@ void ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AddField(const RFie
    fDescriptor.fFieldDescriptors.emplace(fieldDesc.GetId(), fieldDesc.Clone());
    if (fDescriptor.fHeaderExtension)
       fDescriptor.fHeaderExtension->AddFieldId(fieldDesc.GetId());
+   if (fieldDesc.GetFieldName().empty() && fieldDesc.GetParentId() == kInvalidDescriptorId) {
+      fDescriptor.fFieldZeroId = fieldDesc.GetId();
+   }
 }
 
 ROOT::Experimental::RResult<void>
@@ -793,11 +800,10 @@ ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AddFieldLink(DescriptorI
    return RResult<void>::Success();
 }
 
-void ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AddColumn(DescriptorId_t logicalId,
-                                                                       DescriptorId_t physicalId,
-                                                                       DescriptorId_t fieldId,
-                                                                       const RColumnModel &model, std::uint32_t index,
-                                                                       std::uint64_t firstElementIdx)
+ROOT::Experimental::RResult<void>
+ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AddColumn(DescriptorId_t logicalId, DescriptorId_t physicalId,
+                                                                  DescriptorId_t fieldId, const RColumnModel &model,
+                                                                  std::uint32_t index, std::uint64_t firstElementIdx)
 {
    RColumnDescriptor c;
    c.fLogicalColumnId = logicalId;
@@ -806,11 +812,18 @@ void ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AddColumn(Descripto
    c.fModel = model;
    c.fIndex = index;
    c.fFirstElementIndex = firstElementIdx;
+
+   auto res = AttachColumn(fieldId, c);
+   if (!res)
+      R__FORWARD_ERROR(res);
+
    if (!c.IsAliasColumn())
       fDescriptor.fNPhysicalColumns++;
    if (fDescriptor.fHeaderExtension)
       fDescriptor.fHeaderExtension->AddColumn(/*isAliasColumn=*/c.IsAliasColumn());
    fDescriptor.fColumnDescriptors.emplace(logicalId, std::move(c));
+
+   return RResult<void>::Success();
 }
 
 ROOT::Experimental::RResult<void>
@@ -833,6 +846,9 @@ ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AddColumn(RColumnDescrip
       if (columnDesc.GetModel() != fDescriptor.GetColumnDescriptor(columnDesc.GetPhysicalId()).GetModel())
          return R__FAIL("alias column type mismatch");
    }
+   auto res = AttachColumn(fieldId, columnDesc);
+   if (!res)
+      R__FORWARD_ERROR(res);
 
    auto logicalId = columnDesc.GetLogicalId();
    if (!columnDesc.IsAliasColumn())
@@ -840,6 +856,23 @@ ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AddColumn(RColumnDescrip
    fDescriptor.fColumnDescriptors.emplace(logicalId, std::move(columnDesc));
    if (fDescriptor.fHeaderExtension)
       fDescriptor.fHeaderExtension->AddColumn(/*isAliasColumn=*/columnDesc.IsAliasColumn());
+
+   return RResult<void>::Success();
+}
+
+ROOT::Experimental::RResult<void>
+ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AttachColumn(DescriptorId_t fieldId,
+                                                                     const RColumnDescriptor &columnDesc)
+{
+   auto itrFieldDesc = fDescriptor.fFieldDescriptors.find(fieldId);
+   if (itrFieldDesc == fDescriptor.fFieldDescriptors.end()) {
+      return R__FAIL("AttachColumn: invalid field ID");
+   }
+   auto &logicalColumnIds = itrFieldDesc->second.fLogicalColumnIds;
+   for (std::size_t i = logicalColumnIds.size(); i <= columnDesc.GetIndex(); ++i) {
+      logicalColumnIds.emplace_back(kInvalidDescriptorId);
+   }
+   logicalColumnIds.at(columnDesc.GetIndex()) = columnDesc.GetLogicalId();
 
    return RResult<void>::Success();
 }

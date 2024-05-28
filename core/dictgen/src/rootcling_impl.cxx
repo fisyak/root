@@ -135,9 +135,8 @@ const ROOT::Internal::RootCling::DriverConfig* gDriverConfig = nullptr;
 using HeadersDeclsMap_t = std::map<std::string, std::list<std::string>>;
 
 using namespace ROOT;
-using namespace TClassEdit;
 
-using namespace std;
+using std::string, std::map, std::ifstream, std::ofstream, std::endl, std::ios, std::vector;
 
 namespace genreflex {
    bool verbose = false;
@@ -5642,6 +5641,8 @@ int GenReflexMain(int argc, char **argv)
       "        without \"//\". For example comment=\"!\" or \"||\".\n"
       "      - noStreamer [true/false]: turns off streamer generation if set to 'true.'\n"
       "        Default value is 'false'\n"
+      "      - rntupleSplit [true/false]: enforce split or unsplit writing for RNTuple.\n"
+      "        If unset, RNTuple stores classes in split mode or fails if the class cannot be split.\n"
       "      - noInputOperator [true/false]: turns off input operator generation if set\n"
       "        to 'true'. Default value is 'false'\n"
       "      Example XML:\n"
@@ -5650,7 +5651,8 @@ int GenReflexMain(int argc, char **argv)
       "          <class [name=\"classname\"] [pattern=\"wildname\"]\n"
       "                 [file_name=\"filename\"] [file_pattern=\"wildname\"]\n"
       "                 [id=\"xxxx\"] [noStreamer=\"true/false\"]\n"
-      "                 [noInputOperator=\"true/false\"] />\n"
+      "                 [noInputOperator=\"true/false\"]\n"
+      "                 [rntupleSplit=\"true/false\"] />\n"
       "          <class name=\"classname\" >\n"
       "            <field name=\"m_transient\" transient=\"true\"/>\n"
       "            <field name=\"m_anothertransient\" persistent=\"false\"/>\n"

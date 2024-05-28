@@ -30,6 +30,8 @@
 #include <utility>
 #include <vector>
 
+#include "IOHandler.cxx"
+
 using namespace CPyCppyy;
 
 namespace PyROOT {
@@ -52,16 +54,6 @@ static PyMethodDef gPyROOTMethods[] = {
     (char *)"Fully enable the use of TTree::Branch from Python"},
    {(char *)"AddPrettyPrintingPyz", (PyCFunction)PyROOT::AddPrettyPrintingPyz, METH_VARARGS,
     (char *)"Add pretty printing pythonization"},
-   {(char *)"GetEndianess", (PyCFunction)PyROOT::GetEndianess, METH_NOARGS, (char *)"Get endianess of the system"},
-   {(char *)"GetDataPointer", (PyCFunction)PyROOT::GetDataPointer, METH_VARARGS,
-    (char *)"Get pointer to data of a C++ object"},
-   {(char *)"GetSizeOfType", (PyCFunction)PyROOT::GetSizeOfType, METH_VARARGS, (char *)"Get size of data-type"},
-   {(char *)"AsRVec", (PyCFunction)PyROOT::AsRVec, METH_O, (char *)"Get object with array interface as RVec"},
-#ifdef R__HAS_DATAFRAME
-   {(char *)"AsRTensor", (PyCFunction)PyROOT::AsRTensor, METH_O, (char *)"Get object with array interface as RTensor"},
-   {(char *)"MakeNumpyDataFrame", (PyCFunction)PyROOT::MakeNumpyDataFrameImpl, METH_O,
-    (char *)"Make RDataFrame from dictionary of numpy arrays"},
-#endif
    {(char *)"InitApplication", (PyCFunction)PyROOT::RPyROOTApplication::InitApplication, METH_VARARGS,
     (char *)"Initialize interactive ROOT use from Python"},
    {(char *)"InstallGUIEventInputHook", (PyCFunction)PyROOT::RPyROOTApplication::InstallGUIEventInputHook, METH_NOARGS,
@@ -70,15 +62,27 @@ static PyMethodDef gPyROOTMethods[] = {
     (char *)"Deserialize a pickled object"},
    {(char *)"ClearProxiedObjects", (PyCFunction)PyROOT::ClearProxiedObjects, METH_NOARGS,
     (char *)"Clear proxied objects regulated by PyROOT"},
+   {(char *)"JupyROOTExecutor", (PyCFunction)JupyROOTExecutor, METH_VARARGS,
+    (char *)"Create JupyROOTExecutor"},
+   {(char *)"JupyROOTDeclarer", (PyCFunction)JupyROOTDeclarer, METH_VARARGS,
+    (char *)"Create JupyROOTDeclarer"},
+   {(char *)"JupyROOTExecutorHandler_Clear", (PyCFunction)JupyROOTExecutorHandler_Clear, METH_NOARGS,
+    (char *)"Clear JupyROOTExecutorHandler"},
+   {(char *)"JupyROOTExecutorHandler_Ctor", (PyCFunction)JupyROOTExecutorHandler_Ctor, METH_NOARGS,
+    (char *)"Create JupyROOTExecutorHandler"},
+   {(char *)"JupyROOTExecutorHandler_Poll", (PyCFunction)JupyROOTExecutorHandler_Poll, METH_NOARGS,
+    (char *)"Poll JupyROOTExecutorHandler"},
+   {(char *)"JupyROOTExecutorHandler_EndCapture", (PyCFunction)JupyROOTExecutorHandler_EndCapture, METH_NOARGS,
+    (char *)"End capture JupyROOTExecutorHandler"},
+   {(char *)"JupyROOTExecutorHandler_InitCapture", (PyCFunction)JupyROOTExecutorHandler_InitCapture, METH_NOARGS,
+    (char *)"Init capture JupyROOTExecutorHandler"},
+   {(char *)"JupyROOTExecutorHandler_GetStdout", (PyCFunction)JupyROOTExecutorHandler_GetStdout, METH_NOARGS,
+    (char *)"Get stdout JupyROOTExecutorHandler"},
+   {(char *)"JupyROOTExecutorHandler_GetStderr", (PyCFunction)JupyROOTExecutorHandler_GetStderr, METH_NOARGS,
+    (char *)"Get stderr JupyROOTExecutorHandler"},
+   {(char *)"JupyROOTExecutorHandler_Dtor", (PyCFunction)JupyROOTExecutorHandler_Dtor, METH_NOARGS,
+    (char *)"Destruct JupyROOTExecutorHandler"},
    {NULL, NULL, 0, NULL}};
-
-#define QuoteIdent(ident) #ident
-#define QuoteMacro(macro) QuoteIdent(macro)
-#define LIBROOTPYZ_NAME "libROOTPythonizations" QuoteMacro(PY_MAJOR_VERSION) "_" QuoteMacro(PY_MINOR_VERSION)
-#define LIBCPPYY_NAME "libcppyy" QuoteMacro(PY_MAJOR_VERSION) "_" QuoteMacro(PY_MINOR_VERSION)
-
-#define CONCAT(a, b, c, d) a##b##c##d
-#define LIBROOTPYZ_INIT_FUNCTION(a, b, c, d) CONCAT(a, b, c, d)
 
 struct module_state {
    PyObject *error;
@@ -98,27 +102,23 @@ static int rootmodule_clear(PyObject *m)
    return 0;
 }
 
-static struct PyModuleDef moduledef = {PyModuleDef_HEAD_INIT,       LIBROOTPYZ_NAME,  NULL,
+static struct PyModuleDef moduledef = {PyModuleDef_HEAD_INIT,       "libROOTPythonizations",  NULL,
                                        sizeof(struct module_state), gPyROOTMethods,   NULL,
                                        rootmodule_traverse,         rootmodule_clear, NULL};
 
 /// Initialization of extension module libROOTPythonizations
 
-#define PYROOT_INIT_ERROR return NULL
-LIBROOTPYZ_INIT_FUNCTION(extern "C" PyObject* PyInit_libROOTPythonizations, PY_MAJOR_VERSION, _, PY_MINOR_VERSION) ()
+extern "C" PyObject* PyInit_libROOTPythonizations()
 {
    using namespace PyROOT;
 
 // setup PyROOT
    gRootModule = PyModule_Create(&moduledef);
    if (!gRootModule)
-      PYROOT_INIT_ERROR;
+      return nullptr;
 
    // keep gRootModule, but do not increase its reference count even as it is borrowed,
    // or a self-referencing cycle would be created
-
-   // Make sure libcppyy has been imported
-   PyImport_ImportModule(LIBCPPYY_NAME);
 
    // setup PyROOT
    PyROOT::Init();

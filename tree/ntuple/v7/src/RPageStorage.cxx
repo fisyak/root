@@ -162,41 +162,6 @@ void ROOT::Experimental::Internal::RPageSource::UnzipCluster(RCluster *cluster)
       UnzipClusterImpl(cluster);
 }
 
-ROOT::Experimental::Internal::RPage
-ROOT::Experimental::Internal::RPageSource::UnsealPage(const RSealedPage &sealedPage, const RColumnElementBase &element,
-                                                      DescriptorId_t physicalColumnId)
-{
-   // Unsealing a page zero is a no-op.  `RPageRange::ExtendToFitColumnRange()` guarantees that the page zero buffer is
-   // large enough to hold `sealedPage.fNElements`
-   if (sealedPage.fBuffer == RPage::GetPageZeroBuffer()) {
-      auto page = RPage::MakePageZero(physicalColumnId, element.GetSize());
-      page.GrowUnchecked(sealedPage.fNElements);
-      return page;
-   }
-
-   const auto bytesPacked = element.GetPackedSize(sealedPage.fNElements);
-   using Allocator_t = RPageAllocatorHeap;
-   auto page = Allocator_t::NewPage(physicalColumnId, element.GetSize(), sealedPage.fNElements);
-   if (sealedPage.fSize != bytesPacked) {
-      fDecompressor->Unzip(sealedPage.fBuffer, sealedPage.fSize, bytesPacked, page.GetBuffer());
-   } else {
-      // We cannot simply map the sealed page as we don't know its life time. Specialized page sources
-      // may decide to implement to not use UnsealPage but to custom mapping / decompression code.
-      // Note that usually pages are compressed.
-      memcpy(page.GetBuffer(), sealedPage.fBuffer, bytesPacked);
-   }
-
-   if (!element.IsMappable()) {
-      auto tmp = Allocator_t::NewPage(physicalColumnId, element.GetSize(), sealedPage.fNElements);
-      element.Unpack(tmp.GetBuffer(), page.GetBuffer(), sealedPage.fNElements);
-      Allocator_t::DeletePage(page);
-      page = tmp;
-   }
-
-   page.GrowUnchecked(sealedPage.fNElements);
-   return page;
-}
-
 void ROOT::Experimental::Internal::RPageSource::PrepareLoadCluster(
    const RCluster::RKey &clusterKey, ROnDiskPageMap &pageZeroMap,
    std::function<void(DescriptorId_t, NTupleSize_t, const RClusterDescriptor::RPageRange::RPageInfo &)> perPageFunc)
@@ -314,6 +279,40 @@ void ROOT::Experimental::Internal::RPageSource::EnableDefaultMetrics(const std::
          })});
 }
 
+ROOT::Experimental::Internal::RPage
+ROOT::Experimental::Internal::RPageSource::UnsealPage(const RSealedPage &sealedPage, const RColumnElementBase &element,
+                                                      DescriptorId_t physicalColumnId)
+{
+   // Unsealing a page zero is a no-op.  `RPageRange::ExtendToFitColumnRange()` guarantees that the page zero buffer is
+   // large enough to hold `sealedPage.fNElements`
+   if (sealedPage.fBuffer == RPage::GetPageZeroBuffer()) {
+      auto page = RPage::MakePageZero(physicalColumnId, element.GetSize());
+      page.GrowUnchecked(sealedPage.fNElements);
+      return page;
+   }
+
+   const auto bytesPacked = element.GetPackedSize(sealedPage.fNElements);
+   using Allocator_t = RPageAllocatorHeap;
+   auto page = Allocator_t::NewPage(physicalColumnId, element.GetSize(), sealedPage.fNElements);
+   if (sealedPage.fSize != bytesPacked) {
+      fDecompressor->Unzip(sealedPage.fBuffer, sealedPage.fSize, bytesPacked, page.GetBuffer());
+   } else {
+      // We cannot simply map the sealed page as we don't know its life time. Specialized page sources
+      // may decide to implement to not use UnsealPage but to custom mapping / decompression code.
+      // Note that usually pages are compressed.
+      memcpy(page.GetBuffer(), sealedPage.fBuffer, bytesPacked);
+   }
+
+   if (!element.IsMappable()) {
+      auto tmp = Allocator_t::NewPage(physicalColumnId, element.GetSize(), sealedPage.fNElements);
+      element.Unpack(tmp.GetBuffer(), page.GetBuffer(), sealedPage.fNElements);
+      Allocator_t::DeletePage(page);
+      page = tmp;
+   }
+
+   page.GrowUnchecked(sealedPage.fNElements);
+   return page;
+}
 
 //------------------------------------------------------------------------------
 
@@ -460,7 +459,7 @@ void ROOT::Experimental::Internal::RPagePersistentSink::UpdateSchema(const RNTup
       fSerializationContext.MapSchema(descriptor, /*forHeaderExtension=*/true);
 }
 
-void ROOT::Experimental::Internal::RPagePersistentSink::Init(RNTupleModel &model)
+void ROOT::Experimental::Internal::RPagePersistentSink::InitImpl(RNTupleModel &model)
 {
    fDescriptorBuilder.SetNTuple(fNTupleName, model.GetDescription());
    const auto &descriptor = fDescriptorBuilder.GetDescriptor();
@@ -483,6 +482,41 @@ void ROOT::Experimental::Internal::RPagePersistentSink::Init(RNTupleModel &model
    InitImpl(buffer.get(), fSerializationContext.GetHeaderSize());
 
    fDescriptorBuilder.BeginHeaderExtension();
+}
+
+void ROOT::Experimental::Internal::RPagePersistentSink::InitFromDescriptor(const RNTupleDescriptor &descriptor)
+{
+   {
+      auto model = descriptor.CreateModel();
+      Init(*model.get());
+   }
+
+   auto clusterId = descriptor.FindClusterId(0, 0);
+
+   while (clusterId != ROOT::Experimental::kInvalidDescriptorId) {
+      auto &cluster = descriptor.GetClusterDescriptor(clusterId);
+      auto nEntries = cluster.GetNEntries();
+
+      RClusterDescriptorBuilder clusterBuilder;
+      clusterBuilder.ClusterId(fDescriptorBuilder.GetDescriptor().GetNActiveClusters())
+         .FirstEntryIndex(fPrevClusterNEntries)
+         .NEntries(nEntries);
+
+      for (unsigned int i = 0; i < fOpenColumnRanges.size(); ++i) {
+         R__ASSERT(fOpenColumnRanges[i].fPhysicalColumnId == i);
+         const auto &columnRange = cluster.GetColumnRange(i);
+         R__ASSERT(columnRange.fPhysicalColumnId == i);
+         const auto &pageRange = cluster.GetPageRange(i);
+         R__ASSERT(pageRange.fPhysicalColumnId == i);
+         clusterBuilder.CommitColumnRange(i, fOpenColumnRanges[i].fFirstElementIndex, columnRange.fCompressionSettings,
+                                          pageRange);
+         fOpenColumnRanges[i].fFirstElementIndex += columnRange.fNElements;
+      }
+      fDescriptorBuilder.AddCluster(clusterBuilder.MoveDescriptor().Unwrap());
+      fPrevClusterNEntries += nEntries;
+
+      clusterId = descriptor.FindNextClusterId(clusterId);
+   }
 }
 
 void ROOT::Experimental::Internal::RPagePersistentSink::CommitPage(ColumnHandle_t columnHandle, const RPage &page)

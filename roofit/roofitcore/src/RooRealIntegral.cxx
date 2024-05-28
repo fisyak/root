@@ -715,7 +715,7 @@ RooRealIntegral::RooRealIntegral(const RooRealIntegral &other, const char *name)
      _intList("!intList", this, other._intList),
      _anaList("!anaList", this, other._anaList),
      _jacList("!jacList", this, other._jacList),
-     _facList("!facList", "Variables independent of function", this, false, true),
+     _facList("!facList", this, other._facList),
      _function("!func", this, other._function),
      _iconfig(other._iconfig),
      _sumCat("!sumCat", this, other._sumCat),
@@ -726,12 +726,6 @@ RooRealIntegral::RooRealIntegral(const RooRealIntegral &other, const char *name)
  if(other._funcNormSet) {
    _funcNormSet = std::make_unique<RooArgSet>();
    other._funcNormSet->snapshot(*_funcNormSet, false);
- }
-
- for (const auto arg : other._facList) {
-   std::unique_ptr<RooAbsArg> argClone{static_cast<RooAbsArg*>(arg->Clone())};
-   _facList.addOwned(*argClone);
-   addOwnedComponents(std::move(argClone));
  }
 
  other._intList.snapshot(_saveInt) ;
@@ -1055,7 +1049,7 @@ void RooRealIntegral::translate(RooFit::Detail::CodeSquashContext &ctx) const
 
    auto &intVar = static_cast<RooAbsRealLValue &>(*_intList[0]);
 
-   RooFuncWrapper wrapper{GetName(), GetTitle(), *_function, {}, nullptr, nullptr, false};
+   RooFit::Experimental::RooFuncWrapper wrapper{GetName(), GetTitle(), *_function};
 
    RooArgSet params;
    _function->getParameters(nullptr, params);
@@ -1097,7 +1091,7 @@ void RooRealIntegral::translate(RooFit::Detail::CodeSquashContext &ctx) const
       << "      " << paramsName << "[" << intVarIdx << "] = " << intVar.getMin(intRange()) << " + eps * i;\n"
       // TODO: the second "paramsName" should be nullptr, but until Clad issue
       // 636 is fixed, we have to pass a non-nullptr dummy.
-      << "      " << resName << " += " << " + " << ctx.buildCall(wrapper.funcName(), paramsName, paramsName) << ";\n"
+      << "      " << resName << " += " << " + " << ctx.buildCall(wrapper.funcName(), paramsName, paramsName, paramsName) << ";\n"
       << "   }\n"
       << "   " << resName << " *= " << " d / n;\n"
       << "}\n";

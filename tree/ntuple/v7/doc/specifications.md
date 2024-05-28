@@ -1,4 +1,4 @@
-# RNTuple Reference Specifications 0.2.0.0
+# RNTuple Reference Specifications 0.2.1.0
 
 **Note:** This is work in progress. The RNTuple specification is not yet finalized.
 
@@ -338,13 +338,13 @@ The flags field can have one of the following bits set
 
 The structural role of the field can have on of the following values
 
-| Value    | Structural role                                          |
-|----------|----------------------------------------------------------|
-| 0x00     | Leaf field in the schema tree                            |
-| 0x01     | The field is the mother of a collection (e.g., a vector) |
-| 0x02     | The field is the mother of a record (e.g., a struct)     |
-| 0x03     | The field is the mother of a variant (e.g., a union)     |
-| 0x04     | The field is a reference (pointer), TODO                 |
+| Value    | Structural role                                                          |
+|----------|--------------------------------------------------------------------------|
+| 0x00     | Leaf field in the schema tree                                            |
+| 0x01     | The field is the mother of a collection (e.g., a vector)                 |
+| 0x02     | The field is the mother of a record (e.g., a struct)                     |
+| 0x03     | The field is the mother of a variant                                     |
+| 0x04     | The field represents an unsplit object serialized with the ROOT streamer |
 
 
 #### Column Description
@@ -411,6 +411,9 @@ Delta + split
 Zigzag + split
 : Used on signed integers only; it maps $x$ to $2x$ if $x$ is positive and to $-(2x+1)$ if $x$ is negative.
   Followed by split encoding.
+
+**Note**: these encodings always happen within each page, thus decoding should be done page-wise,
+not cluster-wise.
 
 Future versions of the file format may introduce additional column types
 without changing the minimum version of the header.
@@ -839,10 +842,12 @@ The behavior depends on whether the class has an associated collection proxy.
 User defined C++ classes are supported with the following limitations
   - The class must have a dictionary
   - All persistent members and base classes must be themselves types with RNTuple I/O support
-  - Transient members must be marked by a `//!` comment
+  - Transient members must be marked, e.g. by a `//!` comment
   - The class must not be in the `std` namespace
+  - The class must be empty or splittable (e.g., the class must not provide a custom streamer)
   - There is no support for polymorphism,
     i.e. a field of class `A` cannot store class `B` that derives from `A`
+  - Virtual inheritance is unsupported
 
 User classes are stored as a record mother field with no attached columns.
 Direct base classes and persistent members are stored as subfields with their respective types.
@@ -869,6 +874,13 @@ If $i == 0$, i.e. it falls on the start of a cluster, the $(i-1)$-th value in th
 
 The `SizeT` template parameter defines the in-memory integer type of the collection size.
 The valid types are `std::uint32_t` and `std::uint64_t`.
+
+### Unsplit types
+
+A field with the structural role 0x05 ("unsplit") represents an object serialized by the ROOT streamer in unsplit mode.
+It can have any type supported by TClass (even types that are not available in the native RNTuple type system).
+The first (principal) column is of type [Split]Index[32|64].
+The second column is of type Byte.
 
 ## Limits
 

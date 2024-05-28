@@ -177,6 +177,13 @@ if(LLVM_EXE_LINKER_FLAGS)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LLVM_EXE_LINKER_FLAGS}")
 endif()
 
+# Explicitly disable -Wmisleading-indentation for GCC: Some LLVM source files
+# are too large.
+set(cxx_flags_prev ${CMAKE_CXX_FLAGS})
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-misleading-indentation")
+endif()
+
 if(builtin_llvm)
   # Since debug builds of LLVM are quite large, we want to be able
   # to control the build types of ROOT and LLVM independently. The
@@ -241,6 +248,12 @@ if(builtin_llvm)
   get_directory_property(LLVM_TARGET_TRIPLE DIRECTORY llvm-project/llvm DEFINITION LLVM_TARGET_TRIPLE)
   #---Get back the potentially updated LLVM_TARGETS_TO_BUILD (expanding all/host/Native)---------------
   get_directory_property(LLVM_TARGETS_TO_BUILD DIRECTORY llvm-project/llvm DEFINITION LLVM_TARGETS_TO_BUILD)
+
+  if(MSVC)
+      set(LLVM_TABLEGEN_EXE "${LLVM_BINARY_DIR}/$<CONFIG>/bin/llvm-tblgen.exe")
+  else()
+      set(LLVM_TABLEGEN_EXE "${LLVM_BINARY_DIR}/bin/llvm-tblgen")
+  endif()
 else()
   # Rely on llvm-config.
   set(CONFIG_OUTPUT)
@@ -313,6 +326,9 @@ else()
   else()
     message(FATAL_ERROR "Not found: ${LLVMCONFIG_FILE}")
   endif()
+  # We already FORCE-d the CACHE value to OFF, but LLVMConfig.cmake might have
+  # set the variable to ON again...
+  set(LLVM_ENABLE_WARNINGS OFF)
 
   # They are used as destination of target generators.
   # We try to keep these locations consistent with the builtin_llvm. This is important
@@ -328,7 +344,6 @@ else()
     set(LLVM_SHLIB_OUTPUT_INTDIR ${LLVM_LIBRARY_OUTPUT_INTDIR})
   endif()
 
-  option(LLVM_ENABLE_WARNINGS "Enable compiler warnings." ON)
   option(LLVM_INSTALL_TOOLCHAIN_ONLY
     "Only include toolchain files in the 'install' target." OFF)
 
@@ -360,18 +375,7 @@ else()
 #  set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX} )
 
   if(LLVM_INCLUDE_TESTS OR clingtest)
-    set(Python_ADDITIONAL_VERSIONS 2.7)
-    include(FindPythonInterp)
-    if(NOT PYTHONINTERP_FOUND)
-      message(FATAL_ERROR
-"Unable to find Python interpreter, required for builds and testing.
-
-Please install Python or specify the PYTHON_EXECUTABLE CMake variable.")
-    endif()
-
-    if( ${PYTHON_VERSION_STRING} VERSION_LESS 2.7 )
-      message(FATAL_ERROR "Python 2.7 or newer is required")
-    endif()
+    find_package(Python3 3.8 REQUIRED COMPONENTS Interpreter)
 
     # Check prebuilt llvm/utils.
     if(EXISTS ${LLVM_TOOLS_BINARY_DIR}/FileCheck${CMAKE_EXECUTABLE_SUFFIX}
@@ -464,6 +468,10 @@ if (builtin_clang)
 else()
   set(Clang_DIR "${LLVM_BINARY_DIR}/lib/cmake/clang/")
 endif()
+
+# Reset the compiler flags after compiling LLVM and Clang
+set(CMAKE_CXX_FLAGS ${cxx_flags_prev})
+unset(cxx_flags_prev)
 
 add_custom_target(CLING)
 set(CLING_LIBRARIES clingInterpreter;clingMetaProcessor;clingUtils CACHE STRING "")

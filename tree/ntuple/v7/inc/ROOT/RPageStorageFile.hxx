@@ -67,6 +67,7 @@ private:
                                                 std::size_t bytesPacked);
 
 protected:
+   using RPagePersistentSink::InitImpl;
    void InitImpl(unsigned char *serializedHeader, std::uint32_t length) final;
    RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) final;
    RNTupleLocator
@@ -145,6 +146,8 @@ protected:
 
 public:
    RPageSourceFile(std::string_view ntupleName, std::string_view path, const RNTupleReadOptions &options);
+   RPageSourceFile(std::string_view ntupleName, std::unique_ptr<ROOT::Internal::RRawFile> file,
+                   const RNTupleReadOptions &options);
    /// Used from the RNTuple class to build a datasource if the anchor is already available.
    /// Requires the RNTuple object to be streamed from a file.
    static std::unique_ptr<RPageSourceFile>

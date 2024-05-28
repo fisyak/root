@@ -20,6 +20,7 @@
 #include <ROOT/RWebWindow.hxx>
 #include <ROOT/RLogger.hxx>
 #include <ROOT/REveSystem.hxx>
+#include <ROOT/RWebWindowsManager.hxx>
 
 #include "TGeoManager.h"
 #include "TGeoMatrix.h"
@@ -601,6 +602,27 @@ TGeoManager *REveManager::GetDefaultGeometry()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Get the default viewer.
+///
+
+REveViewer *REveManager::GetDefaultViewer() const
+{
+   return dynamic_cast<REveViewer*>(fViewers->FirstChild());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Utility function to allow remote RWebWindow connections.
+/// Disable loopback when use remote client.
+/// Authentification key has to be disabled in the case of multiple connections.
+/// The default arguments prevent remote connections for the security reasons.
+//
+void REveManager::AllowMultipleRemoteConnections(bool loopBack, bool requireAuthKey)
+{
+   ROOT::RWebWindowsManager::SetLoopbackMode(loopBack);
+   fWebWindow->SetRequireAuthKey(requireAuthKey);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Register 'name' as an alias for geometry file 'filename'.
 /// The old aliases are silently overwritten.
 /// After that the geometry can be retrieved also by calling:
@@ -616,11 +638,7 @@ void REveManager::RegisterGeometryAlias(const TString &alias, const TString &fil
 
 void REveManager::ClearROOTClassSaved()
 {
-   TIter nextcl(gROOT->GetListOfClasses());
-   TClass *cls;
-   while ((cls = (TClass *)nextcl())) {
-      cls->ResetBit(TClass::kClassSaved);
-   }
+   gROOT->ResetClassSaved();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

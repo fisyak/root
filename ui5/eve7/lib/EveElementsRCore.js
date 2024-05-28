@@ -414,9 +414,8 @@ sap.ui.define(['rootui5/eve7/lib/EveManager'], function (EveManager)
          let idxBuff = eve_el.render_data.idxBuff;
          // let bin =  idxBuff[idx*2 + 1];
          let val = eve_el.render_data.nrmBuff[idx];
-         let caloData =  this.top_obj.scene.mgr.GetElement(eve_el.dataId);
          let slice = idxBuff[idx*2];
-         let sname = caloData.sliceInfos[slice].name;
+         let sname = "Slice " + slice;
 
          let vbuff =  eve_el.render_data.vtxBuff;
          let p = idx*12;
@@ -723,7 +722,12 @@ sap.ui.define(['rootui5/eve7/lib/EveManager'], function (EveManager)
 
       TestRnr(name, obj, rnr_data)
       {
-         if (obj && rnr_data && rnr_data.vtxBuff) return false;
+         if (obj && rnr_data && rnr_data.vtxBuff) {
+            return false;
+         }
+         console.log("test rnr failed for obj =  ", obj);
+         console.log("test rnr failed for rnr_data =  ", rnr_data);
+         console.log("test rnr failed for rnr_data vtcBuff =  ", rnr_data.vtxBuff);
 
          let cnt = this[name] || 0;
          if (cnt++ < 5) console.log(name, obj, rnr_data);
@@ -1070,11 +1074,72 @@ sap.ui.define(['rootui5/eve7/lib/EveManager'], function (EveManager)
       //==============================================================================
       // make Digits
       //==============================================================================
+      makeBoxSetInstanced(boxset, rnr_data)
+      {
+         // axis aligned box
+         let SN = boxset.N;
+         // console.log("SN", SN, "texture dim =", boxset.texX, boxset.texY);
+
+         let tex_insta_pos_shape = new RC.Texture(rnr_data.vtxBuff,
+            RC.Texture.WRAPPING.ClampToEdgeWrapping,
+            RC.Texture.WRAPPING.ClampToEdgeWrapping,
+            RC.Texture.FILTER.NearestFilter,
+            RC.Texture.FILTER.NearestFilter,
+            RC.Texture.FORMAT.RGBA32F, RC.Texture.FORMAT.RGBA, RC.Texture.TYPE.FLOAT,
+            boxset.texX, boxset.texY);
+
+         let shm = new RC.ZShapeBasicMaterial({
+            ShapeSize: [boxset.defWidth, boxset.defHeight, boxset.defDepth],
+            color: RcCol(boxset.fMainColor),
+            emissive: new RC.Color(0.07, 0.07, 0.06),
+            diffuse: new RC.Color(0, 0.6, 0.7),
+            alpha: 0.5 // AMT, what is this used for ?
+         });
+         if (boxset.instanceFlag == "ScalePerDigit")
+            shm.addSBFlag("SCALE_PER_INSTANCE");
+         else if(boxset.instanceFlag == "Mat4Trans")
+            shm.addSBFlag("MAT4_PER_INSTANCE");
+
+         if (boxset.fMainTransparency) {
+            shm.transparent = true;
+            shm.opacity = (100 - boxset.fMainTransparency) / 100.0;
+            shm.depthWrite = false; //? AMT what does that mean
+         }
+         shm.addInstanceData(tex_insta_pos_shape);
+         shm.instanceData[0].flipy = false;
+         let geo;
+         if (boxset.shapeType == 1) {
+            geo = RC.ZShape.makeHexagonGeometry();
+         }
+         else if (boxset.shapeType == 2) {
+            geo = RC.ZShape.makeConeGeometry(boxset.coneCap);
+         }
+         else {
+            geo = RC.ZShape.makeCubeGeometry();
+         }
+         let zshape = new RC.ZShape(geo, shm);
+         zshape.instanceCount = SN;
+         zshape.frustumCulled = false;
+         zshape.instanced = true;
+         zshape.material.normalFlat = true;
+
+         this.RcPickable(boxset, zshape);
+
+         return zshape;
+      }
 
       makeBoxSet(boxset, rnr_data)
       {
          if (this.TestRnr("boxset", boxset, rnr_data)) return null;
+         // use instancing if texture coordinates
+         if (boxset.instanced === true)
+            return this.makeBoxSetInstanced(boxset, rnr_data);
+         else
+            return this.makeFreeBoxSet(boxset, rnr_data);
+      }
 
+      makeFreeBoxSet(boxset, rnr_data)
+      {
          let vBuff;
          let idxBuff;
          let nVerticesPerDigit = 0;
@@ -1118,8 +1183,8 @@ sap.ui.define(['rootui5/eve7/lib/EveManager'], function (EveManager)
                let ro = i* 3 * 7 * 2;
                for (let j = 0; j < 7; ++j)
                {
-                  vBuff[ro + 21] = vBuff[ro];
-                  vBuff[ro + 22] = vBuff[ro+1];
+                  vBuff[ro + 21] = vBuff[ro]+ hexHeight;
+                  vBuff[ro + 22] = vBuff[ro+1]+ hexHeight;
                   vBuff[ro + 23] = vBuff[ro+2] + hexHeight;
                   ro += 3;
                }
@@ -1234,6 +1299,11 @@ sap.ui.define(['rootui5/eve7/lib/EveManager'], function (EveManager)
             mat.color = RcCol(boxset.fMainColor);
          }
 
+         if (boxset.fMainTransparency) {
+            mat.transparent = true;
+            mat.opacity = (100 - boxset.fMainTransparency) / 100.0;
+            mat.depthWrite = false;
+         }
          let mesh = new RC.Mesh(body, mat);
          this.RcPickable(boxset, mesh, false, boxset.fSecondarySelect ? BoxSetControl : EveElemControl);
 
@@ -1387,7 +1457,8 @@ sap.ui.define(['rootui5/eve7/lib/EveManager'], function (EveManager)
          let mop = 1 - egs.fMainTransparency/100;
 
          let mat = this.RcFancyMaterial(fcol, mop);
-         mat.side = RC.FRONT_AND_BACK_SIDE;
+         // mat.side = RC.FRONT_AND_BACK_SIDE;
+         mat.side = RC.FRONT_SIDE;
          mat.shininess = 50;
          mat.normalFlat = true;
 
@@ -1415,7 +1486,7 @@ sap.ui.define(['rootui5/eve7/lib/EveManager'], function (EveManager)
          let material = this.RcFlatMaterial(fcol, mop);
          material.side = RC.FRONT_AND_BACK_SIDE;
 
-         let line_mat = this.RcLineMaterial(fcol, mop);
+         let line_mat = this.RcLineMaterial(fcol);
 
          let meshes = [];
          for (let ib_pos = 0; ib_pos < ib_len;)

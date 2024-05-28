@@ -913,14 +913,25 @@ void TObject::Streamer(TBuffer &R__b)
       }
    } else {
       R__b.WriteVersion(TObject::IsA());
+      // Can not read TFile.h here and avoid going through the interpreter by
+      // simply hard-coding this value.
+      // This **must** be equal to TFile::k630forwardCompatibility
+      constexpr int TFile__k630forwardCompatibility = BIT(2);
+      const auto parent = R__b.GetParent();
       if (!TestBit(kIsReferenced)) {
          R__b << fUniqueID;
-         R__b << (fBits & (~kIsOnHeap & ~kNotDeleted));
+         if (R__unlikely(parent && parent->TestBit(TFile__k630forwardCompatibility)))
+            R__b << fBits;
+         else
+            R__b << (fBits & (~kIsOnHeap & ~kNotDeleted));
       } else {
          //if the object is referenced, we must save its address/file_pid
          UInt_t uid = fUniqueID & 0xffffff;
          R__b << uid;
-         R__b << (fBits & (~kIsOnHeap & ~kNotDeleted));
+         if (R__unlikely(parent && parent->TestBit(TFile__k630forwardCompatibility)))
+            R__b << fBits;
+         else
+            R__b << (fBits & (~kIsOnHeap & ~kNotDeleted));
          TProcessID *pid = TProcessID::GetProcessWithUID(fUniqueID,this);
          //add uid to the TRefTable if there is one
          TRefTable *table = TRefTable::GetRefTable();
@@ -1131,7 +1142,6 @@ std::string cling::printValue(TObject *val)
    return strm.str();
 }
 
-#ifdef R__PLACEMENTDELETE
 ////////////////////////////////////////////////////////////////////////////////
 /// Only called by placement new when throwing an exception.
 
@@ -1147,4 +1157,3 @@ void TObject::operator delete[](void *ptr, void *vp)
 {
    TStorage::ObjectDealloc(ptr, vp);
 }
-#endif

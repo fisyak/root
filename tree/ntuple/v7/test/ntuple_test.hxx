@@ -6,14 +6,19 @@
 #include <ROOT/RField.hxx>
 #include <ROOT/RFieldVisitor.hxx>
 #include <ROOT/RMiniFile.hxx>
-#include <ROOT/RNTuple.hxx>
+#include <ROOT/RNTupleCollectionWriter.hxx>
 #include <ROOT/RNTupleDescriptor.hxx>
+#include <ROOT/RNTupleFillStatus.hxx>
 #include <ROOT/RNTupleMerger.hxx>
 #include <ROOT/RNTupleMetrics.hxx>
 #include <ROOT/RNTupleModel.hxx>
-#include <ROOT/RNTupleOptions.hxx>
+#include <ROOT/RNTupleReadOptions.hxx>
+#include <ROOT/RNTupleReader.hxx>
 #include <ROOT/RNTupleParallelWriter.hxx>
 #include <ROOT/RNTupleSerialize.hxx>
+#include <ROOT/RNTupleWriteOptions.hxx>
+#include <ROOT/RNTupleWriteOptionsDaos.hxx>
+#include <ROOT/RNTupleWriter.hxx>
 #include <ROOT/RNTupleZip.hxx>
 #include <ROOT/RPageAllocator.hxx>
 #include <ROOT/RPagePool.hxx>
@@ -31,11 +36,6 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
-// Backward compatibility for gtest version < 1.10.0
-#ifndef TYPED_TEST_SUITE
-#define TYPED_TEST_SUITE TYPED_TEST_CASE
-#endif
 
 #include "CustomStruct.hxx"
 
@@ -78,6 +78,7 @@ using RNTupleCalcPerf = ROOT::Experimental::Detail::RNTupleCalcPerf;
 using RNTupleCompressor = ROOT::Experimental::Internal::RNTupleCompressor;
 using RNTupleDecompressor = ROOT::Experimental::Internal::RNTupleDecompressor;
 using RNTupleDescriptor = ROOT::Experimental::RNTupleDescriptor;
+using RNTupleFillStatus = ROOT::Experimental::RNTupleFillStatus;
 using RNTupleDescriptorBuilder = ROOT::Experimental::Internal::RNTupleDescriptorBuilder;
 using RNTupleFileWriter = ROOT::Experimental::Internal::RNTupleFileWriter;
 using RNTupleParallelWriter = ROOT::Experimental::RNTupleParallelWriter;

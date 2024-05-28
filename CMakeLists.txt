@@ -96,15 +96,6 @@ else()
   set(NO_CONNECTION TRUE)
 endif()
 
-if(NO_CONNECTION)
-  if(clad AND fail-on-missing)
-    message(FATAL_ERROR "No internet connection. Please check your connection, or either disable the 'clad' option or the 'fail-on-missing' to automatically disable options requiring internet access")
-  elseif(clad)
-    message(STATUS "No internet connection, disabling the 'clad' option")
-  endif()
-  set(clad OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
-endif()
-
 #---Where to look first for cmake modules, before ${CMAKE_ROOT}/Modules/ is checked-------------
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
 
@@ -112,12 +103,20 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 #---Load some basic macros which are needed later for the confiuration and build----------------
-include(SearchRootCoreDeps)
 include(CheckCompiler)
 include(RootBuildOptions)
 include(RootMacros)
 include(CheckAssembler)
 include(CheckIntrinsics)
+
+if(clad AND NO_CONNECTION)
+  if(fail-on-missing)
+    message(FATAL_ERROR "No internet connection. Please check your connection, or either disable the 'clad' option or the 'fail-on-missing' to automatically disable options requiring internet access")
+  else()
+    message(STATUS "No internet connection, disabling the 'clad' option")
+    set(clad OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
+  endif()
+endif()
 
 # relatedrepo_GetClosestMatch(REPO_NAME <repo> ORIGIN_PREFIX <originp> UPSTREAM_PREFIX <upstreamp>
 #                             FETCHURL_VARIABLE <output_url> FETCHREF_VARIABLE <output_ref>)
@@ -537,10 +536,10 @@ else()
       etc/dictpch/allHeaders.h
       etc/dictpch/allLinkDefs.h
     COMMAND
-      ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/unix/makepchinput.py
+      ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/unix/makepchinput.py
       ${CMAKE_SOURCE_DIR} . ${pyroot_legacy} ${__cling_pch}
     COMMAND
-      ${CMAKE_COMMAND} -E env ROOTIGNOREPREFIX=1 ${PYTHON_EXECUTABLE}
+      ${CMAKE_COMMAND} -E env ROOTIGNOREPREFIX=1 ${Python3_EXECUTABLE}
       ${CMAKE_SOURCE_DIR}/etc/dictpch/makepch.py etc/allDict.cxx.pch
       ${__allIncludes} -I${CMAKE_BINARY_DIR}/include -I${CMAKE_SOURCE_DIR}/core
     DEPENDS
@@ -627,12 +626,12 @@ endif()
 
 #---version--------------------------------------------------------------------------------------
 if(NOT WIN32)
-add_custom_target(version COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/unix/makeversion.py
+add_custom_target(version COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/unix/makeversion.py
                           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
 
 #---distribution commands------------------------------------------------------------------------
-add_custom_target(distsrc COMMAND ${CMAKE_SOURCE_DIR}/build/unix/makedistsrc.sh "${ROOT_FULL_VERSION}" "${GIT_DESCRIBE_ALWAYS}" "${CMAKE_SOURCE_DIR}")
+add_custom_target(distsrc COMMAND ${CMAKE_SOURCE_DIR}/build/unix/makedistsrc.sh "${ROOT_FULL_VERSION}" "${CMAKE_SOURCE_DIR}")
 add_custom_target(dist COMMAND cpack --config CPackConfig.cmake)
 
 #---Configure and install various files neded later and for clients -----------------------------
@@ -668,11 +667,7 @@ if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_INSTALL_PREFIX)
   if(webgui)
      install(DIRECTORY ui5/    DESTINATION ${CMAKE_INSTALL_OPENUI5DIR})
   endif()
-  if(xproofd AND xrootd AND ssl)
-     set(MAN_PATT_EXCL)
-  else()
-     set(MAN_PATT_EXCL PATTERN xproofd.1 EXCLUDE)
-  endif()
+  set(MAN_PATT_EXCL)
   if(NOT fortran OR NOT CMAKE_Fortran_COMPILER)
     list(APPEND MAN_PATT_EXCL PATTERN h2root.1 EXCLUDE)
     list(APPEND MAN_PATT_EXCL PATTERN g2root.1 EXCLUDE)

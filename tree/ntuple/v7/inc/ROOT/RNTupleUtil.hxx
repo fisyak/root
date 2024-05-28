@@ -40,7 +40,7 @@ enum ENTupleStructure {
    kCollection,
    kRecord,
    kVariant,
-   kReference, // unimplemented so far
+   kUnsplit,
    kInvalid,
 };
 
@@ -154,7 +154,7 @@ struct RNTupleLocator {
 
    /// Simple on-disk locators consisting of a 64-bit offset use variant type `uint64_t`; extended locators have
    /// `fPosition.index()` > 0
-   std::variant<std::uint64_t, std::string, RNTupleLocatorObject64> fPosition;
+   std::variant<std::uint64_t, std::string, RNTupleLocatorObject64> fPosition{};
    std::uint32_t fBytesOnStorage = 0;
    /// For non-disk locators, the value for the _Type_ field. This makes it possible to have different type values even
    /// if the payload structure is identical.
@@ -171,6 +171,15 @@ struct RNTupleLocator {
       return std::get<T>(fPosition);
    }
 };
+
+namespace Internal {
+template <typename T>
+auto MakeAliasedSharedPtr(T *rawPtr)
+{
+   const static std::shared_ptr<T> fgRawPtrCtrlBlock;
+   return std::shared_ptr<T>(fgRawPtrCtrlBlock, rawPtr);
+}
+} // namespace Internal
 
 } // namespace Experimental
 } // namespace ROOT

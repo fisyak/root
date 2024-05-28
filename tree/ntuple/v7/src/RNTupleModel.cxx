@@ -15,8 +15,9 @@
 
 #include <ROOT/RError.hxx>
 #include <ROOT/RField.hxx>
+#include <ROOT/RNTupleCollectionWriter.hxx>
 #include <ROOT/RNTupleModel.hxx>
-#include <ROOT/RNTuple.hxx>
+#include <ROOT/RNTupleWriter.hxx>
 #include <ROOT/StringUtils.hxx>
 
 #include <atomic>
@@ -32,6 +33,30 @@ std::uint64_t GetNewModelId()
 }
 } // anonymous namespace
 
+std::unique_ptr<ROOT::Experimental::RNTupleModel>
+ROOT::Experimental::Internal::MergeModels(const RNTupleModel &left, const RNTupleModel &right,
+                                          std::string_view rightFieldPrefix)
+{
+   if (!left.IsFrozen() || !right.IsFrozen())
+      throw RException(R__FAIL("invalid attempt to merge unfrozen models"));
+
+   auto newModel = left.Clone();
+   newModel->Unfreeze();
+
+   if (!rightFieldPrefix.empty()) {
+      newModel->MakeCollection(std::string(rightFieldPrefix), right.Clone());
+   } else {
+      for (const auto &f : right.GetFieldZero().GetSubFields()) {
+         newModel->AddField(f->Clone(f->GetFieldName()));
+      }
+   }
+
+   newModel->Freeze();
+   return newModel;
+}
+
+//------------------------------------------------------------------------------
+
 ROOT::Experimental::RResult<void>
 ROOT::Experimental::RNTupleModel::RProjectedFields::EnsureValidMapping(const RFieldBase *target,
                                                                        const FieldMap_t &fieldMap)
@@ -42,7 +67,7 @@ ROOT::Experimental::RNTupleModel::RProjectedFields::EnsureValidMapping(const RFi
       ((source->GetStructure() == ENTupleStructure::kCollection) && dynamic_cast<const RCardinalityField *>(target));
    if (!hasCompatibleStructure)
       return R__FAIL("field mapping structural mismatch: " + source->GetFieldName() + " --> " + target->GetFieldName());
-   if (source->GetStructure() == ENTupleStructure::kLeaf) {
+   if ((source->GetStructure() == ENTupleStructure::kLeaf) || (source->GetStructure() == ENTupleStructure::kUnsplit)) {
       if (target->GetTypeName() != source->GetTypeName())
          return R__FAIL("field mapping type mismatch: " + source->GetFieldName() + " --> " + target->GetFieldName());
    }
@@ -185,9 +210,8 @@ void ROOT::Experimental::RNTupleModel::EnsureValidFieldName(std::string_view fie
       nameValid.Throw();
    }
    auto fieldNameStr = std::string(fieldName);
-   if (fFieldNames.insert(fieldNameStr).second == false) {
+   if (fFieldNames.count(fieldNameStr) > 0)
       throw RException(R__FAIL("field name '" + fieldNameStr + "' already exists in NTuple model"));
-   }
 }
 
 void ROOT::Experimental::RNTupleModel::EnsureNotFrozen() const
@@ -280,6 +304,7 @@ void ROOT::Experimental::RNTupleModel::AddField(std::unique_ptr<RFieldBase> fiel
 
    if (fDefaultEntry)
       fDefaultEntry->AddValue(field->CreateValue());
+   fFieldNames.insert(field->GetFieldName());
    fFieldZero->Attach(std::move(field));
 }
 
@@ -307,14 +332,15 @@ ROOT::Experimental::RNTupleModel::AddProjectedField(std::unique_ptr<RFieldBase> 
    EnsureValidFieldName(fieldName);
    auto result = fProjectedFields->Add(std::move(field), fieldMap);
    if (!result) {
-      fFieldNames.erase(fieldName);
       return R__FORWARD_ERROR(result);
    }
+   fFieldNames.insert(fieldName);
    return RResult<void>::Success();
 }
 
-std::shared_ptr<ROOT::Experimental::RCollectionNTupleWriter> ROOT::Experimental::RNTupleModel::MakeCollection(
-   std::string_view fieldName, std::unique_ptr<RNTupleModel> collectionModel)
+std::shared_ptr<ROOT::Experimental::RNTupleCollectionWriter>
+ROOT::Experimental::RNTupleModel::MakeCollection(std::string_view fieldName,
+                                                 std::unique_ptr<RNTupleModel> collectionModel)
 {
    EnsureNotFrozen();
    EnsureValidFieldName(fieldName);
@@ -322,7 +348,7 @@ std::shared_ptr<ROOT::Experimental::RCollectionNTupleWriter> ROOT::Experimental:
       throw RException(R__FAIL("null collectionModel"));
    }
 
-   auto collectionWriter = std::make_shared<RCollectionNTupleWriter>(std::move(collectionModel->fDefaultEntry));
+   auto collectionWriter = std::make_shared<RNTupleCollectionWriter>(std::move(collectionModel->fDefaultEntry));
 
    auto field = std::make_unique<RCollectionField>(fieldName, collectionWriter, std::move(collectionModel->fFieldZero));
    field->SetDescription(collectionModel->GetDescription());
@@ -330,6 +356,7 @@ std::shared_ptr<ROOT::Experimental::RCollectionNTupleWriter> ROOT::Experimental:
    if (fDefaultEntry)
       fDefaultEntry->AddValue(field->BindValue(std::shared_ptr<void>(collectionWriter->GetOffsetPtr(), [](void *) {})));
 
+   fFieldNames.insert(field->GetFieldName());
    fFieldZero->Attach(std::move(field));
    return collectionWriter;
 }
@@ -388,6 +415,21 @@ std::unique_ptr<ROOT::Experimental::REntry> ROOT::Experimental::RNTupleModel::Cr
    return entry;
 }
 
+ROOT::Experimental::REntry::RFieldToken ROOT::Experimental::RNTupleModel::GetToken(std::string_view fieldName) const
+{
+   if (!IsFrozen())
+      throw RException(R__FAIL("invalid attempt to get field token of unfrozen model"));
+
+   const auto &topLevelFields = fFieldZero->GetSubFields();
+   auto it = std::find_if(topLevelFields.begin(), topLevelFields.end(),
+                          [&fieldName](const RFieldBase *f) { return f->GetFieldName() == fieldName; });
+
+   if (it == topLevelFields.end()) {
+      throw RException(R__FAIL("invalid field name: " + std::string(fieldName)));
+   }
+   return REntry::RFieldToken(std::distance(topLevelFields.begin(), it), fModelId);
+}
+
 ROOT::Experimental::RFieldBase::RBulk ROOT::Experimental::RNTupleModel::CreateBulk(std::string_view fieldName) const
 {
    if (!IsFrozen())
@@ -419,4 +461,38 @@ void ROOT::Experimental::RNTupleModel::SetDescription(std::string_view descripti
 {
    EnsureNotFrozen();
    fDescription = std::string(description);
+}
+
+std::size_t ROOT::Experimental::RNTupleModel::EstimateWriteMemoryUsage(const RNTupleWriteOptions &options) const
+{
+   std::size_t bytes = 0;
+
+   // First estimate the write pages per column. Do not bother with computing the number of elements first, just take
+   // the value as set in the options.
+   std::size_t pageBufferPerColumn = options.GetApproxUnzippedPageSize();
+   if (options.GetUseTailPageOptimization()) {
+      // For tail page optimization, RColumn::ConnectPageSink allocates two pages that are larger by 50% to accomodate
+      // merging a small tail page.
+      pageBufferPerColumn *= 3;
+   }
+
+   std::size_t nColumns = 0;
+   for (auto &&field : *fFieldZero) {
+      nColumns += field.GetColumnRepresentative().size();
+   }
+   bytes += nColumns * pageBufferPerColumn;
+
+   // If using buffered writing with RPageSinkBuf, we keep at least the compressed pages in memory.
+   if (options.GetUseBufferedWrite()) {
+      // Use the target cluster size as an estimate for all compressed pages combined.
+      bytes += options.GetApproxZippedClusterSize();
+      int compression = options.GetCompression();
+      if (compression != 0 && options.GetUseImplicitMT() == RNTupleWriteOptions::EImplicitMT::kDefault) {
+         // With IMT, compression happens asynchronously which means that the uncompressed pages also stay around. Use a
+         // compression factor of 2x as a very rough estimate.
+         bytes += 2 * options.GetApproxZippedClusterSize();
+      }
+   }
+
+   return bytes;
 }

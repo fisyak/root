@@ -69,10 +69,8 @@ if(NOT clad)
   set(clad_veto fit/minuit2GausFit.C)
 endif()
 
-# RBatchGenerator tutorials need Python 3.8+.
-# Also, they don't work on Windows at the moment.
-if (PYTHON_VERSION_STRING VERSION_LESS 3.8 OR
-    (MSVC AND NOT win_broken_tests))
+# RBatchGenerator tutorials don't work on Windows at the moment.
+if(MSVC AND NOT win_broken_tests)
   list(APPEND dataframe_veto tmva/RBatchGenerator_NumPy.py)
   list(APPEND dataframe_veto tmva/RBatchGenerator_TensorFlow.py)
   list(APPEND dataframe_veto tmva/RBatchGenerator_PyTorch.py)
@@ -95,17 +93,6 @@ if (NOT dataframe)
     list(APPEND dataframe_veto tmva/RBatchGenerator_filters_vectors.py)
     # RooFit tutorial depending on RDataFrame
     list(APPEND dataframe_veto roofit/rf408*)
-elseif(MSVC AND NOT win_broken_tests)
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-      list(APPEND dataframe_veto dataframe/df002_dataModel.py)
-      list(APPEND dataframe_veto dataframe/df016_vecOps.py)
-      list(APPEND dataframe_veto dataframe/df017_vecOpsHEP.py)
-    endif()
-
-    # Why do we need to veto these tutorials on Windows with C++17?
-    list(APPEND dataframe_veto dataframe/df032_RDFFromNumpy.py)
-    list(APPEND dataframe_veto dataframe/df033_Describe.py)
-
 endif()
 
 if(NOT sqlite)
@@ -123,12 +110,6 @@ if(MACOSX_VERSION VERSION_EQUAL 10.13)
    list(APPEND dataframe_veto dataframe/df103_NanoAODHiggsAnalysis.*)
 endif()
 
-if(MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT win_broken_tests)
-    list(APPEND dataframe_veto dataframe/df002_dataModel.C)
-    list(APPEND dataframe_veto dataframe/df016_vecOps.C)
-    list(APPEND dataframe_veto dataframe/df017_vecOpsHEP.C)
-endif()
-
 if(NOT ROOT_proof_FOUND)
    set(proof_veto roostats/StandardFrequentistDiscovery.C)
 endif()
@@ -142,16 +123,19 @@ if(NOT ROOT_roofit_FOUND)
                   roostats/*.C roostats/*.py
                   histfactory/*.C histfactory/*.py)
 else()
-  if(MSVC AND NOT win_broken_tests)
-    set(roofit_veto roofit/rf401_importttreethx.py roofit/rf708_bphysics.py roofit/rf501_simultaneouspdf.py)
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-      list(APPEND roofit_veto roofit/rf409_NumPyPandasToRooFit.py)
-    else()
-      # The following tutorials are failing with this error:
-      # IncrementalExecutor::executeFunction: symbol '__std_find_trivial_4@12' unresolved while linking [cling interface function]!
-      # on Windows 32 bit and Visual Studio v17.8
-      list(APPEND roofit_veto roofit/rf509_wsinteractive.C roofit/rf614_binned_fit_problems.C)
+  if(DEFINED ENV{JENKINS_HOME})
+    if(MSVC AND NOT win_broken_tests)
+      message(STATUS "Running in Jenkins: Disabling rf401_importttreethx.py rf708_bphysics.py and rf501_simultaneouspdf.py")
+      set(roofit_veto roofit/rf401_importttreethx.py roofit/rf708_bphysics.py roofit/rf501_simultaneouspdf.py)
     endif()
+  endif()
+  if(MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT llvm13_broken_tests)
+    # The following tutorials are failing with this error:
+    # IncrementalExecutor::executeFunction: symbol '__std_find_trivial_4@12' unresolved while linking [cling interface function]!
+    # on Windows 32 bit and Visual Studio v17.8
+    list(APPEND roofit_veto roofit/rf509_wsinteractive.C roofit/rf614_binned_fit_problems.C)
+    # The following tutorial fails with a segfault (see #15364)
+    list(APPEND roofit_veto roostats/rs101_limitexample.py)
   endif()
 endif()
 
@@ -217,6 +201,7 @@ if(NOT ROOT_mathmore_FOUND)
       math/tStudent.C
       math/normalDist.C
       roostats/TestNonCentral.C
+      roostats/TestNonCentral.py
       math/Legendre.py
       math/Bessel.py
       math/tStudent.py)
@@ -292,11 +277,13 @@ else()
     list(APPEND tmva_veto tmva/envelope/classification.C)
   endif()
   #these depends on external packages
-  find_python_module(torch QUIET)
-  find_python_module(keras QUIET)
-  find_python_module(sonnet QUIET)
-  find_python_module(graph_nets QUIET)
-  find_python_module(sklearn QUIET)
+  if (tmva-pymva)
+    find_python_module(torch QUIET)
+    find_python_module(keras QUIET)
+    find_python_module(sonnet QUIET)
+    find_python_module(graph_nets QUIET)
+    find_python_module(sklearn QUIET)
+  endif()
   if (NOT PY_KERAS_FOUND)
     list(APPEND tmva_veto tmva/TMVA_SOFIE_Keras.C)
     list(APPEND tmva_veto tmva/TMVA_SOFIE_Keras_HiggsModel.C)
@@ -331,11 +318,8 @@ else()
 
 endif()
 
-if (NOT ROOT_pythia6_FOUND)
-  set(pythia_veto pythia/pythiaExample.C)
-endif()
 if (NOT ROOT_pythia8_FOUND)
-  set(pythia_veto ${pythia_veto} pythia/pythia8.C)
+  set(pythia_veto pythia/pythia8.C)
 else()
   if("$ENV{PYTHIA8}" STREQUAL "")
     get_filename_component(pythia8dir "${PYTHIA8_INCLUDE_DIR}" DIRECTORY)
@@ -416,30 +400,23 @@ set(extra_veto
   r/rootlogon.C)
 
 if(MSVC AND NOT llvm13_broken_tests)
- list(APPEND extra_veto
-      dataframe/df002_dataModel.C
-      dataframe/df007_snapshot.C
-      dataframe/df016_vecOps.C
-      dataframe/df017_vecOpsHEP.C
-      fit/NumericalMinimization.C
-      fit/fit2.C
-      fit/fit2a.C
-      fit/fit2dHist.C
-      graphics/earth.C
-      graphs/motorcycle.C
-      math/exampleFunction.py
-      math/multidimSampling.C
-      math/multivarGaus.C
-      tree/basic.C
-      unfold/testUnfold5b.C
-      unfold/testUnfold5c.C
-      unfold/testUnfold5d.C
-      unuran/unuranDemo.C
-      v7/ntuple/ntpl001_staff.C
-      v7/perfcomp.cxx
-      dataframe/df002_dataModel.py
-      dataframe/df016_vecOps.py
-      dataframe/df017_vecOpsHEP.py)
+  list(APPEND extra_veto
+       math/exampleFunction.py
+       dataframe/df002_dataModel.C
+       dataframe/df016_vecOps.C
+       dataframe/df017_vecOpsHEP.C
+       dataframe/df002_dataModel.py
+       dataframe/df016_vecOps.py
+       dataframe/df017_vecOpsHEP.py
+       dataframe/df032_RDFFromNumpy.py
+       dataframe/df035_RDFFromPandas.py)
+  if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    list(APPEND extra_veto
+         dataframe/df007_snapshot.C
+         graphics/earth.C
+         graphs/motorcycle.C
+         v7/ntuple/ntpl001_staff.C)
+  endif()
 endif()
 
 set(all_veto hsimple.C
@@ -589,11 +566,11 @@ if (PY_TORCH_FOUND)
   set (tmva-pytorch-ApplicationRegressionPyTorch-depends tutorial-tmva-pytorch-RegressionPyTorch-py)
 endif()
 if (PY_KERAS_FOUND)
-  set (tmva-TMVA_SOFIE_Keras_HiggsModel-depends tutorial-tmva-TMVA_Higgs_Classification)
-  set (tmva-TMVA_SOFIE_RDataFrame-depends tutorial-tmva-TMVA_SOFIE_Keras_HiggsModel)
-  set (tmva-TMVA_SOFIE_RDataFrame_JIT-depends tutorial-tmva-TMVA_SOFIE_Keras_HiggsModel)
-  set (tmva-TMVA_SOFIE_Inference-depends tutorial-tmva-TMVA_Higgs_Classification)
   set (tmva-TMVA_SOFIE_RSofieReader-depends tutorial-tmva-TMVA_Higgs_Classification)
+  set (tmva-TMVA_SOFIE_RDataFrame_JIT-depends tutorial-tmva-TMVA_SOFIE_RSofieReader)
+  set (tmva-TMVA_SOFIE_Keras_HiggsModel-depends tutorial-tmva-TMVA_SOFIE_RDataFrame_JIT)
+  set (tmva-TMVA_SOFIE_RDataFrame-depends tutorial-tmva-TMVA_SOFIE_Keras_HiggsModel)
+  set (tmva-TMVA_SOFIE_Inference-depends tutorial-tmva-TMVA_SOFIE_RDataFrame-py)
   if (PY_TORCH_FOUND)
     set (tmva-keras-RegressionKeras-depends tutorial-tmva-pytorch-RegressionPyTorch-py)
     set (tmva-keras-ClassificationKeras-depends tutorial-tmva-pytorch-ClassificationPyTorch-py)
@@ -604,7 +581,6 @@ endif()
 #if (PY_SONNET_FOUND AND PY_GRAPH_NETS_FOUND)
 #   set (tmva-TMVA_SOFIE_GNN_Application-depends tutorial-tmva-TMVA_SOFIE_GNN_Parser-py)
 #endif()
-
 
 #--List long-running tutorials to label them as "longtest"
 set (long_running
@@ -634,7 +610,7 @@ ROOT_ADD_TEST(tutorial-geom-geometry COMMAND ${ROOT_root_CMD} -b -l -n -q ${CMAK
                 FAILREGEX "Error in" "error:" LABELS tutorial)
 # define Python GNN parsing tutorial needed to run before
 if (PY_SONNET_FOUND AND PY_GRAPH_NETS_FOUND)
-  ROOT_ADD_TEST(tutorial-tmva-TMVA_SOFIE_GNN_Parser COMMAND ${PYTHON_EXECUTABLE}
+  ROOT_ADD_TEST(tutorial-tmva-TMVA_SOFIE_GNN_Parser COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_CURRENT_SOURCE_DIR}/tmva/TMVA_SOFIE_GNN_Parser.py
   PASSRC 0 FAILREGEX "Error in" ": error:" LABELS tutorial ENVIRONMENT ${ROOT_environ})
 endif()
@@ -756,7 +732,7 @@ if(ROOT_pyroot_FOUND)
   endif()
   # Use main Python executable to run in PySpark driver and executors
   if(test_distrdf_pyspark)
-    list(APPEND ROOT_environ PYSPARK_PYTHON=${PYTHON_EXECUTABLE})
+    list(APPEND ROOT_environ PYSPARK_PYTHON=${Python3_EXECUTABLE})
     if(MACOSX_VERSION VERSION_GREATER_EQUAL 10.13)
       # MacOS has changed rules about forking processes after 10.13
       # Running pyspark tests with XCode Python3 throws crashes with errors like:
@@ -782,7 +758,6 @@ if(ROOT_pyroot_FOUND)
     list(APPEND pyveto ${tmva_veto_py})
   endif()
 
-  find_python_module(keras QUIET)
   if(NOT PY_KERAS_FOUND)
     file(GLOB tmva_veto_py RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} tmva/keras/*.py)
     list(APPEND pyveto ${tmva_veto_py})
@@ -793,7 +768,6 @@ if(ROOT_pyroot_FOUND)
     list(APPEND pyveto tmva/keras/MultiClassKeras.py)
   endif()
 
-  find_python_module(torch QUIET)
   if(NOT PY_TORCH_FOUND)
     file(GLOB tmva_veto_py RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} tmva/pytorch/*.py)
     list(APPEND pyveto ${tmva_veto_py})
@@ -824,10 +798,10 @@ if(ROOT_pyroot_FOUND)
   set(pyroot-na49view-depends tutorial-pyroot-geometry-py)
   set(roofit-rf503_wspaceread-depends tutorial-roofit-rf502_wspacewrite-py)
 
-  # Avoid a race condition: make sure Python tutorial is ran after C++ tutorial
+  # Avoid a race condition: make sure Python tutorial is run after C++ tutorial
   set(roofit-rf104_classfactory-depends tutorial-roofit-rf104_classfactory)
   set(roofit-rf512_wsfactory_oper-depends tutorial-roofit-rf512_wsfactory_oper)
-  set (tmva-Higgs_CNN_Classification-depends tutorial-tmva-TMVA_Higgs_Classification)
+  set (tmva-TMVA_Higgs_Classification-depends tutorial-tmva-TMVA_Higgs_Classification)
   set (tmva-TMVA_CNN_Classification-depends tutorial-tmva-TMVA_CNN_Classification)
   set (tmva-TMVA_RNN_Classification-depends tutorial-tmva-TMVA_RNN_Classification)
 
@@ -889,7 +863,7 @@ if(ROOT_pyroot_FOUND)
     endforeach()
 
     ROOT_ADD_TEST(${tutorial_name}
-                COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${t}
+                COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${t}
                 PASSRC ${rc} FAILREGEX "Error in" ": error:" "segmentation violation"
                 LABELS ${labels}
                 DEPENDS ${${tname}-depends}

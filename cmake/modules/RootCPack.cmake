@@ -10,9 +10,11 @@
 #---------------------------------------------------------------------------------------------------
 
 #---------------------------------------------------------------------------------------------------
-# Package up needed system libraries - only for WIN32?
+# Package up needed system libraries - except for WIN32
 #
-include(InstallRequiredSystemLibraries)
+if(NOT WIN32)
+  include(InstallRequiredSystemLibraries)
+endif()
 
 #----------------------------------------------------------------------------------------------------
 # General packaging setup - variable relavant to all package formats
@@ -76,7 +78,7 @@ if(MSVC)
     math(EXPR VS_VERSION "${VC_MAJOR} - 4")
   elseif(MSVC_VERSION LESS 1930)
     math(EXPR VS_VERSION "${VC_MAJOR} - 3")
-  elseif(MSVC_VERSION LESS 1940)
+  elseif(MSVC_VERSION LESS 1950)
     math(EXPR VS_VERSION "${VC_MAJOR} - 2")
   else()
     message(FATAL_ERROR "MSVC_VERSION ${MSVC_VERSION} not implemented")

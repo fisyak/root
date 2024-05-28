@@ -1,5 +1,10 @@
 #include "ntuple_test.hxx"
 #include <TRandom3.h>
+#include <TMemFile.h>
+
+#ifdef R__USE_IMT
+#include <ROOT/TThreadExecutor.hxx>
+#endif
 
 #include <ROOT/RPageNullSink.hxx>
 using ROOT::Experimental::Internal::RPageNullSink;
@@ -22,7 +27,13 @@ protected:
       return {};
    }
 
-   void Init(RNTupleModel &) final {}
+   const RNTupleDescriptor &GetDescriptor() const final
+   {
+      static RNTupleDescriptor descriptor;
+      return descriptor;
+   }
+
+   void InitImpl(RNTupleModel &) final {}
    void UpdateSchema(const ROOT::Experimental::Internal::RNTupleModelChangeset &, NTupleSize_t) final {}
    void CommitPage(ColumnHandle_t /*columnHandle*/, const RPage & /*page*/) final { fCounters.fNCommitPage++; }
    void CommitSealedPage(ROOT::Experimental::DescriptorId_t, const RPageStorage::RSealedPage &) final
@@ -218,6 +229,105 @@ TEST(RNTuple, PageFilling) {
    EXPECT_EQ(1u, pr3.fPageInfos[1].fNElements);
 }
 
+TEST(RNTuple, PageFillingTail)
+{
+   FileRaii fileGuard("test_ntuple_page_filling_tail.root");
+
+   {
+      auto model = RNTupleModel::Create();
+      auto fldX = model->MakeField<std::int16_t>("x");
+
+      RNTupleWriteOptions options;
+      // Exercises the tail page optimization with pages to hold 4 elements
+      options.SetApproxUnzippedPageSize(8);
+      options.SetUseTailPageOptimization(true);
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath(), options);
+      for (std::int16_t i = 0; i < 16; ++i) {
+         *fldX = i;
+         ntuple->Fill();
+         // Trigger tail page optimization; the page has 4 + 1 elements
+         if (i == 4)
+            ntuple->CommitCluster();
+         // Trigger another tail page optimization: the first page in this cluster had 4 elements and was flushed
+         // automatically; the second page has 4 + 1 elements
+         if (i == 13)
+            ntuple->CommitCluster();
+      }
+   }
+
+   auto ntuple = RNTupleReader::Open("ntpl", fileGuard.GetPath());
+   auto viewX = ntuple->GetView<std::int16_t>("x");
+   ASSERT_EQ(16u, ntuple->GetNEntries());
+   for (std::int16_t i = 0; i < 16; ++i)
+      EXPECT_EQ(i, viewX(i));
+
+   const auto &desc = ntuple->GetDescriptor();
+   EXPECT_EQ(3u, desc.GetNClusters());
+   const auto &cd1 = desc.GetClusterDescriptor(desc.FindClusterId(0, 0));
+   const auto &pr1 = cd1.GetPageRange(0);
+   ASSERT_EQ(1u, pr1.fPageInfos.size());
+   EXPECT_EQ(5u, pr1.fPageInfos[0].fNElements);
+   const auto &cd2 = desc.GetClusterDescriptor(desc.FindNextClusterId(cd1.GetId()));
+   const auto &pr2 = cd2.GetPageRange(0);
+   ASSERT_EQ(2u, pr2.fPageInfos.size());
+   EXPECT_EQ(4u, pr2.fPageInfos[0].fNElements);
+   EXPECT_EQ(5u, pr2.fPageInfos[1].fNElements);
+   const auto &cd3 = desc.GetClusterDescriptor(desc.FindNextClusterId(cd2.GetId()));
+   const auto &pr3 = cd3.GetPageRange(0);
+   ASSERT_EQ(1u, pr3.fPageInfos.size());
+   EXPECT_EQ(2u, pr3.fPageInfos[0].fNElements);
+}
+
+TEST(RNTuple, PageFillingTailOff)
+{
+   FileRaii fileGuard("test_ntuple_page_filling_tail_off.root");
+
+   {
+      auto model = RNTupleModel::Create();
+      auto fldX = model->MakeField<std::int16_t>("x");
+
+      RNTupleWriteOptions options;
+      // Exercises the (disabled) tail page optimization with pages to hold 4 elements
+      options.SetApproxUnzippedPageSize(8);
+      options.SetUseTailPageOptimization(false);
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath(), options);
+      for (std::int16_t i = 0; i < 16; ++i) {
+         *fldX = i;
+         ntuple->Fill();
+         // Tail page optimization should not be active: the pages have 4 and 1 elements
+         if (i == 4)
+            ntuple->CommitCluster();
+         // Two pages of 4 elements and one undersized tail page with only 1 element
+         if (i == 13)
+            ntuple->CommitCluster();
+      }
+   }
+
+   auto ntuple = RNTupleReader::Open("ntpl", fileGuard.GetPath());
+   auto viewX = ntuple->GetView<std::int16_t>("x");
+   ASSERT_EQ(16u, ntuple->GetNEntries());
+   for (std::int16_t i = 0; i < 16; ++i)
+      EXPECT_EQ(i, viewX(i));
+
+   const auto &desc = ntuple->GetDescriptor();
+   EXPECT_EQ(3u, desc.GetNClusters());
+   const auto &cd1 = desc.GetClusterDescriptor(desc.FindClusterId(0, 0));
+   const auto &pr1 = cd1.GetPageRange(0);
+   ASSERT_EQ(2u, pr1.fPageInfos.size());
+   EXPECT_EQ(4u, pr1.fPageInfos[0].fNElements);
+   EXPECT_EQ(1u, pr1.fPageInfos[1].fNElements);
+   const auto &cd2 = desc.GetClusterDescriptor(desc.FindNextClusterId(cd1.GetId()));
+   const auto &pr2 = cd2.GetPageRange(0);
+   ASSERT_EQ(3u, pr2.fPageInfos.size());
+   EXPECT_EQ(4u, pr2.fPageInfos[0].fNElements);
+   EXPECT_EQ(4u, pr2.fPageInfos[1].fNElements);
+   EXPECT_EQ(1u, pr2.fPageInfos[2].fNElements);
+   const auto &cd3 = desc.GetClusterDescriptor(desc.FindNextClusterId(cd2.GetId()));
+   const auto &pr3 = cd3.GetPageRange(0);
+   ASSERT_EQ(1u, pr3.fPageInfos.size());
+   EXPECT_EQ(2u, pr3.fPageInfos[0].fNElements);
+}
+
 TEST(RNTuple, PageFillingString) {
    FileRaii fileGuard("test_ntuple_page_filling_string.root");
 
@@ -228,6 +338,7 @@ TEST(RNTuple, PageFillingString) {
 
       RNTupleWriteOptions options;
       options.SetApproxUnzippedPageSize(16);
+      options.SetUseTailPageOptimization(true);
       auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath(), options);
       // 1 page: 17 characters
       *fldX = "01234567890123456";
@@ -275,6 +386,33 @@ TEST(RNTuple, PageFillingString) {
    ASSERT_EQ(2u, pr4.fPageInfos.size());
    EXPECT_EQ(16u, pr4.fPageInfos[0].fNElements);
    EXPECT_EQ(10u, pr4.fPageInfos[1].fNElements);
+}
+
+#ifdef R__HAS_DAVIX
+TEST(RNTuple, OpenHTTP)
+{
+  std::unique_ptr<TFile> file(TFile::Open("http://root.cern/files/tutorials/ntpl004_dimuon_v1rc2.root"));
+  auto reader = RNTupleReader::Open(file->Get<RNTuple>("Events"));
+  reader->LoadEntry(0);
+}
+#endif
+
+TEST(RNTuple, TMemFile)
+{
+   TMemFile file("memfile.root", "RECREATE");
+
+   {
+      auto model = RNTupleModel::Create();
+      auto pt = model->MakeField<float>("pt", 42.0);
+
+      auto writer = RNTupleWriter::Append(std::move(model), "ntpl", file);
+      writer->Fill();
+   }
+
+   auto reader = RNTupleReader::Open(file.Get<RNTuple>("ntpl"));
+   auto pt = reader->GetModel().GetDefaultEntry().GetPtr<float>("pt");
+   reader->LoadEntry(0);
+   EXPECT_EQ(*pt, 42.0);
 }
 
 TEST(RPageSinkBuf, Basics)
@@ -421,16 +559,55 @@ TEST(RPageSinkBuf, ParallelZip) {
       EXPECT_EQ((std::vector<float>(3, fi)), viewKlassVec(i).at(0).v2.at(0));
       EXPECT_EQ("hi" + std::to_string(i), viewKlassVec(i).at(0).s);
    }
+
+#ifdef R__USE_IMT
+   ROOT::DisableImplicitMT();
+#endif
 }
+
+#ifdef R__USE_IMT
+TEST(RPageSinkBuf, ParallelZipIMT)
+{
+   ROOT::EnableImplicitMT(2);
+
+   ROOT::TThreadExecutor ex(2);
+   ex.Foreach(
+      [&](int i) {
+         std::string filename = "test_ntuple_sinkbuf_pzip.";
+         filename += std::to_string(i);
+         filename += ".root";
+         FileRaii fileGuard(filename);
+
+         auto model = ROOT::Experimental::RNTupleModel::Create();
+         auto wrPt = model->MakeField<float>("pt", 42.0);
+
+         RNTupleWriteOptions options;
+         options.SetApproxUnzippedPageSize(8);
+         options.SetUseBufferedWrite(true);
+         auto writer =
+            ROOT::Experimental::RNTupleWriter::Recreate(std::move(model), "myNTuple", fileGuard.GetPath(), options);
+         for (int c = 0; c < 2; c++) {
+            writer->Fill();
+            writer->Fill();
+            // The first page is full now.
+            writer->Fill();
+            writer->Fill();
+            // The second page is full now.
+            writer->Fill();
+            writer->CommitCluster();
+         }
+      },
+      {1, 2});
+
+   ROOT::DisableImplicitMT();
+}
+#endif
 
 TEST(RPageSinkBuf, CommitSealedPageV)
 {
    RNTupleWriteOptions options;
    options.SetApproxUnzippedPageSize(16);
 
-#ifdef R__USE_IMT
-   ROOT::DisableImplicitMT();
-#endif
    {
       std::unique_ptr<RPageSink> sink(new RPageSinkMock(options));
       auto &counters = static_cast<RPageSinkMock *>(sink.get())->fCounters;
@@ -471,6 +648,10 @@ TEST(RPageSinkBuf, CommitSealedPageV)
       EXPECT_EQ(0, counters.fNCommitSealedPage);
       EXPECT_EQ(1, counters.fNCommitSealedPageV);
    }
+
+#ifdef R__USE_IMT
+   ROOT::DisableImplicitMT();
+#endif
 }
 
 TEST(RPageSink, Empty)

@@ -1512,7 +1512,8 @@ ROOT::RDF::Experimental::AddProgressBar(df);
 
 Alternatively, RDataFrame can be cast to an RNode first, giving the user more flexibility 
 For example, it can be called at any computational node, such as Filter or Define, not only the head node,
-with no change to the ProgressBar function itself: 
+with no change to the ProgressBar function itself (please see the [Efficient analysis in Python](#python) 
+section for appropriate usage in Python): 
 ~~~{.cpp}
 ROOT::RDataFrame df("tree", "file.root");
 auto df_1 = ROOT::RDF::RNode(df.Filter("x>1"));
@@ -1663,6 +1664,17 @@ RDataFrame::RDataFrame(std::unique_ptr<ROOT::RDF::RDataSource> ds, const ColumnN
 RDataFrame::RDataFrame(ROOT::RDF::Experimental::RDatasetSpec spec)
    : RInterface(std::make_shared<RDFDetail::RLoopManager>(std::move(spec)))
 {
+}
+
+RDataFrame::~RDataFrame()
+{
+   // If any node of the computation graph associated with this RDataFrame
+   // declared code to jit, we need to make sure the compilation actually
+   // happens. For example, a jitted Define could have been booked but
+   // if the computation graph is not actually run then the code of the
+   // Define node is not jitted. This in turn would cause memory leaks.
+   // See https://github.com/root-project/root/issues/15399
+   fLoopManager->Jit();
 }
 
 namespace RDF {

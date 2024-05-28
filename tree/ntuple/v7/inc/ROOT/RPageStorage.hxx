@@ -19,7 +19,8 @@
 #include <ROOT/RCluster.hxx>
 #include <ROOT/RNTupleDescriptor.hxx>
 #include <ROOT/RNTupleMetrics.hxx>
-#include <ROOT/RNTupleOptions.hxx>
+#include <ROOT/RNTupleReadOptions.hxx>
+#include <ROOT/RNTupleWriteOptions.hxx>
 #include <ROOT/RNTupleUtil.hxx>
 #include <ROOT/RPage.hxx>
 #include <ROOT/RPageAllocator.hxx>
@@ -70,8 +71,6 @@ public:
    class RTaskScheduler {
    public:
       virtual ~RTaskScheduler() = default;
-      /// Start a new set of tasks
-      virtual void Reset() = 0;
       /// Take a callable that represents a task
       virtual void AddTask(const std::function<void(void)> &taskFunc) = 0;
       /// Blocks until all scheduled tasks finished
@@ -118,7 +117,6 @@ protected:
       if (!fTaskScheduler)
          return;
       fTaskScheduler->Wait();
-      fTaskScheduler->Reset();
    }
 
 public:
@@ -198,6 +196,10 @@ protected:
    static RSealedPage SealPage(const RPage &page, const RColumnElementBase &element, int compressionSetting, void *buf,
                                bool allowAlias = true);
 
+private:
+   /// Flag if sink was initialized
+   bool fIsInitialized = false;
+
 public:
    RPageSink(std::string_view ntupleName, const RNTupleWriteOptions &options);
 
@@ -213,9 +215,26 @@ public:
 
    void DropColumn(ColumnHandle_t /*columnHandle*/) final {}
 
+   bool IsInitialized() const { return fIsInitialized; }
+
+   /// Return the RNTupleDescriptor being constructed.
+   virtual const RNTupleDescriptor &GetDescriptor() const = 0;
+
    /// Physically creates the storage container to hold the ntuple (e.g., a keys a TFile or an S3 bucket)
    /// Init() associates column handles to the columns referenced by the model
-   virtual void Init(RNTupleModel &model) = 0;
+   void Init(RNTupleModel &model)
+   {
+      if (fIsInitialized) {
+         throw RException(R__FAIL("already initialized"));
+      }
+      fIsInitialized = true;
+      InitImpl(model);
+   }
+
+protected:
+   virtual void InitImpl(RNTupleModel &model) = 0;
+
+public:
    /// Incorporate incremental changes to the model into the ntuple descriptor. This happens, e.g. if new fields were
    /// added after the initial call to `RPageSink::Init(RNTupleModel &)`.
    /// `firstEntry` specifies the global index for the first stored element in the added columns.
@@ -348,9 +367,14 @@ public:
 
    ColumnHandle_t AddColumn(DescriptorId_t fieldId, const RColumn &column) final;
 
+   const RNTupleDescriptor &GetDescriptor() const final { return fDescriptorBuilder.GetDescriptor(); }
+
    /// Updates the descriptor and calls InitImpl() that handles the backend-specific details (file, DAOS, etc.)
-   void Init(RNTupleModel &model) final;
+   void InitImpl(RNTupleModel &model) final;
    void UpdateSchema(const RNTupleModelChangeset &changeset, NTupleSize_t firstEntry) final;
+
+   /// Initialize sink based on an existing descriptor and fill into the descriptor builder.
+   void InitFromDescriptor(const RNTupleDescriptor &descriptor);
 
    void CommitPage(ColumnHandle_t columnHandle, const RPage &page) final;
    void CommitSealedPage(DescriptorId_t physicalColumnId, const RPageStorage::RSealedPage &sealedPage) final;
@@ -480,13 +504,6 @@ protected:
    virtual void UnzipClusterImpl(RCluster * /* cluster */)
       { }
 
-   /// Helper for unstreaming a page. This is commonly used in derived, concrete page sources.  The implementation
-   /// currently always makes a memory copy, even if the sealed page is uncompressed and in the final memory layout.
-   /// The optimization of directly mapping pages is left to the concrete page source implementations.
-   /// Usage of this method requires construction of fDecompressor. Memory is allocated via
-   /// `RPageAllocatorHeap`; use `RPageAllocatorHeap::DeletePage()` to deallocate returned pages.
-   RPage UnsealPage(const RSealedPage &sealedPage, const RColumnElementBase &element, DescriptorId_t physicalColumnId);
-
    /// Prepare a page range read for the column set in `clusterKey`.  Specifically, pages referencing the
    /// `kTypePageZero` locator are filled in `pageZeroMap`; otherwise, `perPageFunc` is called for each page. This is
    /// commonly used as part of `LoadClusters()` in derived classes.
@@ -559,6 +576,13 @@ public:
    /// buffer and call LoadSealedPage again.
    virtual void
    LoadSealedPage(DescriptorId_t physicalColumnId, RClusterIndex clusterIndex, RSealedPage &sealedPage) = 0;
+
+   /// Helper for unstreaming a page. This is commonly used in derived, concrete page sources.  The implementation
+   /// currently always makes a memory copy, even if the sealed page is uncompressed and in the final memory layout.
+   /// The optimization of directly mapping pages is left to the concrete page source implementations.
+   /// Usage of this method requires construction of fDecompressor. Memory is allocated via
+   /// `RPageAllocatorHeap`; use `RPageAllocatorHeap::DeletePage()` to deallocate returned pages.
+   RPage UnsealPage(const RSealedPage &sealedPage, const RColumnElementBase &element, DescriptorId_t physicalColumnId);
 
    /// Populates all the pages of the given cluster ids and columns; it is possible that some columns do not
    /// contain any pages.  The page source may load more columns than the minimal necessary set from `columns`.
