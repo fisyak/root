@@ -91,7 +91,7 @@ CustomStreamers = {
       const pos = classv.lastIndexOf(';');
 
       if (pos > 0) {
-         clv = parseInt(classv.slice(pos + 1));
+         clv = Number.parseInt(classv.slice(pos + 1));
          classv = classv.slice(0, pos);
       }
 
@@ -2782,16 +2782,14 @@ class TFile {
          }
 
          if (res && first_req) {
-            if (file.fAcceptRanges && !first_req.getResponseHeader('Accept-Ranges')) {
-               file.fAcceptRanges = false;
-               if (res?.byteLength === place[1]) {
-                  // special case with cernbox, let try to get full size content
-                  console.warn(`First block is ${place[1]} bytes but browser does not provides access to header - try to read full file`);
-                  first_block_retry = true;
-                  return send_new_request();
-               }
+            // special workaround for servers like cernbox blocking access to some response headers
+            // as result, it is not possible to parse multipart responses
+            if (file.fAcceptRanges && (first_req.status === 206) && (res?.byteLength === place[1]) && !first_req.getResponseHeader('Content-Range') && (file.fMaxRanges > 1)) {
+               console.warn('Server response with 206 code but browser does not provide access to Content-Range header - setting fMaxRanges = 1, consider to load full file with "filename.root+" argument or adjust server configurations');
+               file.fMaxRanges = 1;
             }
 
+            // workaround for simpleHTTP
             const kind = browser.isFirefox ? first_req.getResponseHeader('Server') : '';
             if (isStr(kind) && kind.indexOf('SimpleHTTP') === 0) {
                file.fMaxRanges = 1;
@@ -2801,7 +2799,6 @@ class TFile {
 
          if (res && first_block && !file.fFileContent) {
             // special case - keep content of first request (could be complete file) in memory
-
             file.fFileContent = new TBuffer(isStr(res) ? res : new DataView(res));
 
             if (!file.fAcceptRanges)
@@ -2854,8 +2851,8 @@ class TFile {
             if (isStr(hdr_range) && hdr_range.indexOf('bytes') >= 0) {
                const parts = hdr_range.slice(hdr_range.indexOf('bytes') + 6).split(/[\s-/]+/);
                if (parts.length === 3) {
-                  segm_start = parseInt(parts[0]);
-                  segm_last = parseInt(parts[1]);
+                  segm_start = Number.parseInt(parts[0]);
+                  segm_last = Number.parseInt(parts[1]);
                   if (!Number.isInteger(segm_start) || !Number.isInteger(segm_last) || (segm_start > segm_last)) {
                      segm_start = 0; segm_last = -1;
                   }
@@ -2912,8 +2909,8 @@ class TFile {
                   if ((line.indexOf('content-range') >= 0) && (line.indexOf('bytes') > 0)) {
                      const parts = line.slice(line.indexOf('bytes') + 6).split(/[\s-/]+/);
                      if (parts.length === 3) {
-                        segm_start = parseInt(parts[0]);
-                        segm_last = parseInt(parts[1]);
+                        segm_start = Number.parseInt(parts[0]);
+                        segm_last = Number.parseInt(parts[1]);
                         if (!Number.isInteger(segm_start) || !Number.isInteger(segm_last) || (segm_start > segm_last)) {
                            segm_start = 0; segm_last = -1;
                         }
@@ -2965,7 +2962,10 @@ class TFile {
    getDir(dirname, cycle) {
       if ((cycle === undefined) && isStr(dirname)) {
          const pos = dirname.lastIndexOf(';');
-         if (pos > 0) { cycle = parseInt(dirname.slice(pos + 1)); dirname = dirname.slice(0, pos); }
+         if (pos > 0) {
+            cycle = Number.parseInt(dirname.slice(pos + 1));
+            dirname = dirname.slice(0, pos);
+         }
       }
 
       for (let j = 0; j < this.fDirectories.length; ++j) {
@@ -3044,8 +3044,8 @@ class TFile {
      * console.log(`Read object of type ${obj._typename}`); */
    async readObject(obj_name, cycle, only_dir) {
       const pos = obj_name.lastIndexOf(';');
-      if (pos > 0) {
-         cycle = parseInt(obj_name.slice(pos + 1));
+      if (pos >= 0) {
+         cycle = Number.parseInt(obj_name.slice(pos + 1));
          obj_name = obj_name.slice(0, pos);
       }
 

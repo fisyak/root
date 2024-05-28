@@ -205,7 +205,7 @@ void PiecewiseInterpolation::translate(RooFit::Detail::CodeSquashContext &ctx) c
    // models, where is is always used the same way: all RooAbsReals in _lowSet,
    // _histSet, and also nominal are 1D RooHistFuncs with with same structure.
    //
-   // Therefore, we can make a big optimization: we get the bin index ony once
+   // Therefore, we can make a big optimization: we get the bin index only once
    // here in the generated code for PiecewiseInterpolation. Then, we also
    // rearrange the histogram data in such a way that we can always pass the
    // same arrays to the free function that implements the interpolation, just
@@ -240,7 +240,7 @@ void PiecewiseInterpolation::translate(RooFit::Detail::CodeSquashContext &ctx) c
    code += "double " + nominalName + " = *(" + valsNominalStr + " + " + idxName + ");\n";
 
    std::string funcCall = ctx.buildCall("RooFit::Detail::MathFuncs::flexibleInterp", _interpCode[0], _paramSet, n,
-                                        lowName, highName, 1.0, nominalName);
+                                        lowName, highName, 1.0, nominalName, 0.0);
    code += "double " + resName + " = " + funcCall + ";\n";
 
    if (_positiveDefinite)

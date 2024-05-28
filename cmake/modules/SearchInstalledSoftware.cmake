@@ -184,13 +184,16 @@ if(NOT builtin_pcre)
   foreach(suffix FOUND INCLUDE_DIR PCRE_LIBRARY)
     unset(PCRE_${suffix} CACHE)
   endforeach()
-  if(fail-on-missing)
-    find_package(PCRE REQUIRED)
-  else()
-    find_package(PCRE)
-    if(NOT PCRE_FOUND)
-      message(STATUS "PCRE not found. Switching on builtin_pcre option")
-      set(builtin_pcre ON CACHE BOOL "Enabled because PCRE not found (${builtin_pcre_description})" FORCE)
+  find_package(PCRE2)
+  if(NOT PCRE2_FOUND)
+    if(fail-on-missing)
+      find_package(PCRE REQUIRED)
+    else()
+      find_package(PCRE)
+      if(NOT PCRE_FOUND)
+        message(STATUS "PCRE not found. Switching on builtin_pcre option")
+        set(builtin_pcre ON CACHE BOOL "Enabled because PCRE not found (${builtin_pcre_description})" FORCE)
+      endif()
     endif()
   endif()
 endif()
@@ -436,6 +439,11 @@ if(asimage)
     else()
       set(_jpeginclude --with-builtin-jpeg)
     endif()
+    if(GIF_FOUND)
+       set(_gifinclude  --with-gif --with-gif-includes=${GIF_INCLUDE_DIR} --without-builtin-gif)
+    else()
+       set(_gifinclude)
+    endif()
     if(PNG_FOUND)
       set(_pnginclude  --with-png-includes=${PNG_INCLUDE_DIR})
     else()
@@ -448,6 +456,7 @@ if(asimage)
     endif()
     if(cocoa)
       set(_jpeginclude --without-x --with-builtin-jpeg)
+      set(_gifinclude  --with-builtin-ungif)
       set(_pnginclude  --with-builtin-png)
       set(_tiffinclude --with-tiff=no)
     endif()
@@ -458,6 +467,9 @@ if(asimage)
     if(CMAKE_OSX_SYSROOT)
       set(_after_cflags "${_after_cflags} -isysroot ${CMAKE_OSX_SYSROOT}")
     endif()
+    if(builtin_zlib)
+      set(_after_cflags "${_after_cflags} -I${ZLIB_INCLUDE_DIR}")
+    endif()
     ExternalProject_Add(
       AFTERIMAGE
       DOWNLOAD_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/graf2d/asimage/src/libAfterImage AFTERIMAGE
@@ -466,7 +478,7 @@ if(asimage)
                         --libdir=<INSTALL_DIR>/lib
                         --with-ttf ${_ttf_include} --with-afterbase=no
                         --without-svg --disable-glx ${_after_mmx}
-                        --with-builtin-ungif  --with-jpeg ${_jpeginclude}
+                        ${_gifinclude} --with-jpeg ${_jpeginclude}
                         --with-png ${_pnginclude} ${_tiffinclude}
                         CC=${CMAKE_C_COMPILER} CFLAGS=${_after_cflags}
       LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 BUILD_IN_SOURCE 1
@@ -874,11 +886,18 @@ if(shadowpw)
   endif()
 endif()
 
-#---Check for Xrootd support---------------------------------------------------------
+#---Configure Xrootd support---------------------------------------------------------
 
 foreach(suffix FOUND INCLUDE_DIR INCLUDE_DIRS LIBRARY LIBRARIES)
   unset(XROOTD_${suffix} CACHE)
 endforeach()
+
+if(xrootd OR builtin_xrootd)
+  # This is the target that ROOT will use, irrespective of whether XRootD is a builtin or in the system.
+  # All targets should only link to ROOT::XRootD. Refrain from using XRootD variables.
+  add_library(XRootD INTERFACE IMPORTED GLOBAL)
+  add_library(ROOT::XRootD ALIAS XRootD)
+endif()
 
 if(xrootd AND NOT builtin_xrootd)
   message(STATUS "Looking for XROOTD")
@@ -888,6 +907,9 @@ if(xrootd AND NOT builtin_xrootd)
       message(FATAL_ERROR "XROOTD not found. Set environment variable XRDSYS to point to your XROOTD installation, "
                           "or include the installation of XROOTD in the CMAKE_PREFIX_PATH. "
                           "Alternatively, you can also enable the option 'builtin_xrootd' to build XROOTD internally")
+    elseif(NO_CONNECTION)
+      message(FATAL_ERROR "No internet connection. Please check your connection, or either disable the 'builtin_xrootd'"
+        " option or the 'fail-on-missing' to automatically disable options requiring internet access")
     else()
       message(STATUS "XROOTD not found, enabling 'builtin_xrootd' option")
       set(builtin_xrootd ON CACHE BOOL "Enabled because xrootd is enabled, but external xrootd was not found (${xrootd_description})" FORCE)
@@ -895,19 +917,30 @@ if(xrootd AND NOT builtin_xrootd)
   endif()
 endif()
 
-if(builtin_xrootd AND NO_CONNECTION)
-  if(fail-on-missing)
-    message(FATAL_ERROR "No internet connection. Please check your connection, or either disable the 'builtin_xrootd' option or the 'fail-on-missing' to automatically disable options requiring internet access")
-  else()
-    message(STATUS "No internet connection, disabling 'builtin_xrootd' option")
-    set(builtin_xrootd OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
-    set(xrootd OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
-  endif()
-endif()
 if(builtin_xrootd)
-  list(APPEND ROOT_BUILTINS XROOTD)
+  if(NO_CONNECTION)
+    message(FATAL_ERROR "No internet connection. Please check your connection, or either disable the 'builtin_xrootd'"
+      " option or the 'fail-on-missing' to automatically disable options requiring internet access")
+  endif()
+  list(APPEND ROOT_BUILTINS BUILTIN_XROOTD)
   add_subdirectory(builtins/xrootd)
   set(xrootd ON CACHE BOOL "Enabled because builtin_xrootd requested (${xrootd_description})" FORCE)
+endif()
+
+# Finalise the XRootD target configuration
+if(TARGET XRootD)
+
+  # The XROOTD_INCLUDE_DIRS provided by XRootD is actually a list with two
+  # paths, like:
+  #   <xrootd_include_dir>;<xrootd_include_dir>/private
+  # We don't need the private headers, and we have to exclude this path from
+  # the build configuration if we don't want it to fail on systems were the
+  # private headers are not installed (most linux distributions).
+  list(GET XROOTD_INCLUDE_DIRS 0 XROOTD_INCLUDE_DIR_PRIMARY)
+
+  target_include_directories(XRootD SYSTEM INTERFACE "$<BUILD_INTERFACE:${XROOTD_INCLUDE_DIR_PRIMARY}>")
+  target_link_libraries(XRootD INTERFACE $<BUILD_INTERFACE:${XROOTD_CLIENT_LIBRARIES}>)
+  target_link_libraries(XRootD INTERFACE $<BUILD_INTERFACE:${XROOTD_UTILS_LIBRARIES}>)
 endif()
 
 #---check if netxng can be built-------------------------------

@@ -66,7 +66,12 @@ endfunction()
 #---Tutorials disabled depending on the build components-------------
 
 if(NOT clad)
-  set(clad_veto fit/minuit2GausFit.C)
+  set(clad_veto fit/minuit2GausFit.C
+                # TODO: the next veto should not be necessary!
+                # The tutorial should also work without clad.
+                # See https://github.com/root-project/root/issues/15091.
+                fit/exampleFit3D.C
+  )
 endif()
 
 # RBatchGenerator tutorials don't work on Windows at the moment.
@@ -570,7 +575,7 @@ if (PY_KERAS_FOUND)
   set (tmva-TMVA_SOFIE_RDataFrame_JIT-depends tutorial-tmva-TMVA_SOFIE_RSofieReader)
   set (tmva-TMVA_SOFIE_Keras_HiggsModel-depends tutorial-tmva-TMVA_SOFIE_RDataFrame_JIT)
   set (tmva-TMVA_SOFIE_RDataFrame-depends tutorial-tmva-TMVA_SOFIE_Keras_HiggsModel)
-  set (tmva-TMVA_SOFIE_Inference-depends tutorial-tmva-TMVA_SOFIE_RDataFrame-py)
+  set (tmva-TMVA_SOFIE_Inference-depends tutorial-tmva-TMVA_SOFIE_RDataFrame)
   if (PY_TORCH_FOUND)
     set (tmva-keras-RegressionKeras-depends tutorial-tmva-pytorch-RegressionPyTorch-py)
     set (tmva-keras-ClassificationKeras-depends tutorial-tmva-pytorch-ClassificationPyTorch-py)

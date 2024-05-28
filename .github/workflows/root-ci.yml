@@ -98,7 +98,7 @@ jobs:
         include:
           - platform: mac13   
             arch: ARM64
-            overrides: ["LLVM_ENABLE_ASSERTIONS=On"]
+            overrides: ["LLVM_ENABLE_ASSERTIONS=On", "builtin_zlib=ON"]
           - platform: mac14
             arch: ARM64
             overrides: ["LLVM_ENABLE_ASSERTIONS=On", "CMAKE_CXX_STANDARD=20"]
@@ -356,7 +356,8 @@ jobs:
             overrides: ["imt=Off", "LLVM_ENABLE_ASSERTIONS=On", "CMAKE_BUILD_TYPE=Debug"]
           - image: ubuntu2310
             overrides: ["LLVM_ENABLE_ASSERTIONS=On", "CMAKE_CXX_STANDARD=20"]
-
+          - image: ubuntu2404
+            overrides: ["LLVM_ENABLE_ASSERTIONS=On", "CMAKE_BUILD_TYPE=Debug"]
     runs-on:
       - self-hosted
       - linux
