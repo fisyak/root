@@ -758,6 +758,20 @@ if(odbc)
   endif()
 endif()
 
+#---Check for Pythia6-------------------------------------------------------------------
+if(pythia6)
+  message(STATUS "Looking for Pythia6")
+  find_package(Pythia6 QUIET)
+  if(NOT PYTHIA6_FOUND AND NOT pythia6_nolink)
+    if(fail-on-missing)
+      message(FATAL_ERROR "Pythia6 libraries not found and they are required (pythia6 option enabled)")
+    else()
+      message(STATUS "Pythia6 not found. Switching off pythia6 option")
+      set(pythia6 OFF CACHE BOOL "Disabled because Pythia6 not found (${pythia6_description})" FORCE)
+    endif()
+  endif()
+endif()
+
 #---Check for PostgreSQL-------------------------------------------------------------------
 if(pgsql)
   message(STATUS "Looking for PostgreSQL")

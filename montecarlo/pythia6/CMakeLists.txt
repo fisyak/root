@@ -33,6 +33,8 @@ ROOT_STANDARD_LIBRARY_PACKAGE(EGPythia6
     src/TMCParticle.cxx
     src/TPythia6.cxx
     src/TPythia6Decayer.cxx
+    src/pythia6_common_address.c
+    src/tpythia6_called_from_cc.F
   LIBRARIES
     ${PYTHIA6_LIBRARIES}
   DEPENDENCIES
