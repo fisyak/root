@@ -13,6 +13,7 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
+#include "Rtypes.h"
 #include <ROOT/RConfig.hxx>
 #include <ROOT/RError.hxx>
 
@@ -21,6 +22,7 @@
 #include <ROOT/RRawFile.hxx>
 #include <ROOT/RNTupleZip.hxx>
 
+#include <Byteswap.h>
 #include <TError.h>
 #include <TFile.h>
 #include <TKey.h>
@@ -35,6 +37,15 @@
 #include <string>
 #include <chrono>
 
+#ifndef R__LITTLE_ENDIAN
+#ifdef R__BYTESWAP
+// `R__BYTESWAP` is defined in RConfig.hxx for little-endian architectures; undefined otherwise
+#define R__LITTLE_ENDIAN 1
+#else
+#define R__LITTLE_ENDIAN 0
+#endif
+#endif /* R__LITTLE_ENDIAN */
+
 namespace {
 
 // The following types are used to read and write the TFile binary format
@@ -43,7 +54,14 @@ namespace {
 class RUInt16BE {
 private:
    std::uint16_t fValBE = 0;
-   static std::uint16_t Swap(std::uint16_t val) { return (val & 0x00FF) << 8 | (val & 0xFF00) >> 8; }
+   static std::uint16_t Swap(std::uint16_t val)
+   {
+#if R__LITTLE_ENDIAN == 1
+      return RByteSwap<sizeof(val)>::bswap(val);
+#else
+      return val;
+#endif
+   }
 
 public:
    RUInt16BE() = default;
@@ -62,8 +80,11 @@ private:
    std::uint32_t fValBE = 0;
    static std::uint32_t Swap(std::uint32_t val)
    {
-      auto x = (val & 0x0000FFFF) << 16 | (val & 0xFFFF0000) >> 16;
-      return (x & 0x00FF00FF) << 8 | (x & 0xFF00FF00) >> 8;
+#if R__LITTLE_ENDIAN == 1
+      return RByteSwap<sizeof(val)>::bswap(val);
+#else
+      return val;
+#endif
    }
 
 public:
@@ -83,8 +104,11 @@ private:
    std::int32_t fValBE = 0;
    static std::int32_t Swap(std::int32_t val)
    {
-      auto x = (val & 0x0000FFFF) << 16 | (val & 0xFFFF0000) >> 16;
-      return (x & 0x00FF00FF) << 8 | (x & 0xFF00FF00) >> 8;
+#if R__LITTLE_ENDIAN == 1
+      return RByteSwap<sizeof(val)>::bswap(val);
+#else
+      return val;
+#endif
    }
 
 public:
@@ -104,9 +128,11 @@ private:
    std::uint64_t fValBE = 0;
    static std::uint64_t Swap(std::uint64_t val)
    {
-      auto x = (val & 0x00000000FFFFFFFF) << 32 | (val & 0xFFFFFFFF00000000) >> 32;
-      x = (x & 0x0000FFFF0000FFFF) << 16 | (x & 0xFFFF0000FFFF0000) >> 16;
-      return (x & 0x00FF00FF00FF00FF) << 8 | (x & 0xFF00FF00FF00FF00) >> 8;
+#if R__LITTLE_ENDIAN == 1
+      return RByteSwap<sizeof(val)>::bswap(val);
+#else
+      return val;
+#endif
    }
 
 public:
@@ -954,25 +980,6 @@ constexpr char const *kBlobClassName = "RBlob";
 /// The class name of the RNTuple anchor
 constexpr char const *kNTupleClassName = "ROOT::Experimental::RNTuple";
 
-/// The RKeyBlob writes an invisible key into a TFile.  That is, a key that is not indexed in the list of keys,
-/// like a TBasket.
-class RKeyBlob : public TKey {
-public:
-   explicit RKeyBlob(TFile *file) : TKey(file)
-   {
-      fClassName = kBlobClassName;
-      fVersion += 1000;
-      fKeylen = Sizeof();
-   }
-
-   /// Register a new key for a data record of size nbytes
-   void Reserve(size_t nbytes, std::uint64_t *seekKey)
-   {
-      Create(nbytes);
-      *seekKey = fSeekKey;
-   }
-};
-
 } // anonymous namespace
 
 namespace ROOT {
@@ -986,6 +993,32 @@ struct RTFileControlBlock {
    std::uint64_t fSeekNTuple{0}; // Remember the offset for the keys list
    std::uint64_t fSeekFileRecord{0};
 };
+
+/// The RKeyBlob writes an invisible key into a TFile.  That is, a key that is not indexed in the list of keys,
+/// like a TBasket.
+/// NOTE: out of anonymous namespace because otherwise ClassDefInline fails to compile
+/// on some platforms.
+class RKeyBlob : public TKey {
+public:
+   RKeyBlob() = default;
+
+   explicit RKeyBlob(TFile *file) : TKey(file)
+   {
+      fClassName = kBlobClassName;
+      fVersion += 1000;
+      fKeylen = Sizeof();
+   }
+
+   /// Register a new key for a data record of size nbytes
+   void Reserve(size_t nbytes, std::uint64_t *seekKey)
+   {
+      Create(nbytes);
+      *seekKey = fSeekKey;
+   }
+
+   ClassDefInlineOverride(RKeyBlob, 0)
+};
+
 } // namespace Internal
 } // namespace Experimental
 } // namespace ROOT
