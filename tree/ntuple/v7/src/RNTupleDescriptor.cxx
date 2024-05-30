@@ -219,6 +219,24 @@ ROOT::Experimental::RClusterDescriptor ROOT::Experimental::RClusterDescriptor::C
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool ROOT::Experimental::RExtraTypeInfoDescriptor::operator==(const RExtraTypeInfoDescriptor &other) const
+{
+   return fContentId == other.fContentId && fTypeName == other.fTypeName &&
+          fTypeVersionFrom == other.fTypeVersionFrom && fTypeVersionTo == other.fTypeVersionTo;
+}
+
+ROOT::Experimental::RExtraTypeInfoDescriptor ROOT::Experimental::RExtraTypeInfoDescriptor::Clone() const
+{
+   RExtraTypeInfoDescriptor clone;
+   clone.fContentId = fContentId;
+   clone.fTypeVersionFrom = fTypeVersionFrom;
+   clone.fTypeVersionTo = fTypeVersionTo;
+   clone.fTypeName = fTypeName;
+   clone.fContent = fContent;
+   return clone;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 bool ROOT::Experimental::RNTupleDescriptor::operator==(const RNTupleDescriptor &other) const
 {
@@ -492,6 +510,8 @@ std::unique_ptr<ROOT::Experimental::RNTupleDescriptor> ROOT::Experimental::RNTup
       clone->fClusterGroupDescriptors.emplace(d.first, d.second.Clone());
    for (const auto &d : fClusterDescriptors)
       clone->fClusterDescriptors.emplace(d.first, d.second.Clone());
+   for (const auto &d : fExtraTypeInfoDescriptors)
+      clone->fExtraTypeInfoDescriptors.emplace_back(d.Clone());
    if (fHeaderExtension)
       clone->fHeaderExtension = std::make_unique<RHeaderExtension>(*fHeaderExtension);
    return clone;
@@ -656,6 +676,18 @@ ROOT::Experimental::Internal::RColumnGroupDescriptorBuilder::MoveDescriptor()
       return R__FAIL("unset column group ID");
    RColumnGroupDescriptor result;
    std::swap(result, fColumnGroup);
+   return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+ROOT::Experimental::RResult<ROOT::Experimental::RExtraTypeInfoDescriptor>
+ROOT::Experimental::Internal::RExtraTypeInfoDescriptorBuilder::MoveDescriptor()
+{
+   if (fExtraTypeInfo.fContentId == EExtraTypeInfoIds::kInvalid)
+      throw RException(R__FAIL("invalid extra type info content id"));
+   RExtraTypeInfoDescriptor result;
+   std::swap(result, fExtraTypeInfo);
    return result;
 }
 
@@ -913,5 +945,17 @@ ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AddCluster(RClusterDescr
    if (fDescriptor.fClusterDescriptors.count(clusterId) > 0)
       return R__FAIL("cluster id clash");
    fDescriptor.fClusterDescriptors.emplace(clusterId, std::move(clusterDesc));
+   return RResult<void>::Success();
+}
+
+ROOT::Experimental::RResult<void>
+ROOT::Experimental::Internal::RNTupleDescriptorBuilder::AddExtraTypeInfo(RExtraTypeInfoDescriptor &&extraTypeInfoDesc)
+{
+   // Make sure we have no duplicates
+   if (std::find(fDescriptor.fExtraTypeInfoDescriptors.begin(), fDescriptor.fExtraTypeInfoDescriptors.end(),
+                 extraTypeInfoDesc) != fDescriptor.fExtraTypeInfoDescriptors.end()) {
+      return R__FAIL("extra type info duplicates");
+   }
+   fDescriptor.fExtraTypeInfoDescriptors.emplace_back(std::move(extraTypeInfoDesc));
    return RResult<void>::Success();
 }

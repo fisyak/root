@@ -35,6 +35,7 @@ protected:
 
    void InitImpl(RNTupleModel &) final {}
    void UpdateSchema(const ROOT::Experimental::Internal::RNTupleModelChangeset &, NTupleSize_t) final {}
+   void UpdateExtraTypeInfo(const ROOT::Experimental::RExtraTypeInfoDescriptor &) final {}
    void CommitPage(ColumnHandle_t /*columnHandle*/, const RPage & /*page*/) final { fCounters.fNCommitPage++; }
    void CommitSealedPage(ROOT::Experimental::DescriptorId_t, const RPageStorage::RSealedPage &) final
    {
@@ -46,7 +47,7 @@ protected:
    }
    std::uint64_t CommitCluster(NTupleSize_t) final { return 0; }
    void CommitClusterGroup() final {}
-   void CommitDataset() final {}
+   void CommitDatasetImpl() final {}
 
    RPage ReservePage(ColumnHandle_t columnHandle, std::size_t nElements) final
    {

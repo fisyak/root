@@ -51,11 +51,12 @@ protected:
 
    void InitImpl(RNTupleModel &) final {}
    void UpdateSchema(const ROOT::Experimental::Internal::RNTupleModelChangeset &, NTupleSize_t) final {}
+   void UpdateExtraTypeInfo(const ROOT::Experimental::RExtraTypeInfoDescriptor &) final {}
    void CommitSealedPage(ROOT::Experimental::DescriptorId_t, const RPageStorage::RSealedPage &) final {}
    void CommitSealedPageV(std::span<RPageStorage::RSealedPageGroup>) final {}
    std::uint64_t CommitCluster(NTupleSize_t) final { return 0; }
    void CommitClusterGroup() final {}
-   void CommitDataset() final {}
+   void CommitDatasetImpl() final {}
 
    RPage ReservePage(ColumnHandle_t, std::size_t) final { return {}; }
    void ReleasePage(RPage &) final {}

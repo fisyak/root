@@ -71,6 +71,7 @@ public:
    {
       ConnectFields(changeset.fAddedFields, firstEntry);
    }
+   void UpdateExtraTypeInfo(const RExtraTypeInfoDescriptor &) final {}
 
    void CommitPage(ColumnHandle_t, const RPage &page) final { fNBytesCurrentCluster += page.GetNBytes(); }
    void CommitSealedPage(DescriptorId_t, const RSealedPage &page) final { fNBytesCurrentCluster += page.fSize; }
@@ -90,7 +91,7 @@ public:
       return bytes;
    }
    void CommitClusterGroup() final {}
-   void CommitDataset() final {}
+   void CommitDatasetImpl() final {}
 };
 
 } // namespace Internal

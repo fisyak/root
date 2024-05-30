@@ -1,4 +1,4 @@
-# RNTuple Reference Specifications 0.2.1.0
+# RNTuple Reference Specifications 0.2.2.0
 
 **Note:** This is work in progress. The RNTuple specification is not yet finalized.
 
@@ -467,11 +467,11 @@ The type information record frame has the following contents
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
++                       Content Identifier                      +
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |                        Type Version From                      |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |                         Type Version To                       |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-+                       Content Identifier                      +
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
@@ -484,8 +484,13 @@ The following kinds of content are supported:
 
 | Content identifier  | Meaning of content                                  |
 |---------------------|-----------------------------------------------------|
-| 0x01                | String: C++ definition of the type                  |
+| 0x00                | Serialized ROOT streamer info; see notes            |
 
+The serialized ROOT streamer info is not bound to a specific type.
+It is the combined streamer information from all the unsplit fields.
+Writers set version from/to to zero and use an empty type name.
+Readers should ignore the type-specific information.
+The format of the content is a ROOT streamed TList of TStreamerInfo objects.
 
 ### Footer Envelope
 
@@ -778,6 +783,8 @@ Variants are stored in $n+1$ fields:
 
 The dispatch tag ranges from 1 to $n$.
 A value of 0 indicates that the variant is in the invalid state, i.e., it does not hold any of the valid alternatives.
+Variants must not have more than 125 subfields.
+This follows common compiler implementation limits.
 
 #### std::pair<T1, T2>
 

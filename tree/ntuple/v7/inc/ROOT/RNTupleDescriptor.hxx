@@ -53,6 +53,7 @@ class RColumnDescriptorBuilder;
 class RColumnGroupDescriptorBuilder;
 class RClusterDescriptorBuilder;
 class RClusterGroupDescriptorBuilder;
+class RExtraTypeInfoDescriptorBuilder;
 class RFieldDescriptorBuilder;
 class RNTupleDescriptorBuilder;
 } // namespace Internal
@@ -396,6 +397,50 @@ public:
    bool HasClusterDetails() const { return !fClusterIds.empty(); }
 };
 
+/// Used in RExtraTypeInfoDescriptor
+enum class EExtraTypeInfoIds { kInvalid, kStreamerInfo };
+
+// clang-format off
+/**
+\class ROOT::Experimental::RExtraTypeInfoDescriptor
+\ingroup NTuple
+\brief Field specific extra type information from the header / extenstion header
+
+Currently only used by unsplit fields to store RNTuple-wide list of streamer info records.
+*/
+// clang-format on
+class RExtraTypeInfoDescriptor {
+   friend class Internal::RExtraTypeInfoDescriptorBuilder;
+
+private:
+   /// Specifies the meaning of the extra information
+   EExtraTypeInfoIds fContentId = EExtraTypeInfoIds::kInvalid;
+   /// Extra type information restricted to a certain version range of the type
+   std::uint32_t fTypeVersionFrom = 0;
+   std::uint32_t fTypeVersionTo = 0;
+   /// The type name the extra information refers to; empty for RNTuple-wide extra information
+   std::string fTypeName;
+   /// The content format depends on the content ID and may be binary
+   std::string fContent;
+
+public:
+   RExtraTypeInfoDescriptor() = default;
+   RExtraTypeInfoDescriptor(const RExtraTypeInfoDescriptor &other) = delete;
+   RExtraTypeInfoDescriptor &operator=(const RExtraTypeInfoDescriptor &other) = delete;
+   RExtraTypeInfoDescriptor(RExtraTypeInfoDescriptor &&other) = default;
+   RExtraTypeInfoDescriptor &operator=(RExtraTypeInfoDescriptor &&other) = default;
+
+   bool operator==(const RExtraTypeInfoDescriptor &other) const;
+
+   RExtraTypeInfoDescriptor Clone() const;
+
+   EExtraTypeInfoIds GetContentId() const { return fContentId; }
+   std::uint32_t GetTypeVersionFrom() const { return fTypeVersionFrom; }
+   std::uint32_t GetTypeVersionTo() const { return fTypeVersionTo; }
+   std::string GetTypeName() const { return fTypeName; }
+   std::string GetContent() const { return fContent; }
+};
+
 // clang-format off
 /**
 \class ROOT::Experimental::RNTupleDescriptor
@@ -454,6 +499,7 @@ private:
    /// May contain only a subset of all the available clusters, e.g. the clusters of the current file
    /// from a chain of files
    std::unordered_map<DescriptorId_t, RClusterDescriptor> fClusterDescriptors;
+   std::vector<RExtraTypeInfoDescriptor> fExtraTypeInfoDescriptors;
    std::unique_ptr<RHeaderExtension> fHeaderExtension;
 
 public:
@@ -693,6 +739,54 @@ public:
       RIterator end() { return RIterator(fNTuple, fNTuple.GetNActiveClusters()); }
    };
 
+   // clang-format off
+   /**
+   \class ROOT::Experimental::RNTupleDescriptor::RExtraTypeInfoDescriptorIterable
+   \ingroup NTuple
+   \brief Used to loop over all the extra type info record of an ntuple (in unspecified order)
+   */
+   // clang-format on
+   class RExtraTypeInfoDescriptorIterable {
+   private:
+      /// The associated NTuple for this range.
+      const RNTupleDescriptor &fNTuple;
+
+   public:
+      class RIterator {
+      private:
+         /// The enclosing range's NTuple.
+         const RNTupleDescriptor &fNTuple;
+         std::size_t fIndex = 0;
+
+      public:
+         using iterator_category = std::forward_iterator_tag;
+         using iterator = RIterator;
+         using value_type = RExtraTypeInfoDescriptor;
+         using difference_type = std::ptrdiff_t;
+         using pointer = RExtraTypeInfoDescriptor *;
+         using reference = const RExtraTypeInfoDescriptor &;
+
+         RIterator(const RNTupleDescriptor &ntuple, std::size_t index) : fNTuple(ntuple), fIndex(index) {}
+         iterator operator++()
+         {
+            ++fIndex;
+            return *this;
+         }
+         reference operator*()
+         {
+            auto it = fNTuple.fExtraTypeInfoDescriptors.begin();
+            std::advance(it, fIndex);
+            return *it;
+         }
+         bool operator!=(const iterator &rh) const { return fIndex != rh.fIndex; }
+         bool operator==(const iterator &rh) const { return fIndex == rh.fIndex; }
+      };
+
+      RExtraTypeInfoDescriptorIterable(const RNTupleDescriptor &ntuple) : fNTuple(ntuple) {}
+      RIterator begin() { return RIterator(fNTuple, 0); }
+      RIterator end() { return RIterator(fNTuple, fNTuple.GetNExtraTypeInfos()); }
+   };
+
    RNTupleDescriptor() = default;
    RNTupleDescriptor(const RNTupleDescriptor &other) = delete;
    RNTupleDescriptor &operator=(const RNTupleDescriptor &other) = delete;
@@ -766,6 +860,8 @@ public:
       return RClusterDescriptorIterable(*this);
    }
 
+   RExtraTypeInfoDescriptorIterable GetExtraTypeInfoIterable() const { return RExtraTypeInfoDescriptorIterable(*this); }
+
    std::string GetName() const { return fName; }
    std::string GetDescription() const { return fDescription; }
 
@@ -775,6 +871,7 @@ public:
    std::size_t GetNClusterGroups() const { return fClusterGroupDescriptors.size(); }
    std::size_t GetNClusters() const { return fNClusters; }
    std::size_t GetNActiveClusters() const { return fClusterDescriptors.size(); }
+   std::size_t GetNExtraTypeInfos() const { return fExtraTypeInfoDescriptors.size(); }
 
    /// We know the number of entries from adding the cluster summaries
    NTupleSize_t GetNEntries() const { return fNEntries; }
@@ -1075,6 +1172,49 @@ public:
 
 // clang-format off
 /**
+\class ROOT::Experimental::Internal::RExtraTypeInfoDescriptorBuilder
+\ingroup NTuple
+\brief A helper class for piece-wise construction of an RExtraTypeInfoDescriptor
+*/
+// clang-format on
+class RExtraTypeInfoDescriptorBuilder {
+private:
+   RExtraTypeInfoDescriptor fExtraTypeInfo;
+
+public:
+   RExtraTypeInfoDescriptorBuilder() = default;
+
+   RExtraTypeInfoDescriptorBuilder &ContentId(EExtraTypeInfoIds contentId)
+   {
+      fExtraTypeInfo.fContentId = contentId;
+      return *this;
+   }
+   RExtraTypeInfoDescriptorBuilder &TypeVersionFrom(std::uint32_t typeVersionFrom)
+   {
+      fExtraTypeInfo.fTypeVersionFrom = typeVersionFrom;
+      return *this;
+   }
+   RExtraTypeInfoDescriptorBuilder &TypeVersionTo(std::uint32_t typeVersionTo)
+   {
+      fExtraTypeInfo.fTypeVersionTo = typeVersionTo;
+      return *this;
+   }
+   RExtraTypeInfoDescriptorBuilder &TypeName(const std::string &typeName)
+   {
+      fExtraTypeInfo.fTypeName = typeName;
+      return *this;
+   }
+   RExtraTypeInfoDescriptorBuilder &Content(const std::string &content)
+   {
+      fExtraTypeInfo.fContent = content;
+      return *this;
+   }
+
+   RResult<RExtraTypeInfoDescriptor> MoveDescriptor();
+};
+
+// clang-format off
+/**
 \class ROOT::Experimental::Internal::RNTupleDescriptorBuilder
 \ingroup NTuple
 \brief A helper class for piece-wise construction of an RNTupleDescriptor
@@ -1116,6 +1256,8 @@ public:
 
    RResult<void> AddClusterGroup(RClusterGroupDescriptor &&clusterGroup);
    RResult<void> AddCluster(RClusterDescriptor &&clusterDesc);
+
+   RResult<void> AddExtraTypeInfo(RExtraTypeInfoDescriptor &&extraTypeInfoDesc);
 
    /// Clears so-far stored clusters, fields, and columns and return to a pristine ntuple descriptor
    void Reset();

@@ -360,6 +360,13 @@ ROOT::Experimental::Internal::RPageSink::SealPage(const RPage &page, const RColu
    return SealPage(page, element, compressionSetting, fCompressor->GetZipBuffer());
 }
 
+void ROOT::Experimental::Internal::RPageSink::CommitDataset()
+{
+   for (const auto &cb : fOnDatasetCommitCallbacks)
+      cb(*this);
+   CommitDatasetImpl();
+}
+
 //------------------------------------------------------------------------------
 
 std::unique_ptr<ROOT::Experimental::Internal::RPageSink>
@@ -457,6 +464,15 @@ void ROOT::Experimental::Internal::RPagePersistentSink::UpdateSchema(const RNTup
    // header was already serialized, this has to be done manually as it is required for page list serialization.
    if (fSerializationContext.GetHeaderSize() > 0)
       fSerializationContext.MapSchema(descriptor, /*forHeaderExtension=*/true);
+}
+
+void ROOT::Experimental::Internal::RPagePersistentSink::UpdateExtraTypeInfo(
+   const RExtraTypeInfoDescriptor &extraTypeInfo)
+{
+   if (extraTypeInfo.GetContentId() != EExtraTypeInfoIds::kStreamerInfo)
+      throw RException(R__FAIL("ROOT bug: unexpected type extra info in UpdateExtraTypeInfo()"));
+
+   fStreamerInfos.merge(RNTupleSerializer::DeserializeStreamerInfos(extraTypeInfo.GetContent()).Unwrap());
 }
 
 void ROOT::Experimental::Internal::RPagePersistentSink::InitImpl(RNTupleModel &model)
@@ -632,8 +648,15 @@ void ROOT::Experimental::Internal::RPagePersistentSink::CommitClusterGroup()
    fNextClusterInGroup = nClusters;
 }
 
-void ROOT::Experimental::Internal::RPagePersistentSink::CommitDataset()
+void ROOT::Experimental::Internal::RPagePersistentSink::CommitDatasetImpl()
 {
+   if (!fStreamerInfos.empty()) {
+      RExtraTypeInfoDescriptorBuilder extraInfoBuilder;
+      extraInfoBuilder.ContentId(EExtraTypeInfoIds::kStreamerInfo)
+         .Content(RNTupleSerializer::SerializeStreamerInfos(fStreamerInfos));
+      fDescriptorBuilder.AddExtraTypeInfo(extraInfoBuilder.MoveDescriptor().Unwrap());
+   }
+
    const auto &descriptor = fDescriptorBuilder.GetDescriptor();
 
    auto szFooter = RNTupleSerializer::SerializeFooter(nullptr, descriptor, fSerializationContext);

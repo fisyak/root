@@ -19,6 +19,7 @@
 #include <ROOT/RColumn.hxx>
 #include <ROOT/RError.hxx>
 #include <ROOT/RColumnElement.hxx>
+#include <ROOT/RNTupleSerialize.hxx>
 #include <ROOT/RNTupleUtil.hxx>
 #include <ROOT/RSpan.hxx>
 #include <string_view>
@@ -47,11 +48,13 @@
 #include <typeinfo>
 #include <variant>
 #include <vector>
+#include <unordered_map>
 #include <utility>
 
 class TClass;
 class TEnum;
 class TObject;
+class TVirtualStreamerInfo;
 
 namespace ROOT {
 
@@ -524,12 +527,19 @@ protected:
 
    // Perform housekeeping tasks for global to cluster-local index translation
    virtual void CommitClusterImpl() {}
+   // The field can indicate that it needs to register extra type information in the on-disk schema.
+   // In this case, a callback from the page sink to the field will be registered on connect, so that the
+   // extra type information can be collected when the dataset gets committed.
+   virtual bool HasExtraTypeInfo() const { return false; }
+   // The page sink's callback when the data set gets committed will call this method to get the field's extra
+   // type information. This has to happen at the end of writing because the type information may change depending
+   // on the data that's written, e.g. for polymorphic types in the unsplit field.
+   virtual RExtraTypeInfoDescriptor GetExtraTypeInfo() const { return RExtraTypeInfoDescriptor(); }
 
    /// Add a new subfield to the list of nested fields
    void Attach(std::unique_ptr<RFieldBase> child);
 
-   /// Called by `ConnectPageSource()` only once connected; derived classes may override this
-   /// as appropriate
+   /// Called by `ConnectPageSource()` once connected; derived classes may override this as appropriate
    virtual void OnConnectPageSource() {}
 
    /// Factory method to resurrect a field from the stored on-disk type information.  This overload takes an already
@@ -826,6 +836,7 @@ private:
    };
 
    TClass *fClass = nullptr;
+   Internal::RNTupleSerializer::StreamerInfoMap_t fStreamerInfos; ///< streamer info records seen during writing
    ClusterSize_t fIndex; ///< number of bytes written in the current cluster
 
 private:
@@ -847,6 +858,10 @@ protected:
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
 
    void CommitClusterImpl() final { fIndex = 0; }
+
+   bool HasExtraTypeInfo() const final { return true; }
+   // Returns the list of seen streamer infos
+   RExtraTypeInfoDescriptor GetExtraTypeInfo() const final;
 
 public:
    RUnsplitField(std::string_view fieldName, std::string_view className, std::string_view typeAlias = "");
@@ -1349,14 +1364,22 @@ public:
 /// The generic field for std::variant types
 class RVariantField : public RFieldBase {
 private:
+   // Most compilers support at least 255 variants (256 - 1 value for the empty variant).
+   // Some compilers switch to a two-byte tag field already with 254 variants.
+   // MSVC only supports 163 variants in older versions, 250 in newer ones. It switches to a 2 byte
+   // tag as of 128 variants (at least in debug mode), so for simplicity we set the limit to 125 variants.
+   static constexpr std::size_t kMaxVariants = 125;
+
    class RVariantDeleter : public RDeleter {
    private:
       std::size_t fTagOffset;
+      std::size_t fVariantOffset;
       std::vector<std::unique_ptr<RDeleter>> fItemDeleters;
 
    public:
-      RVariantDeleter(std::size_t tagOffset, std::vector<std::unique_ptr<RDeleter>> &itemDeleters)
-         : fTagOffset(tagOffset), fItemDeleters(std::move(itemDeleters))
+      RVariantDeleter(std::size_t tagOffset, std::size_t variantOffset,
+                      std::vector<std::unique_ptr<RDeleter>> &itemDeleters)
+         : fTagOffset(tagOffset), fVariantOffset(variantOffset), fItemDeleters(std::move(itemDeleters))
       {
       }
       void operator()(void *objPtr, bool dtorOnly) final;
@@ -1366,12 +1389,17 @@ private:
    size_t fMaxAlignment = 1;
    /// In the std::variant memory layout, at which byte number is the index stored
    size_t fTagOffset = 0;
+   /// In the std::variant memory layout, the actual union of types may start at an offset > 0
+   size_t fVariantOffset = 0;
    std::vector<ClusterSize_t::ValueType> fNWritten;
 
    static std::string GetTypeList(const std::vector<RFieldBase *> &itemFields);
    /// Extracts the index from an std::variant and transforms it into the 1-based index used for the switch column
-   static std::uint32_t GetTag(const void *variantPtr, std::size_t tagOffset);
-   static void SetTag(void *variantPtr, std::size_t tagOffset, std::uint32_t tag);
+   /// The implementation supports two memory layouts that are in use: a trailing unsigned byte, zero-indexed,
+   /// having the exception caused empty state encoded by the max tag value,
+   /// or a trailing unsigned int instead of a char.
+   static std::uint8_t GetTag(const void *variantPtr, std::size_t tagOffset);
+   static void SetTag(void *variantPtr, std::size_t tagOffset, std::uint8_t tag);
 
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final;
@@ -1396,7 +1424,7 @@ public:
    ~RVariantField() override = default;
 
    size_t GetValueSize() const final;
-   size_t GetAlignment() const final { return fMaxAlignment; }
+   size_t GetAlignment() const final;
 };
 
 /// The generic field for a std::set<Type> and std::unordered_set<Type>
