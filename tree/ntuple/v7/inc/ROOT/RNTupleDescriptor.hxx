@@ -226,13 +226,13 @@ public:
    /// The window of element indexes of a particular column in a particular cluster
    struct RColumnRange {
       DescriptorId_t fPhysicalColumnId = kInvalidDescriptorId;
-      /// A 64bit element index
+      /// The global index of the first column element in the cluster
       NTupleSize_t fFirstElementIndex = kInvalidNTupleIndex;
       /// The number of column elements in the cluster
       ClusterSize_t fNElements = kInvalidClusterIndex;
       /// The usual format for ROOT compression settings (see Compression.h).
       /// The pages of a particular column in a particular cluster are all compressed with the same settings.
-      std::int64_t fCompressionSettings = 0;
+      int fCompressionSettings = kUnknownCompressionSettings;
 
       // TODO(jblomer): we perhaps want to store summary information, such as average, min/max, etc.
       // Should this be done on the field level?
@@ -1082,10 +1082,10 @@ public:
    RResult<void> CommitColumnRange(DescriptorId_t physicalId, std::uint64_t firstElementIndex,
                                    std::uint32_t compressionSettings, const RClusterDescriptor::RPageRange &pageRange);
 
-   /// Add column and page ranges for deferred columns missing in this cluster.  The locator type for the synthesized
-   /// page ranges is `kTypePageZero`.  All the page sources must be able to populate the 'zero' page from such locator.
-   /// Any call to `CommitColumnRange()` should happen before calling this function.
-   RClusterDescriptorBuilder &AddDeferredColumnRanges(const RNTupleDescriptor &desc);
+   /// Add column and page ranges for columns created during late model extension missing in this cluster.  The locator
+   /// type for the synthesized page ranges is `kTypePageZero`.  All the page sources must be able to populate the
+   /// 'zero' page from such locator. Any call to `CommitColumnRange()` should happen before calling this function.
+   RClusterDescriptorBuilder &AddExtendedColumnRanges(const RNTupleDescriptor &desc);
 
    /// Move out the full cluster descriptor including page locations
    RResult<RClusterDescriptor> MoveDescriptor();

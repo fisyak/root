@@ -572,7 +572,7 @@ ROOT::Experimental::RResult<void> ROOT::Experimental::Internal::RClusterDescript
 }
 
 ROOT::Experimental::Internal::RClusterDescriptorBuilder &
-ROOT::Experimental::Internal::RClusterDescriptorBuilder::AddDeferredColumnRanges(const RNTupleDescriptor &desc)
+ROOT::Experimental::Internal::RClusterDescriptorBuilder::AddExtendedColumnRanges(const RNTupleDescriptor &desc)
 {
    /// Carries out a depth-first traversal of a field subtree rooted at `rootFieldId`.  For each field, `visitField` is
    /// called passing the field ID and the number of overall repetitions, taking into account the repetitions of each
@@ -586,7 +586,7 @@ ROOT::Experimental::Internal::RClusterDescriptorBuilder::AddDeferredColumnRanges
       }
    };
 
-   // Deferred columns can only be part of the header extension
+   // Extended columns can only be part of the header extension
    auto xHeader = desc.GetHeaderExtension();
    if (!xHeader)
       return *this;
@@ -600,15 +600,20 @@ ROOT::Experimental::Internal::RClusterDescriptorBuilder::AddDeferredColumnRanges
                const DescriptorId_t physicalId = c.GetPhysicalId();
                auto &columnRange = fCluster.fColumnRanges[physicalId];
                auto &pageRange = fCluster.fPageRanges[physicalId];
-               // Initialize a RColumnRange for `physicalId` if it was not there
+               // Initialize a RColumnRange for `physicalId` if it was not there. Columns that were created during model
+               // extension won't have on-disk metadata for the clusters that were already committed before the model
+               // was extended. Therefore, these need to be synthetically initialized upon reading.
                if (columnRange.fPhysicalColumnId == kInvalidDescriptorId) {
                   columnRange.fPhysicalColumnId = physicalId;
+                  columnRange.fFirstElementIndex = 0;
+                  columnRange.fNElements = 0;
+
                   pageRange.fPhysicalColumnId = physicalId;
                }
-               // Fixup the RColumnRange and RPageRange in deferred columns.  We know what the first element index and
+               // Fixup the RColumnRange and RPageRange in deferred columns. We know what the first element index and
                // number of elements should have been if the column was not deferred; fix those and let
                // `ExtendToFitColumnRange()` synthesize RPageInfos accordingly.
-               // Note that a column whose first element index is != 0 already met the criteria of
+               // Note that a deferred column (i.e, whose first element index is > 0) already met the criteria of
                // `RFieldBase::EntryToColumnElementIndex()`, i.e. it is a principal column reachable from the field zero
                // excluding subfields of collection and variant fields.
                if (c.IsDeferredColumn()) {

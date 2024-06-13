@@ -1,4 +1,4 @@
-# RNTuple Reference Specifications 0.2.2.0
+# RNTuple Reference Specifications 0.2.3.0
 
 **Note:** This is work in progress. The RNTuple specification is not yet finalized.
 
@@ -86,11 +86,19 @@ The current (class version 5) **ROOT::Experimental::RNTuple** object has the fol
 +                         Len Footer                            +
 |                                                               |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               | 
++                        Max Key Size                           +
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 ```
 
 When serialized to disk, a 64 bit checksum is appended to the anchor, calculated as the XXH3 hash of
 all the (serialized) fields of the anchor object.
+
+Note that, since the anchor is serialized as a "classic" TFile key, all integers in the anchor, as well
+as the checksum, are encoded in **big-endian**, unlike the RNTuple payload which is encoded in little-endian.
+
 The anchor may evolve in future versions only by appending new fields to the existing schema, but
 fields will not be removed, renamed or reordered.
 

@@ -258,18 +258,37 @@ void ROOT::Experimental::Internal::RPageSourceFile::InitDescriptor(const RNTuple
    }
 
    fDescriptorBuilder.SetOnDiskHeaderSize(anchor.GetNBytesHeader());
-   auto buffer = std::make_unique<unsigned char[]>(anchor.GetLenHeader());
-   auto zipBuffer = std::make_unique<unsigned char[]>(anchor.GetNBytesHeader());
-   fReader.ReadBuffer(zipBuffer.get(), anchor.GetNBytesHeader(), anchor.GetSeekHeader());
-   fDecompressor->Unzip(zipBuffer.get(), anchor.GetNBytesHeader(), anchor.GetLenHeader(), buffer.get());
-   RNTupleSerializer::DeserializeHeader(buffer.get(), anchor.GetLenHeader(), fDescriptorBuilder);
-
    fDescriptorBuilder.AddToOnDiskFooterSize(anchor.GetNBytesFooter());
-   buffer = std::make_unique<unsigned char[]>(anchor.GetLenFooter());
-   zipBuffer = std::make_unique<unsigned char[]>(anchor.GetNBytesFooter());
-   fReader.ReadBuffer(zipBuffer.get(), anchor.GetNBytesFooter(), anchor.GetSeekFooter());
-   fDecompressor->Unzip(zipBuffer.get(), anchor.GetNBytesFooter(), anchor.GetLenFooter(), buffer.get());
-   RNTupleSerializer::DeserializeFooter(buffer.get(), anchor.GetLenFooter(), fDescriptorBuilder);
+
+   const auto bufSize =
+      anchor.GetNBytesHeader() + anchor.GetNBytesFooter() + std::max(anchor.GetLenHeader(), anchor.GetLenFooter());
+   auto buffer = std::make_unique<unsigned char[]>(bufSize);
+   auto headerBuf = buffer.get();
+   auto footerBuf = headerBuf + anchor.GetNBytesHeader();
+   auto unzipBuf = footerBuf + anchor.GetNBytesFooter();
+
+   auto readvLimits = fFile->GetReadVLimits();
+   if ((readvLimits.fMaxReqs < 2) ||
+       (std::max(anchor.GetNBytesHeader(), anchor.GetNBytesFooter()) > readvLimits.fMaxSingleSize) ||
+       (anchor.GetNBytesHeader() + anchor.GetNBytesFooter() > readvLimits.fMaxTotalSize)) {
+      Detail::RNTupleAtomicTimer timer(fCounters->fTimeWallRead, fCounters->fTimeCpuRead);
+      fReader.ReadBuffer(headerBuf, anchor.GetNBytesHeader(), anchor.GetSeekHeader());
+      fReader.ReadBuffer(footerBuf, anchor.GetNBytesFooter(), anchor.GetSeekFooter());
+      fCounters->fNRead.Add(2);
+   } else {
+      Detail::RNTupleAtomicTimer timer(fCounters->fTimeWallRead, fCounters->fTimeCpuRead);
+      ROOT::Internal::RRawFile::RIOVec readRequests[2] = {
+         {headerBuf, anchor.GetSeekHeader(), anchor.GetNBytesHeader(), 0},
+         {footerBuf, anchor.GetSeekFooter(), anchor.GetNBytesFooter(), 0}};
+      fFile->ReadV(readRequests, 2);
+      fCounters->fNReadV.Inc();
+   }
+
+   fDecompressor->Unzip(headerBuf, anchor.GetNBytesHeader(), anchor.GetLenHeader(), unzipBuf);
+   RNTupleSerializer::DeserializeHeader(unzipBuf, anchor.GetLenHeader(), fDescriptorBuilder);
+
+   fDecompressor->Unzip(footerBuf, anchor.GetNBytesFooter(), anchor.GetLenFooter(), unzipBuf);
+   RNTupleSerializer::DeserializeFooter(unzipBuf, anchor.GetLenFooter(), fDescriptorBuilder);
 }
 
 std::unique_ptr<ROOT::Experimental::Internal::RPageSourceFile>

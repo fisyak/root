@@ -488,7 +488,7 @@ class TPavePainter extends ObjectPainter {
       if (!text_g) text_g = this.draw_g;
 
       const fast = (nlines === 1) && pp._fast_drawing;
-      let num_default = 0;
+      let num_default = 0, is_any_text = false;
 
       for (let nline = 0; nline < nlines; ++nline) {
          const entry = arr[nline], texty = nline*stepy;
@@ -500,7 +500,7 @@ class TPavePainter extends ObjectPainter {
 
                let color = entry.fTextColor ? this.getColor(entry.fTextColor) : '';
                if (!color) color = this.textatt.color;
-
+               is_any_text = true;
                if (entry.fX || entry.fY || entry.fTextSize) {
                   // individual positioning
                   const align = entry.fTextAlign || this.textatt.align,
@@ -556,6 +556,9 @@ class TPavePainter extends ObjectPainter {
 
       if (num_default > 0)
          promises.push(this.finishTextDrawing(text_g, num_default > 1));
+
+      if (this.isTitle())
+         this.draw_g.style('display', !is_any_text ? 'none' : null);
 
       if (draw_header) {
          const x = Math.round(width*0.25),
@@ -700,10 +703,8 @@ class TPavePainter extends ObjectPainter {
             if ('fLineColor' in mo) o_line = mo;
             if ('fFillColor' in mo) o_fill = mo;
             if ('fMarkerColor' in mo) o_marker = mo;
-
             painter = pp.findPainterFor(mo);
          }
-
 
          // Draw fill pattern (in a box)
          if (draw_fill) {
@@ -722,6 +723,8 @@ class TPavePainter extends ObjectPainter {
                               .attr('d', `M${x0 + padding_x},${Math.round(pos_y+step_y*0.1)}v${Math.round(step_y*0.8)}h${tpos_x-2*padding_x-x0}v${-Math.round(step_y*0.8)}z`);
                if (!fillatt.empty())
                   rect.call(fillatt.func);
+               else
+                  rect.style('fill', 'none');
                if (lineatt)
                   rect.call(lineatt.func);
             }
@@ -835,7 +838,7 @@ class TPavePainter extends ObjectPainter {
             contour = main.fContour,
             levels = contour?.getLevels(),
             is_th3 = isFunc(main.getDimension) && (main.getDimension() === 3),
-            log = (is_th3 ? pad?.fLogv : pad?.fLogz) ?? 0,
+            log = pad?.fLogv ?? (is_th3 ? false : pad?.fLogz),
             draw_palette = main._color_palette,
             zaxis = main.getObject()?.fZaxis,
             sizek = pad?.fTickz ? 0.35 : 0.7;
@@ -889,12 +892,12 @@ class TPavePainter extends ObjectPainter {
 
       if (this._palette_vertical) {
          this._swap_side = palette.fX2NDC < 0.5;
-         this.z_handle.configureAxis('zaxis', gzmin, gzmax, zmin, zmax, true, [0, s_height], { log, fixed_ticks: cjust ? levels : null, maxTickSize: Math.round(s_width*sizek), swap_side: this._swap_side });
+         this.z_handle.configureAxis('zaxis', gzmin, gzmax, zmin, zmax, true, [0, s_height], { log, fixed_ticks: cjust ? levels : null, maxTickSize: Math.round(s_width*sizek), swap_side: this._swap_side, minposbin: main.gminposbin });
          axis_transform = this._swap_side ? null : `translate(${s_width})`;
          if (pad?.fTickz) axis_second = this._swap_side ? s_width : -s_width;
       } else {
          this._swap_side = palette.fY1NDC > 0.5;
-         this.z_handle.configureAxis('zaxis', gzmin, gzmax, zmin, zmax, false, [0, s_width], { log, fixed_ticks: cjust ? levels : null, maxTickSize: Math.round(s_height*sizek), swap_side: this._swap_side });
+         this.z_handle.configureAxis('zaxis', gzmin, gzmax, zmin, zmax, false, [0, s_width], { log, fixed_ticks: cjust ? levels : null, maxTickSize: Math.round(s_height*sizek), swap_side: this._swap_side, minposbin: main.gminposbin });
          axis_transform = this._swap_side ? null : `translate(0,${s_height})`;
          if (pad?.fTickz) axis_second = this._swap_side ? s_height : -s_height;
       }
@@ -1014,9 +1017,10 @@ class TPavePainter extends ObjectPainter {
          zoom_rect = null;
          doing_zoom = false;
 
-         const z = this.z_handle.gr, z1 = z.invert(sel1), z2 = z.invert(sel2);
+         const z1 = this.z_handle.revertPoint(sel1),
+               z2 = this.z_handle.revertPoint(sel2);
 
-         this.getFramePainter().zoom('z', Math.min(z1, z2), Math.max(z1, z2));
+         this.getFramePainter().zoomSingle('z', Math.min(z1, z2), Math.max(z1, z2), true);
       }, startRectSel = evnt => {
          // ignore when touch selection is activated
          if (doing_zoom) return;
@@ -1050,7 +1054,7 @@ class TPavePainter extends ObjectPainter {
       if (settings.Zooming) {
          this.draw_g.selectAll('.axis_zoom')
                     .on('mousedown', startRectSel)
-                    .on('dblclick', () => this.getFramePainter().unzoom('z'));
+                    .on('dblclick', () => this.getFramePainter().zoomSingle('z', 0, 0, true));
       }
 
       if (settings.ZoomWheel) {
@@ -1059,7 +1063,7 @@ class TPavePainter extends ObjectPainter {
                   coord = this._palette_vertical ? (1 - pos[1] / s_height) : pos[0] / s_width,
                   item = this.z_handle.analyzeWheelEvent(evnt, coord);
             if (item?.changed)
-               this.getFramePainter().zoom('z', item.min, item.max);
+               this.getFramePainter().zoomSingle('z', item.min, item.max, true);
          });
        }
    }

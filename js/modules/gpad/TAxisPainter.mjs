@@ -11,12 +11,17 @@ import { FontHandler } from '../base/FontHandler.mjs';
   * @private */
 function getTimeOffset(axis) {
    const dflt_time_offset = 788918400000;
+
    if (!axis) return dflt_time_offset;
    const idF = axis.fTimeFormat.indexOf('%F');
    if (idF < 0) return gStyle.fTimeOffset * 1000;
    let sof = axis.fTimeFormat.slice(idF + 2);
    // default string in axis offset
-   if (sof.indexOf('1995-01-01 00:00:00s0') === 0) return dflt_time_offset;
+   if (sof.indexOf('1995-01-01 00:00:00s0') === 0)
+      return dflt_time_offset;
+   // another default string with unix time
+   if (sof.indexOf('1970-01-01 00:00:00s0') === 0)
+      return 0;
    // special case, used from DABC painters
    if ((sof === '0') || (sof === '')) return 0;
 
@@ -34,10 +39,9 @@ function getTimeOffset(axis) {
       hour = next(':', 0, 23),
       min = next(':', 0, 59),
       sec = next('s', 0, 59),
-      msec = next(' ', 0, 999),
-      dt = new Date(Date.UTC(year, month, day, hour, min, sec, msec));
+      msec = next(' ', 0, 999);
 
-   let offset = dt.getTime();
+   let offset = Date.UTC(year, month, day, hour, min, sec, msec);
 
    // now also handle suffix like GMT or GMT -0600
    sof = sof.toUpperCase();
@@ -115,7 +119,18 @@ const AxisPainterMethods = {
 
    /** @summary Convert axis value into the Date object */
    convertDate(v) {
-      return new Date(this.timeoffset + v*1000);
+      const dt = new Date(this.timeoffset + v*1000);
+      let res = dt;
+      if (!this.timegmt && settings.TimeZone) {
+         try {
+            const ms = dt.getMilliseconds();
+            res = new Date(dt.toLocaleString('en-US', { timeZone: settings.TimeZone }));
+            res.setMilliseconds(ms);
+         } catch (err) {
+            res = dt;
+         }
+      }
+      return res;
    },
 
    /** @summary Convert graphical point back into axis value */
@@ -125,8 +140,8 @@ const AxisPainterMethods = {
    },
 
    /** @summary Provide label for time axis */
-   formatTime(d, asticks) {
-      return asticks ? this.tfunc1(d) : this.tfunc2(d);
+   formatTime(dt, asticks) {
+      return asticks ? this.tfunc1(dt) : this.tfunc2(dt);
    },
 
    /** @summary Provide label for log axis */
@@ -310,9 +325,15 @@ const AxisPainterMethods = {
       if ((dmin > 0) && (dmin < 1)) {
          if (this.log) {
             let factor = (item.min > 0) ? Math.log10(item.max/item.min) : 2;
-            if (factor > 10) factor = 10; else if (factor < 0.01) factor = 0.01;
-            item.min = item.min / Math.pow(10, factor*delta_left*dmin);
-            item.max = item.max * Math.pow(10, factor*delta_right*(1-dmin));
+            if (factor > 10)
+               factor = 10;
+            else if (factor < 0.01)
+               factor = 0.01;
+            item.min = item.min / Math.pow(10, factor * delta_left * dmin);
+            item.max = item.max * Math.pow(10, factor * delta_right * (1 - dmin));
+            // special handling for Z scale - limit zooming of color scale
+            if (this.minposbin && this.name === 'zaxis')
+               item.min = Math.max(item.min, 0.3*this.minposbin);
          } else if ((delta_left === -delta_right) && !item.reverse) {
             // shift left/right, try to keep range constant
             let delta = (item.max - item.min) * delta_right * dmin;
@@ -406,6 +427,7 @@ class TAxisPainter extends ObjectPainter {
       this.kind = kAxisNormal;
       this.vertical = vertical;
       this.log = opts.log || 0;
+      this.minposbin = opts.minposbin;
       this.noexp_changed = opts.noexp_changed;
       this.symlog = opts.symlog || false;
       this.reverse = opts.reverse || false;
@@ -421,13 +443,12 @@ class TAxisPainter extends ObjectPainter {
          this.timegmt = getTimeGMT(axis);
       } else if (opts.axis_func)
          this.kind = kAxisFunc;
-       else
+      else
          this.kind = !axis.fLabels ? kAxisNormal : kAxisLabels;
-
 
       if (this.kind === kAxisTime)
          this.func = d3_scaleTime().domain([this.convertDate(smin), this.convertDate(smax)]);
-       else if (this.log) {
+      else if (this.log) {
          if ((this.log === 1) || (this.log === 10))
             this.logbase = 10;
          else if (this.log === 3)
@@ -585,22 +606,20 @@ class TAxisPainter extends ObjectPainter {
          this.noticksopt = true;
 
       const handle = { painter: this, nminor: 0, nmiddle: 0, nmajor: 0, func: this.func, minor: [], middle: [], major: [] };
-      let ticks;
+      let ticks = [];
 
       if (this.fixed_ticks) {
-         ticks = [];
          this.fixed_ticks.forEach(v => {
             if ((v >= this.scale_min) && (v <= this.scale_max)) ticks.push(v);
          });
-      } else if ((this.kind === kAxisLabels) && !this.regular_labels) {
-         ticks = [];
+      } else if (this.kind === kAxisLabels) {
          handle.lbl_pos = [];
          const axis = this.getObject();
-         for (let n = 0; n < axis.fNbins; ++n) {
-            const x = axis.fXmin + n / axis.fNbins * (axis.fXmax - axis.fXmin);
-            if ((x >= this.scale_min) && (x < this.scale_max)) {
+         for (let n = 0; n <= axis.fNbins; ++n) {
+            const x = this.regular_labels ? n : axis.fXmin + n / axis.fNbins * (axis.fXmax - axis.fXmin);
+            if ((x >= this.scale_min) && (x <= this.scale_max)) {
                handle.lbl_pos.push(x);
-               if (x > this.scale_min) ticks.push(x);
+               ticks.push(x);
             }
          }
       } else
@@ -937,18 +956,18 @@ class TAxisPainter extends ObjectPainter {
      * @return {Promise} with array label size and max width */
    async drawLabels(axis_g, axis, w, h, handle, side, labelsFont, labeloffset, tickSize, ticksPlusMinus, max_text_width, frame_ygap) {
       const center_lbls = this.isCenteredLabels(),
-            rotate_lbls = axis.TestBit(EAxisBits.kLabelsVert),
             label_g = [axis_g.append('svg:g').attr('class', 'axis_labels')],
             lbl_pos = handle.lbl_pos || handle.major,
             tilt_angle = gStyle.AxisTiltAngle ?? 25;
-      let textscale = 1, maxtextlen = 0, applied_scale = 0,
+      let rotate_lbls = axis.TestBit(EAxisBits.kLabelsVert),
+          textscale = 1, flipscale = 1, maxtextlen = 0, applied_scale = 0,
           lbl_tilt = false, any_modified = false, max_textwidth = 0, max_tiltsize = 0;
 
       if (this.lbls_both_sides)
          label_g.push(axis_g.append('svg:g').attr('class', 'axis_labels').attr('transform', this.vertical ? `translate(${w})` : `translate(0,${-h})`));
 
-       if (frame_ygap > 0)
-          max_tiltsize = frame_ygap / Math.sin(tilt_angle/180*Math.PI) - Math.tan(tilt_angle/180*Math.PI);
+      if (frame_ygap > 0)
+         max_tiltsize = frame_ygap / Math.sin(tilt_angle/180*Math.PI) - Math.tan(tilt_angle/180*Math.PI);
 
       // function called when text is drawn to analyze width, required to correctly scale all labels
       // must be function to correctly handle 'this' argument
@@ -956,19 +975,21 @@ class TAxisPainter extends ObjectPainter {
          const textwidth = this.result_width;
          max_textwidth = Math.max(max_textwidth, textwidth);
 
-         if (textwidth && ((!painter.vertical && !rotate_lbls) || (painter.vertical && rotate_lbls)) && !painter.log) {
-            let maxwidth = this.gap_before*0.45 + this.gap_after*0.45;
-            if (!this.gap_before)
-               maxwidth = 0.9*this.gap_after;
-            else if (!this.gap_after)
-               maxwidth = 0.9*this.gap_before;
+         const maxwidth = !this.gap_before ? 0.9*this.gap_after : (!this.gap_after ? 0.9*this.gap_before : this.gap_before*0.45 + this.gap_after*0.45);
+
+         if (!painter.vertical && !rotate_lbls && this.result_height && maxwidth)
+            flipscale = Math.min(flipscale, maxwidth/this.result_height);
+
+         if (textwidth && ((!painter.vertical && !rotate_lbls) || (painter.vertical && rotate_lbls)) && !painter.log)
             textscale = Math.min(textscale, maxwidth / textwidth);
-         } else if (painter.vertical && max_text_width && this.normal_side && (max_text_width - labeloffset > 20) && (textwidth > max_text_width - labeloffset))
+         else if (painter.vertical && max_text_width && this.normal_side && (max_text_width - labeloffset > 20) && (textwidth > max_text_width - labeloffset))
             textscale = Math.min(textscale, (max_text_width - labeloffset) / textwidth);
 
          if ((textscale > 0.0001) && (textscale < 0.7) && !any_modified &&
-              !painter.vertical && !rotate_lbls && (maxtextlen > 5) && (label_g.length === 1) && (lbl_tilt === false))
-            lbl_tilt = true;
+              !painter.vertical && !rotate_lbls && (label_g.length === 1) && (lbl_tilt === false)) {
+                 if (maxtextlen > 5)
+                    lbl_tilt = true;
+              }
 
          let scale = textscale;
 
@@ -987,6 +1008,20 @@ class TAxisPainter extends ObjectPainter {
          if (((scale > 0.0001) && (scale < 1)) || (lbl_tilt !== false)) {
             applied_scale = 1/scale;
             painter.scaleTextDrawing(applied_scale, label_g[0]);
+         }
+      }
+
+      // check if short labels can be rotated
+      if (!this.vertical && this.regular_labels && !rotate_lbls) {
+         let tlen = 0;
+         for (let nmajor = 0; nmajor < lbl_pos.length; ++nmajor) {
+            const text = this.format(lbl_pos[nmajor], true);
+            if (text) tlen = Math.max(tlen, text.length);
+         }
+
+         if ((tlen > 2) && (tlen <= 5) && (lbl_pos.length * labelsFont.size > w / 2)) {
+            rotate_lbls = true;
+            lbl_tilt = 0;
          }
       }
 
@@ -1094,7 +1129,8 @@ class TAxisPainter extends ObjectPainter {
          if (lbl_tilt) {
             label_g[0].selectAll('text').each(function() {
                const txt = d3_select(this), tr = txt.attr('transform');
-               txt.attr('transform', `${tr} rotate(${tilt_angle})`).style('text-anchor', 'start');
+               if (lbl_tilt)
+                  txt.attr('transform', `${tr} rotate(${tilt_angle})`).style('text-anchor', 'start');
             });
          }
 
