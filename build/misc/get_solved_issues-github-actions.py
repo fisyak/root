@@ -37,12 +37,15 @@ def print_fmtted_issues():
     name_pattern = re.compile(r''.join([r'\W' if not char.isalnum() else char for char in name_pattern_str]))
     def matches(project):
         return name_pattern.search(project.name)
+    
+    repo_projects_str = " ".join(repo.projects())
+    print(f"List of projects in the repository: {repo_projects_str}")
 
     pro = [p for p in repo.projects() if matches(p)]
     if len(pro) != 1:
         print(
-            f"Could not identify a unique GitHub project in root-project/root with "
-            "name containing {args.name}",
+            "Could not identify a unique GitHub project in root-project/root with "
+            f"name containing {name_pattern_str}",
             file=sys.stderr,
         )
         sys.exit(1)
