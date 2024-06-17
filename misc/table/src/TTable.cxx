@@ -797,6 +797,7 @@ Bool_t TTable::EntryLoop(const Char_t *exprFileName,Int_t &action, TObject *obj
    //   where  i$ - meta variable to set current row index
    //          n$ - meta variable to set the total table size
    const Char_t *funcName = "SelectionQWERTY";
+   //#define BYTECODE
 #ifdef BYTECODE
    const Char_t *argtypes = "Float_t *,float **, int&, int& ";
    Long_t offset;
@@ -1752,7 +1753,13 @@ const Char_t *TTable::Print(Int_t row, Int_t rownumber, const Char_t *, const Ch
             // Encode  the column's comment
 	    if (indexOffset==0) {
                TDataSet *nxc = nextComment();
-               out << " " << (const char *)(nxc ? nxc->GetTitle() : "no comment");
+	       TString Title("no comment");
+	       if (nxc) {
+		 Title = nxc->GetTitle();
+		 Title.ReplaceAll("*/","");
+	       }
+	       //               out << " " << (const char *)(nxc ? nxc->GetTitle() : "no comment");
+               out << " " << Title.Data();
 	    }
             if (!indexOffset) {
               std::cout << membertype.Data();
