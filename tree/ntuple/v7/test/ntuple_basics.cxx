@@ -214,7 +214,8 @@ TEST(RNTuple, FileAnchor)
    auto readerB = RNTupleReader::Open("B", fileGuard.GetPath());
 
    auto f = std::unique_ptr<TFile>(TFile::Open(fileGuard.GetPath().c_str()));
-   auto readerA = RNTupleReader::Open(f->Get<RNTuple>("A"));
+   auto ntuple = std::unique_ptr<RNTuple>(f->Get<RNTuple>("A"));
+   auto readerA = RNTupleReader::Open(*ntuple);
 
    EXPECT_EQ(1U, readerA->GetNEntries());
    EXPECT_EQ(1U, readerB->GetNEntries());
@@ -333,6 +334,7 @@ TEST(RNTuple, ClusterEntriesAuto)
    {
       RNTupleWriteOptions options;
       options.SetCompression(0);
+      options.SetEnablePageChecksums(false);
       options.SetApproxZippedClusterSize(5 * sizeof(float));
       auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath(), options);
       for (int i = 0; i < 100; i++) {
@@ -357,6 +359,7 @@ TEST(RNTuple, ClusterEntriesAutoStatus)
 
       RNTupleWriteOptions options;
       options.SetCompression(0);
+      options.SetEnablePageChecksums(false);
       options.SetApproxZippedClusterSize(5 * sizeof(float));
       auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath(), options);
       auto entry = ntuple->CreateEntry();
@@ -635,6 +638,7 @@ TEST(RNTuple, BareEntry)
 {
    auto m = RNTupleModel::CreateBare();
    auto f = m->MakeField<float>("pt");
+   EXPECT_TRUE(m->IsBare());
    EXPECT_FALSE(f);
 
    FileRaii fileGuard("test_ntuple_bare_entry.root");
@@ -828,6 +832,7 @@ TEST(RNTuple, RValue)
 TEST(REntry, Basics)
 {
    auto model = RNTupleModel::Create();
+   EXPECT_FALSE(model->IsBare());
    model->MakeField<float>("pt");
    model->Freeze();
 

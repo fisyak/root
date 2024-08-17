@@ -16,6 +16,7 @@
 import argparse
 import datetime
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -83,13 +84,19 @@ def main():
         if args.architecture == 'x86':
             options = "-AWin32 " + options
 
-    # The hash of the name of the image (if any) and build option string is 
-    # used to find existing artifacts with matching build options on s3 storage.
-    options_for_hash = options
-    if args.image:
-        options_for_hash += args.image
-    options_hash = calc_options_hash(options_for_hash)
-    obj_prefix = f'{args.platform}/{args.base_ref}/{args.buildtype}/{options_hash}'
+    # The hash of the build option string is used to find existing artifacts
+    # with matching build options on s3 storage.
+    options_hash = calc_options_hash(options)
+
+    # Differentiate between macos versions: it's possible to have the same label
+    # for different macos versions, especially different minor versions.
+    macos_version_prefix = ''
+    if 'Darwin' == platform.system():
+        macos_version_tuple = platform.mac_ver()
+        macos_version = macos_version_tuple[0]
+        macos_version_prefix = f'{macos_version}/'
+
+    obj_prefix = f'{args.platform}/{macos_version_prefix}{args.base_ref}/{args.buildtype}/{options_hash}'
 
     # Make testing of CI in forks not impact artifacts
     if 'root-project/root' not in args.repository:

@@ -25,6 +25,7 @@ endif()
 
 ROOT_ADD_GTEST(ntuple_basics ntuple_basics.cxx LIBRARIES ROOTNTuple CustomStruct)
 ROOT_ADD_GTEST(ntuple_bulk ntuple_bulk.cxx LIBRARIES ROOTNTuple CustomStruct)
+ROOT_ADD_GTEST(ntuple_checksum ntuple_checksum.cxx ntuple_test.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_cluster ntuple_cluster.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_compat ntuple_compat.cxx RXTuple.cxx LIBRARIES ROOTNTuple xxHash::xxHash)
 ROOT_GENERATE_DICTIONARY(RXTupleDict ${CMAKE_CURRENT_SOURCE_DIR}/RXTuple.hxx
@@ -34,12 +35,14 @@ ROOT_GENERATE_DICTIONARY(RXTupleDict ${CMAKE_CURRENT_SOURCE_DIR}/RXTuple.hxx
 ROOT_ADD_GTEST(ntuple_descriptor ntuple_descriptor.cxx LIBRARIES ROOTNTuple CustomStruct)
 ROOT_ADD_GTEST(ntuple_endian ntuple_endian.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_friends ntuple_friends.cxx LIBRARIES ROOTNTuple CustomStruct)
-ROOT_ADD_GTEST(ntuple_merger ntuple_merger.cxx LIBRARIES ROOTNTuple CustomStruct)
+ROOT_ADD_GTEST(ntuple_merger ntuple_merger.cxx LIBRARIES ROOTNTuple CustomStruct ZLIB::ZLIB)
 ROOT_ADD_GTEST(ntuple_metrics ntuple_metrics.cxx LIBRARIES ROOTNTuple CustomStruct)
 ROOT_ADD_GTEST(ntuple_model ntuple_model.cxx LIBRARIES ROOTNTuple CustomStruct)
+ROOT_ADD_GTEST(ntuple_multi_column ntuple_multi_column.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_packing ntuple_packing.cxx LIBRARIES ROOTNTuple CustomStruct)
 ROOT_ADD_GTEST(ntuple_pages ntuple_pages.cxx LIBRARIES ROOTNTuple CustomStruct)
 ROOT_ADD_GTEST(ntuple_print ntuple_print.cxx LIBRARIES ROOTNTuple CustomStruct)
+ROOT_ADD_GTEST(ntuple_processor ntuple_processor.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_project ntuple_project.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_modelext ntuple_modelext.cxx LIBRARIES ROOTNTuple MathCore CustomStruct)
 ROOT_ADD_GTEST(ntuple_serialize ntuple_serialize.cxx LIBRARIES ROOTNTuple CustomStruct)
@@ -60,7 +63,7 @@ ROOT_ADD_GTEST(rfield_string rfield_string.cxx LIBRARIES ROOTNTuple CustomStruct
 ROOT_ADD_GTEST(rfield_variant rfield_variant.cxx LIBRARIES ROOTNTuple CustomStruct)
 if(MSVC)
   # Necessary to have TClass handle very large variants
-  set_property(TARGET rfield_variant APPEND_STRING PROPERTY LINK_FLAGS " -STACK:4000000")
+  set_property(TARGET rfield_variant APPEND_STRING PROPERTY LINK_FLAGS " -STACK:8000000")
 endif()
 ROOT_ADD_GTEST(rfield_vector rfield_vector.cxx LIBRARIES ROOTNTuple CustomStruct)
 
@@ -113,7 +116,7 @@ if(daos OR daos_mock)
     set(daos_test_pool ntuple-daos-test-pool)
   endif()
 
-  ROOT_ADD_GTEST(ntuple_storage_daos ntuple_storage_daos.cxx LIBRARIES ROOTNTuple MathCore CustomStruct)
+  ROOT_ADD_GTEST(ntuple_storage_daos ntuple_storage_daos.cxx ntuple_test.cxx LIBRARIES ROOTNTuple MathCore CustomStruct)
   target_compile_definitions(ntuple_storage_daos PRIVATE R__DAOS_TEST_POOL="${daos_test_pool}")
 
   if(daos_mock)

@@ -914,28 +914,30 @@ bool RWebDisplayHandle::ProduceImages(const std::string &fname, const std::vecto
    if (jsons.empty())
       return false;
 
-   std::string _fname = fname;
-   std::transform(_fname.begin(), _fname.end(), _fname.begin(), ::tolower);
-   auto EndsWith = [&_fname](const std::string &suffix) {
+   auto EndsWith = [&fname](const std::string &suffix) {
+      std::string _fname = fname;
+      std::transform(_fname.begin(), _fname.end(), _fname.begin(), ::tolower);
       return (_fname.length() > suffix.length()) ? (0 == _fname.compare(_fname.length() - suffix.length(), suffix.length(), suffix)) : false;
    };
 
    std::vector<std::string> fnames;
 
    if (!EndsWith(".pdf")) {
-      bool has_quialifier = _fname.find("%") != std::string::npos;
+      std::string farg = fname;
+
+      bool has_quialifier = farg.find("%") != std::string::npos;
 
       if (!has_quialifier && (jsons.size() > 1)) {
-         _fname.insert(_fname.rfind("."), "%d");
+         farg.insert(farg.rfind("."), "%d");
          has_quialifier = true;
       }
 
       for (unsigned n = 0; n < jsons.size(); n++) {
          if (has_quialifier) {
-            auto expand_name = TString::Format(_fname.c_str(), (int) n);
+            auto expand_name = TString::Format(farg.c_str(), (int) n);
             fnames.emplace_back(expand_name.Data());
          } else {
-            fnames.emplace_back(_fname);
+            fnames.emplace_back(farg);
          }
       }
    }
@@ -1150,8 +1152,12 @@ try_again:
    }
 
    // delete temporary HTML file
-   if (html_name.Length() > 0)
-      gSystem->Unlink(html_name.Data());
+   if (html_name.Length() > 0) {
+      if (gEnv->GetValue("WebGui.PreserveBatchFiles", -1) > 0)
+         ::Info("ProduceImages", "Preserve batch file %s", html_name.Data());
+      else
+         gSystem->Unlink(html_name.Data());
+   }
 
    if (!wait_file_name.IsNull() && gSystem->AccessPathName(wait_file_name.Data())) {
       R__LOG_ERROR(WebGUILog()) << "Fail to produce image " << fname;
@@ -1185,7 +1191,7 @@ try_again:
             std::ofstream ofs(fn);
             if ((p1 != std::string::npos) && (p2 != std::string::npos) && (p1 < p2)) {
                ofs << dumpcont.substr(p1, p2-p1+6);
-               ::Info("ProduceImage", "SVG file %s size %d bytes has been created", fn.c_str(), (int) (p2-p1+6));
+               ::Info("ProduceImages", "SVG file %s size %d bytes has been created", fn.c_str(), (int) (p2-p1+6));
             } else {
                R__LOG_ERROR(WebGUILog()) << "Fail to extract SVG from HTML dump " << dump_name;
                ofs << "Failure!!!\n" << dumpcont;
@@ -1210,7 +1216,7 @@ try_again:
                std::ofstream ofs(fn, std::ios::binary);
                ofs.write(binary.Data(), binary.Length());
 
-               ::Info("ProduceImage", "Image file %s size %d bytes has been created", fn.c_str(), (int) binary.Length());
+               ::Info("ProduceImages", "Image file %s size %d bytes has been created", fn.c_str(), (int) binary.Length());
             } else {
                R__LOG_ERROR(WebGUILog()) << "Fail to extract image from dump HTML code " << dump_name;
 
@@ -1219,7 +1225,7 @@ try_again:
          }
       }
    } else if (EndsWith(".pdf")) {
-      ::Info("ProduceImage", "PDF file %s with %d pages has been created", fname.c_str(), (int) jsons.size());
+      ::Info("ProduceImages", "PDF file %s with %d pages has been created", fname.c_str(), (int) jsons.size());
    }
 
    if (fnames.size() == 1)

@@ -17,8 +17,7 @@ import { assign3DHandler, disposeThreejsObject, createOrbitControl,
          createRender3D, beforeRender3D, afterRender3D, getRender3DKind, cleanupRender3D,
          HelveticerRegularFont } from '../base/base3d.mjs';
 import { getColor, getRootColors } from '../base/colors.mjs';
-import { DrawOptions } from '../base/BasePainter.mjs';
-import { ObjectPainter } from '../base/ObjectPainter.mjs';
+import { ObjectPainter, DrawOptions } from '../base/ObjectPainter.mjs';
 import { createMenu, closeMenu } from '../gui/menu.mjs';
 import { TAxisPainter } from '../gpad/TAxisPainter.mjs';
 import { ensureTCanvas } from '../gpad/TCanvasPainter.mjs';
@@ -609,7 +608,7 @@ class TGeoPainter extends ObjectPainter {
       this.cleanup(true);
    }
 
-   /** @summary Function callled by framework when dark mode is changed
+   /** @summary Function called by framework when dark mode is changed
      * @private */
    changeDarkMode(mode) {
       if ((this.ctrl.background === '#000000') || (this.ctrl.background === '#ffffff'))
@@ -1123,7 +1122,7 @@ class TGeoPainter extends ObjectPainter {
 
    /** @summary Fill context menu */
    fillContextMenu(menu) {
-      menu.add('header: Draw options');
+      menu.header('Draw options');
 
       menu.addchk(this.ctrl.update_browser, 'Browser update', () => {
          this.ctrl.update_browser = !this.ctrl.update_browser;
@@ -1131,11 +1130,11 @@ class TGeoPainter extends ObjectPainter {
       });
       menu.addchk(this.ctrl.show_controls, 'Show Controls', () => this.showControlGui('toggle'));
 
-      menu.add('sub:Show axes', () => this.setAxesDraw('toggle'));
+      menu.sub('Show axes', () => this.setAxesDraw('toggle'));
       menu.addchk(this.ctrl._axis === 0, 'off', 0, arg => this.setAxesDraw(parseInt(arg)));
       menu.addchk(this.ctrl._axis === 1, 'side', 1, arg => this.setAxesDraw(parseInt(arg)));
       menu.addchk(this.ctrl._axis === 2, 'center', 2, arg => this.setAxesDraw(parseInt(arg)));
-      menu.add('endsub:');
+      menu.endsub();
 
       if (this.geo_manager)
          menu.addchk(this.ctrl.showtop, 'Show top volume', () => this.setShowTop(!this.ctrl.showtop));
@@ -1145,7 +1144,7 @@ class TGeoPainter extends ObjectPainter {
       if (!this.getCanvPainter())
          menu.addchk(this.isTooltipAllowed(), 'Show tooltips', () => this.setTooltipAllowed('toggle'));
 
-      menu.add('sub:Highlight');
+      menu.sub('Highlight');
 
       menu.addchk(!this.ctrl.highlight, 'Off', () => {
          this.ctrl.highlight = false;
@@ -1162,16 +1161,16 @@ class TGeoPainter extends ObjectPainter {
          this.changedHighlight();
       });
 
-      menu.add('separator');
+      menu.separator();
 
       menu.addchk(this.ctrl.highlight_scene, 'Scene', flag => {
          this.ctrl.highlight_scene = flag;
          this.changedHighlight();
       });
 
-      menu.add('endsub:');
+      menu.endsub();
 
-      menu.add('sub:Camera');
+      menu.sub('Camera');
       menu.add('Reset position', () => this.focusCamera());
       if (!this.ctrl.project)
           menu.addchk(this.ctrl.rotate, 'Autorotate', () => this.setAutoRotate(!this.ctrl.rotate));
@@ -1187,25 +1186,25 @@ class TGeoPainter extends ObjectPainter {
             });
          }
 
-         menu.add('sub:Kind');
+         menu.sub('Kind');
          this.ctrl.cameraKindItems.forEach(item =>
             menu.addchk(this.ctrl.camera_kind === item.value, item.name, item.value, arg => {
                this.ctrl.camera_kind = arg;
                this.changeCamera();
             }));
-         menu.add('endsub:');
+         menu.endsub();
 
          if (this.isOrthoCamera()) {
-            menu.add('sub:Overlay');
+            menu.sub('Overlay');
             this.ctrl.cameraOverlayItems.forEach(item =>
                menu.addchk(this.ctrl.camera_overlay === item.value, item.name, item.value, arg => {
                   this.ctrl.camera_overlay = arg;
                   this.changeCamera();
                }));
-            menu.add('endsub:');
+            menu.endsub();
          }
       }
-      menu.add('endsub:');
+      menu.endsub();
 
       menu.addchk(this.ctrl.select_in_view, 'Select in view', () => {
          this.ctrl.select_in_view = !this.ctrl.select_in_view;
@@ -1372,7 +1371,7 @@ class TGeoPainter extends ObjectPainter {
          this.drawAxesAndOverlay();
    }
 
-   /** @summary Should be called when autorotate property changed */
+   /** @summary Should be called when auto rotate property changed */
    changedAutoRotate() {
       this.autorotate(2.5);
    }
@@ -1645,7 +1644,7 @@ class TGeoPainter extends ObjectPainter {
       }
    }
 
-   /** @summary show material docu */
+   /** @summary show material documentation from https://threejs.org  */
    showMaterialDocu() {
       const cfg = this.ctrl.getMaterialCfg();
       if (cfg?.name && typeof window !== 'undefined')
@@ -1768,7 +1767,7 @@ class TGeoPainter extends ObjectPainter {
           else {
             const many = (numnodes + numitems) > 1;
 
-            if (many) menu.add('header:' + ((numitems > 0) ? 'Items' : 'Nodes'));
+            if (many) menu.header((numitems > 0) ? 'Items' : 'Nodes');
 
             for (let n = 0; n < intersects.length; ++n) {
                const obj = intersects[n].object,
@@ -1825,7 +1824,7 @@ class TGeoPainter extends ObjectPainter {
                      menu.painter.render3D();
                   }, 'Hide this physical node');
 
-                  if (many) menu.add('endsub:');
+                  if (many) menu.endsub();
 
                   continue;
                }
@@ -1892,7 +1891,7 @@ class TGeoPainter extends ObjectPainter {
                   }
                }
 
-               if (many) menu.add('endsub:');
+               if (many) menu.endsub();
             }
          }
          menu.show();
@@ -1904,7 +1903,7 @@ class TGeoPainter extends ObjectPainter {
       if (!intersects?.length)
          return intersects;
 
-      // check redirections
+      // check redirection
       for (let n = 0; n < intersects.length; ++n) {
          if (intersects[n].object.geo_highlight)
             intersects[n].object = intersects[n].object.geo_highlight;
@@ -2657,13 +2656,13 @@ class TGeoPainter extends ObjectPainter {
          if (enabled) plights.push(light);
       }
 
-      // keep light power of all soources constant
+      // keep light power of all sources constant
       plights.forEach(ll => { ll.power = p*4*Math.PI/plights.length; });
 
       if (need_render) this.render3D();
    }
 
-   /** @summary Returns true if orthogarphic camera is used */
+   /** @summary Returns true if orthographic camera is used */
    isOrthoCamera() {
       return this.ctrl.camera_kind.indexOf('ortho') === 0;
    }
@@ -2783,7 +2782,7 @@ class TGeoPainter extends ObjectPainter {
          this.createSpecialEffects();
 
          if (this._fit_main_area && !this._webgl) {
-            // create top-most SVG for geomtery drawings
+            // create top-most SVG for geometry drawings
             const doc = getDocument(),
                   svg = doc.createElementNS(nsSVG, 'svg');
             svg.setAttribute('width', w);
@@ -2942,7 +2941,7 @@ class TGeoPainter extends ObjectPainter {
 
    /** @summary Place camera to default position,
      * @param arg - true forces camera readjustment, 'first' is called when suppose to be first after complete drawing
-     * @param keep_zoom - tries to keep zomming factor of the camera */
+     * @param keep_zoom - tries to keep zooming factor of the camera */
    adjustCameraPosition(arg, keep_zoom) {
       if (!this._toplevel || this.superimpose) return;
 
@@ -3131,7 +3130,7 @@ class TGeoPainter extends ObjectPainter {
             this._camera.left = m - szy * screen_ratio / 2;
             this._camera.right = m + szy * screen_ratio / 2;
          } else {
-            // screen heigher than actual geometry
+            // screen higher than actual geometry
             const m = (this._camera.top + this._camera.bottom) / 2;
             this._camera.top = m + szx / screen_ratio / 2;
             this._camera.bottom = m - szx / screen_ratio / 2;
@@ -3191,7 +3190,7 @@ class TGeoPainter extends ObjectPainter {
          this.focusCamera(this._clones.resolveStack(stack, true), false);
    }
 
-   /** @summary focus camera on speicifed position */
+   /** @summary focus camera on specified position */
    focusCamera(focus, autoClip) {
       if (this.ctrl.project || this.isOrthoCamera()) {
          this.adjustCameraPosition(true);
@@ -3282,7 +3281,7 @@ class TGeoPainter extends ObjectPainter {
    //   this._controls.update();
    }
 
-   /** @summary actiavte auto rotate */
+   /** @summary activate auto rotate */
    autorotate(speed) {
       const rotSpeed = (speed === undefined) ? 2.0 : speed;
       let last = new Date();
@@ -3312,7 +3311,7 @@ class TGeoPainter extends ObjectPainter {
    }
 
    /** @summary Drawing with 'count' option
-     * @desc Scans hieararchy and check for unique nodes
+     * @desc Scans hierarchy and check for unique nodes
      * @return {Promise} with object drawing ready */
    async drawCount(unqievis, clonetm) {
       const makeTime = tm => (this.isBatchMode() ? 'anytime' : tm.toString()) + ' ms',
@@ -3451,7 +3450,7 @@ class TGeoPainter extends ObjectPainter {
       return true;
    }
 
-   /** @summary manipulate visisbility of extra objects, used for HierarchyPainter
+   /** @summary manipulate visibility of extra objects, used for HierarchyPainter
      * @private */
    extraObjectVisible(hpainter, hitem, toggle) {
       if (!this._extraObjects) return;
@@ -3751,7 +3750,7 @@ class TGeoPainter extends ObjectPainter {
       return true;
    }
 
-   /** @summary Serach for specified node
+   /** @summary Search for specified node
      * @private */
    findNodeWithVolume(name, action, prnt, itemname, volumes) {
       let first_level = false, res = null;
@@ -4191,7 +4190,7 @@ class TGeoPainter extends ObjectPainter {
      * @param [measure] - when true, for the first time printout rendering time
      * @return {Promise} when tmout bigger than 0 is specified
      * @desc Timeout used to avoid multiple rendering of the picture when several 3D drawings
-     * superimposed with each other. If tmeout <= 0, rendering performed immediately
+     * superimposed with each other. If tmout <= 0, rendering performed immediately
      * Several special values are used:
      *   -1    - force recheck of rendering order based on camera position */
    render3D(tmout, measure) {
@@ -4858,7 +4857,7 @@ class TGeoPainter extends ObjectPainter {
 
    /** @summary Should be called when depth method is changed */
    changedDepthMethod(arg) {
-      // force recalculatiion of render order
+      // force recalculation of render order
       delete this._last_camera_position;
       if (arg !== 'norender')
          return this.render3D();
@@ -5502,7 +5501,7 @@ function provideMenu(menu, item, hpainter) {
 
    if (!vol && !iseve) return false;
 
-   menu.add('separator');
+   menu.separator();
 
    const scanEveVisible = (obj, arg, skip_this) => {
       if (!arg) arg = { visible: 0, hidden: 0 };
@@ -5579,12 +5578,12 @@ function provideMenu(menu, item, hpainter) {
             findItemWithPainter(item, 'testGeomChanges');
          };
 
-         menu.add('sub:Physical vis', 'Physical node visibility - only for this instance');
+         menu.sub('Physical vis', 'Physical node visibility - only for this instance');
          menu.addchk(phys_vis?.visible, 'on', 'on', changePhysVis, 'Enable visibility of phys node');
          menu.addchk(phys_vis && !phys_vis.visible, 'off', 'off', changePhysVis, 'Disable visibility of physical node');
          menu.add('reset', 'clear', changePhysVis, 'Reset custom visibility of physical node');
          menu.add('reset all', 'clearall', changePhysVis, 'Reset all custom settings for all nodes');
-         menu.add('endsub:');
+         menu.endsub();
       }
 
       menu.addchk(is_visible, 'Logical vis',
@@ -5759,7 +5758,7 @@ async function drawDummy3DGeom(painter) {
          pp = painter.getPadPainter(),
          opt = (pp?.pad?.fFillColor && (pp?.pad?.fFillStyle > 1000)) ? 'bkgr_' + pp.pad.fFillColor : '';
 
-   return TGeoPainter.draw(painter.getDom(), obj, opt)
+   return TGeoPainter.draw(pp, obj, opt)
                      .then(geop => { geop._dummy = true; return geop; });
 }
 

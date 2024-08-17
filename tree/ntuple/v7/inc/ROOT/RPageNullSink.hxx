@@ -17,7 +17,7 @@
 #define ROOT7_RPageNullSink
 
 #include <ROOT/RColumn.hxx>
-#include <ROOT/RField.hxx>
+#include <ROOT/RFieldBase.hxx>
 #include <ROOT/RNTupleModel.hxx>
 #include <ROOT/RPageStorage.hxx>
 
@@ -73,13 +73,17 @@ public:
    }
    void UpdateExtraTypeInfo(const RExtraTypeInfoDescriptor &) final {}
 
+   void CommitSuppressedColumn(ColumnHandle_t) final {}
    void CommitPage(ColumnHandle_t, const RPage &page) final { fNBytesCurrentCluster += page.GetNBytes(); }
-   void CommitSealedPage(DescriptorId_t, const RSealedPage &page) final { fNBytesCurrentCluster += page.fSize; }
+   void CommitSealedPage(DescriptorId_t, const RSealedPage &page) final
+   {
+      fNBytesCurrentCluster += page.GetBufferSize();
+   }
    void CommitSealedPageV(std::span<RSealedPageGroup> ranges) final
    {
       for (auto &range : ranges) {
          for (auto sealedPageIt = range.fFirst; sealedPageIt != range.fLast; ++sealedPageIt) {
-            fNBytesCurrentCluster += sealedPageIt->fSize;
+            fNBytesCurrentCluster += sealedPageIt->GetBufferSize();
          }
       }
    }

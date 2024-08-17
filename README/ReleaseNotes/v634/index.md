@@ -30,7 +30,7 @@ The following people have contributed to this new version:
  Florine de Geus, CERN/University of Twente,\
  Andrei Gheata, CERN/EP-SFT,\
  Bernhard Manfred Gruber,\
- Enrico Guiraud,
+ Enrico Guiraud,\
  Jonas Hahnfeld, CERN/Goethe University Frankfurt,\
  Fernando Hueso Gonzalez, University of Valencia\
  Attila Krasznahorkay, CERN/EP-ADP-OS,\
@@ -46,7 +46,7 @@ The following people have contributed to this new version:
  Alja Mrak Tadel, UCSD/CMS,\
  Axel Naumann, CERN/EP-SFT,\
  Dante Niewenhuis, VU Amsterdam\
- Luis Antonio Obis Aparicio, University of Zaragoza,
+ Luis Antonio Obis Aparicio, University of Zaragoza,\
  Ianna Osborne, Princeton University,\
  Vincenzo Eduardo Padulano, CERN/EP-SFT,\
  Danilo Piparo, CERN/EP-SFT,\
@@ -55,23 +55,30 @@ The following people have contributed to this new version:
  Andrea Rizzi, University of Pisa,\
  Andre Sailer, CERN/EP-SFT,\
  Garima Singh, ETH,\
- Juraj Smiesko, CERN/RCS-PRJ-FC,
+ Juraj Smiesko, CERN/RCS-PRJ-FC,\
  Pavlo Svirin, National Technical University of Ukraine,\
- Maciej Szymanski, Argonne,\
+ Robin Syring, Leibniz University Hannover, CERN/EP-SFT,\
+  Maciej Szymanski, Argonne,\
  Christian Tacke, Darmstadt University,\
  Matevz Tadel, UCSD/CMS,\
  Alvaro Tolosa Delgado, CERN/RCS-PRJ-FC,\
  Devajith Valaparambil Sreeramaswamy, CERN/EP-SFT,\
  Peter Van Gemmeren, Argonne,\
  Vassil Vassilev, Princeton/CMS,\
- Wouter Verkerke, NIKHEF/ATLAS,
- Stefan Wunsch
+ Wouter Verkerke, NIKHEF/ATLAS,\
+ Stefan Wunsch\
 
 ## Deprecation and Removal
 
+* The `RooAbsReal::plotSliceOn()` function that was deprecated since at least ROOT 6 was removed. Use `plotOn(frame,Slice(...))` instead.
+* The `RooTemplateProxy` constructors that take a `proxyOwnsArg` parameter to manually pass ownership are deprecated and replaced by a new constructor that takes ownership via `std::unique_ptr<T>`. They will be removed in ROOT 6.36.
 
 ## Core Libraries
 
+* The `rootcling` invocation corresponding to a `genreflex` invocation can be obtained with the new `genreflex`
+  command line argument `--print-rootcling-invocation`. This can be useful when migrating from genreflex to
+  rootcling.
+* The `rootcling` utility now fully supports selection xml files and not only LinkDef files.
 
 ## I/O Libraries
 
@@ -94,6 +101,13 @@ The following people have contributed to this new version:
 
 
 ## RooFit Libraries
+
+### Miscellaneous
+
+* Setting `useHashMapForFind(true)` is not supported for RooArgLists anymore, since hash-assisted finding by name hash can be ambiguous: a RooArgList is allowed to have different elements with the same name. If you want to do fast lookups by name, convert your RooArgList to a RooArgSet.
+
+* The function `RooFit::bindFunction()` now supports arbitrary many input variables when binding a Python function.
+
 
 ## Graphics Backends
 
@@ -120,6 +134,25 @@ The following people have contributed to this new version:
 
 ## PROOF Libraries
 
+
+## PyROOT
+
+### Typesafe `TTree::SetBranchAddress()` for array inputs
+
+If you call `TTree::SetBranchAddress` with NumPy array or `array.array` inputs, ROOT will now check if the array type matches with the column type.
+If it doesn't, `SetBranchAddress()` will return a negative status code and print an error.
+Take for example this code snippet:
+```python
+arr = array.array(typecode, "d")
+status = t.SetBranchAddress("name", arr)
+print("Status = %s" % (status, ))
+```
+If the branch type is also `double` (like the type of the array indicated by `"d"`), the call to `SetBranchAddress()` would succeed with status code zero.
+If the type doesn't match, you now get a clear error instead of garbage values.
+```txt
+Error in <TTree::SetBranchAddress>: The pointer type given "Double_t" (8) does not correspond to the type needed "Float_t" (5) by the branch: a
+Status = -2
+```
 
 ## Language Bindings
 

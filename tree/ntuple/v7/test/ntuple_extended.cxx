@@ -91,6 +91,7 @@ TEST(RNTuple, RandomAccess)
    {
       RNTupleWriteOptions options;
       options.SetCompression(0);
+      options.SetEnablePageChecksums(false);
       options.SetApproxZippedClusterSize(nEvents * sizeof(std::int32_t) / 10);
       auto ntuple = RNTupleWriter::Recreate(std::move(modelWrite), "myNTuple", fileGuard.GetPath(), options);
       for (unsigned int i = 0; i < nEvents; ++i)
@@ -166,7 +167,8 @@ TEST(RNTuple, LargeFile1)
    {
       auto f = std::unique_ptr<TFile>(TFile::Open(fileGuard.GetPath().c_str(), "READ"));
       EXPECT_TRUE(f);
-      auto reader = RNTupleReader::Open(f->Get<RNTuple>("myNTuple"));
+      auto ntuple = std::unique_ptr<RNTuple>(f->Get<RNTuple>("myNTuple"));
+      auto reader = RNTupleReader::Open(*ntuple);
       auto rdEnergy  = reader->GetView<double>("energy");
 
       double chksumRead = 0.0;
@@ -256,11 +258,13 @@ TEST(RNTuple, LargeFile2)
       auto s2 = f->Get<std::string>("s2");
       EXPECT_EQ("two", *s2);
 
-      auto reader = RNTupleReader::Open(f->Get<RNTuple>("small"));
+      auto small = std::unique_ptr<RNTuple>(f->Get<RNTuple>("small"));
+      auto reader = RNTupleReader::Open(*small);
       reader->LoadEntry(0);
       EXPECT_EQ(42.0f, *reader->GetModel().GetDefaultEntry().GetPtr<float>("pt"));
 
-      reader = RNTupleReader::Open(f->Get<RNTuple>("large"));
+      auto large = std::unique_ptr<RNTuple>(f->Get<RNTuple>("large"));
+      reader = RNTupleReader::Open(*large);
       auto viewE = reader->GetView<double>("E");
       double chksumRead = 0.0;
       for (auto i : reader->GetEntryRange()) {
@@ -296,7 +300,7 @@ TEST(RNTuple, LargePages)
 
       auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
       const auto &desc = reader->GetDescriptor();
-      const auto rndColId = desc.FindPhysicalColumnId(desc.FindFieldId("rnd"), 0);
+      const auto rndColId = desc.FindPhysicalColumnId(desc.FindFieldId("rnd"), 0, 0);
       const auto &clusterDesc = desc.GetClusterDescriptor(desc.FindClusterId(rndColId, 0));
       EXPECT_GT(clusterDesc.GetPageRange(rndColId).Find(0).fLocator.fBytesOnStorage, kMAXZIPBUF);
 
@@ -326,7 +330,7 @@ TEST(RNTuple, SmallClusters)
    {
       auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
       auto desc = reader->GetDescriptor();
-      auto colId = desc->FindLogicalColumnId(desc->FindFieldId("vec"), 0);
+      auto colId = desc->FindLogicalColumnId(desc->FindFieldId("vec"), 0, 0);
       EXPECT_EQ(EColumnType::kSplitIndex64, desc->GetColumnDescriptor(colId).GetModel().GetType());
       reader->LoadEntry(0);
       auto entry = reader->GetModel()->GetDefaultEntry();
@@ -346,7 +350,7 @@ TEST(RNTuple, SmallClusters)
    {
       auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
       auto desc = reader->GetDescriptor();
-      auto colId = desc->FindLogicalColumnId(desc->FindFieldId("vec"), 0);
+      auto colId = desc->FindLogicalColumnId(desc->FindFieldId("vec"), 0, 0);
       EXPECT_EQ(EColumnType::kSplitIndex32, desc->GetColumnDescriptor(colId).GetModel().GetType());
       reader->LoadEntry(0);
       auto entry = reader->GetModel()->GetDefaultEntry();

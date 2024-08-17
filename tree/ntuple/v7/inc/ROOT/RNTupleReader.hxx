@@ -89,13 +89,14 @@ private:
    std::unique_ptr<RNTupleDescriptor> fCachedDescriptor;
    Detail::RNTupleMetrics fMetrics;
 
-   RNTupleReader(std::unique_ptr<RNTupleModel> model, std::unique_ptr<Internal::RPageSource> source);
+   RNTupleReader(std::unique_ptr<RNTupleModel> model, std::unique_ptr<Internal::RPageSource> source,
+                 const RNTupleReadOptions &options);
    /// The model is generated from the ntuple metadata on storage.
-   explicit RNTupleReader(std::unique_ptr<Internal::RPageSource> source);
+   explicit RNTupleReader(std::unique_ptr<Internal::RPageSource> source, const RNTupleReadOptions &options);
 
    void ConnectModel(RNTupleModel &model);
    RNTupleReader *GetDisplayReader();
-   void InitPageSource();
+   void InitPageSource(bool enableMetrics);
 
    DescriptorId_t RetrieveFieldId(std::string_view fieldName) const;
 
@@ -161,20 +162,23 @@ public:
    static std::unique_ptr<RNTupleReader> Open(std::string_view ntupleName, std::string_view storage,
                                               const RNTupleReadOptions &options = RNTupleReadOptions());
    static std::unique_ptr<RNTupleReader>
-   Open(RNTuple *ntuple, const RNTupleReadOptions &options = RNTupleReadOptions());
+   Open(const RNTuple &ntuple, const RNTupleReadOptions &options = RNTupleReadOptions());
    /// The caller imposes a model, which must be compatible with the model found in the data on storage.
    static std::unique_ptr<RNTupleReader> Open(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
                                               std::string_view storage,
                                               const RNTupleReadOptions &options = RNTupleReadOptions());
-   static std::unique_ptr<RNTupleReader>
-   Open(std::unique_ptr<RNTupleModel> model, RNTuple *ntuple, const RNTupleReadOptions &options = RNTupleReadOptions());
+   static std::unique_ptr<RNTupleReader> Open(std::unique_ptr<RNTupleModel> model, const RNTuple &ntuple,
+                                              const RNTupleReadOptions &options = RNTupleReadOptions());
    /// Open RNTuples as one virtual, horizontally combined ntuple.  The underlying RNTuples must
    /// have an identical number of entries.  Fields in the combined RNTuple are named with the ntuple name
    /// as a prefix, e.g. myNTuple1.px and myNTuple2.pt (see tutorial ntpl006_friends)
-   static std::unique_ptr<RNTupleReader> OpenFriends(std::span<ROpenSpec> ntuples);
+   static std::unique_ptr<RNTupleReader>
+   OpenFriends(std::span<ROpenSpec> ntuples, const RNTupleReadOptions &options = RNTupleReadOptions());
    std::unique_ptr<RNTupleReader> Clone()
    {
-      return std::unique_ptr<RNTupleReader>(new RNTupleReader(fSource->Clone()));
+      auto options = RNTupleReadOptions{};
+      options.SetMetricsEnabled(fMetrics.IsEnabled());
+      return std::unique_ptr<RNTupleReader>(new RNTupleReader(fSource->Clone(), options));
    }
    ~RNTupleReader();
 
@@ -213,7 +217,7 @@ public:
    /// ~~~
    ///
    /// For use of ENTupleInfo::kMetrics, see #EnableMetrics.
-   void PrintInfo(const ENTupleInfo what = ENTupleInfo::kSummary, std::ostream &output = std::cout);
+   void PrintInfo(const ENTupleInfo what = ENTupleInfo::kSummary, std::ostream &output = std::cout) const;
 
    /// Shows the values of the i-th entry/row, starting with 0 for the first entry. By default,
    /// prints the output in JSON format.

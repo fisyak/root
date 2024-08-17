@@ -1,12 +1,17 @@
 #include "ntuple_test.hxx"
-#include <TRandom3.h>
-#include <TMemFile.h>
 
+#include <ROOT/RPageNullSink.hxx>
+#include <ROOT/RNTupleWriteOptions.hxx>
 #ifdef R__USE_IMT
 #include <ROOT/TThreadExecutor.hxx>
 #endif
 
-#include <ROOT/RPageNullSink.hxx>
+#include <TRandom3.h>
+#include <TMemFile.h>
+
+#include <limits>
+
+using ROOT::Experimental::Internal::RNTupleWriteOptionsManip;
 using ROOT::Experimental::Internal::RPageNullSink;
 
 namespace {
@@ -36,6 +41,7 @@ protected:
    void InitImpl(RNTupleModel &) final {}
    void UpdateSchema(const ROOT::Experimental::Internal::RNTupleModelChangeset &, NTupleSize_t) final {}
    void UpdateExtraTypeInfo(const ROOT::Experimental::RExtraTypeInfoDescriptor &) final {}
+   void CommitSuppressedColumn(ColumnHandle_t) final {}
    void CommitPage(ColumnHandle_t /*columnHandle*/, const RPage & /*page*/) final { fCounters.fNCommitPage++; }
    void CommitSealedPage(ROOT::Experimental::DescriptorId_t, const RPageStorage::RSealedPage &) final
    {
@@ -393,7 +399,8 @@ TEST(RNTuple, PageFillingString)
 TEST(RNTuple, OpenHTTP)
 {
    std::unique_ptr<TFile> file(TFile::Open("http://root.cern/files/tutorials/ntpl004_dimuon_v1rc2.root"));
-   auto reader = RNTupleReader::Open(file->Get<RNTuple>("Events"));
+   auto Events = std::unique_ptr<RNTuple>(file->Get<RNTuple>("Events"));
+   auto reader = RNTupleReader::Open(*Events);
    reader->LoadEntry(0);
 }
 #endif
@@ -410,7 +417,8 @@ TEST(RNTuple, TMemFile)
       writer->Fill();
    }
 
-   auto reader = RNTupleReader::Open(file.Get<RNTuple>("ntpl"));
+   auto ntpl = std::unique_ptr<RNTuple>(file.Get<RNTuple>("ntpl"));
+   auto reader = RNTupleReader::Open(*ntpl);
    auto pt = reader->GetModel().GetDefaultEntry().GetPtr<float>("pt");
    reader->LoadEntry(0);
    EXPECT_EQ(*pt, 42.0);
@@ -434,6 +442,7 @@ TEST(RPageSinkBuf, Basics)
    FileRaii fileGuard("test_ntuple_sinkbuf_basics.root");
    {
       RNTupleWriteOptions options;
+      options.SetEnablePageChecksums(false); // disable same page merging
       options.SetUseBufferedWrite(true);
       TestModel bufModel;
       // PageSinkBuf wraps a concrete page source
@@ -716,4 +725,280 @@ TEST(RPageNullSink, Basics)
    *wrPt = 42.0;
    ntuple->Fill();
    EXPECT_EQ(ntuple->GetNEntries(), 1);
+}
+
+template <int... N>
+static void GenerateLotsOfFields(RNTupleModel &model, int firstIdx, std::integer_sequence<int, N...>)
+{
+   (model.MakeField<double>(std::to_string(N + firstIdx)), ...);
+}
+
+TEST(RPageStorageFile, MultiKeyBlob_Header)
+{
+   // Write split header and read it back
+
+   FileRaii fileGuardComp("test_ntuple_storage_multi_key_blob_header_comp.root");
+   FileRaii fileGuardUcmp("test_ntuple_storage_multi_key_blob_header_ucmp.root");
+
+   constexpr auto kMaxKeySize = 1024;
+   constexpr auto kNFields = 1024;
+
+   auto modelComp = RNTupleModel::Create();
+   // NOTE: must call this multiple times not to exceed the max fold expansion limit
+   for (int i = 0; i < 4; ++i)
+      GenerateLotsOfFields(*modelComp, i * kNFields / 4, std::make_integer_sequence<int, kNFields / 4>{});
+   auto modelUcmp = modelComp->Clone();
+
+   auto optionsComp = RNTupleWriteOptions{};
+   RNTupleWriteOptionsManip::SetMaxKeySize(optionsComp, kMaxKeySize);
+   auto optionsUcmp = optionsComp.Clone();
+   optionsUcmp->SetCompression(0);
+
+   {
+      auto writerComp = RNTupleWriter::Recreate(std::move(modelComp), "myNTuple", fileGuardComp.GetPath(), optionsComp);
+      auto writerUcmp =
+         RNTupleWriter::Recreate(std::move(modelUcmp), "myNTuple", fileGuardUcmp.GetPath(), *optionsUcmp);
+      writerComp->Fill();
+      writerUcmp->Fill();
+   }
+
+   {
+      auto ntupleComp = RNTupleReader::Open("myNTuple", fileGuardComp.GetPath());
+      auto ntupleUcmp = RNTupleReader::Open("myNTuple", fileGuardUcmp.GetPath());
+
+      EXPECT_GE(ntupleComp->GetDescriptor().GetOnDiskHeaderSize(), kMaxKeySize);
+      EXPECT_GE(ntupleUcmp->GetDescriptor().GetOnDiskHeaderSize(), kMaxKeySize);
+
+      for (int i = 0; i < kNFields; ++i) {
+         ntupleComp->GetModel().GetField(std::to_string(i));
+         ntupleUcmp->GetModel().GetField(std::to_string(i));
+      }
+   }
+}
+
+TEST(RPageStorageFile, MultiKeyBlob_Pages)
+{
+   // Write split pages and read them back
+
+   FileRaii fileGuardComp("test_ntuple_storage_multi_key_blob_pages_comp.root");
+   FileRaii fileGuardUcmp("test_ntuple_storage_multi_key_blob_pages_ucmp.root");
+
+   constexpr auto kMaxKeySize = 1024;
+
+   auto optionsComp = RNTupleWriteOptions{};
+   optionsComp.SetApproxUnzippedPageSize(kMaxKeySize * 10);
+   RNTupleWriteOptionsManip::SetMaxKeySize(optionsComp, kMaxKeySize);
+   auto optionsUcmp = optionsComp.Clone();
+   optionsUcmp->SetCompression(0);
+
+   {
+      auto modelUcmp = RNTupleModel::Create();
+      auto modelComp = RNTupleModel::Create();
+      auto fU = modelUcmp->MakeField<double>("f");
+      auto iU = modelUcmp->MakeField<std::uint32_t>("i");
+      auto fC = modelComp->MakeField<double>("f");
+      auto iC = modelComp->MakeField<std::uint32_t>("i");
+      auto writerUcmp =
+         RNTupleWriter::Recreate(std::move(modelUcmp), "myNTuple", fileGuardUcmp.GetPath(), *optionsUcmp);
+      auto writerComp = RNTupleWriter::Recreate(std::move(modelComp), "myNTuple", fileGuardComp.GetPath(), optionsComp);
+      TRandom3 rnd(42);
+      for (int i = 0; i < 100000; ++i) {
+         *fC = rnd.Rndm() * std::numeric_limits<double>::max();
+         *iC = rnd.Integer(std::numeric_limits<std::int32_t>::max());
+         *fU = rnd.Rndm() * std::numeric_limits<double>::max();
+         *iU = rnd.Integer(std::numeric_limits<std::int32_t>::max());
+         writerComp->Fill();
+         writerUcmp->Fill();
+      }
+   }
+
+   {
+      auto modelUcmp = RNTupleModel::Create();
+      auto modelComp = RNTupleModel::Create();
+      auto fU = modelUcmp->MakeField<double>("f");
+      auto iU = modelUcmp->MakeField<std::uint32_t>("i");
+      auto fC = modelComp->MakeField<double>("f");
+      auto iC = modelComp->MakeField<std::uint32_t>("i");
+      auto ntupleUcmp = RNTupleReader::Open(std::move(modelUcmp), "myNTuple", fileGuardUcmp.GetPath());
+      auto ntupleComp = RNTupleReader::Open(std::move(modelComp), "myNTuple", fileGuardComp.GetPath());
+
+      // Verify that the pages are larger than maxKeySize
+      EXPECT_GT(
+         ntupleComp->GetDescriptor().GetClusterDescriptor(0).GetPageRange(0).fPageInfos[0].fLocator.fBytesOnStorage,
+         kMaxKeySize);
+      EXPECT_GT(
+         ntupleUcmp->GetDescriptor().GetClusterDescriptor(0).GetPageRange(0).fPageInfos[0].fLocator.fBytesOnStorage,
+         kMaxKeySize);
+
+      TRandom3 rnd(42);
+      for (int i = 0; i < 100000; ++i) {
+         ntupleUcmp->LoadEntry(i);
+         ntupleComp->LoadEntry(i);
+         double valC = *fC;
+         double expectC = rnd.Rndm() * std::numeric_limits<double>::max();
+         std::int32_t valIC = *iC;
+         std::int32_t expectIC = rnd.Integer(std::numeric_limits<std::int32_t>::max());
+         double valU = *fU;
+         double expectU = rnd.Rndm() * std::numeric_limits<double>::max();
+         std::int32_t valIU = *iU;
+         std::int32_t expectIU = rnd.Integer(std::numeric_limits<std::int32_t>::max());
+         EXPECT_DOUBLE_EQ(valC, expectC);
+         EXPECT_DOUBLE_EQ(valIC, expectIC);
+         EXPECT_DOUBLE_EQ(valU, expectU);
+         EXPECT_DOUBLE_EQ(valIU, expectIU);
+      }
+   }
+}
+
+TEST(RPageStorageFile, MultiKeyBlob_PageList)
+{
+   // Write a split page list and read it back
+
+   FileRaii fileGuardComp("test_ntuple_storage_multi_key_blob_page_list_comp.root");
+   FileRaii fileGuardUcmp("test_ntuple_storage_multi_key_blob_page_list_ucmp.root");
+
+   constexpr auto kMaxKeySize = 1024;
+
+   auto optionsComp = RNTupleWriteOptions{};
+   optionsComp.SetApproxUnzippedPageSize(128);
+   RNTupleWriteOptionsManip::SetMaxKeySize(optionsComp, kMaxKeySize);
+   auto optionsUcmp = optionsComp.Clone();
+   optionsUcmp->SetCompression(0);
+
+   {
+      auto modelComp = RNTupleModel::Create();
+      auto modelUcmp = RNTupleModel::Create();
+      auto fC = modelComp->MakeField<double>("f");
+      auto fU = modelUcmp->MakeField<double>("f");
+
+      auto writerComp = RNTupleWriter::Recreate(std::move(modelComp), "myNTuple", fileGuardComp.GetPath(), optionsComp);
+      auto writerUcmp =
+         RNTupleWriter::Recreate(std::move(modelUcmp), "myNTuple", fileGuardUcmp.GetPath(), *optionsUcmp);
+      TRandom3 rnd(84);
+      for (int i = 0; i < 100000; ++i) {
+         *fC = rnd.Rndm() * std::numeric_limits<double>::max();
+         *fU = rnd.Rndm() * std::numeric_limits<double>::max();
+         writerComp->Fill();
+         writerUcmp->Fill();
+      }
+   }
+
+   {
+      auto modelComp = RNTupleModel::Create();
+      auto modelUcmp = RNTupleModel::Create();
+      auto fC = modelComp->MakeField<double>("f");
+      auto fU = modelUcmp->MakeField<double>("f");
+      auto ntupleComp = RNTupleReader::Open(std::move(modelComp), "myNTuple", fileGuardComp.GetPath());
+      auto ntupleUcmp = RNTupleReader::Open(std::move(modelUcmp), "myNTuple", fileGuardUcmp.GetPath());
+
+      // Verify that the page list is larger than maxKeySize
+      EXPECT_GT(ntupleComp->GetDescriptor().GetClusterGroupDescriptor(0).GetPageListLength(), kMaxKeySize);
+      EXPECT_GT(ntupleUcmp->GetDescriptor().GetClusterGroupDescriptor(0).GetPageListLength(), kMaxKeySize);
+
+      TRandom3 rnd(84);
+      for (int i = 0; i < 100000; ++i) {
+         ntupleComp->LoadEntry(i);
+         ntupleUcmp->LoadEntry(i);
+         double valC = *fC;
+         double expectC = rnd.Rndm() * std::numeric_limits<double>::max();
+         double valU = *fU;
+         double expectU = rnd.Rndm() * std::numeric_limits<double>::max();
+         EXPECT_DOUBLE_EQ(valC, expectC);
+         EXPECT_DOUBLE_EQ(valU, expectU);
+      }
+   }
+}
+
+TEST(RPageStorageFile, MultiKeyBlob_Footer)
+{
+   // Write a split footer and read it back
+
+   FileRaii fileGuardComp("test_ntuple_storage_multi_key_blob_footer_comp.root");
+   FileRaii fileGuardUcmp("test_ntuple_storage_multi_key_blob_footer_ucmp.root");
+
+   constexpr auto kMaxKeySize = 1024;
+
+   auto optionsComp = RNTupleWriteOptions{};
+   RNTupleWriteOptionsManip::SetMaxKeySize(optionsComp, kMaxKeySize);
+   auto optionsUcmp = optionsComp.Clone();
+   optionsUcmp->SetCompression(0);
+
+   {
+      auto modelComp = RNTupleModel::Create();
+      auto modelUcmp = RNTupleModel::Create();
+      auto fC = modelComp->MakeField<double>("f");
+      auto fU = modelUcmp->MakeField<double>("f");
+
+      auto writerComp = RNTupleWriter::Recreate(std::move(modelComp), "myNTuple", fileGuardComp.GetPath(), optionsComp);
+      auto writerUcmp =
+         RNTupleWriter::Recreate(std::move(modelUcmp), "myNTuple", fileGuardUcmp.GetPath(), *optionsUcmp);
+      TRandom3 rnd(84);
+      for (int i = 0; i < 100000; ++i) {
+         *fC = rnd.Rndm() * std::numeric_limits<double>::max();
+         *fU = rnd.Rndm() * std::numeric_limits<double>::max();
+         writerComp->Fill();
+         writerUcmp->Fill();
+         if (i % 100 == 0) {
+            writerComp->CommitCluster(true);
+            writerUcmp->CommitCluster(true);
+         }
+      }
+   }
+
+   {
+      auto modelComp = RNTupleModel::Create();
+      auto modelUcmp = RNTupleModel::Create();
+      auto fC = modelComp->MakeField<double>("f");
+      auto fU = modelUcmp->MakeField<double>("f");
+      auto ntupleComp = RNTupleReader::Open(std::move(modelComp), "myNTuple", fileGuardComp.GetPath());
+      auto ntupleUcmp = RNTupleReader::Open(std::move(modelUcmp), "myNTuple", fileGuardUcmp.GetPath());
+
+      // Verify that the footer is actually bigger than the max key size
+      EXPECT_GT(ntupleComp->GetDescriptor().GetOnDiskFooterSize(), kMaxKeySize);
+      EXPECT_GT(ntupleUcmp->GetDescriptor().GetOnDiskFooterSize(), kMaxKeySize);
+
+      TRandom3 rnd(84);
+      for (int i = 0; i < 100000; ++i) {
+         ntupleComp->LoadEntry(i);
+         ntupleUcmp->LoadEntry(i);
+         double valC = *fC;
+         double expectC = rnd.Rndm() * std::numeric_limits<double>::max();
+         double valU = *fU;
+         double expectU = rnd.Rndm() * std::numeric_limits<double>::max();
+         EXPECT_DOUBLE_EQ(valC, expectC);
+         EXPECT_DOUBLE_EQ(valU, expectU);
+      }
+   }
+}
+
+TEST(RPageSink, SamePageMerging)
+{
+   FileRaii fileGuard("test_same_page_merging.root");
+
+   for (auto enable : {true, false}) {
+      auto model = RNTupleModel::Create();
+      model->MakeField<float>("px", 1.0);
+      model->MakeField<float>("py", 1.0);
+      RNTupleWriteOptions options;
+      options.SetEnablePageChecksums(enable);
+      auto writer = RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath(), options);
+      writer->Fill();
+      writer.reset();
+
+      auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
+      EXPECT_EQ(1u, reader->GetNEntries());
+
+      const auto &desc = reader->GetDescriptor();
+      const auto pxColId = desc.FindPhysicalColumnId(desc.FindFieldId("px"), 0, 0);
+      const auto pyColId = desc.FindPhysicalColumnId(desc.FindFieldId("py"), 0, 0);
+      const auto clusterId = desc.FindClusterId(pxColId, 0);
+      const auto &clusterDesc = desc.GetClusterDescriptor(clusterId);
+      EXPECT_EQ(enable, clusterDesc.GetPageRange(pxColId).Find(0).fLocator.fPosition ==
+                           clusterDesc.GetPageRange(pyColId).Find(0).fLocator.fPosition);
+
+      auto viewPx = reader->GetView<float>("px");
+      auto viewPy = reader->GetView<float>("py");
+      EXPECT_FLOAT_EQ(1.0, viewPx(0));
+      EXPECT_FLOAT_EQ(1.0, viewPy(0));
+   }
 }

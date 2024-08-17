@@ -3,12 +3,35 @@
 ## Changes in dev
 1. Let use custom time zone for time display, support '&utc' and '&cet' in URL parameters
 2. Support gStyle.fLegendFillStyle
-3. Fix - hide empty title on the canvas
-4. Fix - properly handle zooming in THStack histogram
-5. Fix - properly save zoomed ranges in drawingJSON()
-6. Fix - always show all ticks for labeled axis
-7. Fix - draw TProfile2D bins content as text, not entrie
-8. Fix - interactive zooming on log color palette
+3. Let change histogram min/max values via context menu
+4. Support Z-scale zooming with TScatter
+5. Implement "haxis" draw option for histogram to draw only axes for hbar
+6. Implement "axisg" and "haxisg" to draw axes with grids
+7. Support TH1 marker, text and line drawing superimposed with "haxis"
+8. Support TBox and TLatex drawing on "frame", support drawing on swapped axes
+9. TProfile and TProfile2D projections https://github.com/root-project/root/issues/15851
+10. Draw total histogram from TEfficiency when draw option starts with 'b'
+11. Let redraw TEfficiency, THStack and TMultiGraph with different draw options via hist context menu
+12. Support 'pads' draw options for TMultiGraph, support context menu for it
+13. Let drop object on sub-pads
+14. Properly loads ES6 modules for web canvas
+15. Internals - do not select pad (aka gPad) for objects drawing, always use assigned pad painter
+16. Fix - properly save zoomed ranges in drawingJSON()
+17. Fix - properly redraw TMultuGraph
+18. Fix - show empty bin in TProfile2D if it has entries #316
+
+
+## Changes in 7.7.2
+1. Fix - hide empty title on the canvas
+2. Fix - properly handle zooming in THStack histogram
+3. Fix - always use 0 as minimum in THStack drawings
+4. Fix - always show all ticks for labeled axis
+5. Fix - draw TProfile2D bins content as text, not entries
+6. Fix - interactive zooming on log color palette
+7. Fix - keyboard handling while input dialog active
+8. Fix - legend entry with not configured fill attributes
+9. Fix - prevent that color palette exceed graphical range
+10. Fix - exponential log axis labels with kMoreLogLabels bit set
 
 
 ## Changes in 7.7.1

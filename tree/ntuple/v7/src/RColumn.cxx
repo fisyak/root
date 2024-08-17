@@ -14,15 +14,23 @@
  *************************************************************************/
 
 #include <ROOT/RColumn.hxx>
-#include <ROOT/RColumnModel.hxx>
 #include <ROOT/RNTupleDescriptor.hxx>
 #include <ROOT/RPageStorage.hxx>
 
 #include <TError.h>
 
-ROOT::Experimental::Internal::RColumn::RColumn(const RColumnModel &model, std::uint32_t index)
-   : fModel(model), fIndex(index)
+#include <algorithm>
+#include <cassert>
+#include <utility>
+
+ROOT::Experimental::Internal::RColumn::RColumn(EColumnType type, std::uint32_t columnIndex,
+                                               std::uint16_t representationIndex)
+   : fType(type), fIndex(columnIndex), fRepresentationIndex(representationIndex), fTeam({this})
 {
+   // TODO(jblomer): fix for column types with configurable bit length once available
+   const auto [minBits, maxBits] = RColumnElementBase::GetValidBitRange(type);
+   assert(minBits == maxBits);
+   fBitsOnStorage = minBits;
 }
 
 ROOT::Experimental::Internal::RColumn::~RColumn()
@@ -93,22 +101,62 @@ void ROOT::Experimental::Internal::RColumn::Flush()
    fWritePage[fWritePageIdx].Reset(fNElements);
 }
 
-void ROOT::Experimental::Internal::RColumn::MapPage(const NTupleSize_t index)
+void ROOT::Experimental::Internal::RColumn::CommitSuppressed()
 {
-   fPageSource->ReleasePage(fReadPage);
-   // Set fReadPage to an empty page before populating it to prevent double destruction of the previously page in case
-   // the page population fails.
-   fReadPage = RPage();
-   fReadPage = fPageSource->PopulatePage(fHandleSource, index);
-   R__ASSERT(fReadPage.Contains(index));
+   fPageSink->CommitSuppressedColumn(fHandleSink);
 }
 
-void ROOT::Experimental::Internal::RColumn::MapPage(RClusterIndex clusterIndex)
+bool ROOT::Experimental::Internal::RColumn::TryMapPage(NTupleSize_t globalIndex)
 {
    fPageSource->ReleasePage(fReadPage);
    // Set fReadPage to an empty page before populating it to prevent double destruction of the previously page in case
    // the page population fails.
    fReadPage = RPage();
-   fReadPage = fPageSource->PopulatePage(fHandleSource, clusterIndex);
-   R__ASSERT(fReadPage.Contains(clusterIndex));
+
+   const auto nTeam = fTeam.size();
+   std::size_t iTeam = 1;
+   do {
+      fReadPage = fPageSource->LoadPage(fTeam.at(fLastGoodTeamIdx)->GetHandleSource(), globalIndex);
+      if (fReadPage.IsValid())
+         break;
+      fLastGoodTeamIdx = (fLastGoodTeamIdx + 1) % nTeam;
+      iTeam++;
+   } while (iTeam <= nTeam);
+
+   return fReadPage.Contains(globalIndex);
+}
+
+bool ROOT::Experimental::Internal::RColumn::TryMapPage(RClusterIndex clusterIndex)
+{
+   fPageSource->ReleasePage(fReadPage);
+   // Set fReadPage to an empty page before populating it to prevent double destruction of the previously page in case
+   // the page population fails.
+   fReadPage = RPage();
+
+   const auto nTeam = fTeam.size();
+   std::size_t iTeam = 1;
+   do {
+      fReadPage = fPageSource->LoadPage(fTeam.at(fLastGoodTeamIdx)->GetHandleSource(), clusterIndex);
+      if (fReadPage.IsValid())
+         break;
+      fLastGoodTeamIdx = (fLastGoodTeamIdx + 1) % nTeam;
+      iTeam++;
+   } while (iTeam <= nTeam);
+
+   return fReadPage.Contains(clusterIndex);
+}
+
+void ROOT::Experimental::Internal::RColumn::MergeTeams(RColumn &other)
+{
+   // We are working on very small vectors here, so quadratic complexity works
+   for (auto *c : other.fTeam) {
+      if (std::find(fTeam.begin(), fTeam.end(), c) == fTeam.end())
+         fTeam.emplace_back(c);
+   }
+
+   for (auto c : fTeam) {
+      if (c == this)
+         continue;
+      c->fTeam = fTeam;
+   }
 }

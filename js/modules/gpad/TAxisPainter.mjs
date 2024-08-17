@@ -190,20 +190,19 @@ const AxisPainterMethods = {
    /** @summary Provide label for exponential form */
    formatExp(base, order, value) {
       let res = '';
+      const sbase = Math.abs(base - Math.E) < 0.001 ? 'e' : base.toString();
       if (value) {
          value = Math.round(value/Math.pow(base, order));
-         if ((value !== 0) && (value !== 1)) res = value.toString() + (settings.Latex ? '#times' : 'x');
+         if (settings.StripAxisLabels) {
+            if (order === 0)
+               return value.toString();
+            else if ((order === 1) && (value === 1))
+               return sbase;
+         }
+         if (value !== 1)
+            res = value.toString() + (settings.Latex ? '#times' : 'x');
       }
-      if (Math.abs(base - Math.E) < 0.001)
-         res += 'e';
-      else
-         res += base.toString();
-      if (settings.StripAxisLabels) {
-         if (order === 0)
-            return '1';
-         else if (order === 1)
-            return res;
-      }
+      res += sbase;
       if (settings.Latex > constants.Latex.Symbols)
          return res + `^{${order}}`;
       const superscript_symbols = {
@@ -402,7 +401,7 @@ class TAxisPainter extends ObjectPainter {
       Object.assign(this, AxisPainterMethods);
       this.initAxisPainter();
 
-      this.embedded = embedded; // indicate that painter embedded into the histo painter
+      this.embedded = embedded; // indicate that painter embedded into the histogram painter
       this.invert_side = false;
       this.lbls_both_sides = false; // draw labels on both sides
    }
@@ -418,7 +417,7 @@ class TAxisPainter extends ObjectPainter {
 
    /** @summary Configure axis painter
      * @desc Axis can be drawn inside frame <g> group with offset to 0 point for the frame
-     * Therefore one should distinguish when caclulated coordinates used for axis drawing itself or for calculation of frame coordinates
+     * Therefore one should distinguish when calculated coordinates used for axis drawing itself or for calculation of frame coordinates
      * @private */
    configureAxis(name, min, max, smin, smax, vertical, range, opts) {
       this.name = name;
@@ -434,6 +433,7 @@ class TAxisPainter extends ObjectPainter {
       this.swap_side = opts.swap_side || false;
       this.fixed_ticks = opts.fixed_ticks || null;
       this.maxTickSize = opts.maxTickSize || 0;
+      this.value_axis = opts.value_axis ?? false; // use fMinimum/fMaximum from source object
 
       const axis = this.getObject();
 
@@ -1344,13 +1344,6 @@ class TAxisPainter extends ObjectPainter {
             title_offest_k *= -1.6;
 
             title_shift_x = Math.round(title_offest_k * this.titleOffset);
-
-            // if ((this.name === 'zaxis') && this.is_gaxis && ('getBoundingClientRect' in axis_g.node())) {
-            //    // special handling for color palette labels - draw them always on right side
-            //   const rect = axis_g.node().getBoundingClientRect();
-            //   if (title_shift_x < rect.width - this.ticksSize)
-            //      title_shift_x = Math.round(rect.width - this.ticksSize);
-            // }
 
             title_shift_y = Math.round(this.titleCenter ? h/2 : (xor_reverse ? h : 0));
 

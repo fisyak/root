@@ -613,6 +613,23 @@ Double_t** TGraph::AllocateArrays(Int_t Narrays, Int_t arraySize)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Performs the operation: `y = y + c1*f(x,y)`
+/// Errors are not recalculated.
+///
+/// \param f may be a 1-D function TF1 or 2-d function TF2
+/// \param c1 a scaling factor, 1 by default
+
+void TGraph::Add(TF1 *f, Double_t c1)
+{
+   if (fHistogram) SetBit(kResetHisto);
+
+   for (Int_t i = 0; i < fNpoints; i++) {
+      fY[i] += c1*f->Eval(fX[i], fY[i]);
+   }
+   if (gPad) gPad->Modified();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Apply function f to all the data points
 /// f may be a 1-D function TF1 or 2-d function TF2
 /// The Y values of the graph are replaced by the new values computed
