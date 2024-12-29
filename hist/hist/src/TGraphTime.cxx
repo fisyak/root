@@ -24,13 +24,13 @@ ClassImp(TGraphTime);
 TGraphTime is used to draw a set of objects evolving with nsteps in time between tmin and tmax.
 Each time step has a new list of objects. This list can be identical to
 the list of objects in the previous steps, but with different attributes.
-see example of use in $ROOTSYS/tutorials/graphs/gtime.C
+see example of use in $ROOTSYS/tutorials/visualisation/graphs/gtime.C
 */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// default constructor.
 
-TGraphTime::TGraphTime(): TNamed()
+TGraphTime::TGraphTime()
 {
 }
 
@@ -39,7 +39,6 @@ TGraphTime::TGraphTime(): TNamed()
 /// Create a TGraphTime with nsteps in range [xmin,xmax][ymin,ymax]
 
 TGraphTime::TGraphTime(Int_t nsteps, Double_t xmin, Double_t ymin, Double_t xmax, Double_t ymax)
-      :TNamed()
 {
    if (nsteps <= 0) {
       Warning("TGraphTime", "Number of steps %d changed to 100", nsteps);

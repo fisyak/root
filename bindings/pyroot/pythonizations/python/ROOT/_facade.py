@@ -8,8 +8,6 @@ import cppyy
 
 import cppyy.ll
 
-from libROOTPythonizations import gROOT
-
 from ._application import PyROOTApplication
 from ._numbadeclare import _NumbaDeclareDecorator
 
@@ -36,7 +34,7 @@ class _gROOTWrapper(object):
 
     def __init__(self, facade):
         self.__dict__["_facade"] = facade
-        self.__dict__["_gROOT"] = gROOT
+        self.__dict__["_gROOT"] = cppyy.gbl.ROOT.GetROOT()
 
     def __getattr__(self, name):
         if name != "SetBatch" and self._facade.__dict__["gROOT"] != self._gROOT:
@@ -158,7 +156,7 @@ class ROOTFacade(types.ModuleType):
         elif hasattr(cppyy.gbl.ROOT, name):
             return getattr(cppyy.gbl.ROOT, name)
         else:
-            res = gROOT.FindObject(name)
+            res = self.gROOT.FindObject(name)
             if res:
                 return res
         raise AttributeError("Failed to get attribute {} from ROOT".format(name))
@@ -204,7 +202,10 @@ class ROOTFacade(types.ModuleType):
 
     def _finalSetup(self):
         # Prevent this method from being re-entered through the gROOT wrapper
-        self.__dict__["gROOT"] = gROOT
+        self.__dict__["gROOT"] = cppyy.gbl.ROOT.GetROOT()
+
+        # Make sure the interpreter is initialized once gROOT has been initialized
+        cppyy.gbl.TInterpreter.Instance()
 
         # Setup interactive usage from Python
         self.__dict__["app"] = PyROOTApplication(self.PyConfig, self._is_ipython)
@@ -336,6 +337,25 @@ class ROOTFacade(types.ModuleType):
         try:
             from ._pythonization._rdataframe import _MakeNumpyDataFrame
 
+            # Provide a FromCSV factory method that uses keyword arguments instead of the ROptions config struct.
+            # In Python, the RCsvDS::ROptions struct members are available without the leading 'f' and in camelCase,
+            # e.g. fDelimiter --> delimiter.
+            # We need to keep the parameters of the old FromCSV signature for backward compatibility.
+            ns._FromCSV = ns.FromCSV
+            def MakeCSVDataFrame(
+                    fileName, readHeaders = True, delimiter = ',', linesChunkSize = -1, colTypes = {}, **kwargs):
+                options = ns.RCsvDS.ROptions()
+                options.fHeaders = readHeaders
+                options.fDelimiter = delimiter
+                options.fLinesChunkSize = linesChunkSize
+                options.fColumnTypes = colTypes
+                for key, val in kwargs.items():
+                    structMemberName = 'f' + key[0].upper() + key[1:]
+                    if hasattr(options, structMemberName):
+                        setattr(options, structMemberName, val)
+                return ns._FromCSV(fileName, options)
+            ns.FromCSV = MakeCSVDataFrame
+
             # Make a copy of the arrays that have strides to make sure we read the correct values
             # TODO a cleaner fix
             def MakeNumpyDataFrameCopy(np_dict):
@@ -387,7 +407,7 @@ class ROOTFacade(types.ModuleType):
         from ._pythonization import _tmva
 
         ns = self._fallback_getattr("TMVA")
-        hasRDF = "dataframe" in gROOT.GetConfigFeatures()
+        hasRDF = "dataframe" in self.gROOT.GetConfigFeatures()
         if hasRDF:
             try:
                 from ._pythonization._tmva import inject_rbatchgenerator, _AsRTensor, SaveXGBoost

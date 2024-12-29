@@ -40,6 +40,8 @@
 #include <fstream>
 #include <cstring>
 #include <numeric>
+#include <limits>
+#include <iomanip>
 
 #include "HFitInterface.h"
 #include "Fit/DataRange.h"
@@ -105,7 +107,7 @@ End_Macro
 ////////////////////////////////////////////////////////////////////////////////
 /// Graph default constructor.
 
-TGraph::TGraph(): TNamed(), TAttLine(), TAttFill(0, 1000), TAttMarker()
+TGraph::TGraph() : TAttFill(0, 1000)
 {
    fNpoints = -1;  //will be reset to 0 in CtorAllocate
    if (!CtorAllocate()) return;
@@ -116,7 +118,7 @@ TGraph::TGraph(): TNamed(), TAttLine(), TAttFill(0, 1000), TAttMarker()
 /// the arrays x and y will be set later
 
 TGraph::TGraph(Int_t n)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttFill(0, 1000)
 {
    fNpoints = n;
    if (!CtorAllocate()) return;
@@ -127,7 +129,7 @@ TGraph::TGraph(Int_t n)
 /// Graph normal constructor with ints.
 
 TGraph::TGraph(Int_t n, const Int_t *x, const Int_t *y)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttFill(0, 1000)
 {
    if (!x || !y) {
       fNpoints = 0;
@@ -145,7 +147,7 @@ TGraph::TGraph(Int_t n, const Int_t *x, const Int_t *y)
 /// Graph normal constructor with floats.
 
 TGraph::TGraph(Int_t n, const Float_t *x, const Float_t *y)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttFill(0, 1000)
 {
    if (!x || !y) {
       fNpoints = 0;
@@ -164,7 +166,7 @@ TGraph::TGraph(Int_t n, const Float_t *x, const Float_t *y)
 /// values `start`, `start+step`, `start+2*step`, `start+3*step`, etc ...
 
 TGraph::TGraph(Int_t n, const Double_t *y, Double_t start, Double_t step)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttFill(0, 1000)
 {
    if (!y) {
       fNpoints = 0;
@@ -182,7 +184,7 @@ TGraph::TGraph(Int_t n, const Double_t *y, Double_t start, Double_t step)
 /// Graph normal constructor with doubles.
 
 TGraph::TGraph(Int_t n, const Double_t *x, const Double_t *y)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttFill(0, 1000)
 {
    if (!x || !y) {
       fNpoints = 0;
@@ -295,7 +297,7 @@ TGraph& TGraph::operator=(const TGraph &gr)
 /// in vx and vy.
 
 TGraph::TGraph(const TVectorF &vx, const TVectorF &vy)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttFill(0, 1000)
 {
    fNpoints = TMath::Min(vx.GetNrows(), vy.GetNrows());
    if (!CtorAllocate()) return;
@@ -314,7 +316,7 @@ TGraph::TGraph(const TVectorF &vx, const TVectorF &vy)
 /// in vx and vy.
 
 TGraph::TGraph(const TVectorD &vx, const TVectorD &vy)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttFill(0, 1000)
 {
    fNpoints = TMath::Min(vx.GetNrows(), vy.GetNrows());
    if (!CtorAllocate()) return;
@@ -330,7 +332,7 @@ TGraph::TGraph(const TVectorD &vx, const TVectorD &vy)
 /// Graph constructor importing its parameters from the TH1 object passed as argument
 
 TGraph::TGraph(const TH1 *h)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttFill(0, 1000)
 {
    if (!h) {
       Error("TGraph", "Pointer to histogram is null");
@@ -372,7 +374,7 @@ TGraph::TGraph(const TH1 *h)
 ///                at the fNpx+1 points of f and the integral is normalized to 1.
 
 TGraph::TGraph(const TF1 *f, Option_t *option)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttFill(0, 1000)
 {
    char coption = ' ';
    if (!f) {
@@ -437,7 +439,7 @@ TGraph::TGraph(const TF1 *f, Option_t *option)
 /// Note in that case, the instantiation is about two times slower.
 
 TGraph::TGraph(const char *filename, const char *format, Option_t *option)
-   : TNamed("Graph", filename), TAttLine(), TAttFill(0, 1000), TAttMarker()
+   : TNamed("Graph", filename), TAttFill(0, 1000)
 {
    Double_t x, y;
    TString fname = filename;
@@ -2180,6 +2182,9 @@ TString TGraph::SaveArray(std::ostream &out, const char *suffix, Int_t frameNumb
    TString arrname = TString::Format("%s_%s%d", name.Data(), suffix, frameNumber);
 
    out << "   Double_t " << arrname << "[" << fNpoints << "] = { ";
+   const auto old_precision{out.precision()};
+   constexpr auto max_precision{std::numeric_limits<double>::digits10 + 1}; 
+   out << std::setprecision(max_precision);
    for (Int_t i = 0; i < fNpoints-1; i++) {
       out << arr[i] << ",";
       if (i && (i % 16 == 0))
@@ -2188,7 +2193,7 @@ TString TGraph::SaveArray(std::ostream &out, const char *suffix, Int_t frameNumb
          out << " ";
    }
    out << arr[fNpoints-1] << " };" << std::endl;
-
+   out << std::setprecision(old_precision);
    return arrname;
 }
 

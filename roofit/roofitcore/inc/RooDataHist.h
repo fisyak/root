@@ -212,14 +212,15 @@ public:
 
   std::vector<std::unique_ptr<const RooAbsBinning>> const& getBinnings() const { return _lvbins; }
 
+  int arraySize()   const { return _arrSize; }  
   double const* weightArray()   const { return _wgt; }
   double const* wgtErrLoArray() const { return _errLo; }
   double const* wgtErrHiArray() const { return _errHi; }
   double const* sumW2Array()    const { return _sumw2; }
 
-  std::string calculateTreeIndexForCodeSquash(RooAbsArg const *klass, RooFit::Detail::CodeSquashContext &ctx,
+  std::string calculateTreeIndexForCodeSquash(RooAbsArg const *klass, RooFit::Experimental::CodegenContext &ctx,
                                               const RooAbsCollection &coords, bool reverse = false) const;
-  std::string declWeightArrayForCodeSquash(RooFit::Detail::CodeSquashContext &ctx,
+  std::string declWeightArrayForCodeSquash(RooFit::Experimental::CodegenContext &ctx,
                                            bool correctForBinSize) const;
 
   protected:
@@ -232,7 +233,7 @@ public:
 
   void initialize(const char* binningName=nullptr,bool fillTree=true) ;
   std::unique_ptr<RooAbsData> reduceEng(const RooArgSet& varSubset, const RooFormulaVar* cutVar, const char* cutRange=nullptr,
-                  std::size_t nStart=0, std::size_t nStop=std::numeric_limits<std::size_t>::max()) override;
+                  std::size_t nStart=0, std::size_t nStop=std::numeric_limits<std::size_t>::max()) const override;
   double interpolateDim(int iDim, double xval, size_t centralIdx, int intOrder, bool correctForBinSize, bool cdfBoundaries) ;
   const std::vector<double>& calculatePartialBinVolume(const RooArgSet& dimSet) const ;
   void checkBinBounds() const;

@@ -24,13 +24,14 @@
 #include <utility>
 #include <vector>
 
-using ClusterSize_t = ROOT::Experimental::ClusterSize_t;
-using RCluster = ROOT::Experimental::Internal::RCluster;
-using RClusterPool = ROOT::Experimental::Internal::RClusterPool;
-using RNTupleDescriptor = ROOT::Experimental::RNTupleDescriptor;
-using ROnDiskPage = ROOT::Experimental::Internal::ROnDiskPage;
-using RPage = ROOT::Experimental::Internal::RPage;
-using RPageSource = ROOT::Experimental::Internal::RPageSource;
+using ROOT::Experimental::ClusterSize_t;
+using ROOT::Experimental::RNTupleDescriptor;
+using ROOT::Experimental::Internal::RCluster;
+using ROOT::Experimental::Internal::RClusterPool;
+using ROOT::Experimental::Internal::ROnDiskPage;
+using ROOT::Experimental::Internal::RPage;
+using ROOT::Experimental::Internal::RPageRef;
+using ROOT::Experimental::Internal::RPageSource;
 
 namespace {
 
@@ -42,7 +43,7 @@ protected:
    void LoadStructureImpl() final {}
    RNTupleDescriptor AttachImpl() final { return RNTupleDescriptor(); }
    std::unique_ptr<RPageSource> CloneImpl() const final { return nullptr; }
-   RPage LoadPageImpl(ColumnHandle_t, const RClusterInfo &, ClusterSize_t::ValueType) final { return RPage(); }
+   RPageRef LoadPageImpl(ColumnHandle_t, const RClusterInfo &, ClusterSize_t::ValueType) final { return RPageRef(); }
 
 public:
    /// Records the cluster IDs requests by LoadClusters() calls
@@ -61,16 +62,13 @@ public:
                                    .MoveDescriptor()
                                    .Unwrap());
       }
-      descBuilder.AddClusterGroup(ROOT::Experimental::Internal::RClusterGroupDescriptorBuilder()
-                                     .ClusterGroupId(0)
-                                     .MinEntry(0)
-                                     .EntrySpan(6)
-                                     .MoveDescriptor()
-                                     .Unwrap());
+      ROOT::Experimental::Internal::RClusterGroupDescriptorBuilder cgBuilder;
+      cgBuilder.ClusterGroupId(0).MinEntry(0).EntrySpan(6).NClusters(6);
+      cgBuilder.AddSortedClusters({0, 1, 2, 3, 4, 5});
+      descBuilder.AddClusterGroup(cgBuilder.MoveDescriptor().Unwrap());
       auto descriptorGuard = GetExclDescriptorGuard();
       descriptorGuard.MoveIn(descBuilder.MoveDescriptor());
    }
-   void ReleasePage(RPage &) final {}
    void LoadSealedPage(ROOT::Experimental::DescriptorId_t, ROOT::Experimental::RClusterIndex, RSealedPage &) final {}
    std::vector<std::unique_ptr<RCluster>> LoadClusters(std::span<RCluster::RKey> clusterKeys) final
    {
@@ -315,11 +313,12 @@ TEST(PageStorageFile, LoadClusters)
    FileRaii fileGuard("test_pagestoragefile_loadclusters.root");
 
    auto modelWrite = ROOT::Experimental::RNTupleModel::Create();
-   auto wrPt = modelWrite->MakeField<float>("pt", 42.0);
-   auto wrTag = modelWrite->MakeField<std::int32_t>("tag", 0);
+   auto wrPt = modelWrite->MakeField<float>("pt");
+   auto wrTag = modelWrite->MakeField<std::int32_t>("tag");
 
    {
       auto writer = ROOT::Experimental::RNTupleWriter::Recreate(std::move(modelWrite), "myNTuple", fileGuard.GetPath());
+      *wrPt = 42.0;
       writer->Fill();
       writer->CommitCluster();
       *wrPt = 24.0;
@@ -376,7 +375,7 @@ TEST(PageStorageFile, LoadClustersIMT)
 
    {
       auto model = ROOT::Experimental::RNTupleModel::Create();
-      auto wrPt = model->MakeField<float>("pt", 42.0);
+      *model->MakeField<float>("pt") = 42.0;
 
       auto writer = ROOT::Experimental::RNTupleWriter::Recreate(std::move(model), "myNTuple", fileGuard.GetPath());
       writer->Fill();

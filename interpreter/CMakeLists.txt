@@ -7,7 +7,7 @@ if (NOT builtin_clang)
 endif()
 
 #--Set the LLVM version required for ROOT-----------------------------------------------------------
-set(ROOT_LLVM_VERSION_REQUIRED_MAJOR 16)
+set(ROOT_LLVM_VERSION_REQUIRED_MAJOR 18)
 
 #---Define the way we want to build and what of llvm/clang/cling------------------------------------
 set(LLVM_ENABLE_RTTI ON CACHE BOOL "")
@@ -61,26 +61,6 @@ endif()
 # to serialize access to llvm.  We can later review how to make this finer grained by using llvm's own locking
 # mechanism.
 set(LLVM_ENABLE_THREADS OFF CACHE BOOL "")
-
-# The llvm::ReverseIterate<bool>::value symbol from llvm's SmallPtrSet.h
-# somehow lands in our cling libraries on OS X and doesn't get hidden
-# by visibility-inlines-hidden, so we suddenly have a global weak symbol
-# from LLVM in cling which our visiblity=hidden compiled LLVM libraries
-# reference. This is triggering some build system warnings like this:
-#   ld: warning: direct access in function '(anonymous namespace)::NewGVN::runGVN()'
-#   from file 'interpreter/llvm-project/llvm/lib/libLLVMScalarOpts.a(NewGVN.cpp.o)' to global weak symbol
-#   'llvm::ReverseIterate<bool>::value' from file 'interpreter/llvm-project/llvm/lib/libclingUtils.a(AST.cpp.o)'
-#   means the weak symbol cannot be overridden at runtime. This was likely caused by different
-#   translation units being compiled with different visibility settings.
-# There is no apparent reason why this is happening and it looks like a compiler bug,
-# so let's just disable the part of the code that provides this symbol.
-# As it's in the validation part of LLVM and not in something that providing functionality,
-# this shouldn't cause any problems.
-# TODO: We maybe can remove this code once we upgrade to LLVM>=6.0 as this symbol
-# was introduced quite recently into LLVM 5.0 and probably is also causing problems
-# for some other projects.
-set(LLVM_ENABLE_ABI_BREAKING_CHECKS OFF CACHE BOOL "" FORCE)
-set(LLVM_ABI_BREAKING_CHECKS FORCE_OFF CACHE BOOL "" FORCE)
 
 set(CMAKE_REQUIRED_QUIET 1)  # Make the configuration of LLVM quiet
 
@@ -257,9 +237,13 @@ if(builtin_llvm)
   get_directory_property(LLVM_TARGETS_TO_BUILD DIRECTORY llvm-project/llvm DEFINITION LLVM_TARGETS_TO_BUILD)
 
   if(MSVC)
+    if(CMAKE_GENERATOR MATCHES Ninja)
+      set(LLVM_TABLEGEN_EXE "${LLVM_BINARY_DIR}/bin/llvm-tblgen.exe")
+    else()
       set(LLVM_TABLEGEN_EXE "${LLVM_BINARY_DIR}/$<CONFIG>/bin/llvm-tblgen.exe")
+    endif()
   else()
-      set(LLVM_TABLEGEN_EXE "${LLVM_BINARY_DIR}/bin/llvm-tblgen")
+    set(LLVM_TABLEGEN_EXE "${LLVM_BINARY_DIR}/bin/llvm-tblgen")
   endif()
 else()
   # Rely on llvm-config.
@@ -364,10 +348,10 @@ else()
   include(VersionFromVCS)
 
   set(PACKAGE_VERSION "${LLVM_PACKAGE_VERSION}")
-  if (${PACKAGE_VERSION} MATCHES "${ROOT_LLVM_VERSION_REQUIRED_MAJOR}\\.0(|\\.[0-9]+)")
+  if (${PACKAGE_VERSION} MATCHES "${ROOT_LLVM_VERSION_REQUIRED_MAJOR}\\.1(|\\.[0-9]+)")
     message(STATUS "Using LLVM external library - ${PACKAGE_VERSION}")
   else()
-    message(FATAL_ERROR "LLVM version ${LLVM_PACKAGE_VERSION} different from ROOT supported, please try ${ROOT_LLVM_VERSION_REQUIRED_MAJOR}.0.x")
+    message(FATAL_ERROR "LLVM version ${LLVM_PACKAGE_VERSION} different from ROOT supported, please try ${ROOT_LLVM_VERSION_REQUIRED_MAJOR}.1.x")
   endif()
 
   if (NOT DEFINED LLVM_INCLUDE_TESTS)

@@ -1,4 +1,4 @@
-import { BIT, settings, browser, create, parse, toJSON, loadScript, isFunc, isStr, clTCanvas } from '../core.mjs';
+import { BIT, settings, internals, browser, create, parse, toJSON, loadScript, isFunc, isStr, clTCanvas } from '../core.mjs';
 import { select as d3_select } from '../d3.mjs';
 import { closeCurrentWindow, showProgress, loadOpenui5, ToolbarIcons, getColorExec } from '../gui/utils.mjs';
 import { GridDisplay, getHPainter } from '../gui/display.mjs';
@@ -39,11 +39,6 @@ class TCanvasPainter extends TPadPainter {
       super(dom, canvas, true);
       this._websocket = null;
       this.tooltip_allowed = settings.Tooltip;
-      if ((dom === null) && (canvas === null)) {
-         // for web canvas details are important
-         settings.SmallPad.width = 20;
-         settings.SmallPad.height = 10;
-      }
    }
 
    /** @summary Cleanup canvas painter */
@@ -277,6 +272,10 @@ class TCanvasPainter extends TPadPainter {
          return this.sendWebsocket(`OBJEXEC:${snapid}:${exec}`);
    }
 
+   /** @summary Return true if message can be send via web socket
+    * @private */
+   canSendWebSocket() { return this._websocket?.canSend(); }
+
    /** @summary Send text message with web socket
      * @desc used for communication with server-side of web canvas
      * @private */
@@ -368,6 +367,11 @@ class TCanvasPainter extends TPadPainter {
                 if (ranges) ranges = ':' + ranges;
                 handle.send(`READY6:${version}${ranges}`); // send ready message back when drawing completed
                 this.confirmDraw();
+             }).catch(err => {
+               if (isFunc(this.showConsoleError))
+                  this.showConsoleError(err);
+               else
+                  console.log(err);
              });
       } else if (msg.slice(0, 5) === 'MENU:') {
          // this is menu with exact identifier for object
@@ -589,7 +593,6 @@ class TCanvasPainter extends TPadPainter {
 
                   objpainter?.getPadPainter()?.selectObjectPainter(objpainter);
 
-                  console.log('activate GED');
                   this.processChanges('sbits', this);
 
                   resolveFunc(true);
@@ -614,6 +617,19 @@ class TCanvasPainter extends TPadPainter {
       return true;
    }
 
+   /** @summary Send command to start fit panel code on the server
+     * @private */
+   startFitPanel(standalone) {
+      if (!this._websocket)
+         return false;
+
+      const new_conn = standalone ? null : this._websocket.createChannel();
+
+      this.sendWebsocket('FITPANEL:' + (standalone ? 'standalone' : new_conn.getChannelId()));
+
+      return new_conn;
+   }
+
    /** @summary Complete handling of online canvas drawing
      * @private */
    completeCanvasSnapDrawing() {
@@ -626,11 +642,17 @@ class TCanvasPainter extends TPadPainter {
 
       if (this._all_sections_showed) return;
       this._all_sections_showed = true;
+
+      // used in Canvas.controller.js to avoid browser resize because of initial sections show/hide
+      this._ignore_section_resize = true;
+
       this.showSection('Menu', this.pad.TestBit(kMenuBar));
       this.showSection('StatusBar', this.pad.TestBit(kShowEventStatus));
       this.showSection('ToolBar', this.pad.TestBit(kShowToolBar));
       this.showSection('Editor', this.pad.TestBit(kShowEditor));
       this.showSection('ToolTips', this.pad.TestBit(kShowToolTips) || this._highlight_connect);
+
+      this._ignore_section_resize = false;
    }
 
    /** @summary Handle highlight in canvas - deliver information to server
@@ -764,7 +786,7 @@ class TCanvasPainter extends TPadPainter {
    }
 
    /** @summary produce JSON for TCanvas, which can be used to display canvas once again */
-   produceJSON() {
+   produceJSON(spacing) {
       const canv = this.getObject(),
             fill0 = (canv.fFillStyle === 0),
             axes = [], hists = [];
@@ -817,7 +839,7 @@ class TCanvasPainter extends TPadPainter {
       // const fp = this.getFramePainter();
       // fp?.setRootPadRange(this.getRootPad());
 
-      const res = toJSON(canv);
+      const res = toJSON(canv, spacing);
 
       if (fill0) canv.fFillStyle = 0;
 
@@ -860,10 +882,19 @@ class TCanvasPainter extends TPadPainter {
       const painter = new TCanvasPainter(dom, can);
       painter.checkSpecialsInPrimitives(can, true);
 
-      if (!nocanvas && can.fCw && can.fCh && !painter.isBatchMode()) {
-         const rect0 = painter.selectDom().node().getBoundingClientRect();
-         if (!rect0.height && (rect0.width > 0.1*can.fCw)) {
-            painter.selectDom().style('width', can.fCw+'px').style('height', can.fCh+'px');
+      if (!nocanvas && can.fCw && can.fCh) {
+         const d = painter.selectDom();
+         let apply_size = false;
+         if (!painter.isBatchMode()) {
+            const rect0 = d.node().getBoundingClientRect();
+            apply_size = !rect0.height && (rect0.width > 0.1*can.fCw);
+         } else {
+            const arg = d.property('_batch_use_canvsize');
+            apply_size = arg || (arg === undefined);
+         }
+         if (apply_size) {
+            d.style('width', can.fCw + 'px').style('height', can.fCh + 'px')
+              .attr('width', can.fCw).attr('height', can.fCh);
             painter._fixed_size = true;
          }
       }
@@ -930,7 +961,7 @@ async function ensureTCanvas(painter, frame_kind) {
 
 /** @summary draw TPad snapshot from TWebCanvas
   * @private */
-async function drawTPadSnapshot(dom, snap /*, opt */) {
+async function drawTPadSnapshot(dom, snap /* , opt */) {
    const can = create(clTCanvas),
          painter = new TCanvasPainter(dom, can);
    painter.normal_canvas = false;
@@ -950,5 +981,7 @@ async function drawTFrame(dom, obj, opt) {
    fp.mode3d = opt === '3d';
    return ensureTCanvas(fp, false).then(() => fp.redraw());
 }
+
+Object.assign(internals.jsroot, { ensureTCanvas, TPadPainter, TCanvasPainter });
 
 export { ensureTCanvas, drawTPadSnapshot, drawTFrame, TPadPainter, TCanvasPainter };

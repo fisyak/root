@@ -711,15 +711,12 @@ void TH2::FillN(Int_t ntimes, const Double_t *x, const Double_t *y, const Double
 ///
 ///  One can also call TF2::GetRandom2 to get a random variate from a function.
 
-void TH2::FillRandom(const char *fname, Int_t ntimes, TRandom * rng)
+void TH2::FillRandom(TF1 *fobj, Int_t ntimes, TRandom * rng)
 {
    Int_t bin, binx, biny, ibin, loop;
    Double_t r1, x, y;
-   //*-*- Search for fname in the list of ROOT defined functions
-   TObject *fobj = gROOT->GetFunction(fname);
-   if (!fobj) { Error("FillRandom", "Unknown function: %s",fname); return; }
    TF2 * f1 = dynamic_cast<TF2*>(fobj);
-   if (!f1) { Error("FillRandom", "Function: %s is not a TF2, is a %s",fname,fobj->IsA()->GetName()); return; }
+   if (!f1) { Error("FillRandom", "Function: %s is not a TF2, is a %s",fobj->GetName(),fobj->IsA()->GetName()); return; }
 
 
    TAxis & xAxis = fXaxis;
@@ -2415,7 +2412,7 @@ TH1D *TH2::DoProjection(bool onX, const char *name, Int_t firstbin, Int_t lastbi
 ///
 ///   if option "e" is specified, the errors are computed.
 ///   if option "d" is specified, the projection is drawn in the current pad.
-///   if option "o" original axis range of the taget axes will be
+///   if option "o" original axis range of the target axes will be
 ///   kept, but only bins inside the selected range will be filled.
 ///
 ///   Using a TCutG object, it is possible to select a sub-range of a 2-D histogram.
@@ -2454,7 +2451,7 @@ TH1D *TH2::ProjectionX(const char *name, Int_t firstybin, Int_t lastybin, Option
 ///
 ///   if option "e" is specified, the errors are computed.
 ///   if option "d" is specified, the projection is drawn in the current pad.
-///   if option "o" original axis range of the taget axes will be
+///   if option "o" original axis range of the target axes will be
 ///   kept, but only bins inside the selected range will be filled.
 ///
 ///   Using a TCutG object, it is possible to select a sub-range of a 2-D histogram.
@@ -2861,7 +2858,7 @@ ClassImp(TH2C);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH2C::TH2C(): TH2(), TArrayC()
+TH2C::TH2C()
 {
    SetBinsLength(9);
    if (fgDefaultSumw2) Sumw2();
@@ -2871,9 +2868,7 @@ TH2C::TH2C(): TH2(), TArrayC()
 ////////////////////////////////////////////////////////////////////////////////
 /// Destructor.
 
-TH2C::~TH2C()
-{
-}
+TH2C::~TH2C() {}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3125,7 +3120,7 @@ ClassImp(TH2S);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH2S::TH2S(): TH2(), TArrayS()
+TH2S::TH2S()
 {
    SetBinsLength(9);
    if (fgDefaultSumw2) Sumw2();
@@ -3389,7 +3384,7 @@ ClassImp(TH2I);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH2I::TH2I(): TH2(), TArrayI()
+TH2I::TH2I()
 {
    SetBinsLength(9);
    if (fgDefaultSumw2) Sumw2();
@@ -3618,7 +3613,7 @@ ClassImp(TH2L);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH2L::TH2L(): TH2(), TArrayL64()
+TH2L::TH2L()
 {
    SetBinsLength(9);
    if (fgDefaultSumw2) Sumw2();
@@ -3847,7 +3842,7 @@ ClassImp(TH2F);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH2F::TH2F(): TH2(), TArrayF()
+TH2F::TH2F()
 {
    SetBinsLength(9);
    if (fgDefaultSumw2) Sumw2();
@@ -4119,7 +4114,7 @@ ClassImp(TH2D);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH2D::TH2D(): TH2(), TArrayD()
+TH2D::TH2D()
 {
    SetBinsLength(9);
    if (fgDefaultSumw2) Sumw2();

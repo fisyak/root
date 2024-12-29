@@ -31,16 +31,16 @@
 #include <string>
 #include <utility>
 
-class TFile;
+class TDirectory;
 
 namespace ROOT {
+class RNTuple; // for making RPageSourceFile a friend of RNTuple
 
 namespace Internal {
 class RRawFile;
 }
 
 namespace Experimental {
-class RNTuple; // for making RPageSourceFile a friend of RNTuple
 struct RNTupleLocator;
 
 namespace Internal {
@@ -69,8 +69,6 @@ private:
       size_t fBytesPacked;
    };
 
-   std::unique_ptr<RPageAllocatorHeap> fPageAllocator;
-
    std::unique_ptr<RNTupleFileWriter> fWriter;
    /// Number of bytes committed to storage in the current cluster
    std::uint64_t fNBytesCurrentCluster = 0;
@@ -89,27 +87,24 @@ private:
 protected:
    using RPagePersistentSink::InitImpl;
    void InitImpl(unsigned char *serializedHeader, std::uint32_t length) final;
-   RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) final;
+   RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) override;
    RNTupleLocator
    CommitSealedPageImpl(DescriptorId_t physicalColumnId, const RPageStorage::RSealedPage &sealedPage) final;
    std::vector<RNTupleLocator>
    CommitSealedPageVImpl(std::span<RPageStorage::RSealedPageGroup> ranges, const std::vector<bool> &mask) final;
-   std::uint64_t CommitClusterImpl() final;
+   std::uint64_t StageClusterImpl() final;
    RNTupleLocator CommitClusterGroupImpl(unsigned char *serializedPageList, std::uint32_t length) final;
    using RPagePersistentSink::CommitDatasetImpl;
    void CommitDatasetImpl(unsigned char *serializedFooter, std::uint32_t length) final;
 
 public:
    RPageSinkFile(std::string_view ntupleName, std::string_view path, const RNTupleWriteOptions &options);
-   RPageSinkFile(std::string_view ntupleName, TFile &file, const RNTupleWriteOptions &options);
+   RPageSinkFile(std::string_view ntupleName, TDirectory &fileOrDirectory, const RNTupleWriteOptions &options);
    RPageSinkFile(const RPageSinkFile &) = delete;
    RPageSinkFile &operator=(const RPageSinkFile &) = delete;
    RPageSinkFile(RPageSinkFile &&) = default;
    RPageSinkFile &operator=(RPageSinkFile &&) = default;
    ~RPageSinkFile() override;
-
-   RPage ReservePage(ColumnHandle_t columnHandle, std::size_t nElements) final;
-   void ReleasePage(RPage &page) final;
 }; // class RPageSinkFile
 
 // clang-format off
@@ -120,7 +115,7 @@ public:
 */
 // clang-format on
 class RPageSourceFile : public RPageSource {
-   friend class ROOT::Experimental::RNTuple;
+   friend class ROOT::RNTuple;
 
 private:
    /// Holds the uncompressed header and footer
@@ -167,8 +162,8 @@ protected:
    /// The cloned page source creates a new raw file and reader and opens its own file descriptor to the data.
    std::unique_ptr<RPageSource> CloneImpl() const final;
 
-   RPage LoadPageImpl(ColumnHandle_t columnHandle, const RClusterInfo &clusterInfo,
-                      ClusterSize_t::ValueType idxInCluster) final;
+   RPageRef LoadPageImpl(ColumnHandle_t columnHandle, const RClusterInfo &clusterInfo,
+                         ClusterSize_t::ValueType idxInCluster) final;
 
 public:
    RPageSourceFile(std::string_view ntupleName, std::string_view path, const RNTupleReadOptions &options);
@@ -184,8 +179,6 @@ public:
    RPageSourceFile(RPageSourceFile &&) = delete;
    RPageSourceFile &operator=(RPageSourceFile &&) = delete;
    ~RPageSourceFile() override;
-
-   void ReleasePage(RPage &page) final;
 
    void LoadSealedPage(DescriptorId_t physicalColumnId, RClusterIndex clusterIndex, RSealedPage &sealedPage) final;
 

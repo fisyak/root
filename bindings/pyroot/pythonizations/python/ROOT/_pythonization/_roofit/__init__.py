@@ -40,12 +40,6 @@ from ._rooglobalfunc import (
     Slice,
     Import,
     Link,
-    LineColor,
-    FillColor,
-    MarkerColor,
-    LineStyle,
-    FillStyle,
-    MarkerStyle,
     bindFunction,
 )
 from ._roojsonfactorywstool import RooJSONFactoryWSTool
@@ -58,6 +52,7 @@ from ._roosimultaneous import RooSimultaneous
 from ._roosimwstool import RooSimWSTool
 from ._rooworkspace import RooWorkspace
 from ._roovectordatastore import RooVectorDataStore
+from ._roostats import SPlot
 
 
 # list of python classes that are used to pythonize RooFit classes
@@ -89,6 +84,7 @@ python_classes = [
     RooSimWSTool,
     RooWorkspace,
     RooVectorDataStore,
+    SPlot
 ]
 
 # list of python functions that are used to pythonize RooGlobalFunc function in RooFit
@@ -103,12 +99,6 @@ python_roofit_functions = [
     Slice,
     Import,
     Link,
-    LineColor,
-    FillColor,
-    MarkerColor,
-    LineStyle,
-    FillStyle,
-    MarkerStyle,
     bindFunction,
 ]
 
@@ -132,6 +122,7 @@ def get_defined_attributes(klass, consider_base_classes=False):
         "__weakref__",
         "__firstlineno__",
         "__static_attributes__",
+        "__cpp_name__"
     ]
 
     if not consider_base_classes:

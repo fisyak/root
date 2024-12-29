@@ -109,12 +109,14 @@ class AttrReadTest(unittest.TestCase):
         }
 
         for transformation, args in transformations.items():
-            newProxy = getattr(proxy, transformation)(*args)
-            self.assertEqual(proxy.proxied_node._new_op_name, transformation)
-            self.assertIsInstance(newProxy, Proxy.NodeProxy)
-            self.assertEqual(newProxy.proxied_node.operation.name,
+            parent_node = proxy.proxied_node
+            proxy = getattr(proxy, transformation)(*args)
+            # Calling the operation on the parent node modifies an attribute
+            self.assertEqual(parent_node._new_op_name, transformation)
+            self.assertIsInstance(proxy, Proxy.NodeProxy)
+            self.assertEqual(proxy.proxied_node.operation.name,
                              transformation)
-            self.assertEqual(newProxy.proxied_node.operation.args, args)
+            self.assertEqual(proxy.proxied_node.operation.args, args)
 
     def test_node_attr_transformation(self):
         """
@@ -195,10 +197,6 @@ class GetValueTests(unittest.TestCase):
             """
             self.obtained_head_node = generator.head_node
 
-        def distribute_files(self, includes_list):
-            """do nothing"""
-            pass
-
         def make_dataframe(self, *args, **kwargs):
             """Dummy make_dataframe"""
             pass
@@ -272,3 +270,63 @@ class InternalDataFrameTests(unittest.TestCase):
         cols_after = proxy.GetColumnNames()
 
         self.assertSequenceEqual(cols_after, ["x", "y", "z"])
+        
+    def test_get_column_type(self):
+        
+        """
+        Check column type of the column in the dataset.
+        """
+        
+        hn = create_dummy_headnode(self.test_treename, self.test_filename)
+        proxy = Proxy.NodeProxy(hn)
+        column_type = proxy.GetColumnType("myColumn")
+        self.assertSequenceEqual(column_type, "Float_t")
+    
+    def test_get_column_type_after_define(self):
+        """
+        Check column type of the newly defined columns.
+        """
+
+        node = create_dummy_headnode(1)
+        proxy = Proxy.NodeProxy(node)
+
+        cols_before = proxy.GetColumnNames()
+        self.assertSequenceEqual(cols_before, [])
+
+        proxy = proxy.Define("x", "42.0").Define("y", "43")
+
+        cols_after = proxy.GetColumnNames()
+        column_types = []
+        for column in cols_after:  
+            column_type = proxy.GetColumnType(column)
+            column_types.append(column_type)
+
+        self.assertSequenceEqual(column_types, ["double", "int"])
+
+    def test_columninfo_defines_twobranches(self):
+        """
+        Check new column names and types are available locally even if the same
+        column name is used in different branches of the computation graph.
+        """
+
+        node = create_dummy_headnode(1)
+        proxy = Proxy.NodeProxy(node)
+
+        cols_before = proxy.GetColumnNames()
+        self.assertSequenceEqual(cols_before, [])
+
+        expected_coltype_1 = "Long64_t"
+        branch_1 = proxy.Define("mycol", f"static_cast<{expected_coltype_1}>(42)")
+
+        expected_coltype_2 = "float"
+        branch_2 = proxy.Define("mycol", f"static_cast<{expected_coltype_2}>(33)")
+
+        cols_1 = branch_1.GetColumnNames()
+        self.assertSequenceEqual(cols_1, ["mycol"])
+        coltype_1 = branch_1.GetColumnType(cols_1[0])
+        self.assertEqual(coltype_1, expected_coltype_1)
+
+        cols_2 = branch_2.GetColumnNames()
+        self.assertSequenceEqual(cols_2, ["mycol"])
+        coltype_2 = branch_2.GetColumnType(cols_2[0])
+        self.assertEqual(coltype_2, expected_coltype_2)

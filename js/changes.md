@@ -1,24 +1,86 @@
 # JSROOT changelog
 
 ## Changes in dev
+1. Implement cont5 draw option for `TGraph2D` using Delaunay algorithm
+1. Adjust histogram title drawing with native implementation
+1. Improve float to string convertion when 'g' is specified
+1. Support "same" option for first histogram, draw direcly on pad
+1. Support different angle coordiantes in `TGraphPolargram`, handle 'N' and 'O' draw options
+1. Suppor fAxisAngle in `TGraphPolargram`, provide 'rangleNN' draw option
+1. Implement 'arc' draw option for `TPave`
+1. Provide context menus for all derived from `TPave` classes
+1. Support Poisson errors for `TH1`/`TH2`, https://root-forum.cern.ch/t/62335/
+1. Support TLink and TButton object, used in TInspectCanvas
+1. Fix - handle `TPave` NDC position also when fInit is not set
+1. Fix - correctly position title according to gStyle->GetTitleAlign()
+1. Fix - correctly handle tooltip events for `TGraphPolar`
+1. Fix - font corruption after PDF generation
+
+
+## Changes in 7.8.0
 1. Let use custom time zone for time display, support '&utc' and '&cet' in URL parameters
 2. Support gStyle.fLegendFillStyle
 3. Let change histogram min/max values via context menu
-4. Support Z-scale zooming with TScatter
+4. Support Z-scale zooming with `TScatter`
 5. Implement "haxis" draw option for histogram to draw only axes for hbar
 6. Implement "axisg" and "haxisg" to draw axes with grids
-7. Support TH1 marker, text and line drawing superimposed with "haxis"
-8. Support TBox and TLatex drawing on "frame", support drawing on swapped axes
-9. TProfile and TProfile2D projections https://github.com/root-project/root/issues/15851
-10. Draw total histogram from TEfficiency when draw option starts with 'b'
-11. Let redraw TEfficiency, THStack and TMultiGraph with different draw options via hist context menu
-12. Support 'pads' draw options for TMultiGraph, support context menu for it
-13. Let drop object on sub-pads
+7. Support `TH1` marker, text and line drawing superimposed with "haxis"
+8. Support `TBox`, `TLatex`, `TLine`, `TMarker` drawing on "frame", support drawing on swapped axes
+9. `TProfile` and `TProfile2D` projections https://github.com/root-project/root/issues/15851
+10. Draw total histogram from `TEfficiency` when draw option starts with 'b'
+11. Let redraw `TEfficiency`, `THStack` and `TMultiGraph` with different draw options via hist context menu
+12. Support 'pads' draw options for `TMultiGraph`, support context menu for it
+13. Let drop objects on sub-pads
 14. Properly loads ES6 modules for web canvas
-15. Internals - do not select pad (aka gPad) for objects drawing, always use assigned pad painter
-16. Fix - properly save zoomed ranges in drawingJSON()
-17. Fix - properly redraw TMultuGraph
-18. Fix - show empty bin in TProfile2D if it has entries #316
+15. Improve performance of `TH3`/`RH3` drawing by using `THREE.InstancedMesh`
+16. Implement batch mode with '&batch' URL parameter to create SVG/PNG images with default GUI
+17. Adjust node.js implementation to produce identical output with normal browser
+18. Create necessary infrastructure for testing with 'puppeteer'
+19. Support injection of ES6 modules via '&inject=path.mjs'
+20. Using importmap for 'jsroot' in all major HTML files and in demos
+21. Implement `settings.CutAxisLabels` flag to remove labels which may exceed graphical range
+22. Let disable usage of `TAxis` custom labels via context menu
+23. Let configure default draw options via context menu, preserved in the local storage
+24. Let save canvas as JSON file from context menu, object as JSON from inspector
+25. Upgrade three.js r162 -> r168, use r162 only in node.js because of "gl" module
+26. Create unified svg2pdf/jspdf ES6 modules, integrate in jsroot builds
+27. Let create multi-page PDF document - in `TWebCanvas` batch mode
+28. Let add in latex external links via `#url[link]{label}` syntax - including jsPDF support
+29. Support `TAttMarker` style with line width bigger than 1
+30. Provide link to ROOT class documentation from context menus
+31. Implement axis labels and title rotations on lego plots
+32. Internals - upgrade to eslint 9
+33. Internals - do not select pad (aka gPad) for objects drawing, always use assigned pad painter
+34. Fix - properly save zoomed ranges in drawingJSON()
+35. Fix - properly redraw `TMultiGraph`
+36. Fix - show empty bin in `TProfile2D` if it has entries #316
+37. Fix - unzooming on log scale was extending range forever
+38. Fix - display empty hist bin if fSumw2 not zero
+39. Fix - geometry display on android devices
+
+
+## Changes in 7.7.5
+1. Fix - can enable exponent only for log10 axis scale
+2. Fix - proper set custom font size in latex
+3. Fix - do not force style 8 for hist markers
+4. Fix - ensure minimal hist title height
+5. Fix - disable Bloom effect on Android
+6. Fix - handle reordering of fragments in multipart reply #319
+7. Fix - properly show non-zero entries #320
+
+
+## Changes in 7.7.4
+1. Fix - TGraph Y range selection, do not cross 0
+2. Fix - correctly handle `#font[id]` in latex
+3. Fix - store canvas with embed geometry drawing
+4. Fix - upgrade rollup and import.meta polyfill
+
+
+## Changes in 7.7.3
+1. Fix - correctly handle in I/O empty std::map
+2. Fix - reading of small (<1KB) ROOT files
+3. Fix - race condition in zstd initialization #318
+4. Fix - deployment with zstd #317
 
 
 ## Changes in 7.7.2

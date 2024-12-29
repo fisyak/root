@@ -1,6 +1,5 @@
 import { settings, gStyle, clTMultiGraph, kNoZoom } from '../core.mjs';
-import { Vector2, BufferGeometry, BufferAttribute, Mesh, MeshBasicMaterial, ShapeUtils } from '../three.mjs';
-import { getMaterialArgs } from '../base/base3d.mjs';
+import { getMaterialArgs, THREE } from '../base/base3d.mjs';
 import { assignFrame3DMethods, drawBinsLego, drawBinsError3D, drawBinsContour3D, drawBinsSurf3D } from './hist3d.mjs';
 import { TAxisPainter } from '../gpad/TAxisPainter.mjs';
 import { THistPainter } from '../hist2d/THistPainter.mjs';
@@ -70,7 +69,7 @@ function drawTH2PolyLego(painter) {
                if (vert > 0)
                   dist2 = (currx-lastx)*(currx-lastx) + (curry-lasty)*(curry-lasty);
                if (dist2 > dist2limit) {
-                  pnts.push(new Vector2(currx, curry));
+                  pnts.push(new THREE.Vector2(currx, curry));
                   lastx = currx;
                   lasty = curry;
                }
@@ -78,7 +77,7 @@ function drawTH2PolyLego(painter) {
 
             try {
                if (pnts.length > 2)
-                  faces = ShapeUtils.triangulateShape(pnts, []);
+                  faces = THREE.ShapeUtils.triangulateShape(pnts, []);
             } catch (e) {
                faces = null;
             }
@@ -162,12 +161,12 @@ function drawTH2PolyLego(painter) {
          }
       }
 
-      const geometry = new BufferGeometry();
-      geometry.setAttribute('position', new BufferAttribute(pos, 3));
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       geometry.computeVertexNormals();
 
-      const material = new MeshBasicMaterial(getMaterialArgs(painter._color_palette?.getColor(colindx), { vertexColors: false })),
-            mesh = new Mesh(geometry, material);
+      const material = new THREE.MeshBasicMaterial(getMaterialArgs(painter._color_palette?.getColor(colindx), { vertexColors: false, side: THREE.DoubleSide })),
+            mesh = new THREE.Mesh(geometry, material);
 
       pmain.add3DMesh(mesh);
 
@@ -214,7 +213,8 @@ class TH2Painter extends TH2Painter2D {
       let pr = Promise.resolve(true);
 
       if (reason === 'resize') {
-         if (is_main && main.resize3D()) main.render3D();
+         if (is_main && main.resize3D())
+            main.render3D();
       } else {
          const pad = this.getPadPainter().getRootPad(true),
                logz = pad?.fLogv ?? pad?.fLogz;
@@ -242,9 +242,11 @@ class TH2Painter extends TH2Painter2D {
             pr = main.create3DScene(this.options.Render3D, this.options.x3dscale, this.options.y3dscale, this.options.Ortho).then(() => {
                main.setAxesRanges(histo.fXaxis, this.xmin, this.xmax, histo.fYaxis, this.ymin, this.ymax, histo.fZaxis, this.zmin, this.zmax, this);
                main.set3DOptions(this.options);
-               main.drawXYZ(main.toplevel, TAxisPainter, { zmult, zoom: settings.Zooming, ndim: 2,
+               main.drawXYZ(main.toplevel, TAxisPainter, {
+                  ndim: 2, hist_painter: this, zmult, zoom: settings.Zooming,
                   draw: this.options.Axis !== -1, drawany: this.options.isCartesian(),
-                  reverse_x: this.options.RevX, reverse_y: this.options.RevY });
+                  reverse_x: this.options.RevX, reverse_y: this.options.RevY
+               });
             });
          }
 

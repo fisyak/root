@@ -1,7 +1,7 @@
-import { BIT, isFunc, clTLatex, clTMathText, clTAnnotation } from '../core.mjs';
+import { BIT, isFunc, clTLatex, clTLink, clTMathText, clTAnnotation } from '../core.mjs';
 import { BasePainter, makeTranslate, DrawOptions } from '../base/BasePainter.mjs';
 import { addMoveHandler } from '../gui/utils.mjs';
-import { assignContextMenu, kToFront } from '../gui/menu.mjs';
+import { assignContextMenu } from '../gui/menu.mjs';
 
 
 /** @summary Draw TText
@@ -11,7 +11,8 @@ async function drawText() {
          pp = this.getPadPainter(),
          w = pp.getPadWidth(),
          h = pp.getPadHeight(),
-         fp = this.getFramePainter();
+         fp = this.getFramePainter(),
+         is_url = text.fName.startsWith('http://') || text.fName.startsWith('https://');
    let pos_x = text.fX, pos_y = text.fY, use_frame = false,
        fact = 1,
        annot = this.matchObjectType(clTAnnotation);
@@ -38,7 +39,7 @@ async function drawText() {
       text.fTextAlign = 22;
    }
 
-   this.createG(use_frame ? 'frame2d' : undefined);
+   this.createG(use_frame ? 'frame2d' : undefined, is_url);
 
    this.draw_g.attr('transform', null); // remove transform from interactive changes
 
@@ -51,20 +52,30 @@ async function drawText() {
 
    const arg = this.textatt.createArg({ x: this.pos_x, y: this.pos_y, text: text.fTitle, latex: 0 });
 
-   if ((text._typename === clTLatex) || annot) {
+   if ((text._typename === clTLatex) || annot)
       arg.latex = 1;
-      fact = 0.9;
-   } else if (text._typename === clTMathText) {
+   else if (text._typename === clTMathText) {
       arg.latex = 2;
       fact = 0.8;
    }
 
-   this.startTextDrawing(this.textatt.font, this.textatt.getSize(w, h, fact, 0.05));
+   if (is_url) {
+      this.draw_g.attr('href', text.fName);
+      if (!this.isBatchMode())
+         this.draw_g.append('svg:title').text(`link on ${text.fName}`);
+   }
 
-   this.drawText(arg);
+   return this.startTextDrawingAsync(this.textatt.font, this.textatt.getSize(w, h, fact /* , 0.05 */))
+              .then(() => this.drawText(arg))
+              .then(() => this.finishTextDrawing())
+              .then(() => {
+      if (this.isBatchMode())
+         return this;
 
-   return this.finishTextDrawing().then(() => {
-      if (this.isBatchMode()) return this;
+      if (pp.isButton() && !pp.isEditable()) {
+         this.draw_g.on('click', () => this.getCanvPainter().selectActivePad(pp));
+         return this;
+      }
 
       this.pos_dx = this.pos_dy = 0;
 
@@ -80,19 +91,19 @@ async function drawText() {
          this.moveEnd = function(not_changed) {
             if (not_changed) return;
             const text = this.getObject();
-            let x = this.svgToAxis('x', this.pos_x + this.pos_dx, this.isndc),
-                y = this.svgToAxis('y', this.pos_y + this.pos_dy, this.isndc);
+            let fx = this.svgToAxis('x', this.pos_x + this.pos_dx, this.isndc),
+                fy = this.svgToAxis('y', this.pos_y + this.pos_dy, this.isndc);
             if (this.swap_xy)
-               [x, y] = [y, x];
+               [fx, fy] = [fy, fx];
 
-            text.fX = x;
-            text.fY = y;
-            this.submitCanvExec(`SetX(${x});;SetY(${y});;`);
+            text.fX = fx;
+            text.fY = fy;
+            this.submitCanvExec(`SetX(${fx});;SetY(${fy});;`);
          };
       }
 
       if (annot !== '3d')
-         addMoveHandler(this);
+         addMoveHandler(this, true, is_url);
       else {
          fp.processRender3D = true;
          this.handleRender3D = () => {
@@ -103,7 +114,19 @@ async function drawText() {
          };
       }
 
-      assignContextMenu(this, kToFront);
+      assignContextMenu(this);
+
+      this.fillContextMenuItems = function(menu) {
+         menu.add('Change text', () => menu.input('Enter new text', text.fTitle).then(t => {
+            text.fTitle = t;
+            this.interactiveRedraw('pad', `exec:SetTitle("${t}")`);
+         }));
+      };
+
+      if (this.matchObjectType(clTLink)) {
+         this.draw_g.style('cursor', 'pointer')
+                    .on('click', () => this.submitCanvExec('ExecuteEvent(kButton1Up, 0, 0);;'));
+      }
 
       return this;
    });
@@ -194,7 +217,7 @@ function drawEllipse() {
       .call(this.lineatt.func)
       .call(this.fillatt.func);
 
-   assignContextMenu(this, kToFront);
+   assignContextMenu(this);
 
    addMoveHandler(this);
 
@@ -263,13 +286,19 @@ function drawMarker() {
 
    this.isndc = marker.TestBit(kMarkerNDC);
 
+   const use_frame = this.isndc ? false : new DrawOptions(this.getDrawOpt()).check('FRAME'),
+         swap_xy = use_frame && this.getFramePainter()?.swap_xy;
+
    this.createAttMarker({ attr: marker });
 
-   this.createG();
+   this.createG(use_frame ? 'frame2d' : undefined);
 
-   const x = this.axisToSvg('x', marker.fX, this.isndc),
-         y = this.axisToSvg('y', marker.fY, this.isndc),
-         path = this.markeratt.create(x, y);
+   let x = this.axisToSvg('x', marker.fX, this.isndc),
+       y = this.axisToSvg('y', marker.fY, this.isndc);
+   if (swap_xy)
+      [x, y] = [y, x];
+
+   const path = this.markeratt.create(x, y);
 
    if (path) {
       this.draw_g.append('svg:path')
@@ -277,7 +306,7 @@ function drawMarker() {
           .call(this.markeratt.func);
    }
 
-   assignContextMenu(this, kToFront);
+   assignContextMenu(this);
 
    addMoveHandler(this);
 
@@ -292,9 +321,13 @@ function drawMarker() {
    this.moveEnd = function(not_changed) {
       if (not_changed) return;
       const marker = this.getObject();
-      marker.fX = this.svgToAxis('x', this.axisToSvg('x', marker.fX, this.isndc) + this.dx, this.isndc);
-      marker.fY = this.svgToAxis('y', this.axisToSvg('y', marker.fY, this.isndc) + this.dy, this.isndc);
-      this.submitCanvExec(`SetX(${marker.fX});;SetY(${marker.fY});;Notify();;`);
+      let fx = this.svgToAxis('x', this.axisToSvg('x', marker.fX, this.isndc) + this.dx, this.isndc),
+          fy = this.svgToAxis('y', this.axisToSvg('y', marker.fY, this.isndc) + this.dy, this.isndc);
+      if (swap_xy)
+         [fx, fy] = [fy, fx];
+      marker.fX = fx;
+      marker.fY = fy;
+      this.submitCanvExec(`SetX(${fx});;SetY(${fy});;Notify();;`);
       this.redraw();
    };
 }
@@ -319,7 +352,7 @@ function drawPolyMarker() {
           .call(this.markeratt.func);
    }
 
-   assignContextMenu(this, kToFront);
+   assignContextMenu(this);
 
    addMoveHandler(this);
 

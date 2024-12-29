@@ -33,8 +33,10 @@ class TH1Painter extends TH1Painter2D {
             pr = main.create3DScene(this.options.Render3D, this.options.x3dscale, this.options.y3dscale, this.options.Ortho).then(() => {
                main.setAxesRanges(histo.fXaxis, this.xmin, this.xmax, histo.fYaxis, this.ymin, this.ymax, histo.fZaxis, 0, 0, this);
                main.set3DOptions(this.options);
-               main.drawXYZ(main.toplevel, TAxisPainter, { use_y_for_z: true, zmult, zoom: settings.Zooming, ndim: 1,
-                  draw: (this.options.Axis !== -1), drawany: this.options.isCartesian() });
+               main.drawXYZ(main.toplevel, TAxisPainter, {
+                  ndim: 1, hist_painter: this, use_y_for_z: true, zmult, zoom: settings.Zooming,
+                  draw: (this.options.Axis !== -1), drawany: this.options.isCartesian()
+               });
             });
          }
 
@@ -49,7 +51,7 @@ class TH1Painter extends TH1Painter2D {
       }
 
       if (is_main)
-         pr = pr.then(() => this.drawColorPalette(this.options.Zscale && ((this.options.Lego === 12) || (this.options.Lego === 14))));
+         pr = pr.then(() => this.drawColorPalette(this.options.Zscale && this.options.canHavePalette()));
 
       return pr.then(() => this.updateFunctions())
                .then(() => this.updateHistTitle())

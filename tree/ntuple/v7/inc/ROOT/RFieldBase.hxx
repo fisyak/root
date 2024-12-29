@@ -17,6 +17,7 @@
 #define ROOT7_RFieldBase
 
 #include <ROOT/RColumn.hxx>
+#include <ROOT/RNTupleRange.hxx>
 #include <ROOT/RNTupleUtil.hxx>
 
 #include <cstddef>
@@ -31,15 +32,17 @@
 namespace ROOT {
 namespace Experimental {
 
-class RCollectionField;
+class RClassField;
 class RFieldBase;
+class RNTupleJoinProcessor;
 
 namespace Internal {
 struct RFieldCallbackInjector;
 struct RFieldRepresentationModifier;
 class RPageSink;
 class RPageSource;
-// TODO(jblomer): find a better way to not have these three methods in the RFieldBase public API
+// TODO(jblomer): find a better way to not have these four methods in the RFieldBase public API
+void CallFlushColumnsOnField(RFieldBase &);
 void CallCommitClusterOnField(RFieldBase &);
 void CallConnectPageSinkOnField(RFieldBase &, RPageSink &, NTupleSize_t firstEntry = 0);
 void CallConnectPageSourceOnField(RFieldBase &, RPageSource &);
@@ -65,9 +68,11 @@ This is and can only be partially enforced through C++.
 */
 // clang-format on
 class RFieldBase {
-   friend class ROOT::Experimental::RCollectionField;                  // to move the fields from the collection model
-   friend struct ROOT::Experimental::Internal::RFieldCallbackInjector; // used for unit tests
+   friend class ROOT::Experimental::RClassField;                             // to mark members as artificial
+   friend class ROOT::Experimental::RNTupleJoinProcessor;                    // needs ConstuctValue
+   friend struct ROOT::Experimental::Internal::RFieldCallbackInjector;       // used for unit tests
    friend struct ROOT::Experimental::Internal::RFieldRepresentationModifier; // used for unit tests
+   friend void Internal::CallFlushColumnsOnField(RFieldBase &);
    friend void Internal::CallCommitClusterOnField(RFieldBase &);
    friend void Internal::CallConnectPageSinkOnField(RFieldBase &, Internal::RPageSink &, NTupleSize_t);
    friend void Internal::CallConnectPageSourceOnField(RFieldBase &, Internal::RPageSource &);
@@ -159,141 +164,8 @@ public:
       Selection_t fDeserializationTypes;
    }; // class RColumnRepresentations
 
-   /// Points to an object with RNTuple I/O support and keeps a pointer to the corresponding field.
-   /// Only fields can create RValue objects through generation, binding or splitting.
-   class RValue {
-      friend class RFieldBase;
-
-   private:
-      RFieldBase *fField = nullptr;  ///< The field that created the RValue
-      std::shared_ptr<void> fObjPtr; ///< Set by Bind() or by RFieldBase::CreateValue(), SplitValue() or BindValue()
-
-      RValue(RFieldBase *field, std::shared_ptr<void> objPtr) : fField(field), fObjPtr(objPtr) {}
-
-   public:
-      RValue(const RValue &) = default;
-      RValue &operator=(const RValue &) = default;
-      RValue(RValue &&other) = default;
-      RValue &operator=(RValue &&other) = default;
-      ~RValue() = default;
-
-      std::size_t Append() { return fField->Append(fObjPtr.get()); }
-      void Read(NTupleSize_t globalIndex) { fField->Read(globalIndex, fObjPtr.get()); }
-      void Read(RClusterIndex clusterIndex) { fField->Read(clusterIndex, fObjPtr.get()); }
-      void Bind(std::shared_ptr<void> objPtr) { fObjPtr = objPtr; }
-      void BindRawPtr(void *rawPtr);
-      /// Replace the current object pointer by a pointer to a new object constructed by the field
-      void EmplaceNew() { fObjPtr = fField->CreateValue().GetPtr<void>(); }
-
-      template <typename T>
-      std::shared_ptr<T> GetPtr() const
-      {
-         return std::static_pointer_cast<T>(fObjPtr);
-      }
-
-      template <typename T>
-      const T &GetRef() const
-      {
-         return *static_cast<T *>(fObjPtr.get());
-      }
-
-      const RFieldBase &GetField() const { return *fField; }
-   }; // class RValue
-
-   /// Similar to RValue but manages an array of consecutive values. Bulks have to come from the same cluster.
-   /// Bulk I/O works with two bit masks: the mask of all the available entries in the current bulk and the mask
-   /// of the required entries in a bulk read. The idea is that a single bulk may serve multiple read operations
-   /// on the same range, where in each read operation a different subset of values is required.
-   /// The memory of the value array is managed by the RBulk class.
-   class RBulk {
-   private:
-      friend class RFieldBase;
-
-      RFieldBase *fField = nullptr;                   ///< The field that created the array of values
-      std::unique_ptr<RFieldBase::RDeleter> fDeleter; /// Cached deleter of fField
-      void *fValues = nullptr;                        ///< Pointer to the start of the array
-      std::size_t fValueSize = 0;                     ///< Cached copy of fField->GetValueSize()
-      std::size_t fCapacity = 0;                      ///< The size of the array memory block in number of values
-      std::size_t fSize = 0;              ///< The number of available values in the array (provided their mask is set)
-      bool fIsAdopted = false;            ///< True if the user provides the memory buffer for fValues
-      std::unique_ptr<bool[]> fMaskAvail; ///< Masks invalid values in the array
-      std::size_t fNValidValues = 0;      ///< The sum of non-zero elements in the fMask
-      RClusterIndex fFirstIndex;          ///< Index of the first value of the array
-      /// Reading arrays of complex values may require additional memory, for instance for the elements of
-      /// arrays of vectors. A pointer to the fAuxData array is passed to the field's BulkRead method.
-      /// The RBulk class does not modify the array in-between calls to the field's BulkRead method.
-      std::vector<unsigned char> fAuxData;
-
-      void ReleaseValues();
-      /// Sets a new range for the bulk. If there is enough capacity, the fValues array will be reused.
-      /// Otherwise a new array is allocated. After reset, fMaskAvail is false for all values.
-      void Reset(RClusterIndex firstIndex, std::size_t size);
-      void CountValidValues();
-
-      bool ContainsRange(RClusterIndex firstIndex, std::size_t size) const
-      {
-         if (firstIndex.GetClusterId() != fFirstIndex.GetClusterId())
-            return false;
-         return (firstIndex.GetIndex() >= fFirstIndex.GetIndex()) &&
-                ((firstIndex.GetIndex() + size) <= (fFirstIndex.GetIndex() + fSize));
-      }
-
-      void *GetValuePtrAt(std::size_t idx) const
-      {
-         return reinterpret_cast<unsigned char *>(fValues) + idx * fValueSize;
-      }
-
-      explicit RBulk(RFieldBase *field)
-         : fField(field), fDeleter(field->GetDeleter()), fValueSize(field->GetValueSize())
-      {
-      }
-
-   public:
-      ~RBulk();
-      RBulk(const RBulk &) = delete;
-      RBulk &operator=(const RBulk &) = delete;
-      RBulk(RBulk &&other);
-      RBulk &operator=(RBulk &&other);
-
-      // Sets fValues and fSize/fCapacity to the given values. The capacity is specified in number of values.
-      // Once a buffer is adopted, an attempt to read more values then available throws an exception.
-      void AdoptBuffer(void *buf, std::size_t capacity);
-
-      /// Reads 'size' values from the associated field, starting from 'firstIndex'. Note that the index is given
-      /// relative to a certain cluster. The return value points to the array of read objects.
-      /// The 'maskReq' parameter is a bool array of at least 'size' elements. Only objects for which the mask is
-      /// true are guaranteed to be read in the returned value array.
-      void *ReadBulk(RClusterIndex firstIndex, const bool *maskReq, std::size_t size)
-      {
-         if (!ContainsRange(firstIndex, size))
-            Reset(firstIndex, size);
-
-         // We may read a sub range of the currently available range
-         auto offset = firstIndex.GetIndex() - fFirstIndex.GetIndex();
-
-         if (fNValidValues == fSize)
-            return GetValuePtrAt(offset);
-
-         RBulkSpec bulkSpec;
-         bulkSpec.fFirstIndex = firstIndex;
-         bulkSpec.fCount = size;
-         bulkSpec.fMaskReq = maskReq;
-         bulkSpec.fMaskAvail = &fMaskAvail[offset];
-         bulkSpec.fValues = GetValuePtrAt(offset);
-         bulkSpec.fAuxData = &fAuxData;
-         auto nRead = fField->ReadBulk(bulkSpec);
-         if (nRead == RBulkSpec::kAllSet) {
-            if ((offset == 0) && (size == fSize)) {
-               fNValidValues = fSize;
-            } else {
-               CountValidValues();
-            }
-         } else {
-            fNValidValues += nRead;
-         }
-         return GetValuePtrAt(offset);
-      }
-   }; // class RBulk
+   class RValue;
+   class RBulk;
 
 private:
    /// The field name relative to its parent field
@@ -304,8 +176,13 @@ private:
    ENTupleStructure fStructure;
    /// For fixed sized arrays, the array length
    std::size_t fNRepetitions;
-   /// A field qualifies as simple if it is both mappable and has no post-read callback
+   /// A field qualifies as simple if it is mappable (which implies it has a single principal column),
+   /// and it is not an artificial field and has no post-read callback
    bool fIsSimple;
+   /// A field that is not backed on disk but computed, e.g. a default-constructed missing field or
+   /// a field whose data is created by I/O customization rules. Subfields of artificial fields are
+   /// artificial, too.
+   bool fIsArtificial = false;
    /// When the columns are connected to a page source or page sink, the field represents a field id in the
    /// corresponding RNTuple descriptor. This on-disk ID is set in RPageSink::Create() for writing and by
    /// RFieldDescriptor::CreateField() when recreating a field / model from the stored descriptor.
@@ -331,6 +208,8 @@ private:
    /// field with type `std::array<std::array<float, 4>, 2>`, this function returns 8 for the inner-most field.
    NTupleSize_t EntryToColumnElementIndex(NTupleSize_t globalIndex) const;
 
+   /// Flushes data from active columns
+   void FlushColumns();
    /// Flushes data from active columns to disk and calls CommitClusterImpl
    void CommitCluster();
    /// Fields and their columns live in the void until connected to a physical page storage.  Only once connected, data
@@ -343,27 +222,18 @@ private:
    /// determined using the page source descriptor, based on the parent field ID and the sub field name.
    void ConnectPageSource(Internal::RPageSource &pageSource);
 
-   /// Factory method for the field's type. The caller owns the returned pointer
-   void *CreateObjectRawPtr() const;
+   void SetArtificial()
+   {
+      fIsSimple = false;
+      fIsArtificial = true;
+      for (auto &field : fSubFields) {
+         field->SetArtificial();
+      }
+   }
 
 protected:
    /// Input parameter to ReadBulk() and ReadBulkImpl(). See RBulk class for more information
-   struct RBulkSpec {
-      /// As a return value of ReadBulk and ReadBulkImpl(), indicates that the full bulk range was read
-      /// independent of the provided masks.
-      static const std::size_t kAllSet = std::size_t(-1);
-
-      RClusterIndex fFirstIndex; ///< Start of the bulk range
-      std::size_t fCount = 0;    ///< Size of the bulk range
-      /// A bool array of size fCount, indicating the required values in the requested range
-      const bool *fMaskReq = nullptr;
-      bool *fMaskAvail = nullptr; ///< A bool array of size fCount, indicating the valid values in fValues
-      /// The destination area, which has to be a big enough array of valid objects of the correct type
-      void *fValues = nullptr;
-      /// Reference to memory owned by the RBulk class. The field implementing BulkReadImpl may use fAuxData
-      /// as memory that stays persistent between calls.
-      std::vector<unsigned char> *fAuxData = nullptr;
-   };
+   struct RBulkSpec;
 
    /// Collections and classes own sub fields
    std::vector<std::unique_ptr<RFieldBase>> fSubFields;
@@ -373,7 +243,7 @@ protected:
    /// principal column corresponds to the field type. For collection fields except fixed-sized arrays,
    /// the main column is the offset field.  Class fields have no column of their own.
    /// When reading, points to any column of the column team of the active representation. Usually, this is just
-   /// the first column, except for the nullable field.
+   /// the first column.
    /// When writing, points to the first column index of the currently active (not suppressed) column representation.
    Internal::RColumn *fPrincipalColumn = nullptr;
    /// Some fields have a second column in its column representation. In this case, fAuxiliaryColumn points into
@@ -395,8 +265,11 @@ protected:
    std::uint32_t fOnDiskTypeChecksum = 0;
    /// Pointers into the static vector GetColumnRepresentations().GetSerializationTypes() when
    /// SetColumnRepresentatives is called.  Otherwise (if empty) GetColumnRepresentatives() returns a vector
-   /// with a single element, the default representation.
+   /// with a single element, the default representation.  Always empty for artificial fields.
    std::vector<std::reference_wrapper<const ColumnRepresentation_t>> fColumnRepresentatives;
+
+   /// Factory method for the field's type. The caller owns the returned pointer
+   void *CreateObjectRawPtr() const;
 
    /// Helpers for generating columns. We use the fact that most fields have the same C++/memory types
    /// for all their column representations.
@@ -405,14 +278,14 @@ protected:
    void GenerateColumnsImpl(const ColumnRepresentation_t &representation, std::uint16_t representationIndex)
    {
       assert(ColumnIndexT < representation.size());
-      fAvailableColumns.emplace_back(
+      auto &column = fAvailableColumns.emplace_back(
          Internal::RColumn::Create<HeadT>(representation[ColumnIndexT], ColumnIndexT, representationIndex));
 
       // Initially, the first two columns become the active column representation
       if (representationIndex == 0 && !fPrincipalColumn) {
-         fPrincipalColumn = fAvailableColumns.back().get();
+         fPrincipalColumn = column.get();
       } else if (representationIndex == 0 && !fAuxiliaryColumn) {
-         fAuxiliaryColumn = fAvailableColumns.back().get();
+         fAuxiliaryColumn = column.get();
       } else {
          // We currently have no fields with more than 2 columns in its column representation
          R__ASSERT(representationIndex > 0);
@@ -496,21 +369,11 @@ protected:
    /// column type exists.
    virtual std::size_t AppendImpl(const void *from);
    virtual void ReadGlobalImpl(NTupleSize_t globalIndex, void *to);
-   virtual void ReadInClusterImpl(RClusterIndex clusterIndex, void *to)
-   {
-      ReadGlobalImpl(fPrincipalColumn->GetGlobalIndex(clusterIndex), to);
-   }
+   virtual void ReadInClusterImpl(RClusterIndex clusterIndex, void *to);
 
    /// Write the given value into columns. The value object has to be of the same type as the field.
    /// Returns the number of uncompressed bytes written.
-   std::size_t Append(const void *from)
-   {
-      if (~fTraits & kTraitMappable)
-         return AppendImpl(from);
-
-      fPrincipalColumn->Append(from);
-      return fPrincipalColumn->GetElement()->GetPackedSize();
-   }
+   std::size_t Append(const void *from);
 
    /// Populate a single value with data from the field. The memory location pointed to by to needs to be of the
    /// fitting type. The fast path is conditioned by the field qualifying as simple, i.e. maps as-is
@@ -520,23 +383,30 @@ protected:
       if (fIsSimple)
          return (void)fPrincipalColumn->Read(globalIndex, to);
 
-      if (fTraits & kTraitMappable)
-         fPrincipalColumn->Read(globalIndex, to);
-      else
-         ReadGlobalImpl(globalIndex, to);
+      if (!fIsArtificial) {
+         if (fTraits & kTraitMappable)
+            fPrincipalColumn->Read(globalIndex, to);
+         else
+            ReadGlobalImpl(globalIndex, to);
+      }
       if (R__unlikely(!fReadCallbacks.empty()))
          InvokeReadCallbacks(to);
    }
 
+   /// Populate a single value with data from the field. The memory location pointed to by to needs to be of the
+   /// fitting type. The fast path is conditioned by the field qualifying as simple, i.e. maps as-is
+   /// to a single column and has no read callback.
    void Read(RClusterIndex clusterIndex, void *to)
    {
       if (fIsSimple)
          return (void)fPrincipalColumn->Read(clusterIndex, to);
 
-      if (fTraits & kTraitMappable)
-         fPrincipalColumn->Read(clusterIndex, to);
-      else
-         ReadInClusterImpl(clusterIndex, to);
+      if (!fIsArtificial) {
+         if (fTraits & kTraitMappable)
+            fPrincipalColumn->Read(clusterIndex, to);
+         else
+            ReadInClusterImpl(clusterIndex, to);
+      }
       if (R__unlikely(!fReadCallbacks.empty()))
          InvokeReadCallbacks(to);
    }
@@ -549,22 +419,13 @@ protected:
    /// Returns the number of newly available values, that is the number of bools in bulkSpec.fMaskAvail that
    /// flipped from false to true. As a special return value, kAllSet can be used if all values are read
    /// independent from the masks.
-   std::size_t ReadBulk(const RBulkSpec &bulkSpec)
-   {
-      if (fIsSimple) {
-         /// For simple types, ignore the mask and memcopy the values into the destination
-         fPrincipalColumn->ReadV(bulkSpec.fFirstIndex, bulkSpec.fCount, bulkSpec.fValues);
-         std::fill(bulkSpec.fMaskAvail, bulkSpec.fMaskAvail + bulkSpec.fCount, true);
-         return RBulkSpec::kAllSet;
-      }
-
-      return ReadBulkImpl(bulkSpec);
-   }
+   std::size_t ReadBulk(const RBulkSpec &bulkSpec);
 
    /// Allow derived classes to call Append and Read on other (sub) fields.
    static std::size_t CallAppendOn(RFieldBase &other, const void *from) { return other.Append(from); }
    static void CallReadOn(RFieldBase &other, RClusterIndex clusterIndex, void *to) { other.Read(clusterIndex, to); }
    static void CallReadOn(RFieldBase &other, NTupleSize_t globalIndex, void *to) { other.Read(globalIndex, to); }
+   static void *CallCreateObjectRawPtrOn(RFieldBase &other) { return other.CreateObjectRawPtr(); }
 
    /// Fields may need direct access to the principal column of their sub fields, e.g. in RRVecField::ReadBulk
    static Internal::RColumn *GetPrincipalColumnOf(const RFieldBase &other) { return other.fPrincipalColumn; }
@@ -583,11 +444,14 @@ protected:
    virtual bool HasExtraTypeInfo() const { return false; }
    // The page sink's callback when the data set gets committed will call this method to get the field's extra
    // type information. This has to happen at the end of writing because the type information may change depending
-   // on the data that's written, e.g. for polymorphic types in the unsplit field.
+   // on the data that's written, e.g. for polymorphic types in the streamer field.
    virtual RExtraTypeInfoDescriptor GetExtraTypeInfo() const { return RExtraTypeInfoDescriptor(); }
 
    /// Add a new subfield to the list of nested fields
    void Attach(std::unique_ptr<RFieldBase> child);
+
+   /// Called by `ConnectPageSource()` before connecting; derived classes may override this as appropriate
+   virtual void BeforeConnectPageSource(Internal::RPageSource &) {}
 
    /// Called by `ConnectPageSource()` once connected; derived classes may override this as appropriate
    virtual void OnConnectPageSource() {}
@@ -597,74 +461,11 @@ protected:
    /// TODO(jalopezg): this overload may eventually be removed leaving only the `RFieldBase::Create()` that takes a
    /// single type name
    static RResult<std::unique_ptr<RFieldBase>> Create(const std::string &fieldName, const std::string &canonicalType,
-                                                      const std::string &typeAlias, bool fContinueOnError = false);
+                                                      const std::string &typeAlias, bool continueOnError = false);
 
 public:
-   /// Iterates over the sub tree of fields in depth-first search order
    template <bool IsConstT>
-   class RSchemaIteratorTemplate {
-   private:
-      struct Position {
-         using FieldPtr_t = std::conditional_t<IsConstT, const RFieldBase *, RFieldBase *>;
-         Position() : fFieldPtr(nullptr), fIdxInParent(-1) {}
-         Position(FieldPtr_t fieldPtr, int idxInParent) : fFieldPtr(fieldPtr), fIdxInParent(idxInParent) {}
-         FieldPtr_t fFieldPtr;
-         int fIdxInParent;
-      };
-      /// The stack of nodes visited when walking down the tree of fields
-      std::vector<Position> fStack;
-
-   public:
-      using iterator = RSchemaIteratorTemplate<IsConstT>;
-      using iterator_category = std::forward_iterator_tag;
-      using difference_type = std::ptrdiff_t;
-      using value_type = std::conditional_t<IsConstT, const RFieldBase, RFieldBase>;
-      using pointer = std::conditional_t<IsConstT, const RFieldBase *, RFieldBase *>;
-      using reference = std::conditional_t<IsConstT, const RFieldBase &, RFieldBase &>;
-
-      RSchemaIteratorTemplate() { fStack.emplace_back(Position()); }
-      RSchemaIteratorTemplate(pointer val, int idxInParent) { fStack.emplace_back(Position(val, idxInParent)); }
-      ~RSchemaIteratorTemplate() {}
-      /// Given that the iterator points to a valid field which is not the end iterator, go to the next field
-      /// in depth-first search order
-      void Advance()
-      {
-         auto itr = fStack.rbegin();
-         if (!itr->fFieldPtr->fSubFields.empty()) {
-            fStack.emplace_back(Position(itr->fFieldPtr->fSubFields[0].get(), 0));
-            return;
-         }
-
-         unsigned int nextIdxInParent = ++(itr->fIdxInParent);
-         while (nextIdxInParent >= itr->fFieldPtr->fParent->fSubFields.size()) {
-            if (fStack.size() == 1) {
-               itr->fFieldPtr = itr->fFieldPtr->fParent;
-               itr->fIdxInParent = -1;
-               return;
-            }
-            fStack.pop_back();
-            itr = fStack.rbegin();
-            nextIdxInParent = ++(itr->fIdxInParent);
-         }
-         itr->fFieldPtr = itr->fFieldPtr->fParent->fSubFields[nextIdxInParent].get();
-      }
-
-      iterator operator++(int) /* postfix */
-      {
-         auto r = *this;
-         Advance();
-         return r;
-      }
-      iterator &operator++() /* prefix */
-      {
-         Advance();
-         return *this;
-      }
-      reference operator*() const { return *fStack.back().fFieldPtr; }
-      pointer operator->() const { return fStack.back().fFieldPtr; }
-      bool operator==(const iterator &rh) const { return fStack.back().fFieldPtr == rh.fStack.back().fFieldPtr; }
-      bool operator!=(const iterator &rh) const { return fStack.back().fFieldPtr != rh.fStack.back().fFieldPtr; }
-   };
+   class RSchemaIteratorTemplate;
    using RSchemaIterator = RSchemaIteratorTemplate<false>;
    using RConstSchemaIterator = RSchemaIteratorTemplate<true>;
 
@@ -700,8 +501,6 @@ public:
    /// Checks if the given type is supported by RNTuple. In case of success, the result vector is empty.
    /// Otherwise there is an error record for each failing sub field (sub type).
    static std::vector<RCheckResult> Check(const std::string &fieldName, const std::string &typeName);
-   /// Check whether a given string is a valid field name
-   static RResult<void> EnsureValidFieldName(std::string_view fieldName);
 
    /// Generates an object of the field type and allocates new initialized memory according to the type.
    /// Implemented at the end of this header because the implementation is using RField<T>::TypeName()
@@ -718,9 +517,9 @@ public:
    /// connected to the field.
    RValue CreateValue();
    /// The returned bulk is initially empty; RBulk::ReadBulk will construct the array of values
-   RBulk CreateBulk() { return RBulk(this); }
+   RBulk CreateBulk();
    /// Creates a value from a memory location with an already constructed object
-   RValue BindValue(std::shared_ptr<void> objPtr) { return RValue(this, objPtr); }
+   RValue BindValue(std::shared_ptr<void> objPtr);
    /// Creates the list of direct child values given a value for this field.  E.g. a single value for the
    /// correct variant or all the elements of a collection.  The default implementation assumes no sub values
    /// and returns an empty vector.
@@ -740,11 +539,11 @@ public:
    const std::string &GetTypeAlias() const { return fTypeAlias; }
    ENTupleStructure GetStructure() const { return fStructure; }
    std::size_t GetNRepetitions() const { return fNRepetitions; }
-   NTupleSize_t GetNElements() const { return fPrincipalColumn->GetNElements(); }
    const RFieldBase *GetParent() const { return fParent; }
    std::vector<RFieldBase *> GetSubFields();
    std::vector<const RFieldBase *> GetSubFields() const;
    bool IsSimple() const { return fIsSimple; }
+   bool IsArtificial() const { return fIsArtificial; }
    /// Get the field's description
    const std::string &GetDescription() const { return fDescription; }
    void SetDescription(std::string_view description);
@@ -753,7 +552,8 @@ public:
    DescriptorId_t GetOnDiskId() const { return fOnDiskId; }
    void SetOnDiskId(DescriptorId_t id);
 
-   /// Returns the fColumnRepresentative pointee or, if unset, the field's default representative
+   /// Returns the fColumnRepresentative pointee or, if unset (always the case for artificial fields), the field's
+   /// default representative
    RColumnRepresentations::Selection_t GetColumnRepresentatives() const;
    /// Fixes a column representative. This can only be done _before_ connecting the field to a page sink.
    /// Otherwise, or if the provided representation is not in the list of GetColumnRepresentations,
@@ -774,19 +574,233 @@ public:
    /// if the field stored a type checksum
    std::uint32_t GetOnDiskTypeChecksum() const { return fOnDiskTypeChecksum; }
 
-   RSchemaIterator begin()
-   {
-      return fSubFields.empty() ? RSchemaIterator(this, -1) : RSchemaIterator(fSubFields[0].get(), 0);
-   }
-   RSchemaIterator end() { return RSchemaIterator(this, -1); }
-   RConstSchemaIterator cbegin() const
-   {
-      return fSubFields.empty() ? RConstSchemaIterator(this, -1) : RConstSchemaIterator(fSubFields[0].get(), 0);
-   }
-   RConstSchemaIterator cend() const { return RConstSchemaIterator(this, -1); }
+   RSchemaIterator begin();
+   RSchemaIterator end();
+   RConstSchemaIterator begin() const;
+   RConstSchemaIterator end() const;
+   RConstSchemaIterator cbegin() const;
+   RConstSchemaIterator cend() const;
 
    virtual void AcceptVisitor(Detail::RFieldVisitor &visitor) const;
 }; // class RFieldBase
+
+/// Iterates over the sub tree of fields in depth-first search order
+template <bool IsConstT>
+class RFieldBase::RSchemaIteratorTemplate {
+private:
+   struct Position {
+      using FieldPtr_t = std::conditional_t<IsConstT, const RFieldBase *, RFieldBase *>;
+      Position() : fFieldPtr(nullptr), fIdxInParent(-1) {}
+      Position(FieldPtr_t fieldPtr, int idxInParent) : fFieldPtr(fieldPtr), fIdxInParent(idxInParent) {}
+      FieldPtr_t fFieldPtr;
+      int fIdxInParent;
+   };
+   /// The stack of nodes visited when walking down the tree of fields
+   std::vector<Position> fStack;
+
+public:
+   using iterator = RSchemaIteratorTemplate<IsConstT>;
+   using iterator_category = std::forward_iterator_tag;
+   using difference_type = std::ptrdiff_t;
+   using value_type = std::conditional_t<IsConstT, const RFieldBase, RFieldBase>;
+   using pointer = std::conditional_t<IsConstT, const RFieldBase *, RFieldBase *>;
+   using reference = std::conditional_t<IsConstT, const RFieldBase &, RFieldBase &>;
+
+   RSchemaIteratorTemplate() { fStack.emplace_back(Position()); }
+   RSchemaIteratorTemplate(pointer val, int idxInParent) { fStack.emplace_back(Position(val, idxInParent)); }
+   ~RSchemaIteratorTemplate() {}
+   /// Given that the iterator points to a valid field which is not the end iterator, go to the next field
+   /// in depth-first search order
+   void Advance()
+   {
+      auto itr = fStack.rbegin();
+      if (!itr->fFieldPtr->fSubFields.empty()) {
+         fStack.emplace_back(Position(itr->fFieldPtr->fSubFields[0].get(), 0));
+         return;
+      }
+
+      unsigned int nextIdxInParent = ++(itr->fIdxInParent);
+      while (nextIdxInParent >= itr->fFieldPtr->fParent->fSubFields.size()) {
+         if (fStack.size() == 1) {
+            itr->fFieldPtr = itr->fFieldPtr->fParent;
+            itr->fIdxInParent = -1;
+            return;
+         }
+         fStack.pop_back();
+         itr = fStack.rbegin();
+         nextIdxInParent = ++(itr->fIdxInParent);
+      }
+      itr->fFieldPtr = itr->fFieldPtr->fParent->fSubFields[nextIdxInParent].get();
+   }
+
+   iterator operator++(int) /* postfix */
+   {
+      auto r = *this;
+      Advance();
+      return r;
+   }
+   iterator &operator++() /* prefix */
+   {
+      Advance();
+      return *this;
+   }
+   reference operator*() const { return *fStack.back().fFieldPtr; }
+   pointer operator->() const { return fStack.back().fFieldPtr; }
+   bool operator==(const iterator &rh) const { return fStack.back().fFieldPtr == rh.fStack.back().fFieldPtr; }
+   bool operator!=(const iterator &rh) const { return fStack.back().fFieldPtr != rh.fStack.back().fFieldPtr; }
+};
+
+/// Points to an object with RNTuple I/O support and keeps a pointer to the corresponding field.
+/// Only fields can create RValue objects through generation, binding or splitting.
+class RFieldBase::RValue {
+   friend class RFieldBase;
+
+private:
+   RFieldBase *fField = nullptr;  ///< The field that created the RValue
+   std::shared_ptr<void> fObjPtr; ///< Set by Bind() or by RFieldBase::CreateValue(), SplitValue() or BindValue()
+
+   RValue(RFieldBase *field, std::shared_ptr<void> objPtr) : fField(field), fObjPtr(objPtr) {}
+
+public:
+   RValue(const RValue &) = default;
+   RValue &operator=(const RValue &) = default;
+   RValue(RValue &&other) = default;
+   RValue &operator=(RValue &&other) = default;
+   ~RValue() = default;
+
+   std::size_t Append() { return fField->Append(fObjPtr.get()); }
+   void Read(NTupleSize_t globalIndex) { fField->Read(globalIndex, fObjPtr.get()); }
+   void Read(RClusterIndex clusterIndex) { fField->Read(clusterIndex, fObjPtr.get()); }
+   void Bind(std::shared_ptr<void> objPtr) { fObjPtr = objPtr; }
+   void BindRawPtr(void *rawPtr);
+   /// Replace the current object pointer by a pointer to a new object constructed by the field
+   void EmplaceNew() { fObjPtr = fField->CreateValue().GetPtr<void>(); }
+
+   template <typename T>
+   std::shared_ptr<T> GetPtr() const
+   {
+      return std::static_pointer_cast<T>(fObjPtr);
+   }
+
+   template <typename T>
+   const T &GetRef() const
+   {
+      return *static_cast<T *>(fObjPtr.get());
+   }
+
+   const RFieldBase &GetField() const { return *fField; }
+};
+
+struct RFieldBase::RBulkSpec {
+   /// As a return value of ReadBulk and ReadBulkImpl(), indicates that the full bulk range was read
+   /// independent of the provided masks.
+   static const std::size_t kAllSet = std::size_t(-1);
+
+   RClusterIndex fFirstIndex; ///< Start of the bulk range
+   std::size_t fCount = 0;    ///< Size of the bulk range
+   /// A bool array of size fCount, indicating the required values in the requested range
+   const bool *fMaskReq = nullptr;
+   bool *fMaskAvail = nullptr; ///< A bool array of size fCount, indicating the valid values in fValues
+   /// The destination area, which has to be a big enough array of valid objects of the correct type
+   void *fValues = nullptr;
+   /// Reference to memory owned by the RBulk class. The field implementing BulkReadImpl may use fAuxData
+   /// as memory that stays persistent between calls.
+   std::vector<unsigned char> *fAuxData = nullptr;
+};
+
+/// Similar to RValue but manages an array of consecutive values. Bulks have to come from the same cluster.
+/// Bulk I/O works with two bit masks: the mask of all the available entries in the current bulk and the mask
+/// of the required entries in a bulk read. The idea is that a single bulk may serve multiple read operations
+/// on the same range, where in each read operation a different subset of values is required.
+/// The memory of the value array is managed by the RBulk class.
+class RFieldBase::RBulk {
+private:
+   friend class RFieldBase;
+
+   RFieldBase *fField = nullptr;                   ///< The field that created the array of values
+   std::unique_ptr<RFieldBase::RDeleter> fDeleter; /// Cached deleter of fField
+   void *fValues = nullptr;                        ///< Pointer to the start of the array
+   std::size_t fValueSize = 0;                     ///< Cached copy of fField->GetValueSize()
+   std::size_t fCapacity = 0;                      ///< The size of the array memory block in number of values
+   std::size_t fSize = 0;              ///< The number of available values in the array (provided their mask is set)
+   bool fIsAdopted = false;            ///< True if the user provides the memory buffer for fValues
+   std::unique_ptr<bool[]> fMaskAvail; ///< Masks invalid values in the array
+   std::size_t fNValidValues = 0;      ///< The sum of non-zero elements in the fMask
+   RClusterIndex fFirstIndex;          ///< Index of the first value of the array
+   /// Reading arrays of complex values may require additional memory, for instance for the elements of
+   /// arrays of vectors. A pointer to the fAuxData array is passed to the field's BulkRead method.
+   /// The RBulk class does not modify the array in-between calls to the field's BulkRead method.
+   std::vector<unsigned char> fAuxData;
+
+   void ReleaseValues();
+   /// Sets a new range for the bulk. If there is enough capacity, the fValues array will be reused.
+   /// Otherwise a new array is allocated. After reset, fMaskAvail is false for all values.
+   void Reset(RClusterIndex firstIndex, std::size_t size);
+   void CountValidValues();
+
+   bool ContainsRange(RClusterIndex firstIndex, std::size_t size) const
+   {
+      if (firstIndex.GetClusterId() != fFirstIndex.GetClusterId())
+         return false;
+      return (firstIndex.GetIndex() >= fFirstIndex.GetIndex()) &&
+             ((firstIndex.GetIndex() + size) <= (fFirstIndex.GetIndex() + fSize));
+   }
+
+   void *GetValuePtrAt(std::size_t idx) const { return reinterpret_cast<unsigned char *>(fValues) + idx * fValueSize; }
+
+   explicit RBulk(RFieldBase *field) : fField(field), fDeleter(field->GetDeleter()), fValueSize(field->GetValueSize())
+   {
+   }
+
+public:
+   ~RBulk();
+   RBulk(const RBulk &) = delete;
+   RBulk &operator=(const RBulk &) = delete;
+   RBulk(RBulk &&other);
+   RBulk &operator=(RBulk &&other);
+
+   // Sets fValues and fSize/fCapacity to the given values. The capacity is specified in number of values.
+   // Once a buffer is adopted, an attempt to read more values then available throws an exception.
+   void AdoptBuffer(void *buf, std::size_t capacity);
+
+   /// Reads 'size' values from the associated field, starting from 'firstIndex'. Note that the index is given
+   /// relative to a certain cluster. The return value points to the array of read objects.
+   /// The 'maskReq' parameter is a bool array of at least 'size' elements. Only objects for which the mask is
+   /// true are guaranteed to be read in the returned value array. A 'nullptr' means to read all elements.
+   void *ReadBulk(RClusterIndex firstIndex, const bool *maskReq, std::size_t size)
+   {
+      if (!ContainsRange(firstIndex, size))
+         Reset(firstIndex, size);
+
+      // We may read a sub range of the currently available range
+      auto offset = firstIndex.GetIndex() - fFirstIndex.GetIndex();
+
+      if (fNValidValues == fSize)
+         return GetValuePtrAt(offset);
+
+      RBulkSpec bulkSpec;
+      bulkSpec.fFirstIndex = firstIndex;
+      bulkSpec.fCount = size;
+      bulkSpec.fMaskReq = maskReq;
+      bulkSpec.fMaskAvail = &fMaskAvail[offset];
+      bulkSpec.fValues = GetValuePtrAt(offset);
+      bulkSpec.fAuxData = &fAuxData;
+      auto nRead = fField->ReadBulk(bulkSpec);
+      if (nRead == RBulkSpec::kAllSet) {
+         if ((offset == 0) && (size == fSize)) {
+            fNValidValues = fSize;
+         } else {
+            CountValidValues();
+         }
+      } else {
+         fNValidValues += nRead;
+      }
+      return GetValuePtrAt(offset);
+   }
+
+   /// Overload to read all elements in the given cluster range.
+   void *ReadBulk(RNTupleClusterRange range) { return ReadBulk(*range.begin(), nullptr, range.size()); }
+};
 
 namespace Internal {
 // At some point, RFieldBase::OnClusterCommit() may allow for a user-defined callback to change the

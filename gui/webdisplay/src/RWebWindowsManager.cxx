@@ -24,7 +24,7 @@
 #include "TString.h"
 #include "TApplication.h"
 #include "TTimer.h"
-#include "TRandom.h"
+#include "TRandom3.h"
 #include "TError.h"
 #include "TROOT.h"
 #include "TEnv.h"
@@ -168,6 +168,18 @@ void RWebWindowsManager::SetUseSessionKey(bool on)
 void RWebWindowsManager::SetUseConnectionKey(bool on)
 {
    gEnv->SetValue("WebGui.OnetimeKey", on ? "yes" : "no");
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+/// Enable or disable single connection mode (default on)
+/// If enabled, one connection only with any web widget is possible
+/// Any attempt to establish more connections will fail
+/// if this mode is disabled some widgets like geom viewer or web canvas will be able to
+/// to serve several clients - only when they are connected with required authentication keys
+
+void RWebWindowsManager::SetSingleConnMode(bool on)
+{
+   gEnv->SetValue("WebGui.SingleConnMode", on ? "yes" : "no");
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -522,13 +534,13 @@ bool RWebWindowsManager::CreateServer(bool with_http)
    if ((http_timer > 0) && !IsUseHttpThread())
       fServer->SetTimer(http_timer);
 
+   TRandom3 rnd;
+
    if (http_port < 0) {
       ntry = 0;
    } else {
-
       if (http_port == 0)
-         gRandom->SetSeed(0);
-
+         rnd.SetSeed(0);
       if (http_max - http_min < ntry)
          ntry = http_max - http_min;
    }
@@ -546,7 +558,7 @@ bool RWebWindowsManager::CreateServer(bool with_http)
             return false;
          }
 
-         http_port = (int)(http_min + (http_max - http_min) * gRandom->Rndm(1));
+         http_port = (int)(http_min + (http_max - http_min) * rnd.Rndm(1));
       }
 
       TString engine, url;
@@ -675,6 +687,9 @@ void RWebWindowsManager::Unregister(RWebWindow &win)
 {
    if (win.fWSHandler)
       fServer->UnregisterWS(win.fWSHandler);
+
+   if (fDeleteCallback)
+      fDeleteCallback(win);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -749,6 +764,7 @@ std::string RWebWindowsManager::GetUrl(RWebWindow &win, bool remote, std::string
 ///
 ///      WebGui.Display: kind of display like chrome or firefox or browser, can be overwritten by --web=value command line argument
 ///      WebGui.OnetimeKey: if configured requires unique key every time window is connected (default yes)
+///      WebGui.SingleConnMode: if configured the only connection and the only user of any widget is possible (default yes)
 ///      WebGui.Chrome: full path to Google Chrome executable
 ///      WebGui.ChromeBatch: command to start chrome in batch, used for image production, like "$prog --headless --disable-gpu $geometry $url"
 ///      WebGui.ChromeHeadless: command to start chrome in headless mode, like "fork: --headless --disable-gpu $geometry $url"
@@ -766,7 +782,7 @@ std::string RWebWindowsManager::GetUrl(RWebWindow &win, bool remote, std::string
 ///      WebGui.ForceHttp: 0 - off (default), 1 - always create real http server to run web window
 ///      WebGui.Console: -1 - output only console.error(), 0 - add console.warn(), 1  - add console.log() output
 ///      WebGui.ConnCredits: 10 - number of packets which can be send by server or client without acknowledge from receiving side
-///      WebGui.openui5src: alternative location for openui5 like https://openui5.hana.ondemand.com/
+///      WebGui.openui5src: alternative location for openui5 like https://openui5.hana.ondemand.com/1.128.0/
 ///      WebGui.openui5libs: list of pre-loaded ui5 libs like sap.m, sap.ui.layout, sap.ui.unified
 ///      WebGui.openui5theme: openui5 theme like sap_belize (default) or sap_fiori_3
 ///
@@ -835,7 +851,7 @@ unsigned RWebWindowsManager::ShowWindow(RWebWindow &win, const RWebDisplayArgs &
    if (!args.IsHeadless() && normal_http) {
       auto winurl = args.GetUrl();
       winurl.erase(0, fAddr.length());
-      InformListener(std::string("win:") + winurl);
+      InformListener(std::string("win:") + winurl + "\n");
    }
 
    if (!args.IsHeadless() && ((args.GetBrowserKind() == RWebDisplayArgs::kServer) || gROOT->IsWebDisplayBatch()) /*&& (RWebWindowWSHandler::GetBoolEnv("WebGui.OnetimeKey") != 1)*/) {
@@ -935,6 +951,9 @@ void RWebWindowsManager::Terminate()
 {
    if (fServer)
       fServer->SetTerminate();
+
+   // set flag which sometimes checked in TSystem::ProcessEvents
+   gROOT->SetInterrupt(kTRUE);
 
    if (gApplication)
       TTimer::SingleShot(100, "TApplication",  gApplication, "Terminate()");

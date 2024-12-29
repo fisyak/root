@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unordered_set>
+#include <cctype>
 
 #include "RConfigure.h"
 #include <ROOT/RConfig.hxx>
@@ -382,7 +383,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
                                          bool rRequestNoInputOperator,
                                          bool rRequestOnlyTClass,
                                          int rRequestedVersionNumber,
-                                         int rRequestedRNTupleSplitMode,
+                                         int rRequestedRNTupleSerializationMode,
                                          const cling::Interpreter &interpreter,
                                          const TNormalizedCtxt &normCtxt)
    : fRuleIndex(index),
@@ -392,7 +393,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
      fRequestNoInputOperator(rRequestNoInputOperator),
      fRequestOnlyTClass(rRequestOnlyTClass),
      fRequestedVersionNumber(rRequestedVersionNumber),
-     fRequestedRNTupleSplitMode(rRequestedRNTupleSplitMode)
+     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode)
 // clang-format on
 {
    TMetaUtils::GetNormalizedName(fNormalizedName, decl->getASTContext().getTypeDeclType(decl), interpreter,normCtxt);
@@ -413,7 +414,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
                                          bool rRequestNoInputOperator,
                                          bool rRequestOnlyTClass,
                                          int rRequestVersionNumber,
-                                         int rRequestedRNTupleSplitMode,
+                                         int rRequestedRNTupleSerializationMode,
                                          const cling::Interpreter &interpreter,
                                          const TNormalizedCtxt &normCtxt)
    : fRuleIndex(index),
@@ -424,7 +425,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
      fRequestNoInputOperator(rRequestNoInputOperator),
      fRequestOnlyTClass(rRequestOnlyTClass),
      fRequestedVersionNumber(rRequestVersionNumber),
-     fRequestedRNTupleSplitMode(rRequestedRNTupleSplitMode)
+     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode)
 // clang-format on
 {
    // For comparison purposes.
@@ -452,7 +453,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
                                          bool rRequestNoInputOperator,
                                          bool rRequestOnlyTClass,
                                          int rRequestVersionNumber,
-                                         int rRequestedRNTupleSplitMode,
+                                         int rRequestedRNTupleSerializationMode,
                                          const cling::Interpreter &interpreter,
                                          const TNormalizedCtxt &normCtxt)
    : fRuleIndex(index),
@@ -463,7 +464,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
      fRequestNoInputOperator(rRequestNoInputOperator),
      fRequestOnlyTClass(rRequestOnlyTClass),
      fRequestedVersionNumber(rRequestVersionNumber),
-     fRequestedRNTupleSplitMode(rRequestedRNTupleSplitMode)
+     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode)
 // clang-format on
 {
    // For comparison purposes.
@@ -486,7 +487,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
                                          bool rRequestNoInputOperator,
                                          bool rRequestOnlyTClass,
                                          int rRequestVersionNumber,
-                                         int rRequestedRNTupleSplitMode,
+                                         int rRequestedRNTupleSerializationMode,
                                          const cling::Interpreter &interpreter,
                                          const TNormalizedCtxt &normCtxt)
    : fRuleIndex(index),
@@ -497,7 +498,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
      fRequestNoInputOperator(rRequestNoInputOperator),
      fRequestOnlyTClass(rRequestOnlyTClass),
      fRequestedVersionNumber(rRequestVersionNumber),
-     fRequestedRNTupleSplitMode(rRequestedRNTupleSplitMode)
+     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode)
 // clang-format on
 {
    // const clang::ClassTemplateSpecializationDecl *tmplt_specialization = llvm::dyn_cast<clang::ClassTemplateSpecializationDecl> (decl);
@@ -3094,7 +3095,7 @@ clang::QualType ROOT::TMetaUtils::AddDefaultParameters(clang::QualType instanceT
 
    if (!prefix_changed && !mightHaveChanged) return originalType;
    if (prefix) {
-      instanceType = Ctx.getElaboratedType(clang::ETK_None,prefix,instanceType);
+      instanceType = Ctx.getElaboratedType(clang::ElaboratedTypeKeyword::None, prefix, instanceType);
       instanceType = Ctx.getQualifiedType(instanceType,prefix_qualifiers);
    }
    return instanceType;
@@ -3313,10 +3314,9 @@ void ROOT::TMetaUtils::GetCppName(std::string &out, const char *in)
          out.push_back(c);
    }
 
-   // Remove initial numbers if any
-   auto firstNonNumber = out.find_first_not_of("0123456789");
-   if (firstNonNumber != std::string::npos)
-      out.replace(0,firstNonNumber,"");
+   // If out is empty, or if it starts with a number, it's not a valid C++ variable. Prepend a "_"
+   if (out.empty() || isdigit(out[0]))
+      out.insert(out.begin(), '_');
 }
 
 static clang::SourceLocation
@@ -3388,7 +3388,7 @@ std::string ROOT::TMetaUtils::GetFileName(const clang::Decl& decl,
          = HdrSearch.LookupFile(llvm::sys::path::filename(headerFE->getName()),
                                 SourceLocation(),
                                 true /*isAngled*/, nullptr/*FromDir*/, foundDir,
-                                ArrayRef<std::pair<const FileEntry *, const DirectoryEntry *>>(),
+                                ArrayRef<std::pair<OptionalFileEntryRef, DirectoryEntryRef>>(),
                                 nullptr/*Searchpath*/, nullptr/*RelPath*/,
                                 nullptr/*SuggestedModule*/, nullptr/*RequestingModule*/,
                                 nullptr/*IsMapped*/, nullptr /*IsFrameworkFound*/,
@@ -3448,7 +3448,7 @@ std::string ROOT::TMetaUtils::GetFileName(const clang::Decl& decl,
       ConstSearchDirIterator* FoundDir = nullptr;
       FELong = HdrSearch.LookupFile(trailingPart, SourceLocation(),
                                     true /*isAngled*/, nullptr/*FromDir*/, FoundDir,
-                                    ArrayRef<std::pair<const FileEntry *, const DirectoryEntry *>>(),
+                                    ArrayRef<std::pair<OptionalFileEntryRef, DirectoryEntryRef>>(),
                                     nullptr/*Searchpath*/, nullptr/*RelPath*/,
                                     nullptr/*SuggestedModule*/, nullptr/*RequestingModule*/,
                                     nullptr/*IsMapped*/, nullptr /*IsFrameworkFound*/);
@@ -3474,7 +3474,7 @@ std::string ROOT::TMetaUtils::GetFileName(const clang::Decl& decl,
       // (or are we back to the previously found spelling, which is fine, too)
       if (HdrSearch.LookupFile(trailingPart, SourceLocation(),
                                true /*isAngled*/, nullptr/*FromDir*/, FoundDir,
-                               ArrayRef<std::pair<const FileEntry *, const DirectoryEntry *>>(),
+                               ArrayRef<std::pair<OptionalFileEntryRef, DirectoryEntryRef>>(),
                                nullptr/*Searchpath*/, nullptr/*RelPath*/,
                                nullptr/*SuggestedModule*/, nullptr/*RequestingModule*/,
                                nullptr/*IsMapped*/, nullptr /*IsFrameworkFound*/) == FELong) {
@@ -4007,7 +4007,7 @@ static void KeepNParams(clang::QualType& normalizedType,
    // Here we have (prefix_changed==true || mightHaveChanged), in both case
    // we need to reconstruct the type.
    if (prefix) {
-      normalizedType = astCtxt.getElaboratedType(clang::ETK_None,prefix,normalizedType);
+      normalizedType = astCtxt.getElaboratedType(clang::ElaboratedTypeKeyword::None, prefix, normalizedType);
       normalizedType = astCtxt.getQualifiedType(normalizedType,prefix_qualifiers);
    }
 
@@ -4633,7 +4633,8 @@ clang::QualType ROOT::TMetaUtils::ReSubstTemplateArg(clang::QualType input, cons
       clang::NestedNameSpecifier *scope = ReSubstTemplateArgNNS(Ctxt,etype->getQualifier(),instance);
       clang::QualType subTy = ReSubstTemplateArg(clang::QualType(etype->getNamedType().getTypePtr(),0),instance);
 
-      if (scope) subTy = Ctxt.getElaboratedType(clang::ETK_None,scope,subTy);
+      if (scope)
+         subTy = Ctxt.getElaboratedType(clang::ElaboratedTypeKeyword::None, scope, subTy);
       subTy = Ctxt.getQualifiedType(subTy,scope_qualifiers);
       return subTy;
    }

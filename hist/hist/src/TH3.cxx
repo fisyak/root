@@ -101,8 +101,7 @@ TH3::TH3()
 TH3::TH3(const char *name,const char *title,Int_t nbinsx,Double_t xlow,Double_t xup
                                      ,Int_t nbinsy,Double_t ylow,Double_t yup
                                      ,Int_t nbinsz,Double_t zlow,Double_t zup)
-     :TH1(name,title,nbinsx,xlow,xup),
-      TAtt3D()
+     :TH1(name,title,nbinsx,xlow,xup)
 {
    fDimension   = 3;
    if (nbinsy <= 0) {
@@ -143,8 +142,7 @@ TH3::TH3(const char *name,const char *title,Int_t nbinsx,Double_t xlow,Double_t 
 TH3::TH3(const char *name,const char *title,Int_t nbinsx,const Float_t *xbins
                                            ,Int_t nbinsy,const Float_t *ybins
                                            ,Int_t nbinsz,const Float_t *zbins)
-     :TH1(name,title,nbinsx,xbins),
-      TAtt3D()
+     :TH1(name,title,nbinsx,xbins)
 {
    fDimension   = 3;
    if (nbinsy <= 0) {Warning("TH3","nbinsy is <=0 - set to nbinsy = 1"); nbinsy = 1; }
@@ -181,8 +179,7 @@ TH3::TH3(const char *name,const char *title,Int_t nbinsx,const Float_t *xbins
 TH3::TH3(const char *name,const char *title,Int_t nbinsx,const Double_t *xbins
                                            ,Int_t nbinsy,const Double_t *ybins
                                            ,Int_t nbinsz,const Double_t *zbins)
-     :TH1(name,title,nbinsx,xbins),
-      TAtt3D()
+     :TH1(name,title,nbinsx,xbins)
 {
    fDimension   = 3;
    if (nbinsy <= 0) {Warning("TH3","nbinsy is <=0 - set to nbinsy = 1"); nbinsy = 1; }
@@ -833,15 +830,12 @@ Int_t TH3::Fill(Double_t x, Double_t y, const char *namez, Double_t w)
 ///
 ///  One can also call TF1::GetRandom to get a random variate from a function.
 
-void TH3::FillRandom(const char *fname, Int_t ntimes, TRandom * rng)
+void TH3::FillRandom(TF1 *fobj, Int_t ntimes, TRandom * rng)
 {
    Int_t bin, binx, biny, binz, ibin, loop;
    Double_t r1, x, y,z, xv[3];
-   //  Search for fname in the list of ROOT defined functions
-   TObject *fobj = gROOT->GetFunction(fname);
-   if (!fobj) { Error("FillRandom", "Unknown function: %s",fname); return; }
    TF3 *f1 = dynamic_cast<TF3*>( fobj );
-   if (!f1) { Error("FillRandom", "Function: %s is not a TF3, is a %s",fname,fobj->IsA()->GetName()); return; }
+   if (!f1) { Error("FillRandom", "Function: %s is not a TF3, is a %s",fobj->GetName(),fobj->IsA()->GetName()); return; }
 
    TAxis & xAxis = fXaxis;
    TAxis & yAxis = fYaxis;
@@ -3530,7 +3524,7 @@ ClassImp(TH3C);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH3C::TH3C(): TH3(), TArrayC()
+TH3C::TH3C()
 {
    SetBinsLength(27);
    if (fgDefaultSumw2) Sumw2();
@@ -3799,7 +3793,7 @@ ClassImp(TH3S);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH3S::TH3S(): TH3(), TArrayS()
+TH3S::TH3S()
 {
    SetBinsLength(27);
    if (fgDefaultSumw2) Sumw2();
@@ -4039,7 +4033,7 @@ ClassImp(TH3I);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH3I::TH3I(): TH3(), TArrayI()
+TH3I::TH3I()
 {
    SetBinsLength(27);
    if (fgDefaultSumw2) Sumw2();
@@ -4246,7 +4240,7 @@ ClassImp(TH3L);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH3L::TH3L(): TH3(), TArrayL64()
+TH3L::TH3L()
 {
    SetBinsLength(27);
    if (fgDefaultSumw2) Sumw2();
@@ -4453,7 +4447,7 @@ ClassImp(TH3F);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH3F::TH3F(): TH3(), TArrayF()
+TH3F::TH3F()
 {
    SetBinsLength(27);
    if (fgDefaultSumw2) Sumw2();
@@ -4669,7 +4663,7 @@ ClassImp(TH3D);
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-TH3D::TH3D(): TH3(), TArrayD()
+TH3D::TH3D()
 {
    SetBinsLength(27);
    if (fgDefaultSumw2) Sumw2();

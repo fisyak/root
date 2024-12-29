@@ -105,7 +105,7 @@ class HeadNode(Node, ABC):
 
         # Internal RDataFrame object, useful to expose information such as
         # column names.
-        self._localdf = localdf
+        self.rdf_node = localdf
 
         # A dictionary where the keys are the IDs of the objects to live visualize
         # and the values are the corresponding callback functions 
@@ -119,8 +119,8 @@ class HeadNode(Node, ABC):
         the garbage collector, the cppyy memory regulator and the C++ object
         destructor.
         """
-        if hasattr(self, "_localdf"):
-            del self._localdf
+        if hasattr(self, "rdf_node"):
+            del self.rdf_node
 
     @property
     def npartitions(self) -> Optional[int]:
@@ -237,10 +237,14 @@ class HeadNode(Node, ABC):
 
         computation_graph_callable = partial(ComputationGraphGenerator.trigger_computation_graph, self._generate_graph_dict())
 
+        # Accumulate all code that needs to be declared in one string
+        code_to_declare = "\n".join(self.backend.strings_to_declare.values())
+
         mapper = partial(distrdf_mapper,
                          build_rdf_from_range=self._generate_rdf_creator(),
                          computation_graph_callable=computation_graph_callable,
-                         initialization_fn=self.backend.initialization)
+                         initialization_fn=self.backend.initialization,
+                         code_to_declare=code_to_declare)
 
         # List of action nodes in the same order as values
         local_nodes = self._get_action_nodes()
@@ -265,9 +269,8 @@ class HeadNode(Node, ABC):
 def get_headnode(backend: BaseBackend, npartitions: int, *args) -> HeadNode:
     """
     A factory for different kinds of head nodes of the RDataFrame computation
-    graph, depending on the arguments to the RDataFrame constructor. Currently
-    can return a TreeHeadNode or an EmptySourceHeadNode. Parses the arguments and
-    compares them against the possible RDataFrame constructors.
+    graph, depending on the arguments to the RDataFrame constructor. Parses the
+    arguments and compares them against the possible RDataFrame constructors.
     """
 
     # Early check that arguments are accepted by RDataFrame
@@ -276,60 +279,23 @@ def get_headnode(backend: BaseBackend, npartitions: int, *args) -> HeadNode:
     except TypeError:
         raise TypeError(("The arguments provided are not accepted by any RDataFrame constructor. "
                          "See the RDataFrame documentation for the accepted constructor argument types."))
-        
-    firstarg = args[0]
-    if isinstance(firstarg, int):
-        # RDataFrame(ULong64_t numEntries)
-        return EmptySourceHeadNode(backend, npartitions, localdf, firstarg)
-    elif isinstance(firstarg, (ROOT.TTree)):
-    #     # RDataFrame(std::string_view treeName, filenameglob, defaultBranches = {})
-    #     # RDataFrame(std::string_view treename, filenames, defaultBranches = {})
-    #     # RDataFrame(std::string_view treeName, dirPtr, defaultBranches = {})
-    #     # RDataFrame(TTree &tree, const ColumnNames_t &defaultBranches = {})
-        return TreeHeadNode(backend, npartitions, localdf, *args) 
-    elif isinstance(firstarg, str):
-        # if first argument is a string, we want to check if the second argument
-        # which is a ROOT file holds a TTree or RNTuple
-        secondarg = args[1]
 
-        if (isinstance (secondarg, (str, ROOT.std.string, ROOT.std.string_view))):
-            wildcards = ["[", "]", "*", "?"]
-            if (any(wildcard in secondarg for wildcard in wildcards)):
-                path = ROOT.Internal.TreeUtils.ExpandGlob(secondarg)[0]
-            else:
-                path = secondarg
-        else:
-            path = secondarg[0]
+    if isinstance(args[0], ROOT.RDF.Experimental.RDatasetSpec):
+        return RDatasetSpecHeadNode(backend, npartitions, localdf, *args)
 
-        with ROOT.TDirectory.TContext(), ROOT.TFile.Open(path, "READ_WITHOUT_GLOBALREGISTRATION") as f:
-            dataset = f.Get(firstarg)
-            try:
-                if isinstance(dataset, ROOT.TTree):
-                    return TreeHeadNode(backend, npartitions, localdf, *args)
-
-                elif isinstance(dataset, ROOT.Experimental.RNTuple):
-                    return RNTupleHeadNode(backend, npartitions, localdf, *args)
-
-                else:
-                    raise RuntimeError("")
-            finally:
-                # Remove the reference to the object taken from the TFile
-                # This helps avoiding conflicts between the Python garbage
-                # collector, the cppyy memory regulator and the C++ object.
-                # TODO: Rewrite this whole section as a C++ function. Idea:
-                # the function should be a method of RInterfaceBase so that
-                # from the localdf object we could get a data source label and
-                # dispatch to the correct HeadNode type without reopening.
-                del dataset
-    elif isinstance(firstarg, ROOT.RDF.Experimental.RDatasetSpec):
-        # RDataFrame(rdatasetspec)
-        return RDatasetSpecHeadNode(backend, npartitions, localdf, *args)      
+    label = ROOT.Internal.RDF.GetDataSourceLabel(ROOT.RDF.AsRNode(localdf))
+    if label == "TTreeDS":
+        return TreeHeadNode(backend, npartitions, localdf, *args)
+    elif label == "RNTupleDS":
+        return RNTupleHeadNode(backend, npartitions, localdf, *args)
+    elif label == "EmptyDS":
+        return EmptySourceHeadNode(backend, npartitions, localdf, args[0])
     else:
         raise RuntimeError(
-            ("First argument {} of type {} is not recognised as a supported "
-                "argument for distributed RDataFrame. Currently only TTree/Tchain "
-                "based datasets or datasets created from a number of entries "
-                "can be processed distributedly.").format(firstarg, type(firstarg)))
+            (f"First argument {args[0]} of type {type(args[0])} is not "
+             "recognised as a supported argument for distributed RDataFrame. "
+             "Currently supported data sources are: TTree, RNTuple or an empty "
+             "data source."))
 
 
 class EmptySourceHeadNode(HeadNode):
@@ -521,7 +487,7 @@ class TreeHeadNode(HeadNode):
             # Depending on the cluster setup, this may still be quite costly, so
             # we decide to pay the price only if the user explicitly requested
             # warning logging.
-            clusters, entries = Ranges.get_clusters_and_entries(self.subtreenames[0], self.inputfiles[0])
+            clusters, entries = ROOT.Internal.TreeUtils.GetClustersAndEntries(self.subtreenames[0], self.inputfiles[0])
             # The file could contain an empty tree. In that case, the estimate will not be computed.
             if entries > 0:
                 partitionsperfile = self.npartitions / len(self.inputfiles)
@@ -701,7 +667,7 @@ class RDatasetSpecHeadNode(HeadNode):
             # Depending on the cluster setup, this may still be quite costly, so
             # we decide to pay the price only if the user explicitly requested
             # warning logging.
-            clusters, entries = Ranges.get_clusters_and_entries(
+            clusters, entries = ROOT.Internal.TreeUtils.GetClustersAndEntries(
                 self.subtreenames[0], self.inputfiles[0])
             # The file could contain an empty tree. In that case, the estimate will not be computed.
             if entries > 0:

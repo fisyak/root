@@ -313,8 +313,7 @@ double RooFormulaVar::defaultErrorLevel() const
   return 1.0 ;
 }
 
-void RooFormulaVar::translate(RooFit::Detail::CodeSquashContext &ctx) const
+std::string RooFormulaVar::getUniqueFuncName() const
 {
-   getVal(); // to trigger the creation of the TFormula
-   ctx.addResult(this, ctx.buildCall(_formula->getTFormula()->GetUniqueFuncName().Data(), _actualVars));
+   return getFormula().getTFormula()->GetUniqueFuncName().Data();
 }

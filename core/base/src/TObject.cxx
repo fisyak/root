@@ -23,6 +23,18 @@ ROOT collection classes.
 TObject's bits can be used as flags, bits 0 - 13 and 24-31 are
 reserved as  global bits while bits 14 - 23 can be used in different
 class hierarchies (watch out for overlaps).
+
+\Note
+   Class inheriting directly or indirectly from TObject should not use
+   `= default` for any of the constructors.
+   The default implementation for a constructor can sometime do 'more' than we
+   expect (and still being standard compliant).  On some platforms it will reset
+   all the data member of the class including its base class's member before the
+   actual execution of the base class constructor.
+   `TObject`'s implementation of the `IsOnHeap` bit requires the memory occupied
+   by `TObject::fUniqueID` to *not* be reset between the execution of `TObject::operator new`
+   and the `TObject` constructor (Finding the magic pattern there is how we can determine
+   that the object was allocated on the heap).
 */
 
 #include <cstring>
@@ -117,6 +129,12 @@ bool DeleteChangesMemoryImpl()
    // can guess this is always the case and we can rely on the changes to fBits made
    // by ~TObject to detect use-after-delete error (and print a message rather than
    // stop the program with a segmentation fault)
+#if defined(_MSC_VER) && defined(__SANITIZE_ADDRESS__)
+   // on Windows, even __declspec(no_sanitize_address) does not prevent catching
+   // heap-use-after-free errorswhen using the /fsanitize=address compiler flag
+   // so don't even try
+   return true;
+#endif
    if ( *o_fbits != 0x01000000 ) {
       // operator delete tainted the memory, we can not rely on TestBit(kNotDeleted)
       return true;

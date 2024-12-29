@@ -9,10 +9,10 @@
 #include "CustomStructUtil.hxx"
 #include "ntupleutil_test.hxx"
 
+using ROOT::RNTuple;
 using ROOT::Experimental::EColumnType;
 using ROOT::Experimental::RField;
 using ROOT::Experimental::RFieldBase;
-using ROOT::Experimental::RNTuple;
 using ROOT::Experimental::RNTupleInspector;
 using ROOT::Experimental::RNTupleModel;
 using ROOT::Experimental::RNTupleWriteOptions;
@@ -42,7 +42,7 @@ TEST(RNTupleInspector, CreateFromString)
    auto inspector = RNTupleInspector::Create("ntuple", fileGuard.GetPath());
    EXPECT_EQ(inspector->GetDescriptor()->GetName(), "ntuple");
 
-   EXPECT_THROW(RNTupleInspector::Create("nonexistent", fileGuard.GetPath()), ROOT::Experimental::RException);
+   EXPECT_THROW(RNTupleInspector::Create("nonexistent", fileGuard.GetPath()), ROOT::RException);
 }
 
 TEST(RNTupleInspector, CompressionSettings)
@@ -75,7 +75,7 @@ TEST(RNTupleInspector, UnknownCompression)
    {
       auto model = RNTupleModel::Create();
 
-      auto vecFld = model->MakeField<std::vector<float>>("vecFld", refVec);
+      *model->MakeField<std::vector<float>>("vecFld") = refVec;
 
       RNTupleWriteOptions opts;
       opts.SetCompression(505);
@@ -87,7 +87,7 @@ TEST(RNTupleInspector, UnknownCompression)
       auto modelUpdater = ntuple->CreateModelUpdater();
 
       modelUpdater->BeginUpdate();
-      auto extVecField = modelUpdater->MakeField<std::vector<float>>("extVecFld", refVec);
+      *modelUpdater->MakeField<std::vector<float>>("extVecFld") = refVec;
       modelUpdater->CommitUpdate();
 
       ntuple->Fill();
@@ -238,7 +238,7 @@ TEST(RNTupleInspector, SizeProjectedFields)
       muonPt->emplace_back(1.0);
       muonPt->emplace_back(2.0);
 
-      auto nMuons = RFieldBase::Create("nMuons", "ROOT::Experimental::RNTupleCardinality<std::uint64_t>").Unwrap();
+      auto nMuons = RFieldBase::Create("nMuons", "ROOT::RNTupleCardinality<std::uint64_t>").Unwrap();
       model->AddProjectedField(std::move(nMuons), [](const std::string &) { return "muonPt"; });
 
       auto writer = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath());
@@ -287,7 +287,7 @@ TEST(RNTupleInspector, ColumnInfoCompressed)
 
    EXPECT_EQ(totalOnDiskSize, inspector->GetCompressedSize());
 
-   EXPECT_THROW(inspector->GetColumnInspector(42), ROOT::Experimental::RException);
+   EXPECT_THROW(inspector->GetColumnInspector(42), ROOT::RException);
 }
 
 TEST(RNTupleInspector, ColumnInfoUncompressed)
@@ -534,7 +534,8 @@ TEST(RNTupleInspector, PageSizeDistribution)
 
       auto writeOptions = RNTupleWriteOptions();
       writeOptions.SetCompression(505);
-      writeOptions.SetApproxUnzippedPageSize(64);
+      writeOptions.SetInitialUnzippedPageSize(8);
+      writeOptions.SetMaxUnzippedPageSize(64);
       auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath(), writeOptions);
 
       for (unsigned i = 0; i < 100; ++i) {
@@ -604,7 +605,7 @@ TEST(RNTupleInspector, PageSizeDistribution)
 
    // Requesting a histogram for a column with a physical ID not present in the given RNTuple should throw
    EXPECT_THROW(inspector->GetPageSizeDistribution(inspector->GetDescriptor()->GetNPhysicalColumns() + 1),
-                ROOT::Experimental::RException);
+                ROOT::RException);
 
    // Requesting a histogram for a column type not present in the given RNTuple should give an empty histogram
    auto nonExistingTypeHisto = inspector->GetPageSizeDistribution(EColumnType::kReal32);
@@ -652,9 +653,8 @@ TEST(RNTupleInspector, FieldInfoCompressed)
    EXPECT_EQ(topFieldInfo.GetCompressedSize(), subFieldOnDiskSize);
    EXPECT_EQ(topFieldInfo.GetUncompressedSize(), subFieldInMemorySize);
 
-   EXPECT_THROW(inspector->GetFieldTreeInspector("invalid_field"), ROOT::Experimental::RException);
-   EXPECT_THROW(inspector->GetFieldTreeInspector(inspector->GetDescriptor()->GetNFields()),
-                ROOT::Experimental::RException);
+   EXPECT_THROW(inspector->GetFieldTreeInspector("invalid_field"), ROOT::RException);
+   EXPECT_THROW(inspector->GetFieldTreeInspector(inspector->GetDescriptor()->GetNFields()), ROOT::RException);
 }
 
 TEST(RNTupleInspector, FieldInfoUncompressed)
@@ -773,7 +773,7 @@ TEST(RNTupleInspector, MultiColumnRepresentations)
       writer->Fill();
       writer->CommitCluster();
       ROOT::Experimental::Internal::RFieldRepresentationModifier::SetPrimaryColumnRepresentation(
-         const_cast<RFieldBase &>(writer->GetModel().GetField("px")), 1);
+         const_cast<RFieldBase &>(writer->GetModel().GetConstField("px")), 1);
       writer->Fill();
    }
 

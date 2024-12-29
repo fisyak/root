@@ -175,7 +175,7 @@ inline unsigned int getUniformBinning(double low, double high, double val, unsig
    return val >= high ? numBins - 1 : std::abs((val - low) / binWidth);
 }
 
-inline double interpolate1d(double low, double high, double val, unsigned int numBins, double const* vals)
+inline double interpolate1d(double low, double high, double val, unsigned int numBins, double const *vals)
 {
    double binWidth = (high - low) / numBins;
    int idx = val >= high ? numBins - 1 : std::abs((val - low) / binWidth);
@@ -185,9 +185,9 @@ inline double interpolate1d(double low, double high, double val, unsigned int nu
    if (val > low + 0.5 * binWidth && val < high - 0.5 * binWidth) {
       double slope;
       if (val < central) {
-          slope = vals[idx] - vals[idx - 1];
+         slope = vals[idx] - vals[idx - 1];
       } else {
-          slope = vals[idx + 1] - vals[idx];
+         slope = vals[idx + 1] - vals[idx];
       }
       return vals[idx] + slope * (val - central) / binWidth;
    }
@@ -239,34 +239,39 @@ inline double flexibleInterpSingle(unsigned int code, double low, double high, d
       } else {
          return a * std::pow(paramVal, 2) + b * paramVal + c;
       }
-   } else if (code == 3) {
-      // parabolic version of log-normal
-      double a = 0.5 * (high + low) - nominal;
-      double b = 0.5 * (high - low);
-      double c = 0;
-      if (paramVal > 1) {
-         return (2 * a + b) * (paramVal - 1) + high - nominal;
-      } else if (paramVal < -1) {
-         return -1 * (2 * a - b) * (paramVal + 1) + low - nominal;
-      } else {
-         return a * std::pow(paramVal, 2) + b * paramVal + c;
-      }
-   } else if (code == 4) {
+      // According to an old comment in the source code, code 3 was apparently
+      // meant to be a "parabolic version of log-normal", but it never got
+      // implemented. If someone would need it, it could be implemented as doing
+      // code 2 in log space.
+   } else if (code == 4 || code == 6) {
       double x = paramVal;
+      double mod = 1.0;
+      if (code == 6) {
+         high /= nominal;
+         low /= nominal;
+         nominal = 1;
+      }
       if (x >= boundary) {
-         return x * (high - nominal);
+         mod = x * (high - nominal);
       } else if (x <= -boundary) {
-         return x * (nominal - low);
+         mod = x * (nominal - low);
+      } else {
+         // interpolate 6th degree
+         double t = x / boundary;
+         double eps_plus = high - nominal;
+         double eps_minus = nominal - low;
+         double S = 0.5 * (eps_plus + eps_minus);
+         double A = 0.0625 * (eps_plus - eps_minus);
+
+         mod = x * (S + t * A * (15 + t * t * (-10 + t * t * 3)));
       }
 
-      // interpolate 6th degree
-      double t = x / boundary;
-      double eps_plus = high - nominal;
-      double eps_minus = nominal - low;
-      double S = 0.5 * (eps_plus + eps_minus);
-      double A = 0.0625 * (eps_plus - eps_minus);
+      // code 6 is multiplicative version of code 4
+      if (code == 6) {
+         mod *= res;
+      }
+      return mod;
 
-      return x * (S + t * A * (15 + t * t * (-10 + t * t * 3)));
    } else if (code == 5) {
       double x = paramVal;
       double mod = 1.0;
@@ -605,14 +610,14 @@ poissonIntegral(int code, double mu, double x, double integrandMin, double integ
 
       // Sum from 0 to just before the bin outside of the range.
       if (ixMin == 0) {
-         return ROOT::Math::gamma_cdf_c(mu, ixMax, 1);
+         return ROOT::Math::inc_gamma_c(ixMax, mu);
       } else {
          // If necessary, subtract from 0 to the beginning of the range
          if (ixMin <= mu) {
-            return ROOT::Math::gamma_cdf_c(mu, ixMax, 1) - ROOT::Math::gamma_cdf_c(mu, ixMin, 1);
+            return ROOT::Math::inc_gamma_c(ixMax, mu) - ROOT::Math::inc_gamma_c(ixMin, mu);
          } else {
             // Avoid catastrophic cancellation in the high tails:
-            return ROOT::Math::gamma_cdf(mu, ixMin, 1) - ROOT::Math::gamma_cdf(mu, ixMax, 1);
+            return ROOT::Math::inc_gamma(ixMin, mu) - ROOT::Math::inc_gamma(ixMax, mu);
          }
       }
    }
@@ -621,7 +626,7 @@ poissonIntegral(int code, double mu, double x, double integrandMin, double integ
    // negative ix does not need protection (gamma returns 0.0)
    const double ix = 1 + x;
 
-   return ROOT::Math::gamma_cdf(integrandMax, ix, 1.0) - ROOT::Math::gamma_cdf(integrandMin, ix, 1.0);
+   return ROOT::Math::inc_gamma(ix, integrandMax) - ROOT::Math::inc_gamma(ix, integrandMin);
 }
 
 inline double logNormalIntegral(double xMin, double xMax, double m0, double k)
@@ -726,6 +731,19 @@ inline double bernsteinIntegral(double xlo, double xhi, double xmin, double xmax
    }
 
    return norm * (xmax - xmin);
+}
+
+inline double multiVarGaussian(int n, const double *x, const double *mu, const double *covI)
+{
+   double result = 0.0;
+
+   // Compute the bilinear form (x-mu)^T * covI * (x-mu)
+   for (int i = 0; i < n; ++i) {
+      for (int j = 0; j < n; ++j) {
+         result += (x[i] - mu[i]) * covI[i * n + j] * (x[j] - mu[j]);
+      }
+   }
+   return std::exp(-0.5 * result);
 }
 
 } // namespace MathFuncs

@@ -1,11 +1,11 @@
-import { gStyle, settings, browser, constants, internals, addMethods,
-         isPromise, getPromise, postponePromise, isBatchMode, isObject, isFunc, isStr, clTPad, clTFrame, nsREX } from '../core.mjs';
-import { ColorPalette, addColor, getRootColors } from '../base/colors.mjs';
+import { gStyle, settings, browser, constants, internals, addMethods, isPromise, getPromise, postponePromise,
+         isBatchMode, isObject, isFunc, isStr, clTPad, clTFrame, nsREX, nsSVG, urlClassPrefix } from '../core.mjs';
+import { ColorPalette, addColor, getRootColors, convertColor } from '../base/colors.mjs';
 import { RObjectPainter } from '../base/RObjectPainter.mjs';
-import { getElementRect, getAbsPosInCanvas, DrawOptions, compressSVG, makeTranslate, svgToImage } from '../base/BasePainter.mjs';
+import { prSVG, getElementRect, getAbsPosInCanvas, DrawOptions, compressSVG, makeTranslate, svgToImage } from '../base/BasePainter.mjs';
 import { selectActivePad, getActivePad } from '../base/ObjectPainter.mjs';
 import { registerForResize, saveFile } from '../gui/utils.mjs';
-import { BrowserLayout } from '../gui/display.mjs';
+import { BrowserLayout, getHPainter } from '../gui/display.mjs';
 import { createMenu, closeMenu } from '../gui/menu.mjs';
 import { PadButtonsHandler } from './TPadPainter.mjs';
 
@@ -59,9 +59,10 @@ class RPadPainter extends RObjectPainter {
    isRoot6() { return false; }
 
    /** @summary Returns true if pad is editable */
-   isEditable() {
-      return true;
-   }
+   isEditable() { return true; }
+
+      /** @summary Returns true if button */
+   isButton() { return false; }
 
   /** @summary Returns SVG element for the pad itself
     * @private */
@@ -316,16 +317,16 @@ class RPadPainter extends RObjectPainter {
    /** @summary Generate pad events, normally handled by GED
      * @desc in pad painter, while pad may be drawn without canvas
      * @private */
-   producePadEvent(what, padpainter, painter, position, place) {
+   producePadEvent(what, padpainter, painter, position) {
       if ((what === 'select') && isFunc(this.selectActivePad))
          this.selectActivePad(padpainter, painter, position);
 
-      if (this.pad_events_receiver)
-         this.pad_events_receiver({ what, padpainter, painter, position, place });
+      if (isFunc(this.pad_events_receiver))
+         this.pad_events_receiver({ what, padpainter, painter, position });
    }
 
    /** @summary method redirect call to pad events receiver */
-   selectObjectPainter(painter, pos, place) {
+   selectObjectPainter(painter, pos) {
       const istoppad = (this.iscan || !this.has_canvas),
           canp = istoppad ? this : this.getCanvPainter();
 
@@ -336,14 +337,14 @@ class RPadPainter extends RObjectPainter {
 
       selectActivePad({ pp: this, active: true });
 
-      canp.producePadEvent('select', this, painter, pos, place);
+      canp.producePadEvent('select', this, painter, pos);
    }
 
    /** @summary Set fast drawing property depending on the size
      * @private */
    setFastDrawing(w, h) {
       const was_fast = this._fast_drawing;
-      this._fast_drawing = settings.SmallPad && ((w < settings.SmallPad.width) || (h < settings.SmallPad.height));
+      this._fast_drawing = (this.snapid === undefined) && settings.SmallPad && ((w < settings.SmallPad.width) || (h < settings.SmallPad.height));
       if (was_fast !== this._fast_drawing)
          this.showPadButtons();
    }
@@ -358,6 +359,12 @@ class RPadPainter extends RObjectPainter {
      * @private */
    setGrayscale(/* flag */) {
       console.error('grayscale mode not implemented for RCanvas');
+   }
+
+   /** @summary Returns true if default pad range is configured
+     * @private */
+   isDefaultPadRange() {
+      return true;
    }
 
    /** @summary Create SVG element for the canvas */
@@ -749,7 +756,9 @@ class RPadPainter extends RObjectPainter {
    /** @summary Fill pad context menu
      * @private */
    fillContextMenu(menu) {
-      menu.header(this.iscan ? 'RCanvas' : 'RPad');
+      const clname = this.iscan ? 'RCanvas' : 'RPad';
+
+      menu.header(clname, `${urlClassPrefix}ROOT_1_1Experimental_1_1${clname}.html`);
 
       menu.addchk(this.isTooltipAllowed(), 'Show tooltips', () => this.setTooltipAllowed('toggle'));
 
@@ -804,8 +813,11 @@ class RPadPainter extends RObjectPainter {
    /** @summary Redraw legend object
     * @desc Used when object attributes are changed to ensure that legend is up to date
     * @private */
-   async redrawLegend() {
-   }
+   async redrawLegend() {}
+
+   /** @summary Deliver mouse move or click event to the web canvas
+     * @private */
+   deliverWebCanvasEvent() {}
 
    /** @summary Redraw pad means redraw ourself
      * @return {Promise} when redrawing ready */
@@ -954,7 +966,7 @@ class RPadPainter extends RObjectPainter {
       if (snap.fColIndex && snap.fColValue) {
          const colors = this.root_colors || getRootColors();
          for (let k = 0; k < snap.fColIndex.length; ++k)
-            colors[snap.fColIndex[k]] = snap.fColValue[k];
+            colors[snap.fColIndex[k]] = convertColor(snap.fColValue[k]);
        }
 
       // painter used only for evaluation of attributes
@@ -1096,7 +1108,7 @@ class RPadPainter extends RObjectPainter {
             for (let n = 0; n < arr.length; ++n) {
                const name = arr[n].fString, p = name.indexOf('=');
                if (p > 0)
-                  ListOfColors[parseInt(name.slice(0, p))] = name.slice(p+1);
+                  ListOfColors[parseInt(name.slice(0, p))] = convertColor(name.slice(p+1));
             }
 
             this.root_colors = ListOfColors;
@@ -1181,7 +1193,7 @@ class RPadPainter extends RObjectPainter {
 
          const mainid = this.selectDom().attr('id');
 
-         if (!this.isBatchMode() && !this.use_openui && !this.brlayout && mainid && isStr(mainid)) {
+         if (!this.isBatchMode() && !this.use_openui && !this.brlayout && mainid && isStr(mainid) && !getHPainter()) {
             this.brlayout = new BrowserLayout(mainid, null, this);
             this.brlayout.create(mainid, true);
             this.setDom(this.brlayout.drawing_divid()); // need to create canvas
@@ -1337,7 +1349,7 @@ class RPadPainter extends RObjectPainter {
             if (res)
               this.getCanvPainter()?.sendWebsocket(`SAVE:${filename}:${res}`);
          } else
-            saveFile(filename, (kind !== 'svg') ? imgdata : 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(imgdata));
+            saveFile(filename, (kind !== 'svg') ? imgdata : prSVG + encodeURIComponent(imgdata));
       });
    }
 
@@ -1349,7 +1361,7 @@ class RPadPainter extends RObjectPainter {
 
    /** @summary Produce image for the pad
      * @return {Promise} with created image */
-   async produceImage(full_canvas, file_format) {
+   async produceImage(full_canvas, file_format, args) {
       const use_frame = (full_canvas === 'frame'),
             elem = use_frame ? this.getFrameSvg(this.this_pad_name) : (full_canvas ? this.getCanvSvg() : this.svg_this_pad()),
             painter = (full_canvas && !use_frame) ? this.getCanvPainter() : this,
@@ -1381,18 +1393,24 @@ class RPadPainter extends RObjectPainter {
                btns.remove();
             }
 
-            const main = pp.getFramePainter();
-            if (!isFunc(main?.render3D) || !isFunc(main?.access3dKind)) return;
+            const fp = pp.getFramePainter();
+            if (!isFunc(fp?.access3dKind)) return;
 
-            const can3d = main.access3dKind();
-
+            const can3d = fp.access3dKind();
             if ((can3d !== constants.Embed3D.Overlay) && (can3d !== constants.Embed3D.Embed)) return;
 
-            const sz2 = main.getSizeFor3d(constants.Embed3D.Embed), // get size and position of DOM element as it will be embed
-                  canvas = main.renderer.domElement;
+            let main, canvas;
+            if (isFunc(fp.render3D)) {
+               main = fp;
+               canvas = fp.renderer?.domElement;
+            } else {
+               main = fp.getMainPainter();
+               canvas = main?._renderer?.domElement;
+            }
+            if (!isFunc(main?.render3D) || !isObject(canvas)) return;
 
+            const sz2 = fp.getSizeFor3d(constants.Embed3D.Embed); // get size and position of DOM element as it will be embed
             main.render3D(0); // WebGL clears buffers, therefore we should render scene and convert immediately
-
             const dataUrl = canvas.toDataURL('image/png');
 
             // remove 3D drawings
@@ -1427,9 +1445,9 @@ class RPadPainter extends RObjectPainter {
 
       const arg = (file_format === 'pdf')
          ? { node: elem.node(), width, height, reset_tranform: use_frame }
-         : compressSVG(`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${elem.node().innerHTML}</svg>`);
+         : compressSVG(`<svg width="${width}" height="${height}" xmlns="${nsSVG}">${elem.node().innerHTML}</svg>`);
 
-      return svgToImage(arg, file_format).then(res => {
+      return svgToImage(arg, file_format, args).then(res => {
          for (let k = 0; k < items.length; ++k) {
             const item = items[k];
 

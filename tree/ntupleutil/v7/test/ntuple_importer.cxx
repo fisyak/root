@@ -27,12 +27,12 @@ TEST(RNTupleImporter, Empty)
 
    auto importer = RNTupleImporter::Create(fileGuard.GetPath(), "tree", fileGuard.GetPath());
    importer->SetIsQuiet(true);
-   EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
+   EXPECT_THROW(importer->Import(), ROOT::RException);
    importer->SetNTupleName("ntuple");
    importer->Import();
    auto reader = RNTupleReader::Open("ntuple", fileGuard.GetPath());
    EXPECT_EQ(0U, reader->GetNEntries());
-   EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
+   EXPECT_THROW(importer->Import(), ROOT::RException);
 }
 
 TEST(RNTupleImporter, CreateFromTree)
@@ -49,12 +49,12 @@ TEST(RNTupleImporter, CreateFromTree)
 
    auto importer = RNTupleImporter::Create(tree, fileGuard.GetPath());
    importer->SetIsQuiet(true);
-   EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
+   EXPECT_THROW(importer->Import(), ROOT::RException);
    importer->SetNTupleName("ntuple");
    importer->Import();
    auto reader = RNTupleReader::Open("ntuple", fileGuard.GetPath());
    EXPECT_EQ(0U, reader->GetNEntries());
-   EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
+   EXPECT_THROW(importer->Import(), ROOT::RException);
 }
 
 TEST(RNTupleImporter, CreateFromChain)
@@ -91,7 +91,7 @@ TEST(RNTupleImporter, CreateFromChain)
 
    auto importer1 = RNTupleImporter::Create(namedChain, chainFileGuard.GetPath());
    importer1->SetIsQuiet(true);
-   EXPECT_THROW(importer1->Import(), ROOT::Experimental::RException);
+   EXPECT_THROW(importer1->Import(), ROOT::RException);
    importer1->SetNTupleName("ntuple");
    importer1->Import();
 
@@ -102,7 +102,7 @@ TEST(RNTupleImporter, CreateFromChain)
    EXPECT_EQ(42, viewA(0));
    EXPECT_EQ(43, viewA(1));
 
-   EXPECT_THROW(importer1->Import(), ROOT::Experimental::RException);
+   EXPECT_THROW(importer1->Import(), ROOT::RException);
 
    TChain unnamedChain;
    unnamedChain.Add((treeFileGuard.GetPath() + "?#tree1").c_str());
@@ -215,7 +215,7 @@ TEST(RNTupleImporter, ConvertDotsInBranchNames)
    importer->SetIsQuiet(true);
    importer->SetNTupleName("ntuple");
 
-   EXPECT_THROW(importer->Import(), ROOT::Experimental::RException);
+   EXPECT_THROW(importer->Import(), ROOT::RException);
 
    importer->SetConvertDotsInBranchNames(true);
    importer->Import();
@@ -224,7 +224,7 @@ TEST(RNTupleImporter, ConvertDotsInBranchNames)
    EXPECT_EQ(42, *reader->GetModel().GetDefaultEntry().GetPtr<std::int32_t>("a_a"));
 
    auto viewMuon = reader->GetCollectionView("_collection0");
-   auto viewMuonPt = viewMuon.GetView<float>("muon_pt");
+   auto viewMuonPt = viewMuon.GetView<float>("_0.muon_pt");
    EXPECT_EQ(1, viewMuon(0));
    EXPECT_FLOAT_EQ(3.14, viewMuonPt(0));
 }
@@ -263,9 +263,9 @@ TEST(RNTupleImporter, FieldModifier)
    EXPECT_FLOAT_EQ(2.0, *reader->GetModel().GetDefaultEntry().GetPtr<float>("b"));
 
    EXPECT_EQ(RFieldBase::ColumnRepresentation_t{EColumnType::kReal16},
-             reader->GetModel().GetField("a").GetColumnRepresentatives()[0]);
+             reader->GetModel().GetConstField("a").GetColumnRepresentatives()[0]);
    EXPECT_EQ(RFieldBase::ColumnRepresentation_t{EColumnType::kSplitReal32},
-             reader->GetModel().GetField("b").GetColumnRepresentatives()[0]);
+             reader->GetModel().GetConstField("b").GetColumnRepresentatives()[0]);
 }
 
 TEST(RNTupleImporter, CString)
@@ -437,14 +437,14 @@ TEST(RNTupleImporter, LeafCountArray)
    EXPECT_EQ(2, viewMiddle(0));
    EXPECT_EQ(3, viewEnd(0));
    auto viewJets = reader->GetCollectionView("_collection0");
-   auto viewJetPt = viewJets.GetView<float>("jet_pt");
-   auto viewJetEta = viewJets.GetView<float>("jet_eta");
+   auto viewJetPt = viewJets.GetView<float>("_0.jet_pt");
+   auto viewJetEta = viewJets.GetView<float>("_0.jet_eta");
    auto viewMuons = reader->GetCollectionView("_collection1");
-   auto viewMuonPt = viewMuons.GetView<float>("muon_pt");
-   auto viewProjectedNjets = reader->GetView<ROOT::Experimental::RNTupleCardinality<std::uint32_t>>("njets");
+   auto viewMuonPt = viewMuons.GetView<float>("_0.muon_pt");
+   auto viewProjectedNjets = reader->GetView<ROOT::RNTupleCardinality<std::uint32_t>>("njets");
    auto viewProjectedJetPt = reader->GetView<ROOT::RVec<float>>("jet_pt");
    auto viewProjectedJetEta = reader->GetView<ROOT::RVec<float>>("jet_eta");
-   auto viewProjectedNmuons = reader->GetView<ROOT::Experimental::RNTupleCardinality<std::uint32_t>>("nmuons");
+   auto viewProjectedNmuons = reader->GetView<ROOT::RNTupleCardinality<std::uint32_t>>("nmuons");
    auto viewProjectedMuonPt = reader->GetView<ROOT::RVec<float>>("muon_pt");
 
    // Entry 0: 1 jet, 1 muon

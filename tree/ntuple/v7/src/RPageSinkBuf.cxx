@@ -25,11 +25,6 @@
 
 void ROOT::Experimental::Internal::RPageSinkBuf::RColumnBuf::DropBufferedPages()
 {
-   for (auto &bufPage : fBufferedPages) {
-      if (!bufPage.fPage.IsNull()) {
-         fCol.fColumn->GetPageSink()->ReleasePage(bufPage.fPage);
-      }
-   }
    fBufferedPages.clear();
    // Each RSealedPage points to the same region as `fBuf` for some element in `fBufferedPages`; thus, no further
    // clean-up is required
@@ -42,8 +37,11 @@ ROOT::Experimental::Internal::RPageSinkBuf::RPageSinkBuf(std::unique_ptr<RPageSi
    fMetrics = Detail::RNTupleMetrics("RPageSinkBuf");
    fCounters = std::make_unique<RCounters>(RCounters{
       *fMetrics.MakeCounter<Detail::RNTuplePlainCounter *>("ParallelZip", "", "compressing pages in parallel"),
+      *fMetrics.MakeCounter<Detail::RNTupleAtomicCounter *>("timeWallZip", "ns", "wall clock time spent compressing"),
       *fMetrics.MakeCounter<Detail::RNTuplePlainCounter *>("timeWallCriticalSection", "ns",
                                                            "wall clock time spent in critical sections"),
+      *fMetrics.MakeCounter<Detail::RNTupleTickCounter<Detail::RNTupleAtomicCounter> *>("timeCpuZip", "ns",
+                                                                                        "CPU time spent compressing"),
       *fMetrics.MakeCounter<Detail::RNTupleTickCounter<Detail::RNTuplePlainCounter> *>(
          "timeCpuCriticalSection", "ns", "CPU time spent in critical section")});
    fMetrics.ObserveMetrics(fInnerSink->GetMetrics());
@@ -58,7 +56,7 @@ ROOT::Experimental::Internal::RPageSinkBuf::~RPageSinkBuf()
 }
 
 ROOT::Experimental::Internal::RPageStorage::ColumnHandle_t
-ROOT::Experimental::Internal::RPageSinkBuf::AddColumn(DescriptorId_t /*fieldId*/, const RColumn &column)
+ROOT::Experimental::Internal::RPageSinkBuf::AddColumn(DescriptorId_t /*fieldId*/, RColumn &column)
 {
    return ColumnHandle_t{fNColumns++, &column};
 }
@@ -88,7 +86,7 @@ const ROOT::Experimental::RNTupleDescriptor &ROOT::Experimental::Internal::RPage
 
 void ROOT::Experimental::Internal::RPageSinkBuf::InitImpl(RNTupleModel &model)
 {
-   ConnectFields(model.GetFieldZero().GetSubFields(), 0U);
+   ConnectFields(Internal::GetFieldZeroOfModel(model).GetSubFields(), 0U);
 
    fInnerModel = model.Clone();
    fInnerSink->Init(*fInnerModel);
@@ -110,13 +108,14 @@ void ROOT::Experimental::Internal::RPageSinkBuf::UpdateSchema(const RNTupleModel
    auto cloneAddProjectedField = [&](RFieldBase *field) {
       auto cloned = field->Clone(field->GetFieldName());
       auto p = &(*cloned);
-      auto &projectedFields = changeset.fModel.GetProjectedFields();
-      RNTupleModel::RProjectedFields::FieldMap_t fieldMap;
-      fieldMap[p] = projectedFields.GetSourceField(field);
+      auto &projectedFields = Internal::GetProjectedFieldsOfModel(changeset.fModel);
+      Internal::RProjectedFields::FieldMap_t fieldMap;
+      fieldMap[p] = &fInnerModel->GetConstField(projectedFields.GetSourceField(field)->GetQualifiedFieldName());
       auto targetIt = cloned->begin();
       for (auto &f : *field)
-         fieldMap[&(*targetIt++)] = projectedFields.GetSourceField(&f);
-      const_cast<RNTupleModel::RProjectedFields &>(fInnerModel->GetProjectedFields()).Add(std::move(cloned), fieldMap);
+         fieldMap[&(*targetIt++)] =
+            &fInnerModel->GetConstField(projectedFields.GetSourceField(&f)->GetQualifiedFieldName());
+      Internal::GetProjectedFieldsOfModel(*fInnerModel).Add(std::move(cloned), fieldMap);
       return p;
    };
    RNTupleModelChangeset innerChangeset{*fInnerModel};
@@ -146,16 +145,31 @@ void ROOT::Experimental::Internal::RPageSinkBuf::CommitPage(ColumnHandle_t colum
    auto colId = columnHandle.fPhysicalId;
    const auto &element = *columnHandle.fColumn->GetElement();
 
-   // Safety: References are guaranteed to be valid until the
-   // element is destroyed. In other words, all buffered page elements are
-   // valid until the return value of DrainBufferedPages() goes out of scope in
-   // CommitCluster().
+   // Safety: References are guaranteed to be valid until the element is destroyed. In other words, all buffered page
+   // elements are valid until DropBufferedPages().
    auto &zipItem = fBufferedColumns.at(colId).BufferPage(columnHandle);
-   zipItem.AllocateSealedPageBuf(page.GetNBytes() + GetWriteOptions().GetEnablePageChecksums() * kNBytesPageChecksum);
-   R__ASSERT(zipItem.fBuf);
+   std::size_t maxSealedPageBytes = page.GetNBytes() + GetWriteOptions().GetEnablePageChecksums() * kNBytesPageChecksum;
+   // Do not allocate the buffer yet, in case of IMT we only need it once the task is started.
    auto &sealedPage = fBufferedColumns.at(colId).RegisterSealedPage();
 
+   auto allocateBuf = [&zipItem, maxSealedPageBytes]() {
+      zipItem.fBuf = MakeUninitArray<unsigned char>(maxSealedPageBytes);
+      R__ASSERT(zipItem.fBuf);
+   };
+   auto shrinkSealedPage = [&zipItem, maxSealedPageBytes, &sealedPage]() {
+      // If the sealed page is smaller than the maximum size (with compression), allocate what is needed and copy the
+      // sealed page content to save memory.
+      auto sealedBufferSize = sealedPage.GetBufferSize();
+      if (sealedBufferSize < maxSealedPageBytes) {
+         auto buf = MakeUninitArray<unsigned char>(sealedBufferSize);
+         memcpy(buf.get(), sealedPage.GetBuffer(), sealedBufferSize);
+         zipItem.fBuf = std::move(buf);
+         sealedPage.SetBuffer(zipItem.fBuf.get());
+      }
+   };
+
    if (!fTaskScheduler) {
+      allocateBuf();
       // Seal the page right now, avoiding the allocation and copy, but making sure that the page buffer is not aliased.
       RSealPageConfig config;
       config.fPage = &page;
@@ -164,13 +178,17 @@ void ROOT::Experimental::Internal::RPageSinkBuf::CommitPage(ColumnHandle_t colum
       config.fWriteChecksum = GetWriteOptions().GetEnablePageChecksums();
       config.fAllowAlias = false;
       config.fBuffer = zipItem.fBuf.get();
-      sealedPage = SealPage(config);
+      {
+         Detail::RNTupleAtomicTimer timer(fCounters->fTimeWallZip, fCounters->fTimeCpuZip);
+         sealedPage = SealPage(config);
+      }
+      shrinkSealedPage();
       zipItem.fSealedPage = &sealedPage;
       return;
    }
 
    // TODO avoid frequent (de)allocations by holding on to allocated buffers in RColumnBuf
-   zipItem.fPage = ReservePage(columnHandle, page.GetNElements());
+   zipItem.fPage = fPageAllocator->NewPage(page.GetElementSize(), page.GetNElements());
    // make sure the page is aware of how many elements it will have
    zipItem.fPage.GrowUnchecked(page.GetNElements());
    memcpy(zipItem.fPage.GetBuffer(), page.GetBuffer(), page.GetNBytes());
@@ -178,16 +196,23 @@ void ROOT::Experimental::Internal::RPageSinkBuf::CommitPage(ColumnHandle_t colum
    fCounters->fParallelZip.SetValue(1);
    // Thread safety: Each thread works on a distinct zipItem which owns its
    // compression buffer.
-   fTaskScheduler->AddTask([this, &zipItem, &sealedPage, &element] {
+   fTaskScheduler->AddTask([this, &zipItem, &sealedPage, &element, allocateBuf, shrinkSealedPage] {
+      allocateBuf();
       RSealPageConfig config;
       config.fPage = &zipItem.fPage;
       config.fElement = &element;
       config.fCompressionSetting = GetWriteOptions().GetCompression();
       config.fWriteChecksum = GetWriteOptions().GetEnablePageChecksums();
-      config.fAllowAlias = true;
+      // Make sure the page buffer is not aliased so that we can free the uncompressed page.
+      config.fAllowAlias = false;
       config.fBuffer = zipItem.fBuf.get();
+      // TODO: Somehow expose the time spent in zipping via the metrics. Wall time is tricky because the tasks run
+      // in parallel...
       sealedPage = SealPage(config);
+      shrinkSealedPage();
       zipItem.fSealedPage = &sealedPage;
+      // Release the uncompressed page. This works because the "page allocator must be thread-safe."
+      zipItem.fPage = RPage();
    });
 }
 
@@ -202,7 +227,10 @@ void ROOT::Experimental::Internal::RPageSinkBuf::CommitSealedPageV(std::span<RPa
    throw RException(R__FAIL("should never commit sealed pages to RPageSinkBuf"));
 }
 
-std::uint64_t ROOT::Experimental::Internal::RPageSinkBuf::CommitCluster(ROOT::Experimental::NTupleSize_t nNewEntries)
+// We implement both StageCluster() and CommitCluster() because we can call CommitCluster() on the inner sink more
+// efficiently in a single critical section. For parallel writing, it also guarantees that we produce a fully sequential
+// file.
+void ROOT::Experimental::Internal::RPageSinkBuf::FlushClusterImpl(std::function<void(void)> FlushClusterFn)
 {
    WaitForAllTasks();
 
@@ -214,7 +242,6 @@ std::uint64_t ROOT::Experimental::Internal::RPageSinkBuf::CommitCluster(ROOT::Ex
       toCommit.emplace_back(bufColumn.GetHandle().fPhysicalId, sealedPages.cbegin(), sealedPages.cend());
    }
 
-   std::uint64_t nbytes;
    {
       RPageSink::RSinkGuard g(fInnerSink->GetSinkGuard());
       Detail::RNTuplePlainTimer timer(fCounters->fTimeWallCriticalSection, fCounters->fTimeCpuCriticalSection);
@@ -224,12 +251,33 @@ std::uint64_t ROOT::Experimental::Internal::RPageSinkBuf::CommitCluster(ROOT::Ex
          fInnerSink->CommitSuppressedColumn(handle);
       fSuppressedColumns.clear();
 
-      nbytes = fInnerSink->CommitCluster(nNewEntries);
+      FlushClusterFn();
    }
 
    for (auto &bufColumn : fBufferedColumns)
       bufColumn.DropBufferedPages();
+}
+
+std::uint64_t ROOT::Experimental::Internal::RPageSinkBuf::CommitCluster(ROOT::Experimental::NTupleSize_t nNewEntries)
+{
+   std::uint64_t nbytes;
+   FlushClusterImpl([&] { nbytes = fInnerSink->CommitCluster(nNewEntries); });
    return nbytes;
+}
+
+ROOT::Experimental::Internal::RPageSink::RStagedCluster
+ROOT::Experimental::Internal::RPageSinkBuf::StageCluster(ROOT::Experimental::NTupleSize_t nNewEntries)
+{
+   ROOT::Experimental::Internal::RPageSink::RStagedCluster stagedCluster;
+   FlushClusterImpl([&] { stagedCluster = fInnerSink->StageCluster(nNewEntries); });
+   return stagedCluster;
+}
+
+void ROOT::Experimental::Internal::RPageSinkBuf::CommitStagedClusters(std::span<RStagedCluster> clusters)
+{
+   RPageSink::RSinkGuard g(fInnerSink->GetSinkGuard());
+   Detail::RNTuplePlainTimer timer(fCounters->fTimeWallCriticalSection, fCounters->fTimeCpuCriticalSection);
+   fInnerSink->CommitStagedClusters(clusters);
 }
 
 void ROOT::Experimental::Internal::RPageSinkBuf::CommitClusterGroup()
@@ -250,9 +298,4 @@ ROOT::Experimental::Internal::RPage
 ROOT::Experimental::Internal::RPageSinkBuf::ReservePage(ColumnHandle_t columnHandle, std::size_t nElements)
 {
    return fInnerSink->ReservePage(columnHandle, nElements);
-}
-
-void ROOT::Experimental::Internal::RPageSinkBuf::ReleasePage(RPage &page)
-{
-   fInnerSink->ReleasePage(page);
 }

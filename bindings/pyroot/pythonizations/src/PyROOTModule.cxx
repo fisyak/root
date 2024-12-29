@@ -11,7 +11,6 @@
 
 // Bindings
 #include "PyROOTPythonize.h"
-#include "PyROOTWrapper.h"
 #include "RPyROOTApplication.h"
 
 // Cppyy
@@ -20,6 +19,7 @@
 #include "../../cppyy/CPyCppyy/src/ProxyWrappers.h"
 
 // ROOT
+#include "TInterpreter.h"
 #include "TROOT.h"
 #include "TSystem.h"
 #include "RConfigure.h"
@@ -82,8 +82,6 @@ static PyMethodDef gPyROOTMethods[] = {
     (char *)"Install an input hook to process GUI events"},
    {(char *)"_CPPInstance__expand__", (PyCFunction)PyROOT::CPPInstanceExpand, METH_VARARGS,
     (char *)"Deserialize a pickled object"},
-   {(char *)"ClearProxiedObjects", (PyCFunction)PyROOT::ClearProxiedObjects, METH_NOARGS,
-    (char *)"Clear proxied objects regulated by PyROOT"},
    {(char *)"JupyROOTExecutor", (PyCFunction)JupyROOTExecutor, METH_VARARGS, (char *)"Create JupyROOTExecutor"},
    {(char *)"JupyROOTDeclarer", (PyCFunction)JupyROOTDeclarer, METH_VARARGS, (char *)"Create JupyROOTDeclarer"},
    {(char *)"JupyROOTExecutorHandler_Clear", (PyCFunction)JupyROOTExecutorHandler_Clear, METH_NOARGS,
@@ -146,8 +144,13 @@ extern "C" PyObject *PyInit_libROOTPythonizations()
    // keep gRootModule, but do not increase its reference count even as it is borrowed,
    // or a self-referencing cycle would be created
 
-   // setup PyROOT
-   PyROOT::Init();
+   // Initialize and acquire the GIL to allow for threading in ROOT
+#if PY_VERSION_HEX < 0x03090000
+   PyEval_InitThreads();
+#endif
+
+   // Make sure the interpreter is initialized once gROOT has been initialized
+   TInterpreter::Instance();
 
    // signal policy: don't abort interpreter in interactive mode
    CallContext::SetGlobalSignalPolicy(!gROOT->IsBatch());

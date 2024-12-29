@@ -398,6 +398,11 @@ std::vector<std::unique_ptr<TChain>> MakeFriends(const ROOT::TreeUtils::RFriendI
 
       const auto &treeIndex = finfo.fTreeIndexInfos[i];
       if (treeIndex) {
+         // The call to LoadTree is necessary to make sure that the schema is
+         // properly loaded and all branches are correctly connected with the
+         // friend chain. Not doing so would result in the index not being able
+         // to probe the friend chain afterwards.
+         frChain->LoadTree(0);
          auto *copyOfIndex = static_cast<TVirtualIndex *>(treeIndex->Clone());
          copyOfIndex->SetTree(frChain.get());
          frChain->SetTreeIndex(copyOfIndex);

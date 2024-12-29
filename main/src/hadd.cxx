@@ -211,7 +211,7 @@ int main( int argc, char **argv )
          ++ffirst;
       } else if ( strcmp(argv[a],"-cachesize=") == 0 ) {
          int size;
-         static const size_t arglen = strlen("-cachesize=");
+         static constexpr size_t arglen = std::char_traits<char>::length("-cachesize=");
          auto parseResult = ROOT::FromHumanReadableSize(argv[a]+arglen,size);
          if (parseResult == ROOT::EFromHumanReadableSize::kParseFail) {
             std::cerr << "Error: could not parse the cache size passed after -cachesize: "
@@ -427,8 +427,10 @@ int main( int argc, char **argv )
          else
             newcomp = ROOT::RCompressionSetting::EDefaults::kUseCompiledDefault;
          delete firstInput;
+         fileMerger.SetMergeOptions(TString("first_source_compression"));
       } else {
          newcomp = ROOT::RCompressionSetting::EDefaults::kUseCompiledDefault;
+         fileMerger.SetMergeOptions(TString("default_compression"));
       }
    }
    if (verbosity > 1) {
@@ -487,7 +489,7 @@ int main( int argc, char **argv )
          }
       }
       merger.SetNotrees(noTrees);
-      merger.SetMergeOptions(cacheSize);
+      merger.SetMergeOptions(TString(merger.GetMergeOptions()) + " " + cacheSize);
       merger.SetIOFeatures(features);
       Bool_t status;
       if (append)

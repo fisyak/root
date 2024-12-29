@@ -8,3 +8,7 @@ if(CMAKE_Fortran_COMPILER)
   add_subdirectory(minicern)
 endif()
 add_subdirectory(table)
+
+add_subdirectory(gdbPrinters)
+add_subdirectory(rmkdepend)
+add_subdirectory(win)

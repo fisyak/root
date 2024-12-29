@@ -1,8 +1,8 @@
-import { gStyle, settings, create, isFunc, isStr, clTAxis, nsREX } from '../core.mjs';
+import { gStyle, settings, internals, create, isFunc, isStr, clTAxis, nsREX, urlClassPrefix } from '../core.mjs';
 import { pointer as d3_pointer } from '../d3.mjs';
 import { getSvgLineStyle } from '../base/TAttLineHandler.mjs';
 import { makeTranslate } from '../base/BasePainter.mjs';
-import { TAxisPainter } from './TAxisPainter.mjs';
+import { EAxisBits, TAxisPainter } from './TAxisPainter.mjs';
 import { RAxisPainter } from './RAxisPainter.mjs';
 import { FrameInteractive, getEarthProjectionFunc } from './TFramePainter.mjs';
 import { RObjectPainter } from '../base/RObjectPainter.mjs';
@@ -58,7 +58,7 @@ class RFramePainter extends RObjectPainter {
 
    /** @summary Update graphical attributes */
    updateAttributes(force) {
-      if ((this.fX1NDC === undefined) || (force && !this.modified_NDC)) {
+      if ((this.fX1NDC === undefined) || (force && !this.$modifiedNDC)) {
          const rect = this.getPadPainter().getPadRect();
          this.fX1NDC = this.v7EvalLength('margins_left', rect.width, gStyle.fPadLeftMargin) / rect.width;
          this.fY1NDC = this.v7EvalLength('margins_bottom', rect.height, gStyle.fPadBottomMargin) / rect.height;
@@ -302,7 +302,7 @@ class RFramePainter extends RObjectPainter {
                                       { reverse: this.reverse_x,
                                         log: this.swap_xy ? this.logy : this.logx,
                                         symlog: this.swap_xy ? opts.symlog_y : opts.symlog_x,
-                                        logcheckmin: this.swap_xy,
+                                        logcheckmin: (opts.ndim > 1) || !this.swap_xy,
                                         logminfactor: 0.0001 });
 
       this.x_handle.assignFrameMembers(this, 'x');
@@ -314,7 +314,7 @@ class RFramePainter extends RObjectPainter {
                                       { reverse: this.reverse_y,
                                         log: this.swap_xy ? this.logx : this.logy,
                                         symlog: this.swap_xy ? opts.symlog_x : opts.symlog_y,
-                                        logcheckmin: (opts.ndim < 2) || this.swap_xy,
+                                        logcheckmin: (opts.ndim > 1) || this.swap_xy,
                                         log_min_nz: opts.ymin_nz && (opts.ymin_nz < this.ymax) ? 0.5 * opts.ymin_nz : 0,
                                         logminfactor: 3e-4 });
 
@@ -668,9 +668,14 @@ class RFramePainter extends RObjectPainter {
       this._frame_height = h;
       this._frame_rotate = rotate;
       this._frame_fixpos = fixpos;
+      this._frame_trans = trans;
 
-      if (this.mode3d) return this; // no need for real draw in mode3d
+      return this.mode3d ? this : this.createFrameG();
+   }
 
+   /** @summary Create frame element and update all attributes
+     * @private */
+   createFrameG() {
       // this is svg:g object - container for every other items belonging to frame
       this.draw_g = this.getFrameSvg();
 
@@ -699,20 +704,20 @@ class RFramePainter extends RObjectPainter {
 
       this.axes_drawn = false;
 
-      this.draw_g.attr('transform', trans);
+      this.draw_g.attr('transform', this._frame_trans);
 
       top_rect.attr('x', 0)
               .attr('y', 0)
-              .attr('width', w)
-              .attr('height', h)
+              .attr('width', this._frame_width)
+              .attr('height', this._frame_height)
               .attr('rx', this.lineatt.rx || null)
               .attr('ry', this.lineatt.ry || null)
               .call(this.fillatt.func)
               .call(this.lineatt.func);
 
-      main_svg.attr('width', w)
-              .attr('height', h)
-              .attr('viewBox', `0 0 ${w} ${h}`);
+      main_svg.attr('width', this._frame_width)
+              .attr('height', this._frame_height)
+              .attr('viewBox', `0 0 ${this._frame_width} ${this._frame_height}`);
 
       let pr = Promise.resolve(true);
 
@@ -1055,20 +1060,28 @@ class RFramePainter extends RObjectPainter {
    }
 
    /** @summary Fill context menu */
-   fillContextMenu(menu, kind /* , obj */) {
+   fillContextMenu(menu, kind, obj) {
       if (kind === 'pal') kind = 'z';
 
       if ((kind === 'x') || (kind === 'y') || (kind === 'x2') || (kind === 'y2')) {
-         const handle = this[kind+'_handle'];
+         const handle = this[kind+'_handle'],
+               faxis = obj || this[kind+'axis'];
          if (!handle) return false;
-         menu.header(kind.toUpperCase() + ' axis');
+         menu.header(`${kind.toUpperCase()} axis`, `${urlClassPrefix}ROOT_1_1Experimental_1_1RAxisBase.html`);
+
+         if (isFunc(faxis?.TestBit)) {
+            const main = this.getMainPainter(true);
+            menu.addTAxisMenu(EAxisBits, main || this, faxis, kind);
+            return true;
+         }
+
          return handle.fillAxisContextMenu(menu, kind);
       }
 
       const alone = menu.size() === 0;
 
       if (alone)
-         menu.header('Frame');
+         menu.header('Frame', `${urlClassPrefix}ROOT_1_1Experimental_1_1RFrame.html`);
       else
          menu.separator();
 
@@ -1117,7 +1130,9 @@ class RFramePainter extends RObjectPainter {
       menu.separator();
 
       menu.sub('Save as');
-      ['svg', 'png', 'jpeg', 'pdf', 'webp'].forEach(fmt => menu.add(`frame.${fmt}`, () => this.getPadPainter().saveAs(fmt, 'frame', `frame.${fmt}`)));
+      const fmts = ['svg', 'png', 'jpeg', 'webp'];
+      if (internals.makePDF) fmts.push('pdf');
+      fmts.forEach(fmt => menu.add(`frame.${fmt}`, () => this.getPadPainter().saveAs(fmt, 'frame', `frame.${fmt}`)));
       menu.endsub();
 
       return true;

@@ -29,8 +29,8 @@
 #include <ROOT/RNTupleUtil.hxx>
 
 #include <RVersion.h>
+#include <TDirectory.h>
 #include <TError.h>
-#include <TFile.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -45,13 +45,8 @@
 
 ROOT::Experimental::Internal::RPageSinkFile::RPageSinkFile(std::string_view ntupleName,
                                                            const RNTupleWriteOptions &options)
-   : RPagePersistentSink(ntupleName, options), fPageAllocator(std::make_unique<RPageAllocatorHeap>())
+   : RPagePersistentSink(ntupleName, options)
 {
-   static std::once_flag once;
-   std::call_once(once, []() {
-      R__LOG_WARNING(NTupleLog()) << "The RNTuple file format will change. "
-                                  << "Do not store real data with this version of RNTuple!";
-   });
    fCompressor = std::make_unique<RNTupleCompressor>();
    EnableDefaultMetrics("RPageSinkFile");
    fFeatures.fCanMergePages = true;
@@ -64,18 +59,18 @@ ROOT::Experimental::Internal::RPageSinkFile::RPageSinkFile(std::string_view ntup
    fWriter = RNTupleFileWriter::Recreate(ntupleName, path, RNTupleFileWriter::EContainerFormat::kTFile, options);
 }
 
-ROOT::Experimental::Internal::RPageSinkFile::RPageSinkFile(std::string_view ntupleName, TFile &file,
+ROOT::Experimental::Internal::RPageSinkFile::RPageSinkFile(std::string_view ntupleName, TDirectory &fileOrDirectory,
                                                            const RNTupleWriteOptions &options)
    : RPageSinkFile(ntupleName, options)
 {
-   fWriter = RNTupleFileWriter::Append(ntupleName, file, options.GetMaxKeySize());
+   fWriter = RNTupleFileWriter::Append(ntupleName, fileOrDirectory, options.GetMaxKeySize());
 }
 
 ROOT::Experimental::Internal::RPageSinkFile::~RPageSinkFile() {}
 
 void ROOT::Experimental::Internal::RPageSinkFile::InitImpl(unsigned char *serializedHeader, std::uint32_t length)
 {
-   auto zipBuffer = std::make_unique<unsigned char[]>(length);
+   auto zipBuffer = MakeUninitArray<unsigned char>(length);
    auto szZipHeader = fCompressor->Zip(serializedHeader, length, GetWriteOptions().GetCompression(),
                                        RNTupleCompressor::MakeMemCopyWriter(zipBuffer.get()));
    fWriter->WriteNTupleHeader(zipBuffer.get(), szZipHeader, length);
@@ -221,7 +216,7 @@ ROOT::Experimental::Internal::RPageSinkFile::CommitSealedPageVImpl(std::span<RPa
    return locators;
 }
 
-std::uint64_t ROOT::Experimental::Internal::RPageSinkFile::CommitClusterImpl()
+std::uint64_t ROOT::Experimental::Internal::RPageSinkFile::StageClusterImpl()
 {
    auto result = fNBytesCurrentCluster;
    fNBytesCurrentCluster = 0;
@@ -232,7 +227,7 @@ ROOT::Experimental::RNTupleLocator
 ROOT::Experimental::Internal::RPageSinkFile::CommitClusterGroupImpl(unsigned char *serializedPageList,
                                                                     std::uint32_t length)
 {
-   auto bufPageListZip = std::make_unique<unsigned char[]>(length);
+   auto bufPageListZip = MakeUninitArray<unsigned char>(length);
    auto szPageListZip = fCompressor->Zip(serializedPageList, length, GetWriteOptions().GetCompression(),
                                          RNTupleCompressor::MakeMemCopyWriter(bufPageListZip.get()));
 
@@ -245,25 +240,12 @@ ROOT::Experimental::Internal::RPageSinkFile::CommitClusterGroupImpl(unsigned cha
 void ROOT::Experimental::Internal::RPageSinkFile::CommitDatasetImpl(unsigned char *serializedFooter,
                                                                     std::uint32_t length)
 {
-   auto bufFooterZip = std::make_unique<unsigned char[]>(length);
+   fWriter->UpdateStreamerInfos(fDescriptorBuilder.BuildStreamerInfos());
+   auto bufFooterZip = MakeUninitArray<unsigned char>(length);
    auto szFooterZip = fCompressor->Zip(serializedFooter, length, GetWriteOptions().GetCompression(),
                                        RNTupleCompressor::MakeMemCopyWriter(bufFooterZip.get()));
    fWriter->WriteNTupleFooter(bufFooterZip.get(), szFooterZip, length);
    fWriter->Commit();
-}
-
-ROOT::Experimental::Internal::RPage
-ROOT::Experimental::Internal::RPageSinkFile::ReservePage(ColumnHandle_t columnHandle, std::size_t nElements)
-{
-   if (nElements == 0)
-      throw RException(R__FAIL("invalid call: request empty page"));
-   auto elementSize = columnHandle.fColumn->GetElement()->GetSize();
-   return fPageAllocator->NewPage(columnHandle.fPhysicalId, elementSize, nElements);
-}
-
-void ROOT::Experimental::Internal::RPageSinkFile::ReleasePage(RPage &page)
-{
-   fPageAllocator->DeletePage(page);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -326,18 +308,14 @@ void ROOT::Experimental::Internal::RPageSourceFile::LoadStructureImpl()
 {
    // If we constructed the page source with (ntuple name, path), we need to find the anchor first.
    // Otherwise, the page source was created by OpenFromAnchor()
-   if (!fAnchor)
+   if (!fAnchor) {
       fAnchor = fReader.GetNTuple(fNTupleName).Unwrap();
+   }
+   fReader.SetMaxKeySize(fAnchor->GetMaxKeySize());
 
    // TOOD(jblomer): can the epoch check be factored out across anchors?
    if (fAnchor->GetVersionEpoch() != RNTuple::kVersionEpoch) {
       throw RException(R__FAIL("unsupported RNTuple epoch version: " + std::to_string(fAnchor->GetVersionEpoch())));
-   }
-   if (fAnchor->GetVersionEpoch() == 0) {
-      static std::once_flag once;
-      std::call_once(once, [this]() {
-         R__LOG_WARNING(NTupleLog()) << "Pre-release format version: RC " << fAnchor->GetVersionMajor();
-      });
    }
 
    fDescriptorBuilder.SetOnDiskHeaderSize(fAnchor->GetNBytesHeader());
@@ -346,7 +324,7 @@ void ROOT::Experimental::Internal::RPageSourceFile::LoadStructureImpl()
    // Reserve enough space for the compressed and the uncompressed header/footer (see AttachImpl)
    const auto bufSize = fAnchor->GetNBytesHeader() + fAnchor->GetNBytesFooter() +
                         std::max(fAnchor->GetLenHeader(), fAnchor->GetLenFooter());
-   fStructureBuffer.fBuffer = std::make_unique<unsigned char[]>(bufSize);
+   fStructureBuffer.fBuffer = MakeUninitArray<unsigned char>(bufSize);
    fStructureBuffer.fPtrHeader = fStructureBuffer.fBuffer.get();
    fStructureBuffer.fPtrFooter = fStructureBuffer.fBuffer.get() + fAnchor->GetNBytesHeader();
 
@@ -432,7 +410,7 @@ void ROOT::Experimental::Internal::RPageSourceFile::LoadSealedPage(DescriptorId_
    sealedPage.VerifyChecksumIfEnabled().ThrowOnError();
 }
 
-ROOT::Experimental::Internal::RPage
+ROOT::Experimental::Internal::RPageRef
 ROOT::Experimental::Internal::RPageSourceFile::LoadPageImpl(ColumnHandle_t columnHandle,
                                                             const RClusterInfo &clusterInfo,
                                                             ClusterSize_t::ValueType idxInCluster)
@@ -443,14 +421,15 @@ ROOT::Experimental::Internal::RPageSourceFile::LoadPageImpl(ColumnHandle_t colum
 
    const auto element = columnHandle.fColumn->GetElement();
    const auto elementSize = element->GetSize();
+   const auto elementInMemoryType = element->GetIdentifier().fInMemoryType;
 
    if (pageInfo.fLocator.fType == RNTupleLocator::kTypePageZero) {
-      auto pageZero = RPage::MakePageZero(columnId, elementSize);
+      auto pageZero = fPageAllocator->NewPage(elementSize, pageInfo.fNElements);
       pageZero.GrowUnchecked(pageInfo.fNElements);
+      memset(pageZero.GetBuffer(), 0, pageZero.GetNBytes());
       pageZero.SetWindow(clusterInfo.fColumnOffset + pageInfo.fFirstInPage,
                          RPage::RClusterInfo(clusterId, clusterInfo.fColumnOffset));
-      fPagePool->RegisterPage(pageZero, RPageDeleter([](const RPage &, void *) {}, nullptr));
-      return pageZero;
+      return fPagePool.RegisterPage(std::move(pageZero), RPagePool::RKey{columnId, elementInMemoryType});
    }
 
    RSealedPage sealedPage;
@@ -460,9 +439,12 @@ ROOT::Experimental::Internal::RPageSourceFile::LoadPageImpl(ColumnHandle_t colum
    std::unique_ptr<unsigned char[]> directReadBuffer; // only used if cluster pool is turned off
 
    if (fOptions.GetClusterCache() == RNTupleReadOptions::EClusterCache::kOff) {
-      directReadBuffer = std::unique_ptr<unsigned char[]>(new unsigned char[sealedPage.GetBufferSize()]);
-      fReader.ReadBuffer(directReadBuffer.get(), sealedPage.GetBufferSize(),
-                         pageInfo.fLocator.GetPosition<std::uint64_t>());
+      directReadBuffer = MakeUninitArray<unsigned char>(sealedPage.GetBufferSize());
+      {
+         Detail::RNTupleAtomicTimer timer(fCounters->fTimeWallRead, fCounters->fTimeCpuRead);
+         fReader.ReadBuffer(directReadBuffer.get(), sealedPage.GetBufferSize(),
+                            pageInfo.fLocator.GetPosition<std::uint64_t>());
+      }
       fCounters->fNPageRead.Inc();
       fCounters->fNRead.Inc();
       fCounters->fSzReadPayload.Add(sealedPage.GetBufferSize());
@@ -472,9 +454,10 @@ ROOT::Experimental::Internal::RPageSourceFile::LoadPageImpl(ColumnHandle_t colum
          fCurrentCluster = fClusterPool->GetCluster(clusterId, fActivePhysicalColumns.ToColumnSet());
       R__ASSERT(fCurrentCluster->ContainsColumn(columnId));
 
-      auto cachedPage = fPagePool->GetPage(columnId, RClusterIndex(clusterId, idxInCluster));
-      if (!cachedPage.IsNull())
-         return cachedPage;
+      auto cachedPageRef =
+         fPagePool.GetPage(RPagePool::RKey{columnId, elementInMemoryType}, RClusterIndex(clusterId, idxInCluster));
+      if (!cachedPageRef.Get().IsNull())
+         return cachedPageRef;
 
       ROnDiskPage::Key key(columnId, pageInfo.fPageNo);
       auto onDiskPage = fCurrentCluster->GetOnDiskPage(key);
@@ -485,21 +468,14 @@ ROOT::Experimental::Internal::RPageSourceFile::LoadPageImpl(ColumnHandle_t colum
    RPage newPage;
    {
       Detail::RNTupleAtomicTimer timer(fCounters->fTimeWallUnzip, fCounters->fTimeCpuUnzip);
-      newPage = UnsealPage(sealedPage, *element, columnId).Unwrap();
+      newPage = UnsealPage(sealedPage, *element).Unwrap();
       fCounters->fSzUnzip.Add(elementSize * pageInfo.fNElements);
    }
 
    newPage.SetWindow(clusterInfo.fColumnOffset + pageInfo.fFirstInPage,
                      RPage::RClusterInfo(clusterId, clusterInfo.fColumnOffset));
-   fPagePool->RegisterPage(
-      newPage, RPageDeleter([](const RPage &page, void *) { RPageAllocatorHeap::DeletePage(page); }, nullptr));
    fCounters->fNPageUnsealed.Inc();
-   return newPage;
-}
-
-void ROOT::Experimental::Internal::RPageSourceFile::ReleasePage(RPage &page)
-{
-   fPagePool->ReturnPage(page);
+   return fPagePool.RegisterPage(std::move(newPage), RPagePool::RKey{columnId, elementInMemoryType});
 }
 
 std::unique_ptr<ROOT::Experimental::Internal::RPageSource>
@@ -526,15 +502,17 @@ ROOT::Experimental::Internal::RPageSourceFile::PrepareSingleCluster(
    std::vector<ROnDiskPageLocator> onDiskPages;
    auto activeSize = 0;
    auto pageZeroMap = std::make_unique<ROnDiskPageMap>();
-   PrepareLoadCluster(
-      clusterKey, *pageZeroMap,
-      [&](DescriptorId_t physicalColumnId, NTupleSize_t pageNo,
-          const RClusterDescriptor::RPageRange::RPageInfo &pageInfo) {
-         const auto &pageLocator = pageInfo.fLocator;
-         const auto nBytes = pageLocator.fBytesOnStorage + pageInfo.fHasChecksum * kNBytesPageChecksum;
-         activeSize += nBytes;
-         onDiskPages.push_back({physicalColumnId, pageNo, pageLocator.GetPosition<std::uint64_t>(), nBytes, 0});
-      });
+   PrepareLoadCluster(clusterKey, *pageZeroMap,
+                      [&](DescriptorId_t physicalColumnId, NTupleSize_t pageNo,
+                          const RClusterDescriptor::RPageRange::RPageInfo &pageInfo) {
+                         const auto &pageLocator = pageInfo.fLocator;
+                         if (pageLocator.fType == RNTupleLocator::kTypeUnknown)
+                            throw RException(R__FAIL("tried to read a page with an unknown locator"));
+                         const auto nBytes = pageLocator.fBytesOnStorage + pageInfo.fHasChecksum * kNBytesPageChecksum;
+                         activeSize += nBytes;
+                         onDiskPages.push_back(
+                            {physicalColumnId, pageNo, pageLocator.GetPosition<std::uint64_t>(), nBytes, 0});
+                      });
 
    // Linearize the page requests by file offset
    std::sort(onDiskPages.begin(), onDiskPages.end(),
@@ -579,6 +557,9 @@ ROOT::Experimental::Internal::RPageSourceFile::PrepareSingleCluster(
    const auto currentReadRequestIdx = readRequests.size();
 
    ROOT::Internal::RRawFile::RIOVec req;
+   // To simplify the first loop iteration, pretend an empty request starting at the first page's fOffset.
+   if (!onDiskPages.empty())
+      req.fOffset = onDiskPages[0].fOffset;
    std::size_t szPayload = 0;
    std::size_t szOverhead = 0;
    const std::uint64_t maxKeySize = fReader.GetMaxKeySize();
@@ -588,8 +569,8 @@ ROOT::Experimental::Internal::RPageSourceFile::PrepareSingleCluster(
       // Note: byte ranges of pages may overlap
       const std::uint64_t overhead = std::max(static_cast<std::int64_t>(s.fOffset) - readUpTo, std::int64_t(0));
       const std::uint64_t extent = std::max(static_cast<std::int64_t>(s.fOffset + s.fSize) - readUpTo, std::int64_t(0));
-      szPayload += extent;
       if (req.fSize + extent < maxKeySize && overhead <= gapCut) {
+         szPayload += (extent - overhead);
          szOverhead += overhead;
          s.fBufPos = reinterpret_cast<intptr_t>(req.fBuffer) + s.fOffset - req.fOffset;
          req.fSize += extent;
@@ -603,6 +584,7 @@ ROOT::Experimental::Internal::RPageSourceFile::PrepareSingleCluster(
       req.fBuffer = reinterpret_cast<unsigned char *>(req.fBuffer) + req.fSize;
       s.fBufPos = reinterpret_cast<intptr_t>(req.fBuffer);
 
+      szPayload += s.fSize;
       req.fOffset = s.fOffset;
       req.fSize = s.fSize;
    }

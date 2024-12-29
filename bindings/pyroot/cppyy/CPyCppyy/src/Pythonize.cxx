@@ -26,7 +26,7 @@
 //- data and local helpers ---------------------------------------------------
 namespace CPyCppyy {
     extern PyObject* gThisModule;
-    extern std::map<std::string, std::vector<PyObject*>> gPythonizations;
+    std::map<std::string, std::vector<PyObject*>> &pythonizations();
 }
 
 namespace {
@@ -528,12 +528,14 @@ PyObject* VectorData(PyObject* self, PyObject*)
 
 
 //---------------------------------------------------------------------------
-PyObject* VectorArray(PyObject* self, PyObject* /* args */)
+PyObject* VectorArray(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     PyObject* pydata = VectorData(self, nullptr);
-    PyObject* view = PyObject_CallMethodNoArgs(pydata, PyStrings::gArray);
+    PyObject* arrcall = PyObject_GetAttr(pydata, PyStrings::gArray);
+    PyObject* newarr = PyObject_Call(arrcall, args, kwargs);
+    Py_DECREF(arrcall);
     Py_DECREF(pydata);
-    return view;
+    return newarr;
 }
 
 
@@ -1235,7 +1237,7 @@ PyObject* STLStringDecode(CPPInstance* self, PyObject* args, PyObject* kwds)
         return nullptr;
 
     char* keywords[] = {(char*)"encoding", (char*)"errors", (char*)nullptr};
-    const char* encoding; const char* errors;
+    const char* encoding = nullptr; const char* errors = nullptr;
     if (!PyArg_ParseTupleAndKeywords(args, kwds,
             const_cast<char*>("s|s"), keywords, &encoding, &errors))
         return nullptr;
@@ -1720,9 +1722,8 @@ bool CPyCppyy::Pythonize(PyObject* pyclass, const std::string& name)
     }
 #endif
 
-    // This pythonization is disabled for ROOT because it is a bit buggy
-#if 0
-    if (Cppyy::IsAggregate(((CPPClass*)pyclass)->fCppType) && name.compare(0, 5, "std::", 5) != 0) {
+    if (Cppyy::IsAggregate(((CPPClass*)pyclass)->fCppType) && name.compare(0, 5, "std::", 5) != 0 &&
+        name.compare(0, 6, "tuple<", 6) != 0) {
     // create a pseudo-constructor to allow initializer-style object creation
         Cppyy::TCppType_t kls = ((CPPClass*)pyclass)->fCppType;
         Cppyy::TCppIndex_t ndata = Cppyy::GetNumDatamembers(kls);
@@ -1789,7 +1790,6 @@ bool CPyCppyy::Pythonize(PyObject* pyclass, const std::string& name)
             }
         }
     }
-#endif
 
 
 //- class name based pythonization -------------------------------------------
@@ -1811,7 +1811,7 @@ bool CPyCppyy::Pythonize(PyObject* pyclass, const std::string& name)
             Utility::AddToClass(pyclass, "data", (PyCFunction)VectorData);
 
         // numpy array conversion
-            Utility::AddToClass(pyclass, "__array__", (PyCFunction)VectorArray);
+            Utility::AddToClass(pyclass, "__array__", (PyCFunction)VectorArray, METH_VARARGS | METH_KEYWORDS /* unused */);
 
         // checked getitem
             if (HasAttrDirect(pyclass, PyStrings::gLen)) {
@@ -1964,9 +1964,10 @@ bool CPyCppyy::Pythonize(PyObject* pyclass, const std::string& name)
 // the global ones (the idea is to allow writing a pythonizor that see all classes)
     bool pstatus = true;
     std::string outer_scope = TypeManip::extract_namespace(name);
+    auto &pyzMap = pythonizations();
     if (!outer_scope.empty()) {
-        auto p = gPythonizations.find(outer_scope);
-        if (p != gPythonizations.end()) {
+        auto p = pyzMap.find(outer_scope);
+        if (p != pyzMap.end()) {
             PyObject* subname = CPyCppyy_PyText_FromString(
                 name.substr(outer_scope.size()+2, std::string::npos).c_str());
             pstatus = run_pythonizors(pyclass, subname, p->second);
@@ -1975,8 +1976,8 @@ bool CPyCppyy::Pythonize(PyObject* pyclass, const std::string& name)
     }
 
     if (pstatus) {
-        auto p = gPythonizations.find("");
-        if (p != gPythonizations.end())
+        auto p = pyzMap.find("");
+        if (p != pyzMap.end())
             pstatus = run_pythonizors(pyclass, pyname, p->second);
     }
 

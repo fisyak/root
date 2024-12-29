@@ -488,6 +488,67 @@ DeclIdMap_t *TClass::GetDeclIdMap() {
 #endif
 }
 
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+/// Check whether c is a character that can be part of an identifier.
+bool isIdentifierChar(char c) {
+   return isalnum(c) || c == '_';
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Count the number of occurrences of needle in typename haystack.
+
+static int CountStringOccurrences(const TString &needle, const TString &haystack) {
+   Ssiz_t currStart = 0;
+   int numOccurrences = 0;
+   Ssiz_t posFound = haystack.Index(needle, currStart);
+   while (posFound != TString::kNPOS) {
+      // Ensure it's neither FooNeedle nor NeedleFoo, but Needle is surrounded
+      // by delimiters:
+      auto hasDelimLeft = [&]() {
+         return posFound == 0
+            || !isIdentifierChar(haystack[posFound - 1]);
+      };
+      auto hasDelimRight = [&]() {
+         return posFound + needle.Length() == haystack.Length()
+            || !isIdentifierChar(haystack[posFound + needle.Length()]);
+      };
+
+      if (hasDelimLeft() && hasDelimRight())
+         ++numOccurrences;
+      currStart = posFound + needle.Length();
+      posFound = haystack.Index(needle, currStart);
+   }
+   return numOccurrences;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Whether an existing typeinfo value should be replaced because the new one
+/// has "less" Double32_t.
+
+static bool ShouldReplaceDouble32TypeInfo(TClass *newCl, TClass *existingCl) {
+
+   // If old and new names match, no need to replace.
+   if (!strcmp(newCl->GetName(), existingCl->GetName()))
+      return false;
+
+   int numExistingDouble32 = CountStringOccurrences("Double32_t", existingCl->GetName());
+   int numExistingFloat16 = CountStringOccurrences("Float16_t", existingCl->GetName());
+
+   // If the existing class has no I/O types then it should not be replaced.
+   if (numExistingDouble32 + numExistingFloat16 == 0)
+      return false;
+
+   int numNewDouble32 = CountStringOccurrences("Double32_t", newCl->GetName());
+   int numNewFloat16 = CountStringOccurrences("Float16_t", newCl->GetName());
+
+   // If old has more I/O types, replace!
+   return numExistingDouble32 + numExistingFloat16 > numNewDouble32 + numNewFloat16;
+}
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// static: Add a class to the list and map of classes.
 
@@ -498,7 +559,11 @@ void TClass::AddClass(TClass *cl)
    R__LOCKGUARD(gInterpreterMutex);
    gROOT->GetListOfClasses()->Add(cl);
    if (cl->GetTypeInfo()) {
-      GetIdMap()->Add(cl->GetTypeInfo()->name(),cl);
+      bool shouldAddTypeInfo = true;
+      if (TClass* existingCl = GetIdMap()->Find(cl->GetTypeInfo()->name()))
+         shouldAddTypeInfo = ShouldReplaceDouble32TypeInfo(cl, existingCl);
+      if (shouldAddTypeInfo)
+         GetIdMap()->Add(cl->GetTypeInfo()->name(),cl);
    }
    if (cl->fClassInfo) {
       GetDeclIdMap()->Add((void*)(cl->fClassInfo), cl);
@@ -524,7 +589,9 @@ void TClass::RemoveClass(TClass *oldcl)
    R__LOCKGUARD(gInterpreterMutex);
    gROOT->GetListOfClasses()->Remove(oldcl);
    if (oldcl->GetTypeInfo()) {
-      GetIdMap()->Remove(oldcl->GetTypeInfo()->name());
+      if (TClass* existingCl = GetIdMap()->Find(oldcl->GetTypeInfo()->name()))
+         if (existingCl == oldcl)
+            GetIdMap()->Remove(oldcl->GetTypeInfo()->name());
    }
    if (oldcl->fClassInfo) {
       //GetDeclIdMap()->Remove((void*)(oldcl->fClassInfo));
@@ -684,7 +751,9 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
                line[kvalue] = 0;
             }
          } else {
-            strncpy(&line[kvalue], membertype->AsString(p3pointer), TMath::Min(kline-1-kvalue,(int)strlen(membertype->AsString(p3pointer))));
+            line[kvalue] = '-';
+            line[kvalue+1] = '>';
+            strncpy(&line[kvalue+2], membertype->AsString(p3pointer), TMath::Min(kline-1-kvalue-2,(int)strlen(membertype->AsString(p3pointer))));
          }
       } else if (!strcmp(memberFullTypeName, "char*") ||
                  !strcmp(memberFullTypeName, "const char*")) {
@@ -698,7 +767,7 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
             }
          }
          if (isPrintable) {
-            strncpy(line + kvalue, *ppointer, std::min( i, kline - kvalue));
+            strncpy(line + kvalue, *ppointer, kline - kvalue);
             line[kvalue+i] = 0;
          } else {
             line[kvalue] = 0;
@@ -3151,7 +3220,7 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
             return pairinfo->GetClass();
       } else {
          //  Check if we have an STL container that might provide it.
-         static const size_t slen = strlen("pair");
+         static constexpr size_t slen = std::char_traits<char>::length("pair");
          static const char *associativeContainer[] = { "map", "unordered_map", "multimap",
             "unordered_multimap", "set", "unordered_set", "multiset", "unordered_multiset" };
          for(auto contname : associativeContainer) {
@@ -4941,33 +5010,45 @@ const void *TClass::DynamicCast(const TClass *cl, const void *obj, Bool_t up)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return a pointer to a newly allocated object of this class.
-/// The class must have a default constructor. For meaning of
-/// defConstructor, see TClass::IsCallingNew().
 ///
-/// If quiet is true, do no issue a message via Error on case
-/// of problems, just return 0.
+/// If quiet is true, do not issue a message via Error in case
+/// of problems, just return `nullptr`.
 ///
-/// The constructor actually called here can be customized by
-/// using the rootcint pragma:
+/// This method is also used by the I/O subsystem to allocate the right amount 
+/// of memory for the objects. If a default constructor is not defined for a 
+/// certain class, some options are available.
+/// The simplest is to define the default I/O constructor, for example
+/// ~~~{.cpp}
+/// class myClass {
+/// public:
+///    myClass() = delete;
+///    myClass(TRootIOCtor *) {/* do something */}
+/// // more code...
+/// };
+/// ~~~
+///
+/// Moreover, the constructor called by TClass::New can be customized by
+/// using a rootcling pragma as follows:
 /// ~~~ {.cpp}
 ///    #pragma link C++ ioctortype UserClass;
 /// ~~~
-/// For example, with this pragma and a class named MyClass,
-/// this method will called the first of the following 3
-/// constructors which exists and is public:
+/// `TClass::New` will then look for a constructor (for a class `MyClass` in the 
+/// following example) in the following order, constructing the object using the
+/// first one in the list that exists and is declared public:
 /// ~~~ {.cpp}
 ///    MyClass(UserClass*);
 ///    MyClass(TRootIOCtor*);
 ///    MyClass(); // Or a constructor with all its arguments defaulted.
 /// ~~~
 ///
-/// When more than one pragma ioctortype is used, the first seen as priority
+/// When more than one `pragma ioctortype` is specified, the priority order is
+/// defined as the definition order; the earliest definitions have higher priority.
 /// For example with:
 /// ~~~ {.cpp}
 ///    #pragma link C++ ioctortype UserClass1;
 ///    #pragma link C++ ioctortype UserClass2;
 /// ~~~
-/// We look in the following order:
+/// ROOT looks for constructors with the following order:
 /// ~~~ {.cpp}
 ///    MyClass(UserClass1*);
 ///    MyClass(UserClass2*);
@@ -7458,7 +7539,7 @@ ROOT::NewArrFunc_t TClass::GetNewArray() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return the wrapper around delete ThiObject.
+/// Return the wrapper around delete ThisObject.
 
 ROOT::DelFunc_t TClass::GetDelete() const
 {
@@ -7466,7 +7547,7 @@ ROOT::DelFunc_t TClass::GetDelete() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return the wrapper around delete [] ThiObject.
+/// Return the wrapper around delete [] ThisObject.
 
 ROOT::DelArrFunc_t TClass::GetDeleteArray() const
 {

@@ -40,6 +40,7 @@ class ImportLoadLibs(unittest.TestCase):
             'libssl',
             'libcrypt.*', # by libssl
             'libtbb',
+            'libtbb_debug',
             'libtbbmalloc',
             'liburing', # by libRIO if uring option is enabled
             # On centos7 libssl links against kerberos pulling in all dependencies below, removed with libssl1.1.0
@@ -69,6 +70,7 @@ class ImportLoadLibs(unittest.TestCase):
             'libnss_.*',
             'ld.*',
             'libffi',
+            'libgcc_s',
             # AddressSanitizer runtime and ROOT configuration
             'libclang_rt.asan-.*',
             'libROOTSanitizerConfig',

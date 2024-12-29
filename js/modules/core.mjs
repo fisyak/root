@@ -4,7 +4,7 @@ const version_id = 'dev',
 
 /** @summary version date
   * @desc Release date in format day/month/year like '14/04/2022' */
-version_date = '30/07/2024',
+version_date = '11/12/2024',
 
 /** @summary version id and date
   * @desc Produced by concatenation of {@link version_id} and {@link version_date}
@@ -22,7 +22,9 @@ internals = {
    id_counter: 1
 },
 
-_src = import.meta?.url;
+_src = import.meta?.url,
+
+_src_dir = '$jsrootsys';
 
 
 /** @summary Location of JSROOT modules
@@ -30,17 +32,25 @@ _src = import.meta?.url;
   * @private */
 let source_dir = '';
 
-if (_src && isStr(_src)) {
-   const pos = _src.indexOf('modules/core.mjs');
-   if (pos >= 0) {
+if (_src_dir[0] !== '$')
+   source_dir = _src_dir;
+else if (_src && isStr(_src)) {
+   let pos = _src.indexOf('modules/core.mjs');
+   if (pos < 0)
+      pos = _src.indexOf('build/jsroot.js');
+   if (pos < 0)
+      pos = _src.indexOf('build/jsroot.min.js');
+   if (pos >= 0)
       source_dir = _src.slice(0, pos);
-      if (!nodejs)
-         console.log(`Set jsroot source_dir to ${source_dir}, ${version}`);
-   } else {
-      if (!nodejs)
-         console.log(`jsroot bundle, ${version}`);
+   else
       internals.ignore_v6 = true;
-   }
+}
+
+if (!nodejs) {
+   if (source_dir)
+      console.log(`Set jsroot source_dir to ${source_dir}, ${version}`);
+   else
+      console.log(`jsroot bundle, ${version}`);
 }
 
 /** @summary Is batch mode flag
@@ -91,6 +101,7 @@ if ((typeof document !== 'undefined') && (typeof window !== 'undefined') && (typ
       browser.chromeVersion = (browser.isChrome || browser.isChromeHeadless) ? parseInt(navigator.userAgent.match(/Chrom(?:e|ium)\/([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/)[1]) : 0;
       browser.isWin = navigator.userAgent.indexOf('Windows') >= 0;
    }
+   browser.android = /android/i.test(navigator.userAgent);
    browser.touches = ('ontouchend' in document); // identify if touch events are supported
    browser.screenWidth = window.screen?.width ?? 1200;
 }
@@ -193,6 +204,12 @@ settings = {
    Render3DBatch: constants.Render3D.Default,
    /** @summary Way to embed 3D drawing in SVG, see {@link constants.Embed3D} for possible values */
    Embed3D: constants.Embed3D.Default,
+   /** @summary Default canvas width */
+   CanvasWidth: 1200,
+   /** @summary Default canvas height */
+   CanvasHeight: 800,
+   /** @summary Canvas pixel ratio between viewport and display, default 1 */
+   CanvasScale: 1,
    /** @summary Enable or disable tooltips, default on */
    Tooltip: !nodejs,
    /** @summary Time in msec for appearance of tooltips, 0 - no animation */
@@ -231,6 +248,8 @@ settings = {
    CanAdjustFrame: false,
    /** @summary calculation of text size consumes time and can be skipped to improve performance (but with side effects on text adjustments) */
    ApproxTextSize: false,
+   /** @summary Load symbol.ttf font to display greek labels. By default font file not loaded and unicode is used */
+   LoadSymbolTtf: false,
    /** @summary Histogram drawing optimization: 0 - disabled, 1 - only for large (>5000 1d bins, >50 2d bins) histograms, 2 - always */
    OptimizeDraw: 1,
    /** @summary Automatically create stats box, default on */
@@ -262,7 +281,7 @@ settings = {
    YValuesFormat: undefined,
    /** @summary custom format for all Z values, when not specified {@link gStyle.fStatFormat} is used */
    ZValuesFormat: undefined,
-   /** @summary Let detect and solve problem when browser returns wrong content-length parameter
+   /** @summary Let detect and solve problem when server returns wrong Content-Length header
      * @desc See [jsroot#189]{@link https://github.com/root-project/jsroot/issues/189} for more info
      * Can be enabled by adding 'wrong_http_response' parameter to URL when using JSROOT UI
      * @default false */
@@ -271,8 +290,8 @@ settings = {
      * @desc When specified, extra URL parameter like ```?stamp=unique_value``` append to each files loaded
      * In such case browser will be forced to load file content disregards of server cache settings
      * Can be disabled by providing &usestamp=false in URL or via Settings/Files sub-menu
-     * @default true */
-   UseStamp: true,
+     * Disabled by default on node.js, enabled in the web browsers */
+   UseStamp: !nodejs,
    /** @summary Maximal number of bytes ranges in http 'Range' header
      * @desc Some http server has limitations for number of bytes ranges therefore let change maximal number via setting
      * @default 200 */
@@ -291,6 +310,8 @@ settings = {
    AxisTiltAngle: 25,
    /** @summary Strip axis labels trailing 0 or replace 10^0 by 1 */
    StripAxisLabels: true,
+   /** @summary If true exclude (cut off) axis labels which may exceed graphical range, also axis name can be specified */
+   CutAxisLabels: false,
    /** @summary Draw TF1 by default as curve or line */
    FuncAsCurve: false,
    /** @summary Time zone used for date/time display, local by default, can be 'UTC' or 'Europe/Berlin' or any other valid value */
@@ -416,6 +437,8 @@ gStyle = {
    fCandleBoxRange: 0.5,
    fCandleScaled: false,
    fViolinScaled: true,
+   fCandleCircleLineWidth: 1,
+   fCandleCrossLineWidth: 1,
    fOrthoCamera: false,
    fXAxisExpXOffset: 0,
    fXAxisExpYOffset: 0,
@@ -466,14 +489,19 @@ async function injectCode(code) {
       // try to detect if code includes import and must be treated as module
       const is_v6 = code.indexOf('JSROOT.require') >= 0,
             is_mjs = !is_v6 && (code.indexOf('import {') > 0) && (code.indexOf('} from \'') > 0),
-            promise = is_v6 ? _ensureJSROOT() : Promise.resolve(true);
+            is_batch = !is_v6 && !is_mjs && (code.indexOf('JSROOT.ObjectPainter') >= 0),
+            promise = (is_v6 ? _ensureJSROOT() : Promise.resolve(true));
+
+      if (is_batch && !globalThis.JSROOT)
+         globalThis.JSROOT = internals.jsroot;
 
       return promise.then(() => {
          const element = document.createElement('script');
          element.setAttribute('type', is_mjs ? 'module' : 'text/javascript');
          element.innerHTML = code;
          document.head.appendChild(element);
-         return postponePromise(true, 10); // while onload event not fired, just postpone resolve
+         // while onload event not fired, just postpone resolve
+         return isBatchMode() ? true : postponePromise(true, 10);
       });
    }
 
@@ -1010,7 +1038,6 @@ function createHttpRequest(url, kind, user_accept_callback, user_reject_callback
    if (isNodeJs()) {
       if (!use_promise)
          throw Error('Not allowed to create http requests in node.js without promise');
-      // eslint-disable-next-line new-cap
       return import('xhr2').then(h => configureXhr(new h.default()));
    }
 
@@ -1055,7 +1082,7 @@ const prROOT = 'ROOT.', clTObject = 'TObject', clTNamed = 'TNamed', clTString = 
       clTPaveLabel = 'TPaveLabel', clTPaveClass = 'TPaveClass', clTDiamond = 'TDiamond',
       clTLegend = 'TLegend', clTLegendEntry = 'TLegendEntry',
       clTPaletteAxis = 'TPaletteAxis', clTImagePalette = 'TImagePalette',
-      clTText = 'TText', clTLatex = 'TLatex', clTMathText = 'TMathText', clTAnnotation = 'TAnnotation',
+      clTText = 'TText', clTLink = 'TLink', clTLatex = 'TLatex', clTMathText = 'TMathText', clTAnnotation = 'TAnnotation',
       clTColor = 'TColor', clTLine = 'TLine', clTBox = 'TBox', clTPolyLine = 'TPolyLine',
       clTPolyLine3D = 'TPolyLine3D', clTPolyMarker3D = 'TPolyMarker3D',
       clTAttPad = 'TAttPad', clTPad = 'TPad', clTCanvas = 'TCanvas', clTFrame = 'TFrame', clTAttCanvas = 'TAttCanvas',
@@ -1064,7 +1091,8 @@ const prROOT = 'ROOT.', clTObject = 'TObject', clTNamed = 'TNamed', clTString = 
       clTF1 = 'TF1', clTF2 = 'TF2', clTF3 = 'TF3', clTProfile = 'TProfile', clTProfile2D = 'TProfile2D', clTProfile3D = 'TProfile3D',
       clTGeoVolume = 'TGeoVolume', clTGeoNode = 'TGeoNode', clTGeoNodeMatrix = 'TGeoNodeMatrix',
       nsREX = 'ROOT::Experimental::', nsSVG = 'http://www.w3.org/2000/svg',
-      kNoZoom = -1111, kNoStats = BIT(9), kInspect = 'inspect', kTitle = 'title';
+      kNoZoom = -1111, kNoStats = BIT(9), kInspect = 'inspect', kTitle = 'title',
+      urlClassPrefix = 'https://root.cern/doc/master/class';
 
 
 /** @summary Create some ROOT classes
@@ -1125,7 +1153,7 @@ function create(typename, target) {
          break;
       case clTPave:
          create(clTBox, obj);
-         extend(obj, { fX1NDC: 0, fY1NDC: 0, fX2NDC: 1, fY2NDC: 1,
+         extend(obj, { fX1NDC: 0, fY1NDC: 0, fX2NDC: 0, fY2NDC: 0,
                        fBorderSize: 0, fInit: 1, fShadowColor: 1,
                        fCornerRadius: 0, fOption: 'brNDC', fName: '' });
          break;
@@ -1142,7 +1170,7 @@ function create(typename, target) {
          extend(obj, { fFillColor: gStyle.fStatColor, fFillStyle: gStyle.fStatStyle,
                        fTextFont: gStyle.fStatFont, fTextSize: gStyle.fStatFontSize, fTextColor: gStyle.fStatTextColor,
                        fBorderSize: gStyle.fStatBorderSize,
-                       fOptFit: 0, fOptStat: 0, fFitFormat: '', fStatFormat: '', fParent: null });
+                       fOptFit: gStyle.fOptFit, fOptStat: gStyle.fOptStat, fFitFormat: gStyle.fFitFormat, fStatFormat: gStyle.fStatFormat, fParent: null });
          break;
       case clTLegend:
          create(clTPave, obj);
@@ -1166,12 +1194,12 @@ function create(typename, target) {
       case clTText:
          create(clTNamed, obj);
          create(clTAttText, obj);
-         extend(obj, { fLimitFactorSize: 3, fOriginSize: 0.04 });
+         extend(obj, { fX: 0, fY: 0 });
          break;
       case clTLatex:
          create(clTText, obj);
          create(clTAttLine, obj);
-         extend(obj, { fX: 0, fY: 0 });
+         extend(obj, { fLimitFactorSize: 3, fOriginSize: 0.04 });
          break;
       case clTObjString:
          create(clTObject, obj);
@@ -1252,7 +1280,7 @@ function create(typename, target) {
          create(clTNamed, obj);
          create(clTAttText, obj);
          create(clTAttLine, obj);
-         extend(obj, { fRadian: true, fDegree: false, fGrad: false, fPolarLabelColor: 1, fRadialLabelColor: 1,
+         extend(obj, { fRadian: false, fDegree: false, fGrad: false, fPolarLabelColor: 1, fRadialLabelColor: 1,
                        fAxisAngle: 0, fPolarOffset: 0.04, fPolarTextSize: 0.04, fRadialOffset: 0.025, fRadialTextSize: 0.035,
                        fRwrmin: 0, fRwrmax: 1, fRwtmin: 0, fRwtmax: 2*Math.PI, fTickpolarSize: 0.02,
                        fPolarLabelFont: 62, fRadialLabelFont: 62, fCutRadial: 0, fNdivRad: 508, fNdivPol: 508 });
@@ -1321,7 +1349,7 @@ function create(typename, target) {
                        fYsizeUser: 0, fXsizeReal: 20, fYsizeReal: 10,
                        fWindowTopX: 0, fWindowTopY: 0, fWindowWidth: 0, fWindowHeight: 0,
                        fBorderSize: gStyle.fCanvasBorderSize, fBorderMode: gStyle.fCanvasBorderMode,
-                       fCw: 500, fCh: 300, fCatt: create(clTAttCanvas),
+                       fCw: settings.CanvasWidth, fCh: settings.CanvasHeight, fCatt: create(clTAttCanvas),
                        kMoveOpaque: true, kResizeOpaque: true, fHighLightColor: 5,
                        fBatch: true, kShowEventStatus: false, kAutoExec: true, kMenuBar: true });
          break;
@@ -1890,6 +1918,10 @@ async function _ensureJSROOT() {
    }).then(() => globalThis.JSROOT);
 }
 
+/** @summary Internal collection of functions potentially used by batch scripts
+  * @private */
+internals.jsroot = { version, source_dir, settings, gStyle, parse, isBatchMode };
+
 export { version_id, version_date, version, source_dir, isNodeJs, isBatchMode, setBatchMode,
          browser, internals, constants, settings, gStyle, atob_func, btoa_func, prROOT,
          clTObject, clTNamed, clTString, clTObjString,
@@ -1897,13 +1929,14 @@ export { version_id, version_date, version, source_dir, isNodeJs, isBatchMode, s
          clTList, clTHashList, clTMap, clTObjArray, clTClonesArray,
          clTAttLine, clTAttFill, clTAttMarker, clTAttText,
          clTPave, clTPaveText, clTPavesText, clTPaveStats, clTPaveLabel, clTPaveClass, clTDiamond,
-         clTLegend, clTLegendEntry, clTPaletteAxis, clTImagePalette, clTText, clTLatex, clTMathText, clTAnnotation, clTMultiGraph,
+         clTLegend, clTLegendEntry, clTPaletteAxis, clTImagePalette, clTText, clTLink, clTLatex, clTMathText, clTAnnotation, clTMultiGraph,
          clTColor, clTLine, clTBox, clTPolyLine, clTPad, clTCanvas, clTFrame, clTAttCanvas, clTGaxis,
          clTAxis, clTStyle, clTH1, clTH1I, clTH1D, clTH2, clTH2I, clTH2F, clTH3, clTF1, clTF2, clTF3,
          clTProfile, clTProfile2D, clTProfile3D, clTHStack,
          clTGraph, clTGraph2DErrors, clTGraph2DAsymmErrors,
          clTGraphPolar, clTGraphPolargram, clTGraphTime, clTCutG,
-         clTPolyLine3D, clTPolyMarker3D, clTGeoVolume, clTGeoNode, clTGeoNodeMatrix, nsREX, nsSVG, kNoZoom, kNoStats, kInspect, kTitle,
+         clTPolyLine3D, clTPolyMarker3D, clTGeoVolume, clTGeoNode, clTGeoNodeMatrix,
+         nsREX, nsSVG, kNoZoom, kNoStats, kInspect, kTitle, urlClassPrefix,
          isArrayProto, getDocument, BIT, clone, addMethods, parse, parseMulti, toJSON,
          decodeUrl, findFunction, createHttpRequest, httpRequest, loadModules, loadScript, injectCode,
          create, createHistogram, setHistogramTitle, createTPolyLine, createTGraph, createTHStack, createTMultiGraph,
