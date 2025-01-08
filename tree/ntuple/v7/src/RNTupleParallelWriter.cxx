@@ -21,7 +21,9 @@
 #include <ROOT/RPageStorage.hxx>
 #include <ROOT/RPageStorageFile.hxx>
 
+#include <TDirectory.h>
 #include <TError.h>
+#include <TFile.h>
 
 namespace {
 
@@ -118,7 +120,7 @@ ROOT::Experimental::RNTupleParallelWriter::RNTupleParallelWriter(std::unique_ptr
    : fSink(std::move(sink)), fModel(std::move(model)), fMetrics("RNTupleParallelWriter")
 {
    if (fModel->GetRegisteredSubfields().size() > 0) {
-      throw RException(R__FAIL("cannot create an RNTupleWriter from a model with registered subfields"));
+      throw RException(R__FAIL("cannot create an RNTupleParallelWriter from a model with registered subfields"));
    }
    fModel->Freeze();
    fSink->Init(*fModel.get());
@@ -168,6 +170,16 @@ std::unique_ptr<ROOT::Experimental::RNTupleParallelWriter>
 ROOT::Experimental::RNTupleParallelWriter::Append(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
                                                   TDirectory &fileOrDirectory, const RNTupleWriteOptions &options)
 {
+   auto file = fileOrDirectory.GetFile();
+   if (!file) {
+      throw RException(
+         R__FAIL("RNTupleParallelWriter only supports writing to a ROOT file. Cannot write into a directory "
+                 "that is not backed by a file"));
+   }
+   if (!file->IsBinary()) {
+      throw RException(R__FAIL("RNTupleParallelWriter only supports writing to a ROOT file. Cannot write into " +
+                               std::string(file->GetName())));
+   }
    if (!options.GetUseBufferedWrite()) {
       throw RException(R__FAIL("parallel writing requires buffering"));
    }
@@ -182,9 +194,6 @@ std::shared_ptr<ROOT::Experimental::RNTupleFillContext> ROOT::Experimental::RNTu
    std::lock_guard g(fMutex);
 
    auto model = fModel->Clone();
-
-   // TODO: Think about honoring RNTupleWriteOptions::SetUseBufferedWrite(false); this requires synchronization on every
-   // call to CommitPage() *and* preparing multiple cluster descriptors in parallel!
    auto sink = std::make_unique<Internal::RPageSinkBuf>(std::make_unique<RPageSynchronizingSink>(*fSink, fSinkMutex));
 
    // Cannot use std::make_shared because the constructor of RNTupleFillContext is private. Also it would mean that the

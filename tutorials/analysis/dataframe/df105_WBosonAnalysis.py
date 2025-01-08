@@ -170,10 +170,10 @@ c.SetLogy()
 stack = ROOT.THStack()
 for h, color in zip(
         [singletop, diboson, ttbar, zjets, wjets],
-        [(208, 240, 193), (195, 138, 145), (155, 152, 204), (248, 206, 104), (222, 90, 106)]):
+        [(0.82, 0.94, 0.76), (0.76, 0.54, 0.57), (0.61, 0.6, 0.8), (0.97, 0.81, 0.41), (0.87, 0.35, 0.42)]):
     h.SetLineWidth(1)
-    h.SetLineColor(1)
-    h.SetFillColor(ROOT.TColor.GetColor(*color))
+    h.SetLineColor("black")
+    h.SetFillColor(color)
     stack.Add(h)
 stack.Draw("HIST")
 stack.GetXaxis().SetLabelSize(0.04)
@@ -190,7 +190,7 @@ stack.SetMinimum(1)
 data.SetMarkerStyle(20)
 data.SetMarkerSize(1.2)
 data.SetLineWidth(2)
-data.SetLineColor(ROOT.kBlack)
+data.SetLineColor("black")
 data.Draw("E SAME")
 
 # Add legend

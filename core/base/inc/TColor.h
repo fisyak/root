@@ -14,6 +14,7 @@
 
 #include "TNamed.h"
 
+#include <array>
 #include <vector>
 
 class TArrayI;
@@ -135,5 +136,17 @@ public:
                        kWaterMelon=108,      kCool=109,        kCopper=110,
                        kGistEarth=111,       kViridis=112,     kCividis=113,
                        kRainbow=kRainBow,    kDarkRainbow=kDarkRainBow};
+
+class TColorNumber {
+public:
+   TColorNumber(Int_t color) : fNumber{color} {}
+   TColorNumber(std::string const &color);
+   TColorNumber(std::array<Float_t, 3> rgb);
+   Int_t number() const { return fNumber; }
+
+private:
+   Int_t fNumber; ///< Color number identifier
+};
+
 #endif
 
