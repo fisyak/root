@@ -67,7 +67,7 @@ protected:
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
-   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final;
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final;
 
 public:
    RArrayField(std::string_view fieldName, std::unique_ptr<RFieldBase> itemField, std::size_t arrayLength);
@@ -128,7 +128,7 @@ public:
 
 protected:
    std::size_t fItemSize;
-   ClusterSize_t fNWritten;
+   Internal::RColumnIndex fNWritten;
    std::size_t fValueSize;
 
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final;
@@ -157,13 +157,13 @@ public:
    size_t GetValueSize() const final;
    size_t GetAlignment() const final;
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
-   void GetCollectionInfo(NTupleSize_t globalIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(NTupleSize_t globalIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
    {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(RNTupleLocalIndex localIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
    {
-      fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
+      fPrincipalColumn->GetCollectionInfo(localIndex, collectionStart, size);
    }
 };
 
@@ -206,7 +206,7 @@ private:
    };
 
    std::size_t fItemSize;
-   ClusterSize_t fNWritten;
+   Internal::RColumnIndex fNWritten;
    std::unique_ptr<RDeleter> fItemDeleter;
 
 protected:
@@ -239,13 +239,13 @@ public:
    size_t GetValueSize() const final { return sizeof(std::vector<char>); }
    size_t GetAlignment() const final { return std::alignment_of<std::vector<char>>(); }
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
-   void GetCollectionInfo(NTupleSize_t globalIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(NTupleSize_t globalIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
    {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(RNTupleLocalIndex localIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
    {
-      fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
+      fPrincipalColumn->GetCollectionInfo(localIndex, collectionStart, size);
    }
 };
 
@@ -263,7 +263,7 @@ public:
 template <>
 class RField<std::vector<bool>> final : public RFieldBase {
 private:
-   ClusterSize_t fNWritten{0};
+   Internal::RColumnIndex fNWritten{0};
 
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final
@@ -295,13 +295,13 @@ public:
    size_t GetValueSize() const final { return sizeof(std::vector<bool>); }
    size_t GetAlignment() const final { return std::alignment_of<std::vector<bool>>(); }
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
-   void GetCollectionInfo(NTupleSize_t globalIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(NTupleSize_t globalIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
    {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(RNTupleLocalIndex localIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
    {
-      fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
+      fPrincipalColumn->GetCollectionInfo(localIndex, collectionStart, size);
    }
 };
 
@@ -334,7 +334,7 @@ protected:
    std::unique_ptr<RDeleter> GetDeleter() const final;
 
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
-   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final;
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final;
 
 public:
    /**

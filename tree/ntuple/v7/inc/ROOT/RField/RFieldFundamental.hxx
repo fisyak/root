@@ -331,14 +331,14 @@ public:
    ~RField() final = default;
 
    T *Map(NTupleSize_t globalIndex) { return reinterpret_cast<T *>(this->BaseType::Map(globalIndex)); }
-   T *Map(RClusterIndex clusterIndex) { return reinterpret_cast<T *>(this->BaseType::Map(clusterIndex)); }
+   T *Map(RNTupleLocalIndex localIndex) { return reinterpret_cast<T *>(this->BaseType::Map(localIndex)); }
    T *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems)
    {
       return reinterpret_cast<T *>(this->BaseType::MapV(globalIndex, nItems));
    }
-   T *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems)
+   T *MapV(RNTupleLocalIndex localIndex, NTupleSize_t &nItems)
    {
-      return reinterpret_cast<T *>(this->BaseType::MapV(clusterIndex, nItems));
+      return reinterpret_cast<T *>(this->BaseType::MapV(localIndex, nItems));
    }
 };
 
@@ -378,9 +378,9 @@ protected:
       fAvailableColumns.reserve(n);
       for (std::uint16_t i = 0; i < n; ++i) {
          auto &column = fAvailableColumns.emplace_back(Internal::RColumn::Create<T>(r[i][0], 0, i));
-         if (r[i][0] == EColumnType::kReal32Trunc) {
+         if (r[i][0] == ENTupleColumnType::kReal32Trunc) {
             column->SetBitsOnStorage(fBitWidth);
-         } else if (r[i][0] == EColumnType::kReal32Quant) {
+         } else if (r[i][0] == ENTupleColumnType::kReal32Quant) {
             column->SetBitsOnStorage(fBitWidth);
             column->SetValueRange(fValueMin, fValueMax);
          }
@@ -398,11 +398,11 @@ protected:
 
          auto &column =
             fAvailableColumns.emplace_back(Internal::RColumn::Create<T>(onDiskTypes[0], 0, representationIndex));
-         if (onDiskTypes[0] == EColumnType::kReal32Trunc) {
+         if (onDiskTypes[0] == ENTupleColumnType::kReal32Trunc) {
             const auto &fdesc = desc.GetFieldDescriptor(Base::GetOnDiskId());
             const auto &coldesc = desc.GetColumnDescriptor(fdesc.GetLogicalColumnIds()[0]);
             column->SetBitsOnStorage(coldesc.GetBitsOnStorage());
-         } else if (onDiskTypes[0] == EColumnType::kReal32Quant) {
+         } else if (onDiskTypes[0] == ENTupleColumnType::kReal32Quant) {
             const auto &fdesc = desc.GetFieldDescriptor(Base::GetOnDiskId());
             const auto &coldesc = desc.GetColumnDescriptor(fdesc.GetLogicalColumnIds()[0]);
             assert(coldesc.GetValueRange().has_value());
@@ -432,7 +432,7 @@ public:
    /// Sets this field to use a half precision representation, occupying half as much storage space (16 bits:
    /// 1 sign bit, 5 exponent bits, 10 mantissa bits) on disk.
    /// This is mutually exclusive with `SetTruncated` and `SetQuantized` and supersedes them if called after them.
-   void SetHalfPrecision() { SetColumnRepresentatives({{EColumnType::kReal16}}); }
+   void SetHalfPrecision() { SetColumnRepresentatives({{ENTupleColumnType::kReal16}}); }
 
    /// Set the on-disk representation of this field to a single-precision float truncated to `nBits`.
    /// The remaining (32 - `nBits`) bits will be truncated from the number's mantissa.
@@ -442,13 +442,13 @@ public:
    /// This is mutually exclusive with `SetHalfPrecision` and `SetQuantized` and supersedes them if called after them.
    void SetTruncated(std::size_t nBits)
    {
-      const auto &[minBits, maxBits] = Internal::RColumnElementBase::GetValidBitRange(EColumnType::kReal32Trunc);
+      const auto &[minBits, maxBits] = Internal::RColumnElementBase::GetValidBitRange(ENTupleColumnType::kReal32Trunc);
       if (nBits < minBits || nBits > maxBits) {
          throw RException(R__FAIL("SetTruncated() argument nBits = " + std::to_string(nBits) +
                                   " is out of valid range [" + std::to_string(minBits) + ", " +
                                   std::to_string(maxBits) + "])"));
       }
-      SetColumnRepresentatives({{EColumnType::kReal32Trunc}});
+      SetColumnRepresentatives({{ENTupleColumnType::kReal32Trunc}});
       fBitWidth = nBits;
    }
 
@@ -462,13 +462,13 @@ public:
    /// This is mutually exclusive with `SetTruncated` and `SetHalfPrecision` and supersedes them if called after them.
    void SetQuantized(double minValue, double maxValue, std::size_t nBits)
    {
-      const auto &[minBits, maxBits] = Internal::RColumnElementBase::GetValidBitRange(EColumnType::kReal32Quant);
+      const auto &[minBits, maxBits] = Internal::RColumnElementBase::GetValidBitRange(ENTupleColumnType::kReal32Quant);
       if (nBits < minBits || nBits > maxBits) {
          throw RException(R__FAIL("SetQuantized() argument nBits = " + std::to_string(nBits) +
                                   " is out of valid range [" + std::to_string(minBits) + ", " +
                                   std::to_string(maxBits) + "])"));
       }
-      SetColumnRepresentatives({{EColumnType::kReal32Quant}});
+      SetColumnRepresentatives({{ENTupleColumnType::kReal32Quant}});
       fBitWidth = nBits;
       fValueMin = minValue;
       fValueMax = maxValue;

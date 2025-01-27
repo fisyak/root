@@ -97,6 +97,14 @@ void ROOT::Experimental::Internal::CallConnectPageSourceOnField(RFieldBase &fiel
    field.ConnectPageSource(source);
 }
 
+ROOT::RResult<std::unique_ptr<ROOT::Experimental::RFieldBase>>
+ROOT::Experimental::Internal::CallFieldBaseCreate(const std::string &fieldName, const std::string &canonicalType,
+                                                  const std::string &typeAlias, const RCreateFieldOptions &options,
+                                                  const RNTupleDescriptor *desc, DescriptorId_t fieldId)
+{
+   return RFieldBase::Create(fieldName, canonicalType, typeAlias, options, desc, fieldId);
+}
+
 //------------------------------------------------------------------------------
 
 ROOT::Experimental::RFieldBase::RColumnRepresentations::RColumnRepresentations()
@@ -174,14 +182,14 @@ void ROOT::Experimental::RFieldBase::RBulk::ReleaseValues()
    operator delete(fValues);
 }
 
-void ROOT::Experimental::RFieldBase::RBulk::Reset(RClusterIndex firstIndex, std::size_t size)
+void ROOT::Experimental::RFieldBase::RBulk::Reset(RNTupleLocalIndex firstIndex, std::size_t size)
 {
    if (fCapacity < size) {
       if (fIsAdopted) {
          throw RException(R__FAIL("invalid attempt to bulk read beyond the adopted buffer"));
       }
       ReleaseValues();
-      fValues = operator new(size * fValueSize);
+      fValues = operator new(size *fValueSize);
 
       if (!(fField->GetTraits() & RFieldBase::kTraitTriviallyConstructible)) {
          for (std::size_t i = 0; i < size; ++i) {
@@ -216,7 +224,7 @@ void ROOT::Experimental::RFieldBase::RBulk::AdoptBuffer(void *buf, std::size_t c
 
    fMaskAvail = std::make_unique<bool[]>(capacity);
 
-   fFirstIndex = RClusterIndex();
+   fFirstIndex = RNTupleLocalIndex();
 
    fIsAdopted = true;
 }
@@ -268,7 +276,17 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
 {
    auto typeAlias = Internal::GetNormalizedTypeName(typeName);
    auto canonicalType = Internal::GetNormalizedTypeName(GetCanonicalTypeName(typeAlias));
-   return R__FORWARD_RESULT(RFieldBase::Create(fieldName, canonicalType, typeAlias));
+   return R__FORWARD_RESULT(RFieldBase::Create(fieldName, canonicalType, typeAlias, RCreateFieldOptions{}));
+}
+
+ROOT::RResult<std::unique_ptr<ROOT::Experimental::RFieldBase>>
+ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::string &typeName,
+                                       const RCreateFieldOptions &options, const RNTupleDescriptor *desc,
+                                       DescriptorId_t fieldId)
+{
+   auto typeAlias = Internal::GetNormalizedTypeName(typeName);
+   auto canonicalType = Internal::GetNormalizedTypeName(GetCanonicalTypeName(typeAlias));
+   return R__FORWARD_RESULT(RFieldBase::Create(fieldName, canonicalType, typeAlias, options, desc, fieldId));
 }
 
 std::vector<ROOT::Experimental::RFieldBase::RCheckResult>
@@ -278,32 +296,40 @@ ROOT::Experimental::RFieldBase::Check(const std::string &fieldName, const std::s
    auto canonicalType = Internal::GetNormalizedTypeName(GetCanonicalTypeName(typeAlias));
 
    RFieldZero fieldZero;
-   fieldZero.Attach(RFieldBase::Create(fieldName, canonicalType, typeAlias, true /* continueOnError */).Unwrap());
+   RCreateFieldOptions cfOpts{};
+   cfOpts.fReturnInvalidOnError = true;
+   cfOpts.fEmulateUnknownTypes = false;
+   fieldZero.Attach(RFieldBase::Create(fieldName, canonicalType, typeAlias, cfOpts).Unwrap());
 
    std::vector<RCheckResult> result;
    for (const auto &f : fieldZero) {
-      auto invalidField = dynamic_cast<const RInvalidField *>(&f);
-      if (!invalidField)
+      const bool isInvalidField = f.GetTraits() & RFieldBase::kTraitInvalidField;
+      if (!isInvalidField)
          continue;
 
+      const auto &invalidField = static_cast<const RInvalidField &>(f);
       result.emplace_back(
-         RCheckResult{invalidField->GetQualifiedFieldName(), invalidField->GetTypeName(), invalidField->GetError()});
+         RCheckResult{invalidField.GetQualifiedFieldName(), invalidField.GetTypeName(), invalidField.GetError()});
    }
    return result;
 }
 
 ROOT::RResult<std::unique_ptr<ROOT::Experimental::RFieldBase>>
 ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::string &canonicalType,
-                                       const std::string &typeAlias, bool continueOnError)
+                                       const std::string &typeAlias, const RCreateFieldOptions &options,
+                                       const RNTupleDescriptor *desc, DescriptorId_t fieldId)
 {
    thread_local CreateContext createContext;
    CreateContextGuard createContextGuard(createContext);
-   if (continueOnError)
+   if (options.fReturnInvalidOnError)
       createContextGuard.SetContinueOnError(true);
 
-   auto fnFail = [&fieldName, &canonicalType](const std::string &errMsg) -> RResult<std::unique_ptr<RFieldBase>> {
+   auto fnFail = [&fieldName,
+                  &canonicalType](const std::string &errMsg,
+                                  RInvalidField::RCategory cat =
+                                     RInvalidField::RCategory::kTypeError) -> RResult<std::unique_ptr<RFieldBase>> {
       if (createContext.GetContinueOnError()) {
-         return std::unique_ptr<RFieldBase>(std::make_unique<RInvalidField>(fieldName, canonicalType, errMsg));
+         return std::unique_ptr<RFieldBase>(std::make_unique<RInvalidField>(fieldName, canonicalType, errMsg, cat));
       } else {
          return R__FAIL(errMsg);
       }
@@ -314,11 +340,20 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
 
    std::unique_ptr<ROOT::Experimental::RFieldBase> result;
 
+   const auto maybeGetChildId = [desc, fieldId](int childId) {
+      if (desc) {
+         const auto &fieldDesc = desc->GetFieldDescriptor(fieldId);
+         return fieldDesc.GetLinkIds().at(childId);
+      } else {
+         return kInvalidDescriptorId;
+      }
+   };
+
    // try-catch block to intercept any exception that may be thrown by Unwrap() so that this
    // function never throws but returns RResult::Error instead.
    try {
       if (auto [arrayBaseType, arraySizes] = Internal::ParseArrayType(canonicalType); !arraySizes.empty()) {
-         std::unique_ptr<RFieldBase> arrayField = Create("_0", arrayBaseType).Unwrap();
+         std::unique_ptr<RFieldBase> arrayField = Create("_0", arrayBaseType, options, desc, fieldId).Unwrap();
          for (int i = arraySizes.size() - 1; i >= 0; --i) {
             arrayField =
                std::make_unique<RArrayField>((i == 0) ? fieldName : "_0", std::move(arrayField), arraySizes[i]);
@@ -385,11 +420,11 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
          result = std::make_unique<RField<std::vector<bool>>>(fieldName);
       } else if (canonicalType.substr(0, 12) == "std::vector<") {
          std::string itemTypeName = canonicalType.substr(12, canonicalType.length() - 13);
-         auto itemField = Create("_0", itemTypeName);
+         auto itemField = Create("_0", itemTypeName, options, desc, maybeGetChildId(0));
          result = std::make_unique<RVectorField>(fieldName, itemField.Unwrap());
       } else if (canonicalType.substr(0, 19) == "ROOT::VecOps::RVec<") {
          std::string itemTypeName = canonicalType.substr(19, canonicalType.length() - 20);
-         auto itemField = Create("_0", itemTypeName);
+         auto itemField = Create("_0", itemTypeName, options, desc, maybeGetChildId(0));
          result = std::make_unique<RRVecField>(fieldName, itemField.Unwrap());
       } else if (canonicalType.substr(0, 11) == "std::array<") {
          auto arrayDef = Internal::TokenizeTypeList(canonicalType.substr(11, canonicalType.length() - 12));
@@ -397,14 +432,15 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
             return R__FORWARD_RESULT(fnFail("the template list for std::array must have exactly two elements"));
          }
          auto arrayLength = std::stoi(arrayDef[1]);
-         auto itemField = Create("_0", arrayDef[0]);
+         auto itemField = Create("_0", arrayDef[0], options, desc, maybeGetChildId(0));
          result = std::make_unique<RArrayField>(fieldName, itemField.Unwrap(), arrayLength);
       } else if (canonicalType.substr(0, 13) == "std::variant<") {
          auto innerTypes = Internal::TokenizeTypeList(canonicalType.substr(13, canonicalType.length() - 14));
          std::vector<std::unique_ptr<RFieldBase>> items;
          items.reserve(innerTypes.size());
          for (unsigned int i = 0; i < innerTypes.size(); ++i) {
-            items.emplace_back(Create("_" + std::to_string(i), innerTypes[i]).Unwrap());
+            items.emplace_back(
+               Create("_" + std::to_string(i), innerTypes[i], options, desc, maybeGetChildId(i)).Unwrap());
          }
          result = std::make_unique<RVariantField>(fieldName, std::move(items));
       } else if (canonicalType.substr(0, 10) == "std::pair<") {
@@ -412,15 +448,17 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
          if (innerTypes.size() != 2) {
             return R__FORWARD_RESULT(fnFail("the type list for std::pair must have exactly two elements"));
          }
-         std::array<std::unique_ptr<RFieldBase>, 2> items{Create("_0", innerTypes[0]).Unwrap(),
-                                                          Create("_1", innerTypes[1]).Unwrap()};
+         std::array<std::unique_ptr<RFieldBase>, 2> items{
+            Create("_0", innerTypes[0], options, desc, maybeGetChildId(0)).Unwrap(),
+            Create("_1", innerTypes[1], options, desc, maybeGetChildId(1)).Unwrap()};
          result = std::make_unique<RPairField>(fieldName, std::move(items));
       } else if (canonicalType.substr(0, 11) == "std::tuple<") {
          auto innerTypes = Internal::TokenizeTypeList(canonicalType.substr(11, canonicalType.length() - 12));
          std::vector<std::unique_ptr<RFieldBase>> items;
          items.reserve(innerTypes.size());
          for (unsigned int i = 0; i < innerTypes.size(); ++i) {
-            items.emplace_back(Create("_" + std::to_string(i), innerTypes[i]).Unwrap());
+            items.emplace_back(
+               Create("_" + std::to_string(i), innerTypes[i], options, desc, maybeGetChildId(i)).Unwrap());
          }
          result = std::make_unique<RTupleField>(fieldName, std::move(items));
       } else if (canonicalType.substr(0, 12) == "std::bitset<") {
@@ -428,37 +466,37 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
          result = std::make_unique<RBitsetField>(fieldName, size);
       } else if (canonicalType.substr(0, 16) == "std::unique_ptr<") {
          std::string itemTypeName = canonicalType.substr(16, canonicalType.length() - 17);
-         auto itemField = Create("_0", itemTypeName).Unwrap();
+         auto itemField = Create("_0", itemTypeName, options, desc, maybeGetChildId(0)).Unwrap();
          auto normalizedInnerTypeName = itemField->GetTypeName();
          result = std::make_unique<RUniquePtrField>(fieldName, "std::unique_ptr<" + normalizedInnerTypeName + ">",
                                                     std::move(itemField));
       } else if (canonicalType.substr(0, 14) == "std::optional<") {
          std::string itemTypeName = canonicalType.substr(14, canonicalType.length() - 15);
-         auto itemField = Create("_0", itemTypeName).Unwrap();
+         auto itemField = Create("_0", itemTypeName, options, desc, maybeGetChildId(0)).Unwrap();
          auto normalizedInnerTypeName = itemField->GetTypeName();
          result = std::make_unique<ROptionalField>(fieldName, "std::optional<" + normalizedInnerTypeName + ">",
                                                    std::move(itemField));
       } else if (canonicalType.substr(0, 9) == "std::set<") {
          std::string itemTypeName = canonicalType.substr(9, canonicalType.length() - 10);
-         auto itemField = Create("_0", itemTypeName).Unwrap();
+         auto itemField = Create("_0", itemTypeName, options, desc, maybeGetChildId(0)).Unwrap();
          auto normalizedInnerTypeName = itemField->GetTypeName();
          result =
             std::make_unique<RSetField>(fieldName, "std::set<" + normalizedInnerTypeName + ">", std::move(itemField));
       } else if (canonicalType.substr(0, 19) == "std::unordered_set<") {
          std::string itemTypeName = canonicalType.substr(19, canonicalType.length() - 20);
-         auto itemField = Create("_0", itemTypeName).Unwrap();
+         auto itemField = Create("_0", itemTypeName, options, desc, maybeGetChildId(0)).Unwrap();
          auto normalizedInnerTypeName = itemField->GetTypeName();
          result = std::make_unique<RSetField>(fieldName, "std::unordered_set<" + normalizedInnerTypeName + ">",
                                               std::move(itemField));
       } else if (canonicalType.substr(0, 14) == "std::multiset<") {
          std::string itemTypeName = canonicalType.substr(14, canonicalType.length() - 15);
-         auto itemField = Create("_0", itemTypeName).Unwrap();
+         auto itemField = Create("_0", itemTypeName, options, desc, maybeGetChildId(0)).Unwrap();
          auto normalizedInnerTypeName = itemField->GetTypeName();
          result = std::make_unique<RSetField>(fieldName, "std::multiset<" + normalizedInnerTypeName + ">",
                                               std::move(itemField));
       } else if (canonicalType.substr(0, 24) == "std::unordered_multiset<") {
          std::string itemTypeName = canonicalType.substr(24, canonicalType.length() - 25);
-         auto itemField = Create("_0", itemTypeName).Unwrap();
+         auto itemField = Create("_0", itemTypeName, options, desc, maybeGetChildId(0)).Unwrap();
          auto normalizedInnerTypeName = itemField->GetTypeName();
          result = std::make_unique<RSetField>(fieldName, "std::unordered_multiset<" + normalizedInnerTypeName + ">",
                                               std::move(itemField));
@@ -468,10 +506,12 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
             return R__FORWARD_RESULT(fnFail("the type list for std::map must have exactly two elements"));
          }
 
-         auto itemField = Create("_0", "std::pair<" + innerTypes[0] + "," + innerTypes[1] + ">").Unwrap();
+         auto itemField =
+            Create("_0", "std::pair<" + innerTypes[0] + "," + innerTypes[1] + ">", options, desc, maybeGetChildId(0))
+               .Unwrap();
 
-         // We use the type names of subfields of the newly created item fields to create the map's type name to ensure
-         // the inner type names are properly normalized.
+         // We use the type names of subfields of the newly created item fields to create the map's type name to
+         // ensure the inner type names are properly normalized.
          auto keyTypeName = itemField->GetSubFields()[0]->GetTypeName();
          auto valueTypeName = itemField->GetSubFields()[1]->GetTypeName();
 
@@ -482,10 +522,12 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
          if (innerTypes.size() != 2)
             return R__FORWARD_RESULT(fnFail("the type list for std::unordered_map must have exactly two elements"));
 
-         auto itemField = Create("_0", "std::pair<" + innerTypes[0] + "," + innerTypes[1] + ">").Unwrap();
+         auto itemField =
+            Create("_0", "std::pair<" + innerTypes[0] + "," + innerTypes[1] + ">", options, desc, maybeGetChildId(0))
+               .Unwrap();
 
-         // We use the type names of subfields of the newly created item fields to create the map's type name to ensure
-         // the inner type names are properly normalized.
+         // We use the type names of subfields of the newly created item fields to create the map's type name to
+         // ensure the inner type names are properly normalized.
          auto keyTypeName = itemField->GetSubFields()[0]->GetTypeName();
          auto valueTypeName = itemField->GetSubFields()[1]->GetTypeName();
 
@@ -496,10 +538,12 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
          if (innerTypes.size() != 2)
             return R__FORWARD_RESULT(fnFail("the type list for std::multimap must have exactly two elements"));
 
-         auto itemField = Create("_0", "std::pair<" + innerTypes[0] + "," + innerTypes[1] + ">").Unwrap();
+         auto itemField =
+            Create("_0", "std::pair<" + innerTypes[0] + "," + innerTypes[1] + ">", options, desc, maybeGetChildId(0))
+               .Unwrap();
 
-         // We use the type names of subfields of the newly created item fields to create the map's type name to ensure
-         // the inner type names are properly normalized.
+         // We use the type names of subfields of the newly created item fields to create the map's type name to
+         // ensure the inner type names are properly normalized.
          auto keyTypeName = itemField->GetSubFields()[0]->GetTypeName();
          auto valueTypeName = itemField->GetSubFields()[1]->GetTypeName();
 
@@ -511,10 +555,12 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
             return R__FORWARD_RESULT(
                fnFail("the type list for std::unordered_multimap must have exactly two elements"));
 
-         auto itemField = Create("_0", "std::pair<" + innerTypes[0] + "," + innerTypes[1] + ">").Unwrap();
+         auto itemField =
+            Create("_0", "std::pair<" + innerTypes[0] + "," + innerTypes[1] + ">", options, desc, maybeGetChildId(0))
+               .Unwrap();
 
-         // We use the type names of subfields of the newly created item fields to create the map's type name to ensure
-         // the inner type names are properly normalized.
+         // We use the type names of subfields of the newly created item fields to create the map's type name to
+         // ensure the inner type names are properly normalized.
          auto keyTypeName = itemField->GetSubFields()[0]->GetTypeName();
          auto valueTypeName = itemField->GetSubFields()[1]->GetTypeName();
 
@@ -522,7 +568,7 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
             fieldName, "std::unordered_multimap<" + keyTypeName + "," + valueTypeName + ">", std::move(itemField));
       } else if (canonicalType.substr(0, 12) == "std::atomic<") {
          std::string itemTypeName = canonicalType.substr(12, canonicalType.length() - 13);
-         auto itemField = Create("_0", itemTypeName).Unwrap();
+         auto itemField = Create("_0", itemTypeName, options, desc, maybeGetChildId(0)).Unwrap();
          auto normalizedInnerTypeName = itemField->GetTypeName();
          result = std::make_unique<RAtomicField>(fieldName, "std::atomic<" + normalizedInnerTypeName + ">",
                                                  std::move(itemField));
@@ -560,13 +606,26 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
                   result = std::make_unique<RClassField>(fieldName, canonicalType);
                }
             }
+         } else if (options.fEmulateUnknownTypes) {
+            assert(desc);
+            const auto &fieldDesc = desc->GetFieldDescriptor(fieldId);
+
+            std::vector<std::unique_ptr<RFieldBase>> memberFields;
+            memberFields.reserve(fieldDesc.GetLinkIds().size());
+            for (auto id : fieldDesc.GetLinkIds()) {
+               const auto &memberDesc = desc->GetFieldDescriptor(id);
+               auto field = Create(memberDesc.GetFieldName(), memberDesc.GetTypeName(), options, desc, id).Unwrap();
+               memberFields.emplace_back(std::move(field));
+            }
+            auto recordField = Internal::CreateEmulatedField(fieldName, std::move(memberFields), canonicalType);
+            return recordField;
          }
       }
    } catch (RException &e) {
       auto error = e.GetError();
       if (createContext.GetContinueOnError()) {
-         return std::unique_ptr<RFieldBase>(
-            std::make_unique<RInvalidField>(fieldName, canonicalType, error.GetReport()));
+         return std::unique_ptr<RFieldBase>(std::make_unique<RInvalidField>(fieldName, canonicalType, error.GetReport(),
+                                                                            RInvalidField::RCategory::kGeneric));
       } else {
          return error;
       }
@@ -577,7 +636,7 @@ ROOT::Experimental::RFieldBase::Create(const std::string &fieldName, const std::
          result->fTypeAlias = typeAlias;
       return result;
    }
-   return R__FORWARD_RESULT(fnFail("unknown type: " + canonicalType));
+   return R__FORWARD_RESULT(fnFail("unknown type: " + canonicalType, RInvalidField::RCategory::kUnknownType));
 }
 
 const ROOT::Experimental::RFieldBase::RColumnRepresentations &
@@ -609,9 +668,9 @@ void ROOT::Experimental::RFieldBase::ReadGlobalImpl(ROOT::Experimental::NTupleSi
    R__ASSERT(false);
 }
 
-void ROOT::Experimental::RFieldBase::ReadInClusterImpl(RClusterIndex clusterIndex, void *to)
+void ROOT::Experimental::RFieldBase::ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to)
 {
-   ReadGlobalImpl(fPrincipalColumn->GetGlobalIndex(clusterIndex), to);
+   ReadGlobalImpl(fPrincipalColumn->GetGlobalIndex(localIndex), to);
 }
 
 std::size_t ROOT::Experimental::RFieldBase::ReadBulkImpl(const RBulkSpec &bulkSpec)
@@ -888,16 +947,16 @@ void ROOT::Experimental::RFieldBase::AutoAdjustColumnTypes(const RNTupleWriteOpt
       ColumnRepresentation_t rep = GetColumnRepresentations().GetSerializationDefault();
       for (auto &colType : rep) {
          switch (colType) {
-         case EColumnType::kSplitIndex64: colType = EColumnType::kIndex64; break;
-         case EColumnType::kSplitIndex32: colType = EColumnType::kIndex32; break;
-         case EColumnType::kSplitReal64: colType = EColumnType::kReal64; break;
-         case EColumnType::kSplitReal32: colType = EColumnType::kReal32; break;
-         case EColumnType::kSplitInt64: colType = EColumnType::kInt64; break;
-         case EColumnType::kSplitInt32: colType = EColumnType::kInt32; break;
-         case EColumnType::kSplitInt16: colType = EColumnType::kInt16; break;
-         case EColumnType::kSplitUInt64: colType = EColumnType::kUInt64; break;
-         case EColumnType::kSplitUInt32: colType = EColumnType::kUInt32; break;
-         case EColumnType::kSplitUInt16: colType = EColumnType::kUInt16; break;
+         case ENTupleColumnType::kSplitIndex64: colType = ENTupleColumnType::kIndex64; break;
+         case ENTupleColumnType::kSplitIndex32: colType = ENTupleColumnType::kIndex32; break;
+         case ENTupleColumnType::kSplitReal64: colType = ENTupleColumnType::kReal64; break;
+         case ENTupleColumnType::kSplitReal32: colType = ENTupleColumnType::kReal32; break;
+         case ENTupleColumnType::kSplitInt64: colType = ENTupleColumnType::kInt64; break;
+         case ENTupleColumnType::kSplitInt32: colType = ENTupleColumnType::kInt32; break;
+         case ENTupleColumnType::kSplitInt16: colType = ENTupleColumnType::kInt16; break;
+         case ENTupleColumnType::kSplitUInt64: colType = ENTupleColumnType::kUInt64; break;
+         case ENTupleColumnType::kSplitUInt32: colType = ENTupleColumnType::kUInt32; break;
+         case ENTupleColumnType::kSplitUInt16: colType = ENTupleColumnType::kUInt16; break;
          default: break;
          }
       }
@@ -905,7 +964,7 @@ void ROOT::Experimental::RFieldBase::AutoAdjustColumnTypes(const RNTupleWriteOpt
    }
 
    if (fTypeAlias == "Double32_t")
-      SetColumnRepresentatives({{EColumnType::kSplitReal32}});
+      SetColumnRepresentatives({{ENTupleColumnType::kSplitReal32}});
 }
 
 void ROOT::Experimental::RFieldBase::ConnectPageSink(Internal::RPageSink &pageSink, NTupleSize_t firstEntry)

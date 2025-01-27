@@ -132,6 +132,9 @@ public:
       fCanvas->cd();
 
       RegisterCanvasInGlobalLists();
+
+      // ensure creation of web window
+      fWebCanvas->ShowWebWindow("embed");
    }
 
    RBrowserTCanvasWidget(const std::string &name, std::unique_ptr<TCanvas> &canv) : RBrowserWidget(name)
@@ -154,6 +157,23 @@ public:
       fCanvas->cd();
 
       RegisterCanvasInGlobalLists();
+
+      // ensure creation of web window
+      fWebCanvas->ShowWebWindow("embed");
+   }
+
+   RBrowserTCanvasWidget(const std::string &name, TCanvas *canv, TWebCanvas *webcanv) : RBrowserWidget(name)
+   {
+      fCanvas = canv;
+      fCanvasName = fCanvas->GetName();
+      fCanvas->SetBatch(kTRUE); // mark canvas as batch
+
+      fWebCanvas = webcanv;
+      // use async mode to prevent blocking inside qt5/qt6/cef
+      fWebCanvas->SetAsyncMode(kTRUE);
+
+      // assign implementation
+      SetPrivateCanvasFields(true);
    }
 
    virtual ~RBrowserTCanvasWidget()
@@ -187,23 +207,14 @@ public:
          fCanvas->cd();
    }
 
-   void Show(const std::string &arg) override
+   std::shared_ptr<RWebWindow> GetWindow() override
    {
       if (CheckCanvasPointer())
-         fWebCanvas->ShowWebWindow(arg);
+         return fWebCanvas->GetWebWindow();
+      return nullptr;
    }
 
-   std::string GetUrl() override
-   {
-      if (CheckCanvasPointer())
-         return fWebCanvas->GetWebWindow()->GetUrl(false);
-      return ""s;
-   }
-
-   std::string GetTitle() override
-   {
-      return fCanvasName.Data();
-   }
+   std::string GetTitle() override { return fCanvasName.Data(); }
 
    bool DrawElement(std::shared_ptr<Browsable::RElement> &elem, const std::string &opt = "") override
    {
@@ -292,6 +303,18 @@ protected:
       if (!canv) return nullptr;
 
       return std::make_shared<RBrowserTCanvasWidget>(name, canv);
+   }
+
+   std::shared_ptr<RBrowserWidget> DetectWindow(RWebWindow &win) final
+   {
+      TIter iter(gROOT->GetListOfCanvases());
+
+      while (auto canv = static_cast<TCanvas *>(iter())) {
+         auto web_canv = dynamic_cast<TWebCanvas *>(canv->GetCanvasImp());
+         if (web_canv->GetWebWindow().get() == &win)
+            return std::make_shared<RBrowserTCanvasWidget>(canv->GetName(), canv, web_canv);
+      }
+      return nullptr;
    }
 
 public:

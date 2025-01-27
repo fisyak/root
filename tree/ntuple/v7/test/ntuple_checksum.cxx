@@ -70,7 +70,7 @@ TEST(RNTupleChecksum, VerifyOnLoad)
       pzColId = descGuard->FindPhysicalColumnId(descGuard->FindFieldId("pz"), 0, 0);
       clusterId = descGuard->FindClusterId(pxColId, 0);
    }
-   RClusterIndex index{clusterId, 0};
+   RNTupleLocalIndex index{clusterId, 0};
 
    constexpr std::size_t bufSize = 12;
    pageSource->LoadSealedPage(pzColId, index, sealedPage);
@@ -104,11 +104,11 @@ TEST(RNTupleChecksum, OmitPageChecksum)
    const auto clusterId = descGuard->FindClusterId(pxColId, 0);
    const auto &clusterDesc = descGuard->GetClusterDescriptor(clusterId);
    const auto pageInfo = clusterDesc.GetPageRange(pxColId).fPageInfos[0];
-   EXPECT_EQ(4u, pageInfo.fLocator.fBytesOnStorage);
+   EXPECT_EQ(4u, pageInfo.fLocator.GetNBytesOnStorage());
    EXPECT_FALSE(pageInfo.fHasChecksum);
 
    RPageStorage::RSealedPage sealedPage;
-   pageSource->LoadSealedPage(pxColId, RClusterIndex{clusterId, 0}, sealedPage);
+   pageSource->LoadSealedPage(pxColId, RNTupleLocalIndex{clusterId, 0}, sealedPage);
    EXPECT_FALSE(sealedPage.GetHasChecksum());
    EXPECT_EQ(4u, sealedPage.GetBufferSize());
 
@@ -147,9 +147,9 @@ TEST(RNTupleChecksum, Merge)
    }
 
    auto destination = std::make_unique<RPageSinkFile>("ntpl", fileGuard3.GetPath(), options);
-   RNTupleMerger merger;
+   RNTupleMerger merger{std::move(destination)};
    try {
-      merger.Merge(sourcePtrs, *destination);
+      merger.Merge(sourcePtrs);
       FAIL() << "merging should fail due to checksum error";
    } catch (const ROOT::RException &e) {
       EXPECT_THAT(e.what(), testing::HasSubstr("page checksum"));

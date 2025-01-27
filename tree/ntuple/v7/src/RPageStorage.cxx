@@ -212,7 +212,7 @@ std::unique_ptr<ROOT::Experimental::Internal::RPageSource> ROOT::Experimental::I
 {
    auto clone = CloneImpl();
    if (fIsAttached) {
-      clone->GetExclDescriptorGuard().MoveIn(std::move(*GetSharedDescriptorGuard()->Clone()));
+      clone->GetExclDescriptorGuard().MoveIn(GetSharedDescriptorGuard()->Clone());
       clone->fHasStructure = true;
       clone->fIsAttached = true;
    }
@@ -257,6 +257,7 @@ void ROOT::Experimental::Internal::RPageSource::UnzipClusterImpl(RCluster *clust
          continue;
       const auto &columnInfos = fActivePhysicalColumns.GetColumnInfos(columnId);
 
+      allElements.reserve(allElements.size() + columnInfos.size());
       for (const auto &info : columnInfos) {
          allElements.emplace_back(GenerateColumnElement(info.fElementId));
 
@@ -268,7 +269,7 @@ void ROOT::Experimental::Internal::RPageSource::UnzipClusterImpl(RCluster *clust
             RSealedPage sealedPage;
             sealedPage.SetNElements(pi.fNElements);
             sealedPage.SetHasChecksum(pi.fHasChecksum);
-            sealedPage.SetBufferSize(pi.fLocator.fBytesOnStorage + pi.fHasChecksum * kNBytesPageChecksum);
+            sealedPage.SetBufferSize(pi.fLocator.GetNBytesOnStorage() + pi.fHasChecksum * kNBytesPageChecksum);
             sealedPage.SetBuffer(onDiskPage->GetAddress());
             R__ASSERT(onDiskPage && (onDiskPage->GetSize() == sealedPage.GetBufferSize()));
 
@@ -319,10 +320,10 @@ void ROOT::Experimental::Internal::RPageSource::PrepareLoadCluster(
       const auto &pageRange = clusterDesc.GetPageRange(physicalColumnId);
       NTupleSize_t pageNo = 0;
       for (const auto &pageInfo : pageRange.fPageInfos) {
-         if (pageInfo.fLocator.fType == RNTupleLocator::kTypePageZero) {
+         if (pageInfo.fLocator.GetType() == RNTupleLocator::kTypePageZero) {
             pageZeroMap.Register(
                ROnDiskPage::Key{physicalColumnId, pageNo},
-               ROnDiskPage(const_cast<void *>(RPage::GetPageZeroBuffer()), pageInfo.fLocator.fBytesOnStorage));
+               ROnDiskPage(const_cast<void *>(RPage::GetPageZeroBuffer()), pageInfo.fLocator.GetNBytesOnStorage()));
          } else {
             perPageFunc(physicalColumnId, pageNo, pageInfo);
          }
@@ -386,7 +387,7 @@ ROOT::Experimental::Internal::RPageSource::LoadPage(ColumnHandle_t columnHandle,
       clusterInfo.fPageInfo = clusterDescriptor.GetPageRange(columnId).Find(idxInCluster);
    }
 
-   if (clusterInfo.fPageInfo.fLocator.fType == RNTupleLocator::kTypeUnknown)
+   if (clusterInfo.fPageInfo.fLocator.GetType() == RNTupleLocator::kTypeUnknown)
       throw RException(R__FAIL("tried to read a page with an unknown locator"));
 
    UpdateLastUsedCluster(clusterInfo.fClusterId);
@@ -394,13 +395,13 @@ ROOT::Experimental::Internal::RPageSource::LoadPage(ColumnHandle_t columnHandle,
 }
 
 ROOT::Experimental::Internal::RPageRef
-ROOT::Experimental::Internal::RPageSource::LoadPage(ColumnHandle_t columnHandle, RClusterIndex clusterIndex)
+ROOT::Experimental::Internal::RPageSource::LoadPage(ColumnHandle_t columnHandle, RNTupleLocalIndex localIndex)
 {
-   const auto clusterId = clusterIndex.GetClusterId();
-   const auto idxInCluster = clusterIndex.GetIndex();
+   const auto clusterId = localIndex.GetClusterId();
+   const auto idxInCluster = localIndex.GetIndexInCluster();
    const auto columnId = columnHandle.fPhysicalId;
    const auto columnElementId = columnHandle.fColumn->GetElement()->GetIdentifier();
-   auto cachedPageRef = fPagePool.GetPage(RPagePool::RKey{columnId, columnElementId.fInMemoryType}, clusterIndex);
+   auto cachedPageRef = fPagePool.GetPage(RPagePool::RKey{columnId, columnElementId.fInMemoryType}, localIndex);
    if (!cachedPageRef.Get().IsNull()) {
       UpdateLastUsedCluster(clusterId);
       return cachedPageRef;
@@ -422,7 +423,7 @@ ROOT::Experimental::Internal::RPageSource::LoadPage(ColumnHandle_t columnHandle,
       clusterInfo.fPageInfo = clusterDescriptor.GetPageRange(columnId).Find(idxInCluster);
    }
 
-   if (clusterInfo.fPageInfo.fLocator.fType == RNTupleLocator::kTypeUnknown)
+   if (clusterInfo.fPageInfo.fLocator.GetType() == RNTupleLocator::kTypeUnknown)
       throw RException(R__FAIL("tried to read a page with an unknown locator"));
 
    UpdateLastUsedCluster(clusterInfo.fClusterId);
@@ -857,6 +858,8 @@ void ROOT::Experimental::Internal::RPagePersistentSink::UpdateSchema(const RNTup
    }
 
    const auto nColumns = descriptor.GetNPhysicalColumns();
+   fOpenColumnRanges.reserve(fOpenColumnRanges.size() + (nColumns - nColumnsBeforeUpdate));
+   fOpenPageRanges.reserve(fOpenPageRanges.size() + (nColumns - nColumnsBeforeUpdate));
    for (DescriptorId_t i = nColumnsBeforeUpdate; i < nColumns; ++i) {
       RClusterDescriptor::RColumnRange columnRange;
       columnRange.fPhysicalColumnId = i;
@@ -899,8 +902,10 @@ void ROOT::Experimental::Internal::RPagePersistentSink::InitImpl(RNTupleModel &m
    projectedFields.GetFieldZero().SetOnDiskId(0);
 
    RNTupleModelChangeset initialChangeset{model};
+   initialChangeset.fAddedFields.reserve(fieldZero.GetSubFields().size());
    for (auto f : fieldZero.GetSubFields())
       initialChangeset.fAddedFields.emplace_back(f);
+   initialChangeset.fAddedProjectedFields.reserve(projectedFields.GetFieldZero().GetSubFields().size());
    for (auto f : projectedFields.GetFieldZero().GetSubFields())
       initialChangeset.fAddedProjectedFields.emplace_back(f);
    UpdateSchema(initialChangeset, 0U);
@@ -937,8 +942,8 @@ void ROOT::Experimental::Internal::RPagePersistentSink::InitFromDescriptor(const
          R__ASSERT(columnRange.fPhysicalColumnId == i);
          const auto &pageRange = cluster.GetPageRange(i);
          R__ASSERT(pageRange.fPhysicalColumnId == i);
-         clusterBuilder.CommitColumnRange(i, fOpenColumnRanges[i].fFirstElementIndex, columnRange.fCompressionSettings,
-                                          pageRange);
+         clusterBuilder.CommitColumnRange(i, fOpenColumnRanges[i].fFirstElementIndex,
+                                          columnRange.fCompressionSettings.value(), pageRange);
          fOpenColumnRanges[i].fFirstElementIndex += columnRange.fNElements;
       }
       fDescriptorBuilder.AddCluster(clusterBuilder.MoveDescriptor().Unwrap());
@@ -1106,7 +1111,8 @@ void ROOT::Experimental::Internal::RPagePersistentSink::CommitStagedClusters(std
             clusterBuilder.MarkSuppressedColumnRange(colId);
          } else {
             clusterBuilder.CommitColumnRange(colId, fOpenColumnRanges[colId].fFirstElementIndex,
-                                             fOpenColumnRanges[colId].fCompressionSettings, columnInfo.fPageRange);
+                                             fOpenColumnRanges[colId].fCompressionSettings.value(),
+                                             columnInfo.fPageRange);
             fOpenColumnRanges[colId].fFirstElementIndex += columnInfo.fNElements;
          }
       }
@@ -1135,6 +1141,7 @@ void ROOT::Experimental::Internal::RPagePersistentSink::CommitClusterGroup()
 
    const auto nClusters = descriptor.GetNActiveClusters();
    std::vector<DescriptorId_t> physClusterIDs;
+   physClusterIDs.reserve(nClusters);
    for (auto i = fNextClusterInGroup; i < nClusters; ++i) {
       physClusterIDs.emplace_back(fSerializationContext.MapClusterId(i));
    }
@@ -1158,6 +1165,7 @@ void ROOT::Experimental::Internal::RPagePersistentSink::CommitClusterGroup()
          .NClusters(nClusters - fNextClusterInGroup);
    }
    std::vector<DescriptorId_t> clusterIds;
+   clusterIds.reserve(nClusters);
    for (auto i = fNextClusterInGroup; i < nClusters; ++i) {
       clusterIds.emplace_back(i);
    }

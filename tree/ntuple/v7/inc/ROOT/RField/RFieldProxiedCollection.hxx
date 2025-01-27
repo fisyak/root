@@ -150,7 +150,7 @@ protected:
    RCollectionIterableOnce::RIteratorFuncs fIFuncsRead;
    RCollectionIterableOnce::RIteratorFuncs fIFuncsWrite;
    std::size_t fItemSize;
-   ClusterSize_t fNWritten;
+   Internal::RColumnIndex fNWritten;
 
    /// Constructor used when the value type of the collection is not known in advance, i.e. in the case of custom
    /// collections.
@@ -183,13 +183,13 @@ public:
    size_t GetValueSize() const final { return fProxy->Sizeof(); }
    size_t GetAlignment() const final { return alignof(std::max_align_t); }
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
-   void GetCollectionInfo(NTupleSize_t globalIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(NTupleSize_t globalIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
    {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size) const
+   void GetCollectionInfo(RNTupleLocalIndex localIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
    {
-      fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
+      fPrincipalColumn->GetCollectionInfo(localIndex, collectionStart, size);
    }
 };
 

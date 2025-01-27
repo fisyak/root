@@ -36,10 +36,19 @@ namespace Detail {
 class RFieldVisitor;
 } // namespace Detail
 
+namespace Internal {
+std::unique_ptr<RFieldBase> CreateEmulatedField(std::string_view fieldName,
+                                                std::vector<std::unique_ptr<RFieldBase>> itemFields,
+                                                std::string_view emulatedFromType);
+}
+
 /// The field for an untyped record. The subfields are stored consequitively in a memory block, i.e.
 /// the memory layout is identical to one that a C++ struct would have
 class RRecordField : public RFieldBase {
-private:
+   friend std::unique_ptr<RFieldBase> Internal::CreateEmulatedField(std::string_view fieldName,
+                                                                    std::vector<std::unique_ptr<RFieldBase>> itemFields,
+                                                                    std::string_view emulatedFromType);
+
    class RRecordDeleter : public RDeleter {
    private:
       std::vector<std::unique_ptr<RDeleter>> fItemDeleters;
@@ -55,6 +64,11 @@ private:
 
    RRecordField(std::string_view name, const RRecordField &source); // Used by CloneImpl()
 
+   /// If `emulatedFromType` is non-empty, this field was created as a replacement for a ClassField that we lack a
+   /// dictionary for and reconstructed from the on-disk information.
+   RRecordField(std::string_view fieldName, std::vector<std::unique_ptr<RFieldBase>> itemFields,
+                std::string_view emulatedFromType);
+
 protected:
    std::size_t fMaxAlignment = 1;
    std::size_t fSize = 0;
@@ -69,7 +83,7 @@ protected:
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
-   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final;
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final;
 
    RRecordField(std::string_view fieldName, std::string_view typeName);
 
@@ -99,7 +113,11 @@ public:
    ~RRecordField() override = default;
 
    std::vector<RValue> SplitValue(const RValue &value) const final;
-   size_t GetValueSize() const final { return fSize; }
+   size_t GetValueSize() const final
+   {
+      // The minimum size is 1 to support having vectors of empty records
+      return std::max<size_t>(1ul, fSize);
+   }
    size_t GetAlignment() const final { return fMaxAlignment; }
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
 

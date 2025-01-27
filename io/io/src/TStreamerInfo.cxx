@@ -253,6 +253,118 @@ namespace {
       TStreamerInfo* fInfo;
    };
 
+   decltype(auto) GetSourceType(const ROOT::TSchemaRule::TSources *s, const TStreamerElement *element)
+   {
+      std::string localtypename(s->GetUnderlyingTypeName());
+      Int_t ndim = 0;
+      Int_t totaldim = 0;
+      Int_t memType = TVirtualStreamerInfo::kNoType;
+      Int_t datasize = 1;
+      auto memClass = TClass::GetClass(localtypename.c_str());
+      std::vector<Int_t> dimensions;
+      bool isStdArray = memClass && TClassEdit::IsStdArray(memClass->GetName());
+      if (isStdArray) {
+         totaldim = 1;
+         std::array<Int_t, 5> localMaxIndices;
+         TClassEdit::GetStdArrayProperties(memClass->GetName(), localtypename, localMaxIndices, ndim);
+         for (Int_t i = 0; i < ndim; ++i) {
+            auto d = localMaxIndices[i];
+            dimensions.push_back(d);
+            totaldim *= d;
+         }
+         memClass = TClass::GetClass(localtypename.c_str());
+      }
+      if (memClass) {
+         // cached->SetNewType( cached->GetType() );
+         if (s->GetPointerLevel()) {
+            if (memClass->IsTObject()) {
+               memType = TVirtualStreamerInfo::kObjectP;
+            } else if (memClass->GetCollectionProxy()) {
+               memType = TVirtualStreamerInfo::kSTLp;
+            } else {
+               memType = TVirtualStreamerInfo::kAnyP;
+            }
+         } else {
+            if (memClass->GetCollectionProxy()) {
+               memType = TVirtualStreamerInfo::kSTL;
+            } else if (memClass->IsTObject() && memClass == element->GetClassPointer()) {
+               // If there is a change in the class type, we can't use the TObject::Streamer
+               // virtual function: it would streame the data using the in-memory type rather
+               // than the onfile type.
+               memType = TVirtualStreamerInfo::kObject;
+            } else {
+               memType = TVirtualStreamerInfo::kAny;
+            }
+         }
+         if ((!s->GetPointerLevel() || memType == TVirtualStreamerInfo::kSTLp) &&
+             (isStdArray ? ndim > 0 : s->GetDimensions()[0])) {
+            memType += TVirtualStreamerInfo::kOffsetL;
+         }
+         datasize = memClass->GetClassSize();
+      } else {
+         auto d = gROOT->GetType(localtypename.c_str());
+         if (d) {
+            memType = d->GetType();
+            datasize = d->Size();
+         }
+         if (s->GetDimensions()[0]) {
+            memType += TVirtualStreamerInfo::kOffsetL;
+         }
+         if (s->GetPointerLevel())
+            memType += TVirtualStreamerInfo::kOffsetP;
+      }
+      if (s->GetDimensions()[0]) {
+         if (!totaldim)
+            totaldim = 1;
+         auto dims = s->GetDimensions();
+         while (*dims == '[') {
+            ++dims;
+            uint32_t res = 0;
+            do {
+               if (!isdigit(*dims))
+                  break;
+               if (res * 10 < res) {
+                  Error("GetSourceType", "Could not parse dimension string %s", s->GetDimensions());
+                  break;
+               }
+               res *= 10;
+               res += *dims - '0';
+            } while (*++dims);
+            dimensions.push_back(res);
+            totaldim *= res;
+         }
+      }
+      if (element->GetType() == TStreamerInfo::kStreamLoop &&
+          (memType == TStreamerInfo::kAnyp || memType == TStreamerInfo::kAnyP || memType == TStreamerInfo::kObjectp ||
+           memType == TStreamerInfo::kObjectP)) {
+         memType = TStreamerInfo::kStreamLoop;
+      }
+      if (element->GetType() == TStreamerInfo::kStreamer)
+         memType = element->GetType();
+      return std::make_tuple(memClass, memType, datasize, dimensions, totaldim);
+   }
+
+   void UpdateFromRule(const TStreamerInfo *info, const ROOT::TSchemaRule::TSources *s, TStreamerElement *element)
+   {
+      auto [memClass, memType, datasize, dimensions, totaldim] = GetSourceType(s, element);
+      if (element->GetType() == TVirtualStreamerInfo::kObject && memClass != element->GetClassPointer()) {
+         // If there is a change in the class type, we can't use the TObject::Streamer
+         // virtual function: it would streame the data using the in-memory type rather
+         // than the onfile type.
+         element->SetType(TVirtualStreamerInfo::kAny);
+      }
+      element->SetNewType(memType);
+      element->SetNewClass(memClass);
+      // We can not change the recorded dimensions.  Let's check that
+      // the total number of elements is still the same.
+      if (totaldim != element->GetArrayLength()) {
+         Error("UpdateFromRule",
+               "For %s::%s the number of array elements in the rule (%d) does not match the number in the "
+               "StreamerElement (%d)",
+               info->GetName(), element->GetFullName(), totaldim, element->GetArrayLength());
+      }
+      element->SetSize(totaldim ? totaldim * datasize : datasize);
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -661,7 +773,13 @@ void TStreamerInfo::Build(Bool_t isTransient)
             element = writecopy;
          }
          cached->SetBit(TStreamerElement::kCache);
-         cached->SetNewType( cached->GetType() );
+         // Get one of the potentially many rules applicable
+         // We should check that we don't have a second rule
+         auto r = rules.GetRuleWithSource(element->GetName());
+         assert(r && r->GetSource());
+         auto s = (ROOT::TSchemaRule::TSources *)(r->GetSource()->FindObject(element->GetName()));
+         assert(s);
+         UpdateFromRule(this, s, cached);
       }
 
       fElements->Add(element);
@@ -676,6 +794,21 @@ void TStreamerInfo::Build(Bool_t isTransient)
          if (!isTransient)
             Error("Build","Could you create a TStreamerInfo for %s\n",TString::Format("%s@@%d",GetName(),GetClassVersion()).Data());
       } else {
+         // Need to find the source of rules where an implicit conversion is requested.
+         if (rules) {
+            TIter next(infoalloc->fElements);
+            TStreamerElement *alloc_element;
+            while ((alloc_element = (TStreamerElement *)next())) {
+               if (rules.HasRuleWithSource(alloc_element->GetName(), kTRUE)) {
+                  auto r = rules.GetRuleWithSource(alloc_element->GetName());
+                  assert(r && r->GetSource());
+                  auto s = (ROOT::TSchemaRule::TSources *)(r->GetSource()->FindObject(alloc_element->GetName()));
+                  assert(s);
+                  UpdateFromRule(this, s, alloc_element);
+               }
+            }
+         }
+
          // Tell clone we should rerun BuildOld
          infoalloc->SetBit(kBuildOldUsed,false);
          // Temporarily mark it as built to avoid the BuildCheck from removing
@@ -2504,6 +2637,21 @@ void TStreamerInfo::BuildOld()
                if (!infoalloc) {
                   Error("BuildOld","Unable to create the StreamerInfo for %s.",TString::Format("%s@@%d",GetName(),GetOnFileClassVersion()).Data());
                } else {
+                  // Need to find the source of rules where an implicit conversion is requested.
+                  if (rules) {
+                     TIter alloc_next(infoalloc->fElements);
+                     TStreamerElement *alloc_element;
+                     while ((alloc_element = (TStreamerElement *)alloc_next())) {
+                        if (rules.HasRuleWithSource(alloc_element->GetName(), kTRUE)) {
+                           auto r = rules.GetRuleWithSource(alloc_element->GetName());
+                           assert(r && r->GetSource());
+                           auto s =
+                              (ROOT::TSchemaRule::TSources *)(r->GetSource()->FindObject(alloc_element->GetName()));
+                           assert(s);
+                           UpdateFromRule(this, s, alloc_element);
+                        }
+                     }
+                  }
                   infoalloc->SetBit(kBuildOldUsed,false);
                   infoalloc->BuildCheck();
                   infoalloc->BuildOld();
@@ -2533,7 +2681,16 @@ void TStreamerInfo::BuildOld()
                writecopy->SetOffset(element->GetOffset());
             }
             element->SetBit(TStreamerElement::kCache);
-            element->SetNewType( element->GetType() );
+
+            // Get one of the potentially many rules applicable
+            // We should check that we don't have a second rule
+            auto r = rules.GetRuleWithSource(element->GetName());
+            assert(r && r->GetSource());
+            auto s = (ROOT::TSchemaRule::TSources *)(r->GetSource()->FindObject(element->GetName()));
+            assert(s);
+
+            UpdateFromRule(this, s, element);
+
             element->SetOffset(infoalloc ? infoalloc->GetOffset(element->GetName()) : 0);
          } else if (rules.HasRuleWithTarget( element->GetName(), kTRUE ) ) {
             // The data member exist in the onfile StreamerInfo and there is a rule
@@ -4572,28 +4729,64 @@ void TStreamerInfo::InsertArtificialElements(std::vector<const ROOT::TSchemaRule
          }
       }
 
+      auto canIgnore = [](const ROOT::TSchemaRule *r) {
+         if (r->GetAttributes()[0] != 0) {
+            TString attr(r->GetAttributes());
+            attr.ToLower();
+            return attr.Contains("canignore");
+         } else
+            return false;
+      };
       // NOTE: Before adding the rule we should check that the source do
       // existing in this StreamerInfo.
       const TObjArray *sources = rule->GetSource();
-      TIter input(sources);
-      TObject *src;
-      while((src = input())) {
-         if ( !GetElements()->FindObject(src->GetName()) ) {
-            // Missing source.
-#if 0 // Don't warn about not activating the rule.  If don't warn the user can
-      // have more flexibility in specifying when the rule applies and relying
-      // on both the version number *and* the presence of the source members.
-      // Activating this warning would for example mean that we need to carefully
-      // tweak $ROOTSYS/etc/class.rules.
-            TString ruleStr;
-            rule->AsString(ruleStr);
-            Warning("InsertArtificialElements","For class %s in StreamerInfo %d is missing the source data member %s when trying to apply the rule:\n   %s",
-                   GetName(),GetClassVersion(),src->GetName(),ruleStr.Data());
-            rule = 0;
-#endif
-            break;
+      if (sources)
+         for (auto src : TRangeDynCast<ROOT::TSchemaRule::TSources>(*sources)) {
+            auto source_element = dynamic_cast<TStreamerElement *>(GetElements()->FindObject(src->GetName()));
+            if (!source_element) {
+               // It might still be in one the base classes.
+               if (fClass->GetListOfRealData() && !fClass->GetListOfRealData()->FindObject(src->GetName())) {
+                  // Missing source.
+                  if (!canIgnore(rule)) {
+                     TString ruleStr;
+                     rule->AsString(ruleStr);
+                     Warning("InsertArtificialElements",
+                             "For class %s in StreamerInfo %d is missing the source data member `%s` when trying to "
+                             "apply the "
+                             "rule:\n   %s",
+                             GetName(), GetClassVersion(), src->GetName(), ruleStr.Data());
+                  }
+                  rule = nullptr;
+                  break;
+               }
+            } else {
+               // The source exists, let's check if it has the expected type.
+               auto [memClass, memType, datasize, dimensions, totaldim] = GetSourceType(src, source_element);
+               if ((memClass != source_element->GetNewClass() || memType != source_element->GetNewType()) &&
+                   (memType != TVirtualStreamerInfo::kNoContextMenu && memType != TVirtualStreamerInfo::kNoType)) {
+                  const char *dim = src->GetDimensions();
+                  TString ruleStr;
+                  rule->AsString(ruleStr);
+                  auto cl = source_element->GetNewClass();
+                  TString classmsg;
+                  if (memClass != cl) {
+                     classmsg = "and the memory TClass is \"";
+                     classmsg += cl ? cl->GetName() : "nullptr";
+                     classmsg += "\" while the rule needed \"";
+                     classmsg += memClass ? memClass->GetName() : "nullptr";
+                     classmsg += "\"";
+                  }
+                  Error("InsertArtificialElements",
+                        "For class %s in StreamerInfo %d a rule has conflicting type for the source \"%s %s%s\",\n"
+                        "   The TStreamerElement has memory type %d (needed %d) %s:\n   %s",
+                        GetName(), GetClassVersion(), src->GetTypeForDeclaration().Data(), src->GetName(),
+                        dim && dim[0] ? dim : "", source_element->GetNewType(), memType, classmsg.Data(),
+                        ruleStr.Data());
+                  rule = nullptr;
+                  break;
+               }
+            }
          }
-      }
 
       if (!rule) continue;
 
@@ -4618,11 +4811,9 @@ void TStreamerInfo::InsertArtificialElements(std::vector<const ROOT::TSchemaRule
             TString newName = objstr->String();
             TString realDataName;
             if ( TDataMember* dm = fClass->GetDataMember( newName ) ) {
-               TRealData::GetName(realDataName,dm);
-               newel = new TStreamerArtificial(realDataName,"",
-                                               fClass->GetDataMemberOffset(newName),
-                                               TStreamerInfo::kArtificial,
-                                               fClass->GetDataMember( newName )->GetTypeName());
+               TRealData::GetName(realDataName, dm);
+               newel = new TStreamerArtificial(realDataName, "", fClass->GetDataMemberOffset(realDataName),
+                                               TStreamerInfo::kArtificial, dm->GetTypeName());
                newel->SetReadFunc( rule->GetReadFunctionPointer() );
                newel->SetReadRawFunc( rule->GetReadRawFunctionPointer() );
                toAdd.push_back(newel);
@@ -4635,18 +4826,16 @@ void TStreamerInfo::InsertArtificialElements(std::vector<const ROOT::TSchemaRule
                if (objstr) {
                   newName = objstr->String();
                   if ( TDataMember* dm = fClass->GetDataMember( newName ) ) {
-                     TRealData::GetName(realDataName,dm);
-                     newel = new TStreamerArtificial(realDataName,"",
-                                                     fClass->GetDataMemberOffset(newName),
-                                                     TStreamerInfo::kArtificial,
-                                                     fClass->GetDataMember( newName )->GetTypeName());
+                     TRealData::GetName(realDataName, dm);
+                     newel = new TStreamerArtificial(realDataName, "", fClass->GetDataMemberOffset(realDataName),
+                                                     TStreamerInfo::kArtificial, dm->GetTypeName());
                      toAdd.push_back(newel);
                   }
                }
             }
          } // For each target of the rule
       }
-      // Now find we with need to add them
+      // Now find where with need to add them
       TIter s_iter(rule->GetSource());
       Int_t loc = -1;
       while( TObjString *s = (TObjString*)s_iter() ) {
@@ -4794,13 +4983,16 @@ void* TStreamerInfo::New(void *obj)
 
       // Skip elements for which we do not have any class
       // information.  FIXME: Document how this could happen.
-      TClass* cle = element->GetClassPointer();
-      if (!cle) {
+      TClass *cle = element->GetNewClass();
+      if (!cle)
+         cle = element->GetClassPointer();
+      if (!cle)
          continue;
-      }
 
       char* eaddr = p + element->GetOffset();
-      Int_t etype = element->GetType();
+      Int_t etype = element->GetNewType();
+      if (etype == TStreamerInfo::kNoType)
+         etype = element->GetType();
 
       //cle->GetStreamerInfo(); //necessary in case "->" is not specified
 
@@ -4979,8 +5171,9 @@ void TStreamerInfo::DestructorImpl(void* obj, Bool_t dtorOnly)
       if (ele->GetOffset() == kMissing) continue;
       char* eaddr = p + ele->GetOffset();
 
-
-      Int_t etype = ele->GetType();
+      Int_t etype = ele->GetNewType(); // in memory type
+      if (etype == TStreamerInfo::kNoType)
+         etype = ele->GetType();
 
       switch(etype) {
          case TStreamerInfo::kOffsetP + TStreamerInfo::kBool:   DeleteBasicPointer(eaddr,ele,Bool_t);  continue;
@@ -5001,11 +5194,11 @@ void TStreamerInfo::DestructorImpl(void* obj, Bool_t dtorOnly)
          case TStreamerInfo::kCharStar:                         DeleteBasicPointer(eaddr,ele,Char_t);  continue;
       }
 
-
-
-      TClass* cle = ele->GetClassPointer();
-      if (!cle) continue;
-
+      TClass *cle = ele->GetNewClass(); // in memory type
+      if (!cle)
+         cle = ele->GetClassPointer();
+      if (!cle)
+         continue;
 
       if (etype == kObjectp || etype == kAnyp) {
          // Destroy an array of pre-allocated objects.

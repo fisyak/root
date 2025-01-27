@@ -79,14 +79,16 @@ public:
 
    const RColumnRepresentations &GetColumnRepresentations() const final
    {
-      static RColumnRepresentations representations(
-         {{EColumnType::kSplitIndex64}, {EColumnType::kIndex64}, {EColumnType::kSplitIndex32}, {EColumnType::kIndex32}},
-         {});
+      static RColumnRepresentations representations({{ENTupleColumnType::kSplitIndex64},
+                                                     {ENTupleColumnType::kIndex64},
+                                                     {ENTupleColumnType::kSplitIndex32},
+                                                     {ENTupleColumnType::kIndex32}},
+                                                    {});
       return representations;
    }
    // Field is only used for reading
    void GenerateColumns() final { assert(false && "Cardinality fields must only be used for reading"); }
-   void GenerateColumns(const RNTupleDescriptor &desc) final { GenerateColumnsImpl<ClusterSize_t>(desc); }
+   void GenerateColumns(const RNTupleDescriptor &desc) final { GenerateColumnsImpl<Internal::RColumnIndex>(desc); }
 
    size_t GetValueSize() const final { return sizeof(std::size_t); }
    size_t GetAlignment() const final { return alignof(std::size_t); }
@@ -94,18 +96,18 @@ public:
    /// Get the number of elements of the collection identified by globalIndex
    void ReadGlobalImpl(ROOT::Experimental::NTupleSize_t globalIndex, void *to) final
    {
-      RClusterIndex collectionStart;
-      ClusterSize_t size;
+      RNTupleLocalIndex collectionStart;
+      NTupleSize_t size;
       fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &size);
       *static_cast<std::size_t *>(to) = size;
    }
 
    /// Get the number of elements of the collection identified by clusterIndex
-   void ReadInClusterImpl(ROOT::Experimental::RClusterIndex clusterIndex, void *to) final
+   void ReadInClusterImpl(ROOT::Experimental::RNTupleLocalIndex localIndex, void *to) final
    {
-      RClusterIndex collectionStart;
-      ClusterSize_t size;
-      fPrincipalColumn->GetCollectionInfo(clusterIndex, &collectionStart, &size);
+      RNTupleLocalIndex collectionStart;
+      NTupleSize_t size;
+      fPrincipalColumn->GetCollectionInfo(localIndex, &collectionStart, &size);
       *static_cast<std::size_t *>(to) = size;
    }
 };
@@ -127,7 +129,7 @@ private:
    void GenerateColumns() final { assert(false && "RArraySizeField fields must only be used for reading"); }
    void GenerateColumns(const ROOT::Experimental::RNTupleDescriptor &) final {}
    void ReadGlobalImpl(NTupleSize_t /*globalIndex*/, void *to) final { *static_cast<std::size_t *>(to) = fArrayLength; }
-   void ReadInClusterImpl(RClusterIndex /*clusterIndex*/, void *to) final
+   void ReadInClusterImpl(RNTupleLocalIndex /*localIndex*/, void *to) final
    {
       *static_cast<std::size_t *>(to) = fArrayLength;
    }
@@ -375,7 +377,7 @@ RNTupleDS::RNTupleDS(std::unique_ptr<Internal::RPageSource> pageSource)
    fPrincipalDescriptor = pageSource->GetSharedDescriptorGuard()->Clone();
    fStagingArea.emplace_back(std::move(pageSource));
 
-   AddField(*fPrincipalDescriptor, "", fPrincipalDescriptor->GetFieldZeroId(),
+   AddField(fPrincipalDescriptor, "", fPrincipalDescriptor.GetFieldZeroId(),
             std::vector<ROOT::Experimental::RNTupleDS::RFieldInfo>());
 }
 
@@ -440,9 +442,9 @@ RNTupleDS::GetColumnReaders(unsigned int slot, std::string_view name, const std:
 
    // Map the field's and subfields' IDs to qualified names so that we can later connect the fields to
    // other page sources from the chain
-   fFieldId2QualifiedName[field->GetOnDiskId()] = fPrincipalDescriptor->GetQualifiedFieldName(field->GetOnDiskId());
+   fFieldId2QualifiedName[field->GetOnDiskId()] = fPrincipalDescriptor.GetQualifiedFieldName(field->GetOnDiskId());
    for (const auto &s : *field) {
-      fFieldId2QualifiedName[s.GetOnDiskId()] = fPrincipalDescriptor->GetQualifiedFieldName(s.GetOnDiskId());
+      fFieldId2QualifiedName[s.GetOnDiskId()] = fPrincipalDescriptor.GetQualifiedFieldName(s.GetOnDiskId());
    }
 
    auto reader = std::make_unique<Internal::RNTupleColumnReader>(this, field);
@@ -755,9 +757,4 @@ ROOT::RDataFrame
 ROOT::RDF::Experimental::FromRNTuple(std::string_view ntupleName, const std::vector<std::string> &fileNames)
 {
    return ROOT::RDataFrame(std::make_unique<ROOT::Experimental::RNTupleDS>(ntupleName, fileNames));
-}
-
-ROOT::RDataFrame ROOT::RDF::Experimental::FromRNTuple(ROOT::RNTuple *ntuple)
-{
-   return ROOT::RDataFrame(std::make_unique<ROOT::Experimental::RNTupleDS>(ntuple));
 }

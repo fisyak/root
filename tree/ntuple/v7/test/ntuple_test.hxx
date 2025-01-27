@@ -53,19 +53,19 @@
 #include <variant>
 #include <vector>
 
-using ClusterSize_t = ROOT::Experimental::ClusterSize_t;
+using ROOT::Experimental::RNTupleLocalIndex;
+using ROOT::Experimental::Internal::RColumnIndex;
 using DescriptorId_t = ROOT::Experimental::DescriptorId_t;
-using EColumnType = ROOT::Experimental::EColumnType;
 using ROOT::Experimental::EExtraTypeInfoIds;
+using ROOT::Experimental::ENTupleColumnType;
 using ENTupleStructure = ROOT::Experimental::ENTupleStructure;
 using NTupleSize_t = ROOT::Experimental::NTupleSize_t;
-using RClusterIndex = ROOT::Experimental::RClusterIndex;
 using RClusterDescriptor = ROOT::Experimental::RClusterDescriptor;
 using RClusterDescriptorBuilder = ROOT::Experimental::Internal::RClusterDescriptorBuilder;
 using RClusterGroupDescriptorBuilder = ROOT::Experimental::Internal::RClusterGroupDescriptorBuilder;
 using RColumnDescriptorBuilder = ROOT::Experimental::Internal::RColumnDescriptorBuilder;
 using RColumnElementBase = ROOT::Experimental::Internal::RColumnElementBase;
-using RColumnSwitch = ROOT::Experimental::RColumnSwitch;
+using RColumnSwitch = ROOT::Experimental::Internal::RColumnSwitch;
 using ROOT::Experimental::Internal::RExtraTypeInfoDescriptorBuilder;
 using RFieldDescriptorBuilder = ROOT::Experimental::Internal::RFieldDescriptorBuilder;
 template <class T>
@@ -114,6 +114,8 @@ using RPrepareVisitor = ROOT::Experimental::RPrepareVisitor;
 using RPrintSchemaVisitor = ROOT::Experimental::RPrintSchemaVisitor;
 using RRawFile = ROOT::Internal::RRawFile;
 using EContainerFormat = RNTupleFileWriter::EContainerFormat;
+
+using ROOT::Experimental::Internal::MakeUninitArray;
 
 /**
  * An RAII wrapper around an open temporary file on disk. It cleans up the guarded file when the wrapper object

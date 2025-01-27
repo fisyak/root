@@ -2270,6 +2270,18 @@ public:
    /// auto myGAE2 = myDf.GraphAsymmErrors<f, f, f, f, f, f>("xValues", "yValues", "exl", "exh", "eyl", "eyh");
    /// ~~~
    ///
+   /// `GraphAssymErrors` should also be used for the cases in which values associated only with 
+   /// one of the axes have associated errors. For example, only `ey` exist and `ex` are equal to zero. 
+   /// In such cases, user should do the following: 
+   /// ~~~{.cpp}
+   /// // Create a column of zeros in RDataFrame
+   /// auto rdf_withzeros = rdf.Define("zero", "0"); 
+   /// // or alternatively: 
+   /// auto rdf_withzeros = rdf.Define("zero", []() -> double { return 0.;});
+   /// // Create the graph with y errors only
+   /// auto rdf_errorsOnYOnly = rdf_withzeros.GraphAsymmErrors("xValues", "yValues", "zero", "zero", "eyl", "eyh");
+   /// ~~~
+   ///
    /// \note Differently from other ROOT interfaces, the returned TGraphAsymmErrors is not associated to gDirectory
    /// and the caller is responsible for its lifetime (in particular, a typical source of confusion is that
    /// if result histograms go out of scope before the end of the program, ROOT might display a blank canvas).
@@ -2967,9 +2979,10 @@ public:
    /// * `ROOT::RDF::SampleCallback_t GetSampleCallback()`: if present, it must return a callable with the
    ///   appropriate signature (see ROOT::RDF::SampleCallback_t) that will be invoked at the beginning of the processing
    ///   of every sample, as in DefinePerSample().
-   /// * `Helper MakeNew(void *newResult)`: if implemented, it enables varying the action's result with VariationsFor(). It takes a
-   ///   type-erased new result that can be safely cast to a `std::shared_ptr<Result_t> *` (a pointer to shared pointer) and should
-   ///   be used as the action's output result.
+   /// * `Helper MakeNew(void *newResult, std::string_view variation = "nominal")`: if implemented, it enables varying
+   ///   the action's result with VariationsFor(). It takes a type-erased new result that can be safely cast to a
+   ///   `std::shared_ptr<Result_t> *` (a pointer to shared pointer) and should be used as the action's output result.
+   ///   The function optionally takes the name of the current variation which could be useful in customizing its behaviour.
    ///
    /// In case Book is called without specifying column types as template arguments, corresponding typed code will be just-in-time compiled
    /// by RDataFrame. In that case the Helper class needs to be known to the ROOT interpreter.

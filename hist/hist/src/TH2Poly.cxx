@@ -548,19 +548,6 @@ void TH2Poly::ChangePartition(Int_t n, Int_t m)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Make a complete copy of the underlying object.  If 'newname' is set,
-/// the copy's name will be set to that name.
-
-TObject* TH2Poly::Clone(const char* newname) const
-{
-   // TH1::Clone relies on ::Copy to implemented by the derived class.
-   // Until this is implemented, revert to the much slower default version
-   // (and possibly non-thread safe).
-
-   return TNamed::Clone(newname);
-}
-
-////////////////////////////////////////////////////////////////////////////////
 /// Clears the contents of all bins in the histogram.
 
 void TH2Poly::ClearBinContents()
@@ -1750,4 +1737,16 @@ Double_t TH2Poly::Interpolate(Double_t, Double_t)
 {
    Error("Interpolate", "Not implemented for TH2Poly");
    return TMath::QuietNaN();
+}
+////////////////////////////////////////////////////////////////////////////////
+/// NOT IMPLEMENTED for TH2Poly
+void TH2Poly::AddBinContent(Int_t)
+{
+   Error("AddBinContent", "Not implemented for TH2Poly");
+}
+////////////////////////////////////////////////////////////////////////////////
+/// NOT IMPLEMENTED for TH2Poly
+void TH2Poly::AddBinContent(Int_t, Double_t)
+{
+   Error("AddBinContent", "Not implemented for TH2Poly");
 }

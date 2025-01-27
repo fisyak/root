@@ -397,7 +397,7 @@ const TooltipHandler = {
             frame_rect = this.getFrameRect(),
             pp = this.getPadPainter(),
             pad_width = pp?.getPadWidth(),
-            scale = this.getCanvPainter()?.getPadScale() ?? 1,
+            scale = pp?.getPadScale() ?? 1,
             textheight = (pnt?.touch ? 15 : 11) * scale,
             font = new FontHandler(160, textheight),
             disable_tootlips = !this.isTooltipAllowed() || !this.tooltip_enabled;
@@ -1865,8 +1865,9 @@ class TFramePainter extends ObjectPainter {
             this[`zoom_${name}min`] = axis.fFirst > 1 ? axis.GetBinLowEdge(axis.fFirst) : axis.fXmin;
             this[`zoom_${name}max`] = axis.fLast < axis.fNbins ? axis.GetBinLowEdge(axis.fLast + 1) : axis.fXmax;
             // reset user range for main painter
-            axis.InvertBit(EAxisBits.kAxisRange);
-            axis.fFirst = 1; axis.fLast = axis.fNbins;
+            axis.SetBit(EAxisBits.kAxisRange, false);
+            axis.fFirst = 1;
+            axis.fLast = axis.fNbins;
          }
       }
    }
@@ -2644,11 +2645,36 @@ class TFramePainter extends ObjectPainter {
             }
             menu.input('Enter zoom range like: [min, max]', `[${min}, ${max}]`).then(v => {
                const arr = JSON.parse(v);
-               if (arr && Array.isArray(arr) && (arr.length === 2))
-                  this.zoomSingle(kind, arr[0], arr[1], true);
+               if (arr && Array.isArray(arr) && (arr.length === 2)) {
+                  let flag = false;
+                  if (arr[0] < faxis.fXmin) {
+                     faxis.fFirst = 0;
+                     flag = true;
+                  } else
+                     faxis.fFirst = 1;
+                  if (arr[1] > faxis.fXmax) {
+                     faxis.fLast = faxis.fNbins + 1;
+                     flag = true;
+                  } else
+                     faxis.fLast = faxis.fNbins;
+                  faxis.SetBit(EAxisBits.kAxisRange, flag);
+                  hist_painter?.scanContent();
+                  this.zoomSingle(kind, arr[0], arr[1], true).then(res => {
+                     if (!res && flag)
+                        this.interactiveRedraw('pad');
+                  });
+               }
             });
          });
-         menu.add('Unzoom', () => this.unzoom(kind));
+         menu.add('Unzoom', () => {
+            this.unzoomSingle(kind).then(res => {
+               if (!res && (faxis.fFirst !== faxis.fLast)) {
+                  faxis.fFirst = faxis.fLast = 0;
+                  hist_painter?.scanContent();
+                  this.interactiveRedraw('pad');
+               }
+            });
+         });
          if (handle?.value_axis && isFunc(wrk?.accessMM)) {
             menu.add('Minimum', () => {
                menu.input(`Enter minimum value or ${kNoZoom} as default`, wrk.accessMM(true), 'float').then(v => {
@@ -2681,15 +2707,14 @@ class TFramePainter extends ObjectPainter {
             menu.endsub();
          }
          menu.addchk(faxis.TestBit(EAxisBits.kMoreLogLabels), 'More log', flag => {
-            faxis.InvertBit(EAxisBits.kMoreLogLabels);
+            faxis.SetBit(EAxisBits.kMoreLogLabels, flag);
             if (hist_painter?.snapid && (kind.length === 1))
                hist_painter.interactiveRedraw('pad', `exec:SetMoreLogLabels(${flag})`, kind);
             else
                this.interactiveRedraw('pad');
          });
          menu.addchk(handle?.noexp ?? faxis.TestBit(EAxisBits.kNoExponent), 'No exponent', flag => {
-            if (flag !== faxis.TestBit(EAxisBits.kNoExponent))
-               faxis.InvertBit(EAxisBits.kNoExponent);
+            faxis.SetBit(EAxisBits.kNoExponent, flag);
             if (handle) handle.noexp_changed = true;
             this[`${kind}_noexp_changed`] = true;
             if (hist_painter?.snapid && (kind.length === 1))

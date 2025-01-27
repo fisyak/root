@@ -52,7 +52,7 @@ TEST(RNTuple, SerializeString)
 
 TEST(RNTuple, SerializeColumnType)
 {
-   EColumnType type = EColumnType::kUnknown;
+   ENTupleColumnType type = ENTupleColumnType::kUnknown;
    unsigned char buffer[2];
 
    try {
@@ -65,10 +65,10 @@ TEST(RNTuple, SerializeColumnType)
    RNTupleSerializer::SerializeUInt16(5000, buffer);
    auto res = RNTupleSerializer::DeserializeColumnType(buffer, type);
    EXPECT_TRUE(bool(res));
-   EXPECT_EQ(type, EColumnType::kUnknown);
+   EXPECT_EQ(type, ENTupleColumnType::kUnknown);
 
-   for (int i = 1; i < static_cast<int>(EColumnType::kMax); ++i) {
-      RNTupleSerializer::SerializeColumnType(static_cast<EColumnType>(i), buffer);
+   for (int i = 1; i < static_cast<int>(ENTupleColumnType::kMax); ++i) {
+      RNTupleSerializer::SerializeColumnType(static_cast<ENTupleColumnType>(i), buffer);
       RNTupleSerializer::DeserializeColumnType(buffer, type);
       EXPECT_EQ(i, static_cast<int>(type));
    }
@@ -334,8 +334,8 @@ TEST(RNTuple, SerializeLocator)
 {
    unsigned char buffer[20];
    RNTupleLocator locator;
-   locator.fPosition = 1U;
-   locator.fBytesOnStorage = 2;
+   locator.SetPosition(1U);
+   locator.SetNBytesOnStorage(2);
 
    EXPECT_EQ(12u, RNTupleSerializer::SerializeLocator(locator, nullptr));
    EXPECT_EQ(12u, RNTupleSerializer::SerializeLocator(locator, buffer));
@@ -355,40 +355,40 @@ TEST(RNTuple, SerializeLocator)
    }
    EXPECT_EQ(12u, RNTupleSerializer::DeserializeLocator(buffer, 12, locator).Unwrap());
    EXPECT_EQ(1u, locator.GetPosition<std::uint64_t>());
-   EXPECT_EQ(2u, locator.fBytesOnStorage);
-   EXPECT_EQ(RNTupleLocator::kTypeFile, locator.fType);
+   EXPECT_EQ(2u, locator.GetNBytesOnStorage());
+   EXPECT_EQ(RNTupleLocator::kTypeFile, locator.GetType());
 
-   locator.fBytesOnStorage = std::numeric_limits<std::int32_t>::max();
+   locator.SetNBytesOnStorage(std::numeric_limits<std::int32_t>::max());
    EXPECT_EQ(12u, RNTupleSerializer::SerializeLocator(locator, buffer));
    EXPECT_EQ(12u, RNTupleSerializer::DeserializeLocator(buffer, 12, locator).Unwrap());
-   EXPECT_EQ(std::numeric_limits<std::int32_t>::max(), locator.fBytesOnStorage);
-   locator.fBytesOnStorage = static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) + 1;
+   EXPECT_EQ(std::numeric_limits<std::int32_t>::max(), locator.GetNBytesOnStorage());
+   locator.SetNBytesOnStorage(static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) + 1);
    EXPECT_EQ(20u, RNTupleSerializer::SerializeLocator(locator, buffer));
    EXPECT_EQ(20u, RNTupleSerializer::DeserializeLocator(buffer, 20, locator).Unwrap());
-   EXPECT_EQ(static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) + 1, locator.fBytesOnStorage);
+   EXPECT_EQ(static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) + 1, locator.GetNBytesOnStorage());
    EXPECT_EQ(1u, locator.GetPosition<std::uint64_t>());
-   EXPECT_EQ(RNTupleLocator::kTypeFile, locator.fType);
+   EXPECT_EQ(RNTupleLocator::kTypeFile, locator.GetType());
 
-   locator.fType = RNTupleLocator::kTypeDAOS;
-   locator.fPosition.emplace<RNTupleLocatorObject64>(RNTupleLocatorObject64{1337U});
-   locator.fBytesOnStorage = 420420U;
-   locator.fReserved = 0x5a;
+   locator.SetType(RNTupleLocator::kTypeDAOS);
+   locator.SetPosition(RNTupleLocatorObject64{1337U});
+   locator.SetNBytesOnStorage(420420U);
+   locator.SetReserved(0x5a);
    EXPECT_EQ(16u, RNTupleSerializer::SerializeLocator(locator, buffer));
    locator = RNTupleLocator{};
    EXPECT_EQ(16u, RNTupleSerializer::DeserializeLocator(buffer, 16, locator).Unwrap());
-   EXPECT_EQ(locator.fType, RNTupleLocator::kTypeDAOS);
-   EXPECT_EQ(locator.fBytesOnStorage, 420420U);
-   EXPECT_EQ(locator.fReserved, 0x5a);
-   EXPECT_EQ(1337U, locator.GetPosition<RNTupleLocatorObject64>().fLocation);
+   EXPECT_EQ(locator.GetType(), RNTupleLocator::kTypeDAOS);
+   EXPECT_EQ(locator.GetNBytesOnStorage(), 420420U);
+   EXPECT_EQ(locator.GetReserved(), 0x5a);
+   EXPECT_EQ(1337U, locator.GetPosition<RNTupleLocatorObject64>().GetLocation());
 
-   locator.fBytesOnStorage = static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) + 1;
+   locator.SetNBytesOnStorage(static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) + 1);
    EXPECT_EQ(20u, RNTupleSerializer::SerializeLocator(locator, buffer));
    locator = RNTupleLocator{};
    EXPECT_EQ(20u, RNTupleSerializer::DeserializeLocator(buffer, 20, locator).Unwrap());
-   EXPECT_EQ(locator.fType, RNTupleLocator::kTypeDAOS);
-   EXPECT_EQ(locator.fBytesOnStorage, static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) + 1);
-   EXPECT_EQ(locator.fReserved, 0x5a);
-   EXPECT_EQ(1337U, locator.GetPosition<RNTupleLocatorObject64>().fLocation);
+   EXPECT_EQ(locator.GetType(), RNTupleLocator::kTypeDAOS);
+   EXPECT_EQ(locator.GetNBytesOnStorage(), static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) + 1);
+   EXPECT_EQ(locator.GetReserved(), 0x5a);
+   EXPECT_EQ(1337U, locator.GetPosition<RNTupleLocatorObject64>().GetLocation());
 
    std::int32_t *head = reinterpret_cast<std::int32_t *>(buffer);
 #ifndef R__BYTESWAP
@@ -398,15 +398,15 @@ TEST(RNTuple, SerializeLocator)
    *head = (0x3 << 24) | *head;
 #endif
    RNTupleSerializer::DeserializeLocator(buffer, 20, locator).Unwrap();
-   EXPECT_EQ(locator.fType, RNTupleLocator::kTypeUnknown);
+   EXPECT_EQ(locator.GetType(), RNTupleLocator::kTypeUnknown);
 }
 
 TEST(RNTuple, SerializeEnvelopeLink)
 {
    RNTupleSerializer::REnvelopeLink link;
    link.fLength = 42;
-   link.fLocator.fPosition = 137U;
-   link.fLocator.fBytesOnStorage = 7;
+   link.fLocator.SetPosition(137U);
+   link.fLocator.SetNBytesOnStorage(7);
 
    unsigned char buffer[20];
    EXPECT_EQ(20u, RNTupleSerializer::SerializeEnvelopeLink(link, nullptr));
@@ -472,8 +472,8 @@ TEST(RNTuple, SerializeClusterGroup)
    group.fEntrySpan = 84600;
    group.fNClusters = 42;
    group.fPageListEnvelopeLink.fLength = 42;
-   group.fPageListEnvelopeLink.fLocator.fPosition = 137U;
-   group.fPageListEnvelopeLink.fLocator.fBytesOnStorage = 7;
+   group.fPageListEnvelopeLink.fLocator.SetPosition(137U);
+   group.fPageListEnvelopeLink.fLocator.SetNBytesOnStorage(7);
 
    unsigned char buffer[52];
    ASSERT_EQ(48u, RNTupleSerializer::SerializeClusterGroup(group, nullptr));
@@ -492,7 +492,8 @@ TEST(RNTuple, SerializeClusterGroup)
    EXPECT_EQ(group.fPageListEnvelopeLink.fLength, reco.fPageListEnvelopeLink.fLength);
    EXPECT_EQ(group.fPageListEnvelopeLink.fLocator.GetPosition<std::uint64_t>(),
              reco.fPageListEnvelopeLink.fLocator.GetPosition<std::uint64_t>());
-   EXPECT_EQ(group.fPageListEnvelopeLink.fLocator.fBytesOnStorage, reco.fPageListEnvelopeLink.fLocator.fBytesOnStorage);
+   EXPECT_EQ(group.fPageListEnvelopeLink.fLocator.GetNBytesOnStorage(),
+             reco.fPageListEnvelopeLink.fLocator.GetNBytesOnStorage());
 
    // Test frame evolution
    auto pos = buffer;
@@ -511,7 +512,8 @@ TEST(RNTuple, SerializeClusterGroup)
    EXPECT_EQ(group.fPageListEnvelopeLink.fLength, reco.fPageListEnvelopeLink.fLength);
    EXPECT_EQ(group.fPageListEnvelopeLink.fLocator.GetPosition<std::uint64_t>(),
              reco.fPageListEnvelopeLink.fLocator.GetPosition<std::uint64_t>());
-   EXPECT_EQ(group.fPageListEnvelopeLink.fLocator.fBytesOnStorage, reco.fPageListEnvelopeLink.fLocator.fBytesOnStorage);
+   EXPECT_EQ(group.fPageListEnvelopeLink.fLocator.GetNBytesOnStorage(),
+             reco.fPageListEnvelopeLink.fLocator.GetNBytesOnStorage());
    std::uint16_t remainder;
    RNTupleSerializer::DeserializeUInt16(buffer + 48, remainder);
    EXPECT_EQ(7u, remainder);
@@ -532,7 +534,7 @@ TEST(RNTuple, SerializeEmptyHeader)
    auto desc = builder.MoveDescriptor();
    auto context = RNTupleSerializer::SerializeHeader(nullptr, desc);
    EXPECT_GT(context.GetHeaderSize(), 0);
-   auto buffer = std::make_unique<unsigned char []>(context.GetHeaderSize());
+   auto buffer = MakeUninitArray<unsigned char>(context.GetHeaderSize());
    context = RNTupleSerializer::SerializeHeader(buffer.get(), desc);
 
    RNTupleSerializer::DeserializeHeader(buffer.get(), context.GetHeaderSize(), builder);
@@ -584,7 +586,7 @@ TEST(RNTuple, SerializeHeader)
                         .PhysicalColumnId(23)
                         .FieldId(42)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kReal32)
+                        .Type(ENTupleColumnType::kReal32)
                         .Index(0)
                         .MakeDescriptor()
                         .Unwrap());
@@ -593,7 +595,7 @@ TEST(RNTuple, SerializeHeader)
                         .PhysicalColumnId(23)
                         .FieldId(24)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kReal32)
+                        .Type(ENTupleColumnType::kReal32)
                         .Index(0)
                         .MakeDescriptor()
                         .Unwrap());
@@ -602,7 +604,7 @@ TEST(RNTuple, SerializeHeader)
                         .PhysicalColumnId(17)
                         .FieldId(137)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kIndex32)
+                        .Type(ENTupleColumnType::kIndex32)
                         .Index(0)
                         .MakeDescriptor()
                         .Unwrap());
@@ -611,7 +613,7 @@ TEST(RNTuple, SerializeHeader)
                         .PhysicalColumnId(40)
                         .FieldId(137)
                         .BitsOnStorage(8)
-                        .Type(EColumnType::kByte)
+                        .Type(ENTupleColumnType::kByte)
                         .Index(1)
                         .MakeDescriptor()
                         .Unwrap());
@@ -624,7 +626,7 @@ TEST(RNTuple, SerializeHeader)
    auto desc = builder.MoveDescriptor();
    auto context = RNTupleSerializer::SerializeHeader(nullptr, desc);
    EXPECT_GT(context.GetHeaderSize(), 0);
-   auto buffer = std::make_unique<unsigned char []>(context.GetHeaderSize());
+   auto buffer = MakeUninitArray<unsigned char>(context.GetHeaderSize());
    context = RNTupleSerializer::SerializeHeader(buffer.get(), desc);
 
    RNTupleSerializer::DeserializeHeader(buffer.get(), context.GetHeaderSize(), builder);
@@ -669,7 +671,7 @@ TEST(RNTuple, SerializeFooter)
                         .PhysicalColumnId(17)
                         .FieldId(42)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kIndex32)
+                        .Type(ENTupleColumnType::kIndex32)
                         .Index(0)
                         .MakeDescriptor()
                         .Unwrap());
@@ -682,19 +684,19 @@ TEST(RNTuple, SerializeFooter)
    pageRange.fPhysicalColumnId = 17;
    // Two pages adding up to 100 elements, one with checksum one without
    pageInfo.fNElements = 40;
-   pageInfo.fLocator.fPosition = 7000U;
+   pageInfo.fLocator.SetPosition(7000U);
    pageInfo.fHasChecksum = true;
    pageRange.fPageInfos.emplace_back(pageInfo);
    pageInfo.fNElements = 60;
-   pageInfo.fLocator.fPosition = 8000U;
+   pageInfo.fLocator.SetPosition(8000U);
    pageInfo.fHasChecksum = false;
    pageRange.fPageInfos.emplace_back(pageInfo);
    clusterBuilder.CommitColumnRange(17, 0, 100, pageRange);
    builder.AddCluster(clusterBuilder.MoveDescriptor().Unwrap());
    RClusterGroupDescriptorBuilder cgBuilder;
    RNTupleLocator cgLocator;
-   cgLocator.fPosition = 1337U;
-   cgLocator.fBytesOnStorage = 42;
+   cgLocator.SetPosition(1337U);
+   cgLocator.SetNBytesOnStorage(42);
    cgBuilder.ClusterGroupId(256).PageListLength(137).PageListLocator(cgLocator).NClusters(1).EntrySpan(100);
    std::vector<DescriptorId_t> clusterIds{84};
    cgBuilder.AddSortedClusters(clusterIds);
@@ -703,7 +705,7 @@ TEST(RNTuple, SerializeFooter)
    auto desc = builder.MoveDescriptor();
    auto context = RNTupleSerializer::SerializeHeader(nullptr, desc);
    EXPECT_GT(context.GetHeaderSize(), 0);
-   auto bufHeader = std::make_unique<unsigned char []>(context.GetHeaderSize());
+   auto bufHeader = MakeUninitArray<unsigned char>(context.GetHeaderSize());
    context = RNTupleSerializer::SerializeHeader(bufHeader.get(), desc);
 
    std::vector<DescriptorId_t> physClusterIDs;
@@ -715,12 +717,12 @@ TEST(RNTuple, SerializeFooter)
 
    auto sizePageList = RNTupleSerializer::SerializePageList(nullptr, desc, physClusterIDs, context);
    EXPECT_GT(sizePageList, 0);
-   auto bufPageList = std::make_unique<unsigned char []>(sizePageList);
+   auto bufPageList = MakeUninitArray<unsigned char>(sizePageList);
    EXPECT_EQ(sizePageList, RNTupleSerializer::SerializePageList(bufPageList.get(), desc, physClusterIDs, context));
 
    auto sizeFooter = RNTupleSerializer::SerializeFooter(nullptr, desc, context);
    EXPECT_GT(sizeFooter, 0);
-   auto bufFooter = std::make_unique<unsigned char []>(sizeFooter);
+   auto bufFooter = MakeUninitArray<unsigned char>(sizeFooter);
    EXPECT_EQ(sizeFooter, RNTupleSerializer::SerializeFooter(bufFooter.get(), desc, context));
 
    RNTupleSerializer::DeserializeHeader(bufHeader.get(), context.GetHeaderSize(), builder);
@@ -734,7 +736,7 @@ TEST(RNTuple, SerializeFooter)
    EXPECT_EQ(1u, clusterGroupDesc.GetNClusters());
    EXPECT_EQ(137u, clusterGroupDesc.GetPageListLength());
    EXPECT_EQ(1337u, clusterGroupDesc.GetPageListLocator().GetPosition<std::uint64_t>());
-   EXPECT_EQ(42u, clusterGroupDesc.GetPageListLocator().fBytesOnStorage);
+   EXPECT_EQ(42u, clusterGroupDesc.GetPageListLocator().GetNBytesOnStorage());
    EXPECT_EQ(1u, desc.GetNClusters());
    EXPECT_EQ(0u, desc.GetNActiveClusters());
 
@@ -745,7 +747,7 @@ TEST(RNTuple, SerializeFooter)
    EXPECT_EQ(1u, verify.GetNClusters());
    EXPECT_EQ(137u, verify.GetPageListLength());
    EXPECT_EQ(1337u, verify.GetPageListLocator().GetPosition<std::uint64_t>());
-   EXPECT_EQ(42u, verify.GetPageListLocator().fBytesOnStorage);
+   EXPECT_EQ(42u, verify.GetPageListLocator().GetNBytesOnStorage());
 
    EXPECT_EQ(1u, desc.GetNActiveClusters());
    const auto &clusterDesc = desc.GetClusterDescriptor(0);
@@ -790,14 +792,14 @@ TEST(RNTuple, SerializeFooterXHeader)
                         .PhysicalColumnId(17)
                         .FieldId(42)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kInt32)
+                        .Type(ENTupleColumnType::kInt32)
                         .Index(0)
                         .MakeDescriptor()
                         .Unwrap());
 
    auto context = RNTupleSerializer::SerializeHeader(nullptr, builder.GetDescriptor());
    EXPECT_GT(context.GetHeaderSize(), 0);
-   auto bufHeader = std::make_unique<unsigned char[]>(context.GetHeaderSize());
+   auto bufHeader = MakeUninitArray<unsigned char>(context.GetHeaderSize());
    context = RNTupleSerializer::SerializeHeader(bufHeader.get(), builder.GetDescriptor());
 
    builder.BeginHeaderExtension();
@@ -829,7 +831,7 @@ TEST(RNTuple, SerializeFooterXHeader)
                         .PhysicalColumnId(18)
                         .FieldId(44)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kReal32)
+                        .Type(ENTupleColumnType::kReal32)
                         .Index(0)
                         .FirstElementIndex(4200)
                         .MakeDescriptor()
@@ -839,7 +841,7 @@ TEST(RNTuple, SerializeFooterXHeader)
                         .PhysicalColumnId(19)
                         .FieldId(45)
                         .BitsOnStorage(64)
-                        .Type(EColumnType::kInt64)
+                        .Type(ENTupleColumnType::kInt64)
                         .Index(0)
                         .FirstElementIndex(10000)
                         .MakeDescriptor()
@@ -858,7 +860,7 @@ TEST(RNTuple, SerializeFooterXHeader)
                         .PhysicalColumnId(18)
                         .FieldId(46)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kReal32)
+                        .Type(ENTupleColumnType::kReal32)
                         .Index(0)
                         .MakeDescriptor()
                         .Unwrap());
@@ -874,7 +876,7 @@ TEST(RNTuple, SerializeFooterXHeader)
    auto desc = builder.MoveDescriptor();
    auto sizeFooter = RNTupleSerializer::SerializeFooter(nullptr, desc, context);
    EXPECT_GT(sizeFooter, 0);
-   auto bufFooter = std::make_unique<unsigned char[]>(sizeFooter);
+   auto bufFooter = MakeUninitArray<unsigned char>(sizeFooter);
    EXPECT_EQ(sizeFooter, RNTupleSerializer::SerializeFooter(bufFooter.get(), desc, context));
 
    RNTupleSerializer::DeserializeHeader(bufHeader.get(), context.GetHeaderSize(), builder);
@@ -960,7 +962,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentation)
                         .PhysicalColumnId(0)
                         .FieldId(7)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kIndex32)
+                        .Type(ENTupleColumnType::kIndex32)
                         .Index(0)
                         .MakeDescriptor()
                         .Unwrap());
@@ -969,7 +971,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentation)
                         .PhysicalColumnId(1)
                         .FieldId(7)
                         .BitsOnStorage(8)
-                        .Type(EColumnType::kChar)
+                        .Type(ENTupleColumnType::kChar)
                         .Index(1)
                         .MakeDescriptor()
                         .Unwrap());
@@ -978,7 +980,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentation)
                         .PhysicalColumnId(2)
                         .FieldId(7)
                         .BitsOnStorage(64)
-                        .Type(EColumnType::kIndex64)
+                        .Type(ENTupleColumnType::kIndex64)
                         .Index(0)
                         .RepresentationIndex(1)
                         .MakeDescriptor()
@@ -988,7 +990,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentation)
                         .PhysicalColumnId(3)
                         .FieldId(7)
                         .BitsOnStorage(8)
-                        .Type(EColumnType::kChar)
+                        .Type(ENTupleColumnType::kChar)
                         .Index(1)
                         .RepresentationIndex(1)
                         .MakeDescriptor()
@@ -1031,17 +1033,17 @@ TEST(RNTuple, SerializeMultiColumnRepresentation)
 
    auto desc = builder.MoveDescriptor();
    auto context = RNTupleSerializer::SerializeHeader(nullptr, desc);
-   auto bufHeader = std::make_unique<unsigned char[]>(context.GetHeaderSize());
+   auto bufHeader = MakeUninitArray<unsigned char>(context.GetHeaderSize());
    context = RNTupleSerializer::SerializeHeader(bufHeader.get(), desc);
 
    std::vector<DescriptorId_t> physClusterIDs{context.MapClusterId(13), context.MapClusterId(17)};
    context.MapClusterGroupId(137);
    auto sizePageList = RNTupleSerializer::SerializePageList(nullptr, desc, physClusterIDs, context);
-   auto bufPageList = std::make_unique<unsigned char[]>(sizePageList);
+   auto bufPageList = MakeUninitArray<unsigned char>(sizePageList);
    RNTupleSerializer::SerializePageList(bufPageList.get(), desc, physClusterIDs, context);
 
    auto sizeFooter = RNTupleSerializer::SerializeFooter(nullptr, desc, context);
-   auto bufFooter = std::make_unique<unsigned char[]>(sizeFooter);
+   auto bufFooter = MakeUninitArray<unsigned char>(sizeFooter);
    RNTupleSerializer::SerializeFooter(bufFooter.get(), desc, context);
 
    RNTupleSerializer::DeserializeHeader(bufHeader.get(), context.GetHeaderSize(), builder);
@@ -1057,16 +1059,16 @@ TEST(RNTuple, SerializeMultiColumnRepresentation)
    EXPECT_EQ(4u, columnIds.size());
    EXPECT_EQ(0, desc.GetColumnDescriptor(columnIds[0]).GetIndex());
    EXPECT_EQ(0, desc.GetColumnDescriptor(columnIds[0]).GetRepresentationIndex());
-   EXPECT_EQ(EColumnType::kIndex32, desc.GetColumnDescriptor(columnIds[0]).GetType());
+   EXPECT_EQ(ENTupleColumnType::kIndex32, desc.GetColumnDescriptor(columnIds[0]).GetType());
    EXPECT_EQ(1, desc.GetColumnDescriptor(columnIds[1]).GetIndex());
    EXPECT_EQ(0, desc.GetColumnDescriptor(columnIds[1]).GetRepresentationIndex());
-   EXPECT_EQ(EColumnType::kChar, desc.GetColumnDescriptor(columnIds[1]).GetType());
+   EXPECT_EQ(ENTupleColumnType::kChar, desc.GetColumnDescriptor(columnIds[1]).GetType());
    EXPECT_EQ(0, desc.GetColumnDescriptor(columnIds[2]).GetIndex());
    EXPECT_EQ(1, desc.GetColumnDescriptor(columnIds[2]).GetRepresentationIndex());
-   EXPECT_EQ(EColumnType::kIndex64, desc.GetColumnDescriptor(columnIds[2]).GetType());
+   EXPECT_EQ(ENTupleColumnType::kIndex64, desc.GetColumnDescriptor(columnIds[2]).GetType());
    EXPECT_EQ(1, desc.GetColumnDescriptor(columnIds[3]).GetIndex());
    EXPECT_EQ(1, desc.GetColumnDescriptor(columnIds[3]).GetRepresentationIndex());
-   EXPECT_EQ(EColumnType::kChar, desc.GetColumnDescriptor(columnIds[3]).GetType());
+   EXPECT_EQ(ENTupleColumnType::kChar, desc.GetColumnDescriptor(columnIds[3]).GetType());
 
    EXPECT_EQ(columnIds[0], desc.FindLogicalColumnId(fieldDesc.GetId(), 0, 0));
    EXPECT_EQ(columnIds[1], desc.FindLogicalColumnId(fieldDesc.GetId(), 1, 0));
@@ -1086,10 +1088,10 @@ TEST(RNTuple, SerializeMultiColumnRepresentation)
    const auto columnRange0_1 = clusterDesc0.GetColumnRange(columnIds[1]);
    const auto columnRange0_2 = clusterDesc0.GetColumnRange(columnIds[2]);
    const auto columnRange0_3 = clusterDesc0.GetColumnRange(columnIds[3]);
-   RClusterDescriptor::RColumnRange expect0_0{0, 0, ClusterSize_t(1), -1, true};
-   RClusterDescriptor::RColumnRange expect0_1{1, 0, ClusterSize_t(0), -1, true};
-   RClusterDescriptor::RColumnRange expect0_2{2, 0, ClusterSize_t(1), 505, false};
-   RClusterDescriptor::RColumnRange expect0_3{3, 0, ClusterSize_t(0), 505, false};
+   RClusterDescriptor::RColumnRange expect0_0{0, 0, 1, {}, true};
+   RClusterDescriptor::RColumnRange expect0_1{1, 0, 0, {}, true};
+   RClusterDescriptor::RColumnRange expect0_2{2, 0, 1, 505, false};
+   RClusterDescriptor::RColumnRange expect0_3{3, 0, 0, 505, false};
    EXPECT_EQ(expect0_0, columnRange0_0);
    EXPECT_EQ(expect0_1, columnRange0_1);
    EXPECT_EQ(expect0_2, columnRange0_2);
@@ -1108,10 +1110,10 @@ TEST(RNTuple, SerializeMultiColumnRepresentation)
    const auto columnRange1_1 = clusterDesc1.GetColumnRange(columnIds[1]);
    const auto columnRange1_2 = clusterDesc1.GetColumnRange(columnIds[2]);
    const auto columnRange1_3 = clusterDesc1.GetColumnRange(columnIds[3]);
-   RClusterDescriptor::RColumnRange expect1_0{0, 1, ClusterSize_t(1), 505, false};
-   RClusterDescriptor::RColumnRange expect1_1{1, 0, ClusterSize_t(3), 505, false};
-   RClusterDescriptor::RColumnRange expect1_2{2, 1, ClusterSize_t(1), -1, true};
-   RClusterDescriptor::RColumnRange expect1_3{3, 0, ClusterSize_t(3), -1, true};
+   RClusterDescriptor::RColumnRange expect1_0{0, 1, 1, 505, false};
+   RClusterDescriptor::RColumnRange expect1_1{1, 0, 3, 505, false};
+   RClusterDescriptor::RColumnRange expect1_2{2, 1, 1, {}, true};
+   RClusterDescriptor::RColumnRange expect1_3{3, 0, 3, {}, true};
    EXPECT_EQ(expect1_0, columnRange1_0);
    EXPECT_EQ(expect1_1, columnRange1_1);
    EXPECT_EQ(expect1_2, columnRange1_2);
@@ -1160,7 +1162,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentationProjection)
                         .PhysicalColumnId(0)
                         .FieldId(5)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kReal32)
+                        .Type(ENTupleColumnType::kReal32)
                         .MakeDescriptor()
                         .Unwrap());
    builder.AddColumn(RColumnDescriptorBuilder()
@@ -1168,7 +1170,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentationProjection)
                         .PhysicalColumnId(1)
                         .FieldId(5)
                         .BitsOnStorage(16)
-                        .Type(EColumnType::kReal16)
+                        .Type(ENTupleColumnType::kReal16)
                         .RepresentationIndex(1)
                         .MakeDescriptor()
                         .Unwrap());
@@ -1177,7 +1179,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentationProjection)
                         .PhysicalColumnId(0)
                         .FieldId(7)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kReal32)
+                        .Type(ENTupleColumnType::kReal32)
                         .MakeDescriptor()
                         .Unwrap());
    builder.AddColumn(RColumnDescriptorBuilder()
@@ -1185,7 +1187,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentationProjection)
                         .PhysicalColumnId(1)
                         .FieldId(7)
                         .BitsOnStorage(16)
-                        .Type(EColumnType::kReal16)
+                        .Type(ENTupleColumnType::kReal16)
                         .RepresentationIndex(1)
                         .MakeDescriptor()
                         .Unwrap());
@@ -1217,17 +1219,17 @@ TEST(RNTuple, SerializeMultiColumnRepresentationProjection)
 
    auto desc = builder.MoveDescriptor();
    auto context = RNTupleSerializer::SerializeHeader(nullptr, desc);
-   auto bufHeader = std::make_unique<unsigned char[]>(context.GetHeaderSize());
+   auto bufHeader = MakeUninitArray<unsigned char>(context.GetHeaderSize());
    context = RNTupleSerializer::SerializeHeader(bufHeader.get(), desc);
 
    std::vector<DescriptorId_t> physClusterIDs{context.MapClusterId(13), context.MapClusterId(17)};
    context.MapClusterGroupId(137);
    auto sizePageList = RNTupleSerializer::SerializePageList(nullptr, desc, physClusterIDs, context);
-   auto bufPageList = std::make_unique<unsigned char[]>(sizePageList);
+   auto bufPageList = MakeUninitArray<unsigned char>(sizePageList);
    RNTupleSerializer::SerializePageList(bufPageList.get(), desc, physClusterIDs, context);
 
    auto sizeFooter = RNTupleSerializer::SerializeFooter(nullptr, desc, context);
-   auto bufFooter = std::make_unique<unsigned char[]>(sizeFooter);
+   auto bufFooter = MakeUninitArray<unsigned char>(sizeFooter);
    RNTupleSerializer::SerializeFooter(bufFooter.get(), desc, context);
 
    RNTupleSerializer::DeserializeHeader(bufHeader.get(), context.GetHeaderSize(), builder);
@@ -1245,9 +1247,9 @@ TEST(RNTuple, SerializeMultiColumnRepresentationProjection)
    EXPECT_EQ(0, desc.GetColumnDescriptor(columnIds[0]).GetPhysicalId());
    EXPECT_EQ(1, desc.GetColumnDescriptor(columnIds[1]).GetPhysicalId());
    EXPECT_EQ(0, desc.GetColumnDescriptor(columnIds[0]).GetRepresentationIndex());
-   EXPECT_EQ(EColumnType::kReal32, desc.GetColumnDescriptor(columnIds[0]).GetType());
+   EXPECT_EQ(ENTupleColumnType::kReal32, desc.GetColumnDescriptor(columnIds[0]).GetType());
    EXPECT_EQ(1, desc.GetColumnDescriptor(columnIds[1]).GetRepresentationIndex());
-   EXPECT_EQ(EColumnType::kReal16, desc.GetColumnDescriptor(columnIds[1]).GetType());
+   EXPECT_EQ(ENTupleColumnType::kReal16, desc.GetColumnDescriptor(columnIds[1]).GetType());
 
    EXPECT_EQ(columnIds[0], desc.FindLogicalColumnId(aliasDesc.GetId(), 0, 0));
    EXPECT_EQ(columnIds[1], desc.FindLogicalColumnId(aliasDesc.GetId(), 0, 1));
@@ -1276,7 +1278,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentationDeferred)
                        .Unwrap());
 
    auto context = RNTupleSerializer::SerializeHeader(nullptr, builder.GetDescriptor());
-   auto bufHeader = std::make_unique<unsigned char[]>(context.GetHeaderSize());
+   auto bufHeader = MakeUninitArray<unsigned char>(context.GetHeaderSize());
    context = RNTupleSerializer::SerializeHeader(bufHeader.get(), builder.GetDescriptor());
 
    // First cluster
@@ -1299,7 +1301,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentationDeferred)
                         .PhysicalColumnId(0)
                         .FieldId(5)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kReal32)
+                        .Type(ENTupleColumnType::kReal32)
                         .FirstElementIndex(1)
                         .MakeDescriptor()
                         .Unwrap());
@@ -1308,7 +1310,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentationDeferred)
                         .PhysicalColumnId(1)
                         .FieldId(5)
                         .BitsOnStorage(16)
-                        .Type(EColumnType::kReal16)
+                        .Type(ENTupleColumnType::kReal16)
                         .RepresentationIndex(1)
                         .FirstElementIndex(1)
                         .SetSuppressedDeferred()
@@ -1345,11 +1347,11 @@ TEST(RNTuple, SerializeMultiColumnRepresentationDeferred)
                                               context.MapClusterId(19)};
    context.MapClusterGroupId(137);
    auto sizePageList = RNTupleSerializer::SerializePageList(nullptr, desc, physClusterIDs, context);
-   auto bufPageList = std::make_unique<unsigned char[]>(sizePageList);
+   auto bufPageList = MakeUninitArray<unsigned char>(sizePageList);
    RNTupleSerializer::SerializePageList(bufPageList.get(), desc, physClusterIDs, context);
 
    auto sizeFooter = RNTupleSerializer::SerializeFooter(nullptr, desc, context);
-   auto bufFooter = std::make_unique<unsigned char[]>(sizeFooter);
+   auto bufFooter = MakeUninitArray<unsigned char>(sizeFooter);
    RNTupleSerializer::SerializeFooter(bufFooter.get(), desc, context);
 
    RNTupleSerializer::DeserializeHeader(bufHeader.get(), context.GetHeaderSize(), builder);
@@ -1365,8 +1367,8 @@ TEST(RNTuple, SerializeMultiColumnRepresentationDeferred)
    EXPECT_EQ(0u, clusterDesc0.GetFirstEntryIndex());
    const auto columnRange0_0 = clusterDesc0.GetColumnRange(columnIds[0]);
    const auto columnRange0_1 = clusterDesc0.GetColumnRange(columnIds[1]);
-   RClusterDescriptor::RColumnRange expect0_0{0, 0, ClusterSize_t(1), -1, false};
-   RClusterDescriptor::RColumnRange expect0_1{1, 0, ClusterSize_t(1), -1, true};
+   RClusterDescriptor::RColumnRange expect0_0{0, 0, 1, {}, false};
+   RClusterDescriptor::RColumnRange expect0_1{1, 0, 1, {}, true};
    EXPECT_EQ(expect0_0, columnRange0_0);
    EXPECT_EQ(expect0_1, columnRange0_1);
 
@@ -1374,8 +1376,8 @@ TEST(RNTuple, SerializeMultiColumnRepresentationDeferred)
    EXPECT_EQ(1u, clusterDesc1.GetFirstEntryIndex());
    const auto columnRange1_0 = clusterDesc1.GetColumnRange(columnIds[0]);
    const auto columnRange1_1 = clusterDesc1.GetColumnRange(columnIds[1]);
-   RClusterDescriptor::RColumnRange expect1_0{0, 1, ClusterSize_t(2), 505, false};
-   RClusterDescriptor::RColumnRange expect1_1{1, 1, ClusterSize_t(2), -1, true};
+   RClusterDescriptor::RColumnRange expect1_0{0, 1, 2, 505, false};
+   RClusterDescriptor::RColumnRange expect1_1{1, 1, 2, {}, true};
    EXPECT_EQ(expect1_0, columnRange1_0);
    EXPECT_EQ(expect1_1, columnRange1_1);
 
@@ -1383,8 +1385,8 @@ TEST(RNTuple, SerializeMultiColumnRepresentationDeferred)
    EXPECT_EQ(3u, clusterDesc2.GetFirstEntryIndex());
    const auto columnRange2_0 = clusterDesc2.GetColumnRange(columnIds[0]);
    const auto columnRange2_1 = clusterDesc2.GetColumnRange(columnIds[1]);
-   RClusterDescriptor::RColumnRange expect2_0{0, 3, ClusterSize_t(1), -1, true};
-   RClusterDescriptor::RColumnRange expect2_1{1, 3, ClusterSize_t(1), 505, false};
+   RClusterDescriptor::RColumnRange expect2_0{0, 3, 1, {}, true};
+   RClusterDescriptor::RColumnRange expect2_1{1, 3, 1, 505, false};
    EXPECT_EQ(expect2_0, columnRange2_0);
    EXPECT_EQ(expect2_1, columnRange2_1);
 }
@@ -1416,12 +1418,12 @@ TEST(RNTuple, SerializeMultiColumnRepresentationIncremental)
                         .PhysicalColumnId(0)
                         .BitsOnStorage(16)
                         .FieldId(5)
-                        .Type(EColumnType::kReal16)
+                        .Type(ENTupleColumnType::kReal16)
                         .MakeDescriptor()
                         .Unwrap());
 
    auto context = RNTupleSerializer::SerializeHeader(nullptr, builder.GetDescriptor());
-   auto bufHeader = std::make_unique<unsigned char[]>(context.GetHeaderSize());
+   auto bufHeader = MakeUninitArray<unsigned char>(context.GetHeaderSize());
    context = RNTupleSerializer::SerializeHeader(bufHeader.get(), builder.GetDescriptor());
 
    // First cluster
@@ -1442,7 +1444,7 @@ TEST(RNTuple, SerializeMultiColumnRepresentationIncremental)
                         .PhysicalColumnId(1)
                         .FieldId(5)
                         .BitsOnStorage(32)
-                        .Type(EColumnType::kReal32)
+                        .Type(ENTupleColumnType::kReal32)
                         .RepresentationIndex(1)
                         .FirstElementIndex(1)
                         .SetSuppressedDeferred()
@@ -1468,11 +1470,11 @@ TEST(RNTuple, SerializeMultiColumnRepresentationIncremental)
    std::vector<DescriptorId_t> physClusterIDs{context.MapClusterId(13), context.MapClusterId(17)};
    context.MapClusterGroupId(137);
    auto sizePageList = RNTupleSerializer::SerializePageList(nullptr, desc, physClusterIDs, context);
-   auto bufPageList = std::make_unique<unsigned char[]>(sizePageList);
+   auto bufPageList = MakeUninitArray<unsigned char>(sizePageList);
    RNTupleSerializer::SerializePageList(bufPageList.get(), desc, physClusterIDs, context);
 
    auto sizeFooter = RNTupleSerializer::SerializeFooter(nullptr, desc, context);
-   auto bufFooter = std::make_unique<unsigned char[]>(sizeFooter);
+   auto bufFooter = MakeUninitArray<unsigned char>(sizeFooter);
    RNTupleSerializer::SerializeFooter(bufFooter.get(), desc, context);
 
    RNTupleSerializer::DeserializeHeader(bufHeader.get(), context.GetHeaderSize(), builder);
@@ -1489,8 +1491,8 @@ TEST(RNTuple, SerializeMultiColumnRepresentationIncremental)
    EXPECT_EQ(0u, clusterDesc0.GetFirstEntryIndex());
    const auto columnRange0_0 = clusterDesc0.GetColumnRange(columnIds[0]);
    const auto columnRange0_1 = clusterDesc0.GetColumnRange(columnIds[1]);
-   RClusterDescriptor::RColumnRange expect0_0{0, 0, ClusterSize_t(1), 505, false};
-   RClusterDescriptor::RColumnRange expect0_1{1, 0, ClusterSize_t(1), -1, true};
+   RClusterDescriptor::RColumnRange expect0_0{0, 0, 1, 505, false};
+   RClusterDescriptor::RColumnRange expect0_1{1, 0, 1, {}, true};
    EXPECT_EQ(expect0_0, columnRange0_0);
    EXPECT_EQ(expect0_1, columnRange0_1);
 
@@ -1498,8 +1500,8 @@ TEST(RNTuple, SerializeMultiColumnRepresentationIncremental)
    EXPECT_EQ(1u, clusterDesc1.GetFirstEntryIndex());
    const auto columnRange1_0 = clusterDesc1.GetColumnRange(columnIds[0]);
    const auto columnRange1_1 = clusterDesc1.GetColumnRange(columnIds[1]);
-   RClusterDescriptor::RColumnRange expect1_0{0, 1, ClusterSize_t(1), -1, true};
-   RClusterDescriptor::RColumnRange expect1_1{1, 1, ClusterSize_t(1), 505, false};
+   RClusterDescriptor::RColumnRange expect1_0{0, 1, 1, {}, true};
+   RClusterDescriptor::RColumnRange expect1_1{1, 1, 1, 505, false};
    EXPECT_EQ(expect1_0, columnRange1_0);
    EXPECT_EQ(expect1_1, columnRange1_1);
 }

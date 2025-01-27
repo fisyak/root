@@ -59,16 +59,17 @@ void ROOT::Experimental::RArrayField::ReadGlobalImpl(NTupleSize_t globalIndex, v
    }
 }
 
-void ROOT::Experimental::RArrayField::ReadInClusterImpl(RClusterIndex clusterIndex, void *to)
+void ROOT::Experimental::RArrayField::ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to)
 {
    if (fSubFields[0]->IsSimple()) {
       GetPrincipalColumnOf(*fSubFields[0])
-         ->ReadV(RClusterIndex(clusterIndex.GetClusterId(), clusterIndex.GetIndex() * fArrayLength), fArrayLength, to);
+         ->ReadV(RNTupleLocalIndex(localIndex.GetClusterId(), localIndex.GetIndexInCluster() * fArrayLength),
+                 fArrayLength, to);
    } else {
       auto arrayPtr = static_cast<unsigned char *>(to);
       for (unsigned i = 0; i < fArrayLength; ++i) {
          CallReadOn(*fSubFields[0],
-                    RClusterIndex(clusterIndex.GetClusterId(), clusterIndex.GetIndex() * fArrayLength + i),
+                    RNTupleLocalIndex(localIndex.GetClusterId(), localIndex.GetIndexInCluster() * fArrayLength + i),
                     arrayPtr + (i * fItemSize));
       }
    }
@@ -259,8 +260,8 @@ void ROOT::Experimental::RRVecField::ReadGlobalImpl(NTupleSize_t globalIndex, vo
    auto [beginPtr, sizePtr, capacityPtr] = GetRVecDataMembers(to);
 
    // Read collection info for this entry
-   ClusterSize_t nItems;
-   RClusterIndex collectionStart;
+   NTupleSize_t nItems;
+   RNTupleLocalIndex collectionStart;
    fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &nItems);
    char *begin = reinterpret_cast<char *>(*beginPtr); // for pointer arithmetics
    const std::size_t oldSize = *sizePtr;
@@ -341,8 +342,8 @@ std::size_t ROOT::Experimental::RRVecField::ReadBulkImpl(const RBulkSpec &bulkSp
    auto [beginPtr, sizePtr, capacityPtr] = GetRVecDataMembers(bulkSpec.fValues);
 
    // Get size of the first RVec of the bulk
-   RClusterIndex firstItemIndex;
-   ClusterSize_t collectionSize;
+   RNTupleLocalIndex firstItemIndex;
+   NTupleSize_t collectionSize;
    this->GetCollectionInfo(bulkSpec.fFirstIndex, &firstItemIndex, &collectionSize);
    *beginPtr = itemValueArray;
    *sizePtr = collectionSize;
@@ -351,13 +352,14 @@ std::size_t ROOT::Experimental::RRVecField::ReadBulkImpl(const RBulkSpec &bulkSp
    // Set the size of the remaining RVecs of the bulk, going page by page through the RNTuple offset column.
    // We optimistically assume that bulkSpec.fAuxData is already large enough to hold all the item values in the
    // given range. If not, we'll fix up the pointers afterwards.
-   auto lastOffset = firstItemIndex.GetIndex() + collectionSize;
-   ClusterSize_t::ValueType nRemainingValues = bulkSpec.fCount - 1;
+   auto lastOffset = firstItemIndex.GetIndexInCluster() + collectionSize;
+   NTupleSize_t nRemainingValues = bulkSpec.fCount - 1;
    std::size_t nValues = 1;
    std::size_t nItems = collectionSize;
    while (nRemainingValues > 0) {
       NTupleSize_t nElementsUntilPageEnd;
-      const auto offsets = fPrincipalColumn->MapV<ClusterSize_t>(bulkSpec.fFirstIndex + nValues, nElementsUntilPageEnd);
+      const auto offsets =
+         fPrincipalColumn->MapV<Internal::RColumnIndex>(bulkSpec.fFirstIndex + nValues, nElementsUntilPageEnd);
       const std::size_t nBatch = std::min(nRemainingValues, nElementsUntilPageEnd);
       for (std::size_t i = 0; i < nBatch; ++i) {
          const auto size = offsets[i] - lastOffset;
@@ -392,20 +394,22 @@ std::size_t ROOT::Experimental::RRVecField::ReadBulkImpl(const RBulkSpec &bulkSp
 const ROOT::Experimental::RFieldBase::RColumnRepresentations &
 ROOT::Experimental::RRVecField::GetColumnRepresentations() const
 {
-   static RColumnRepresentations representations(
-      {{EColumnType::kSplitIndex64}, {EColumnType::kIndex64}, {EColumnType::kSplitIndex32}, {EColumnType::kIndex32}},
-      {});
+   static RColumnRepresentations representations({{ENTupleColumnType::kSplitIndex64},
+                                                  {ENTupleColumnType::kIndex64},
+                                                  {ENTupleColumnType::kSplitIndex32},
+                                                  {ENTupleColumnType::kIndex32}},
+                                                 {});
    return representations;
 }
 
 void ROOT::Experimental::RRVecField::GenerateColumns()
 {
-   GenerateColumnsImpl<ClusterSize_t>();
+   GenerateColumnsImpl<Internal::RColumnIndex>();
 }
 
 void ROOT::Experimental::RRVecField::GenerateColumns(const RNTupleDescriptor &desc)
 {
-   GenerateColumnsImpl<ClusterSize_t>(desc);
+   GenerateColumnsImpl<Internal::RColumnIndex>(desc);
 }
 
 void ROOT::Experimental::RRVecField::ConstructValue(void *where) const
@@ -530,8 +534,8 @@ void ROOT::Experimental::RVectorField::ReadGlobalImpl(NTupleSize_t globalIndex, 
 {
    auto typedValue = static_cast<std::vector<char> *>(to);
 
-   ClusterSize_t nItems;
-   RClusterIndex collectionStart;
+   NTupleSize_t nItems;
+   RNTupleLocalIndex collectionStart;
    fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &nItems);
 
    if (fSubFields[0]->IsSimple()) {
@@ -542,6 +546,7 @@ void ROOT::Experimental::RVectorField::ReadGlobalImpl(NTupleSize_t globalIndex, 
    }
 
    // See "semantics of reading non-trivial objects" in RNTuple's Architecture.md
+   R__ASSERT(fItemSize > 0);
    const auto oldNItems = typedValue->size() / fItemSize;
    const bool canRealloc = oldNItems < nItems;
    bool allDeallocated = false;
@@ -566,26 +571,29 @@ void ROOT::Experimental::RVectorField::ReadGlobalImpl(NTupleSize_t globalIndex, 
 const ROOT::Experimental::RFieldBase::RColumnRepresentations &
 ROOT::Experimental::RVectorField::GetColumnRepresentations() const
 {
-   static RColumnRepresentations representations(
-      {{EColumnType::kSplitIndex64}, {EColumnType::kIndex64}, {EColumnType::kSplitIndex32}, {EColumnType::kIndex32}},
-      {});
+   static RColumnRepresentations representations({{ENTupleColumnType::kSplitIndex64},
+                                                  {ENTupleColumnType::kIndex64},
+                                                  {ENTupleColumnType::kSplitIndex32},
+                                                  {ENTupleColumnType::kIndex32}},
+                                                 {});
    return representations;
 }
 
 void ROOT::Experimental::RVectorField::GenerateColumns()
 {
-   GenerateColumnsImpl<ClusterSize_t>();
+   GenerateColumnsImpl<Internal::RColumnIndex>();
 }
 
 void ROOT::Experimental::RVectorField::GenerateColumns(const RNTupleDescriptor &desc)
 {
-   GenerateColumnsImpl<ClusterSize_t>(desc);
+   GenerateColumnsImpl<Internal::RColumnIndex>(desc);
 }
 
 void ROOT::Experimental::RVectorField::RVectorDeleter::operator()(void *objPtr, bool dtorOnly)
 {
    auto vecPtr = static_cast<std::vector<char> *>(objPtr);
    if (fItemDeleter) {
+      R__ASSERT(fItemSize > 0);
       R__ASSERT((vecPtr->size() % fItemSize) == 0);
       auto nItems = vecPtr->size() / fItemSize;
       for (std::size_t i = 0; i < nItems; ++i) {
@@ -607,6 +615,7 @@ std::vector<ROOT::Experimental::RFieldBase::RValue>
 ROOT::Experimental::RVectorField::SplitValue(const RValue &value) const
 {
    auto vec = value.GetPtr<std::vector<char>>();
+   R__ASSERT(fItemSize > 0);
    R__ASSERT((vec->size() % fItemSize) == 0);
    auto nItems = vec->size() / fItemSize;
    std::vector<RValue> result;
@@ -648,8 +657,8 @@ void ROOT::Experimental::RField<std::vector<bool>>::ReadGlobalImpl(NTupleSize_t 
 {
    auto typedValue = static_cast<std::vector<bool> *>(to);
 
-   ClusterSize_t nItems;
-   RClusterIndex collectionStart;
+   NTupleSize_t nItems;
+   RNTupleLocalIndex collectionStart;
    fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &nItems);
 
    typedValue->resize(nItems);
@@ -663,20 +672,22 @@ void ROOT::Experimental::RField<std::vector<bool>>::ReadGlobalImpl(NTupleSize_t 
 const ROOT::Experimental::RFieldBase::RColumnRepresentations &
 ROOT::Experimental::RField<std::vector<bool>>::GetColumnRepresentations() const
 {
-   static RColumnRepresentations representations(
-      {{EColumnType::kSplitIndex64}, {EColumnType::kIndex64}, {EColumnType::kSplitIndex32}, {EColumnType::kIndex32}},
-      {});
+   static RColumnRepresentations representations({{ENTupleColumnType::kSplitIndex64},
+                                                  {ENTupleColumnType::kIndex64},
+                                                  {ENTupleColumnType::kSplitIndex32},
+                                                  {ENTupleColumnType::kIndex32}},
+                                                 {});
    return representations;
 }
 
 void ROOT::Experimental::RField<std::vector<bool>>::GenerateColumns()
 {
-   GenerateColumnsImpl<ClusterSize_t>();
+   GenerateColumnsImpl<Internal::RColumnIndex>();
 }
 
 void ROOT::Experimental::RField<std::vector<bool>>::GenerateColumns(const RNTupleDescriptor &desc)
 {
-   GenerateColumnsImpl<ClusterSize_t>(desc);
+   GenerateColumnsImpl<Internal::RColumnIndex>(desc);
 }
 
 std::vector<ROOT::Experimental::RFieldBase::RValue>
@@ -800,23 +811,23 @@ void ROOT::Experimental::RArrayAsRVecField::ReadGlobalImpl(ROOT::Experimental::N
    }
 }
 
-void ROOT::Experimental::RArrayAsRVecField::ReadInClusterImpl(ROOT::Experimental::RClusterIndex clusterIndex, void *to)
+void ROOT::Experimental::RArrayAsRVecField::ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to)
 {
    auto [beginPtr, _, __] = GetRVecDataMembers(to);
    auto rvecBeginPtr = reinterpret_cast<char *>(*beginPtr); // for pointer arithmetics
 
-   const auto &clusterId = clusterIndex.GetClusterId();
-   const auto &clusterIndexIndex = clusterIndex.GetIndex();
+   const auto &clusterId = localIndex.GetClusterId();
+   const auto &indexInCluster = localIndex.GetIndexInCluster();
 
    if (fSubFields[0]->IsSimple()) {
       GetPrincipalColumnOf(*fSubFields[0])
-         ->ReadV(RClusterIndex(clusterId, clusterIndexIndex * fArrayLength), fArrayLength, rvecBeginPtr);
+         ->ReadV(RNTupleLocalIndex(clusterId, indexInCluster * fArrayLength), fArrayLength, rvecBeginPtr);
       return;
    }
 
    // Read the new values into the collection elements
    for (std::size_t i = 0; i < fArrayLength; ++i) {
-      CallReadOn(*fSubFields[0], RClusterIndex(clusterId, clusterIndexIndex * fArrayLength + i),
+      CallReadOn(*fSubFields[0], RNTupleLocalIndex(clusterId, indexInCluster * fArrayLength + i),
                  rvecBeginPtr + (i * fItemSize));
    }
 }

@@ -8,6 +8,8 @@
 #include <zlib.h>
 #include "gmock/gmock.h"
 
+using ROOT::TestSupport::CheckDiagsRAII;
+
 namespace {
 
 // Reads an integer from a little-endian 4 byte buffer
@@ -54,13 +56,13 @@ TEST(RPageStorage, ReadSealedPages)
    auto columnId = source.GetSharedDescriptorGuard()->FindPhysicalColumnId(fieldId, 0, 0);
 
    // Check first cluster consisting of a single entry
-   RClusterIndex index(source.GetSharedDescriptorGuard()->FindClusterId(columnId, 0), 0);
+   RNTupleLocalIndex index(source.GetSharedDescriptorGuard()->FindClusterId(columnId, 0), 0);
    RPageStorage::RSealedPage sealedPage;
    source.LoadSealedPage(columnId, index, sealedPage);
    ASSERT_EQ(1U, sealedPage.GetNElements());
    ASSERT_EQ(4U, sealedPage.GetDataSize());
    ASSERT_EQ(12U, sealedPage.GetBufferSize());
-   auto buffer = std::make_unique<unsigned char[]>(sealedPage.GetBufferSize());
+   auto buffer = MakeUninitArray<unsigned char>(sealedPage.GetBufferSize());
    sealedPage.SetBuffer(buffer.get());
    source.LoadSealedPage(columnId, index, sealedPage);
    ASSERT_EQ(1U, sealedPage.GetNElements());
@@ -77,10 +79,10 @@ TEST(RPageStorage, ReadSealedPages)
    std::uint32_t firstElementInPage = 0;
    for (const auto &pi : pageRange.fPageInfos) {
       sealedPage.SetBuffer(nullptr);
-      source.LoadSealedPage(columnId, RClusterIndex(clusterId, firstElementInPage), sealedPage);
-      buffer = std::make_unique<unsigned char[]>(sealedPage.GetBufferSize());
+      source.LoadSealedPage(columnId, RNTupleLocalIndex(clusterId, firstElementInPage), sealedPage);
+      buffer = MakeUninitArray<unsigned char>(sealedPage.GetBufferSize());
       sealedPage.SetBuffer(buffer.get());
-      source.LoadSealedPage(columnId, RClusterIndex(clusterId, firstElementInPage), sealedPage);
+      source.LoadSealedPage(columnId, RNTupleLocalIndex(clusterId, firstElementInPage), sealedPage);
       ASSERT_GE(sealedPage.GetBufferSize(), 12U);
       ASSERT_GE(sealedPage.GetDataSize(), 4U);
       EXPECT_EQ(firstElementInPage, ReadRawInt(sealedPage.GetBuffer()));
@@ -131,24 +133,26 @@ TEST(RNTupleMerger, MergeSymmetric)
       }
 
       // Now Merge the inputs
-      RNTupleMerger merger;
       RNTupleMergeOptions opts;
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kFilter;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kUnion;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kStrict;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
    }
@@ -236,12 +240,12 @@ TEST(RNTupleMerger, MergeAsymmetric1)
 
       // Now Merge the inputs
       // We expect this to fail in Filter and Strict mode since the fields between the sources do NOT match
-      RNTupleMerger merger;
       RNTupleMergeOptions opts;
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kFilter;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_FALSE(res);
          if (res.GetError()) {
             EXPECT_THAT(res.GetError()->GetReport(), testing::HasSubstr("missing the following field"));
@@ -250,7 +254,8 @@ TEST(RNTupleMerger, MergeAsymmetric1)
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kStrict;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_FALSE(res);
          if (res.GetError()) {
             EXPECT_THAT(res.GetError()->GetReport(), testing::HasSubstr("missing the following field"));
@@ -259,7 +264,8 @@ TEST(RNTupleMerger, MergeAsymmetric1)
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kUnion;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
    }
@@ -306,12 +312,12 @@ TEST(RNTupleMerger, MergeAsymmetric2)
 
       // Now Merge the inputs
       // We expect this to fail in Filter and Strict mode since the fields between the sources do NOT match
-      RNTupleMerger merger;
       RNTupleMergeOptions opts;
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kFilter;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_FALSE(res);
          if (res.GetError()) {
             EXPECT_THAT(res.GetError()->GetReport(), testing::HasSubstr("missing the following field"));
@@ -320,7 +326,8 @@ TEST(RNTupleMerger, MergeAsymmetric2)
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kStrict;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_FALSE(res);
          if (res.GetError()) {
             EXPECT_THAT(res.GetError()->GetReport(), testing::HasSubstr("missing the following field"));
@@ -329,7 +336,8 @@ TEST(RNTupleMerger, MergeAsymmetric2)
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kUnion;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
    }
@@ -376,12 +384,12 @@ TEST(RNTupleMerger, MergeAsymmetric3)
 
       // Now Merge the inputs
       // We expect this to succeed except in all modes except Strict.
-      RNTupleMerger merger;
       RNTupleMergeOptions opts;
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kStrict;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_FALSE(res);
          if (res.GetError()) {
             EXPECT_THAT(res.GetError()->GetReport(), testing::HasSubstr("Source RNTuple has extra fields"));
@@ -390,13 +398,15 @@ TEST(RNTupleMerger, MergeAsymmetric3)
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kFilter;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
          opts.fMergingMode = ENTupleMergingMode::kUnion;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
    }
@@ -461,10 +471,10 @@ TEST(RNTupleMerger, MergeVector)
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), opts);
 
          // Now Merge the inputs
-         RNTupleMerger merger;
          RNTupleMergeOptions mopts;
          mopts.fMergingMode = mmode;
-         auto res = merger.Merge(sourcePtrs, *destination, mopts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, mopts);
          EXPECT_TRUE(bool(res));
       }
 
@@ -556,14 +566,14 @@ TEST(RNTupleMerger, MergeInconsistentTypes)
 
       // Create the output
       auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), RNTupleWriteOptions());
+      RNTupleMerger merger{std::move(destination)};
 
       // Now Merge the inputs
       // We expect this to fail since the fields between the sources do NOT match
       for (const auto mmode : {ENTupleMergingMode::kFilter, ENTupleMergingMode::kStrict, ENTupleMergingMode::kUnion}) {
-         RNTupleMerger merger;
          RNTupleMergeOptions opts;
          opts.fMergingMode = mmode;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_FALSE(res);
          if (res.GetError()) {
             EXPECT_THAT(res.GetError()->GetReport(), testing::HasSubstr("type incompatible"));
@@ -798,13 +808,13 @@ TEST(RNTupleMerger, MergeThroughTBufferMerger)
    EXPECT_EQ(reader->GetNEntries(), 10);
 }
 
-static bool VerifyPageCompression(const std::string_view fileName, int expectedComp)
+static bool VerifyPageCompression(const std::string_view fileName, std::uint32_t expectedComp)
 {
    // Check that the advertised compression is correct
    bool ok = true;
    {
       auto reader = RNTupleReader::Open("ntuple", fileName);
-      auto compSettings = reader->GetDescriptor().GetClusterDescriptor(0).GetColumnRange(0).fCompressionSettings;
+      auto compSettings = *reader->GetDescriptor().GetClusterDescriptor(0).GetColumnRange(0).fCompressionSettings;
       if (compSettings != expectedComp) {
          std::cerr << "Advertised compression is wrong: " << compSettings << " instead of " << expectedComp << "\n";
          ok = false;
@@ -819,12 +829,13 @@ static bool VerifyPageCompression(const std::string_view fileName, int expectedC
    const auto colElement = ROOT::Experimental::Internal::RColumnElementBase::Generate(columnDesc.GetType());
    ROOT::Experimental::Internal::RPageStorage::RSealedPage sealedPage;
    source->LoadSealedPage(0, {0, 0}, sealedPage);
-   auto buffer = std::make_unique<unsigned char[]>(sealedPage.GetBufferSize());
+   auto buffer = MakeUninitArray<unsigned char>(sealedPage.GetBufferSize());
    sealedPage.SetBuffer(buffer.get());
    source->LoadSealedPage(0, {0, 0}, sealedPage);
 
    // size_t uncompSize = sealedPage.GetNElements() * colElement->GetSize();
-   int compAlgo = R__getCompressionAlgorithm((const unsigned char *)sealedPage.GetBuffer(), sealedPage.GetDataSize());
+   std::uint32_t compAlgo =
+      R__getCompressionAlgorithm((const unsigned char *)sealedPage.GetBuffer(), sealedPage.GetDataSize());
    if (compAlgo == ROOT::RCompressionSetting::EAlgorithm::kUndefined)
       compAlgo = 0;
    if (compAlgo != (expectedComp / 100)) {
@@ -874,19 +885,30 @@ TEST(RNTupleMerger, ChangeCompression)
       auto destinationUncomp = std::make_unique<RPageSinkFile>("ntuple", fileGuardOutUncomp.GetPath(), writeOpts);
       writeOpts.SetEnablePageChecksums(false);
 
-      RNTupleMerger merger;
       auto opts = RNTupleMergeOptions{};
       opts.fCompressionSettings = kNewComp;
-      // This should fail because we specified a different compression than the sink
-      auto res = merger.Merge(sourcePtrs, *destinationDifferentComp, opts);
-      EXPECT_FALSE(bool(res));
-      res = merger.Merge(sourcePtrs, *destinationChecksum, opts);
-      EXPECT_TRUE(bool(res));
-      res = merger.Merge(sourcePtrs, *destinationNoChecksum, opts);
-      EXPECT_TRUE(bool(res));
-      opts.fCompressionSettings = 0;
-      res = merger.Merge(sourcePtrs, *destinationUncomp, opts);
-      EXPECT_TRUE(bool(res));
+      {
+         RNTupleMerger merger{std::move(destinationDifferentComp)};
+         // This should fail because we specified a different compression than the sink
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_FALSE(bool(res));
+      }
+      {
+         RNTupleMerger merger{std::move(destinationChecksum)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
+      {
+         RNTupleMerger merger{std::move(destinationNoChecksum)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
+      {
+         opts.fCompressionSettings = 0;
+         RNTupleMerger merger{std::move(destinationUncomp)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
    }
 
    // Check that compression is the right one
@@ -937,18 +959,29 @@ TEST(RNTupleMerger, ChangeCompressionMixed)
       auto destinationUncomp = std::make_unique<RPageSinkFile>("ntuple", fileGuardOutUncomp.GetPath(), writeOpts);
       writeOpts.SetEnablePageChecksums(false);
 
-      RNTupleMerger merger;
       auto opts = RNTupleMergeOptions{};
-      auto res = merger.Merge(sourcePtrs, *destinationChecksum, opts);
-      EXPECT_TRUE(bool(res));
-      res = merger.Merge(sourcePtrs, *destinationNoChecksum, opts);
-      EXPECT_TRUE(bool(res));
-      opts.fCompressionSettings = 101;
-      res = merger.Merge(sourcePtrs, *destinationDifferentComp, opts);
-      EXPECT_TRUE(bool(res));
-      opts.fCompressionSettings = 0;
-      res = merger.Merge(sourcePtrs, *destinationUncomp, opts);
-      EXPECT_TRUE(bool(res));
+      {
+         RNTupleMerger merger{std::move(destinationChecksum)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
+      {
+         RNTupleMerger merger{std::move(destinationNoChecksum)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
+      {
+         opts.fCompressionSettings = 101;
+         RNTupleMerger merger{std::move(destinationDifferentComp)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
+      {
+         opts.fCompressionSettings = 0;
+         RNTupleMerger merger{std::move(destinationUncomp)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
    }
 
    // Check that compression is the right one
@@ -1012,11 +1045,11 @@ TEST(RNTupleMerger, MergeLateModelExtension)
       auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), wopts);
 
       // Now Merge the inputs
-      RNTupleMerger merger;
       auto opts = RNTupleMergeOptions{};
       opts.fCompressionSettings = 0;
       opts.fMergingMode = ENTupleMergingMode::kUnion;
-      auto res = merger.Merge(sourcePtrs, *destination, opts);
+      RNTupleMerger merger{std::move(destination)};
+      auto res = merger.Merge(sourcePtrs, opts);
       EXPECT_TRUE(bool(res));
    }
 
@@ -1091,7 +1124,6 @@ TEST(RNTupleMerger, MergeCompression)
       }
 
       // Now Merge the inputs
-      RNTupleMerger merger;
       RNTupleMergeOptions opts;
       {
          auto wopts = RNTupleWriteOptions();
@@ -1099,7 +1131,8 @@ TEST(RNTupleMerger, MergeCompression)
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), wopts);
          opts.fMergingMode = ENTupleMergingMode::kUnion;
          opts.fCompressionSettings = kOutCompSettings;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
    }
@@ -1140,7 +1173,7 @@ TEST(RNTupleMerger, DifferentCompatibleRepresentations)
 
    {
       auto &fieldFooDbl = clonedModel->GetMutableField("foo");
-      fieldFooDbl.SetColumnRepresentatives({{EColumnType::kReal32}});
+      fieldFooDbl.SetColumnRepresentatives({{ENTupleColumnType::kReal32}});
       auto ntuple = RNTupleWriter::Recreate(std::move(clonedModel), "ntuple", fileGuard2.GetPath());
       auto e = ntuple->CreateEntry();
       auto pFoo2 = e->GetPtr<double>("foo");
@@ -1166,14 +1199,14 @@ TEST(RNTupleMerger, DifferentCompatibleRepresentations)
       auto sourcePtrs2 = sourcePtrs;
 
       // Now Merge the inputs. Do both with and without compression change
-      RNTupleMerger merger;
       {
          auto wopts = RNTupleWriteOptions();
          wopts.SetCompression(0);
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), wopts);
          auto opts = RNTupleMergeOptions();
          opts.fCompressionSettings = 0;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          // TODO(gparolini): we want to support this in the future
          EXPECT_FALSE(bool(res));
          if (res.GetError()) {
@@ -1183,7 +1216,8 @@ TEST(RNTupleMerger, DifferentCompatibleRepresentations)
       }
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard4.GetPath(), RNTupleWriteOptions());
-         auto res = merger.Merge(sourcePtrs, *destination);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs);
          // TODO(gparolini): we want to support this in the future
          EXPECT_FALSE(bool(res));
          if (res.GetError()) {
@@ -1202,7 +1236,7 @@ TEST(RNTupleMerger, MultipleRepresentations)
    {
       auto model = RNTupleModel::Create();
       auto fldPx = RFieldBase::Create("px", "float").Unwrap();
-      fldPx->SetColumnRepresentatives({{EColumnType::kReal32}, {EColumnType::kReal16}});
+      fldPx->SetColumnRepresentatives({{ENTupleColumnType::kReal32}, {ENTupleColumnType::kReal16}});
       model->AddField(std::move(fldPx));
       auto ptrPx = model->GetDefaultEntry().GetPtr<float>("px");
       auto writer = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard1.GetPath());
@@ -1229,12 +1263,12 @@ TEST(RNTupleMerger, MultipleRepresentations)
 
       auto sourcePtrs2 = sourcePtrs;
 
-      RNTupleMerger merger;
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard2.GetPath(), RNTupleWriteOptions());
          auto opts = RNTupleMergeOptions();
          opts.fCompressionSettings = 0;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          // TODO(gparolini): we want to support this in the future
          // XXX: this currently fails because of a mismatch in the number of columns of dst vs src.
          // Is this correct? Anyway the situation will likely change once we properly support different representation
@@ -1288,14 +1322,14 @@ TEST(RNTupleMerger, Double32)
       auto sourcePtrs2 = sourcePtrs;
 
       // Now Merge the inputs. Do both with and without compression change
-      RNTupleMerger merger;
       {
          auto wopts = RNTupleWriteOptions();
          wopts.SetCompression(0);
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard3.GetPath(), wopts);
          auto opts = RNTupleMergeOptions();
          opts.fCompressionSettings = 0;
-         auto res = merger.Merge(sourcePtrs, *destination, opts);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
       {
@@ -1313,7 +1347,8 @@ TEST(RNTupleMerger, Double32)
       }
       {
          auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard4.GetPath(), RNTupleWriteOptions());
-         auto res = merger.Merge(sourcePtrs, *destination);
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs);
          EXPECT_TRUE(bool(res));
       }
       {
@@ -1362,8 +1397,8 @@ TEST(RNTupleMerger, MergeProjectedFields)
 
       // Now Merge the inputs
       auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuard2.GetPath(), RNTupleWriteOptions());
-      RNTupleMerger merger;
-      auto res = merger.Merge(sourcePtrs, *destination);
+      RNTupleMerger merger{std::move(destination)};
+      auto res = merger.Merge(sourcePtrs);
       EXPECT_TRUE(bool(res));
    }
 
@@ -1441,7 +1476,7 @@ TEST_P(RNTupleMergerCheckEncoding, CorrectEncoding)
       fileMerger.AddFile(nt2.get());
       // If `useDefaultComp` is true, it's as if we were calling hadd without a -f* flag
       if (useDefaultComp)
-         fileMerger.SetMergeOptions(TString("default_compression"));
+         fileMerger.SetMergeOptions(TString("DefaultCompression"));
       fileMerger.Merge();
 
       EXPECT_TRUE(VerifyPageCompression(fileGuard3.GetPath(), expectedComp));
@@ -1479,3 +1514,92 @@ INSTANTIATE_TEST_SUITE_P(Seq, RNTupleMergerCheckEncoding,
                             ::testing::Values(0, 101, 207, 404, 505),
                             // use default compression
                             ::testing::Values(true, false)));
+
+TEST(RNTupleMerger, MergeAsymmetric1TFileMerger)
+{
+   // Exactly the same test as MergeAsymmetric1, but passing through TFileMerger.
+
+   // Write two test ntuples to be merged
+   FileRaii fileGuard1("test_ntuple_merge_in_1.root");
+   {
+      auto model = RNTupleModel::Create();
+      auto fieldFoo = model->MakeField<int>("foo");
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard1.GetPath());
+      for (size_t i = 0; i < 10; ++i) {
+         *fieldFoo = i * 123;
+         ntuple->Fill();
+      }
+   }
+
+   FileRaii fileGuard2("test_ntuple_merge_in_2.root");
+   {
+      auto model = RNTupleModel::Create();
+      auto fieldBar = model->MakeField<int>("bar");
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard2.GetPath());
+      for (size_t i = 0; i < 10; ++i) {
+         *fieldBar = i * 765;
+         ntuple->Fill();
+      }
+   }
+
+   // Now merge the inputs
+   FileRaii fileGuard3("test_ntuple_merge_out.root");
+   {
+      // Gather the input sources
+      std::vector<std::unique_ptr<RPageSource>> sources;
+      sources.push_back(RPageSource::Create("ntuple", fileGuard1.GetPath(), RNTupleReadOptions()));
+      sources.push_back(RPageSource::Create("ntuple", fileGuard2.GetPath(), RNTupleReadOptions()));
+      std::vector<RPageSource *> sourcePtrs;
+      for (const auto &s : sources) {
+         sourcePtrs.push_back(s.get());
+      }
+
+      // Now Merge the inputs
+      // We expect this to fail in Filter and Strict mode since the fields between the sources do NOT match
+      {
+         auto nt1 = std::unique_ptr<TFile>(TFile::Open(fileGuard1.GetPath().c_str()));
+         auto nt2 = std::unique_ptr<TFile>(TFile::Open(fileGuard2.GetPath().c_str()));
+         TFileMerger fileMerger(kFALSE, kFALSE);
+         fileMerger.OutputFile(fileGuard3.GetPath().c_str(), "RECREATE");
+         fileMerger.AddFile(nt1.get());
+         fileMerger.AddFile(nt2.get());
+         fileMerger.SetMergeOptions(TString("rntuple.MergingMode=Filter"));
+         CheckDiagsRAII diags;
+         diags.requiredDiag(kError, "TFileMerger::Merge", "error during merge", false);
+         diags.requiredDiag(kError, "RNTuple::Merge", "missing the following field", false);
+         diags.requiredDiag(kError, "TFileMerger::MergeRecursive", "Could NOT merge RNTuples!", false);
+         diags.optionalDiag(kWarning, "TFileMerger::MergeRecursive", "Merging RNTuples is experimental", false);
+         auto res = fileMerger.Merge();
+         EXPECT_FALSE(res);
+      }
+      {
+         auto nt1 = std::unique_ptr<TFile>(TFile::Open(fileGuard1.GetPath().c_str()));
+         auto nt2 = std::unique_ptr<TFile>(TFile::Open(fileGuard2.GetPath().c_str()));
+         TFileMerger fileMerger(kFALSE, kFALSE);
+         fileMerger.OutputFile(fileGuard3.GetPath().c_str(), "RECREATE");
+         fileMerger.AddFile(nt1.get());
+         fileMerger.AddFile(nt2.get());
+         fileMerger.SetMergeOptions(TString("rntuple.MergingMode=Strict"));
+         CheckDiagsRAII diags;
+         diags.requiredDiag(kError, "TFileMerger::Merge", "error during merge", false);
+         diags.requiredDiag(kError, "RNTuple::Merge", "missing the following field", false);
+         diags.requiredDiag(kError, "TFileMerger::MergeRecursive", "Could NOT merge RNTuples!", false);
+         diags.optionalDiag(kWarning, "TFileMerger::MergeRecursive", "Merging RNTuples is experimental", false);
+         auto res = fileMerger.Merge();
+         EXPECT_FALSE(res);
+      }
+      {
+         auto nt1 = std::unique_ptr<TFile>(TFile::Open(fileGuard1.GetPath().c_str()));
+         auto nt2 = std::unique_ptr<TFile>(TFile::Open(fileGuard2.GetPath().c_str()));
+         TFileMerger fileMerger(kFALSE, kFALSE);
+         fileMerger.OutputFile(fileGuard3.GetPath().c_str(), "RECREATE");
+         fileMerger.AddFile(nt1.get());
+         fileMerger.AddFile(nt2.get());
+         fileMerger.SetMergeOptions(TString("rntuple.MergingMode=Union"));
+         CheckDiagsRAII diags;
+         diags.optionalDiag(kWarning, "TFileMerger::MergeRecursive", "Merging RNTuples is experimental", false);
+         auto res = fileMerger.Merge();
+         EXPECT_TRUE(res);
+      }
+   }
+}

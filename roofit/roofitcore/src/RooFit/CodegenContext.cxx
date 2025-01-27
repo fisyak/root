@@ -149,7 +149,7 @@ void CodegenContext::addToCodeBody(std::string const &in, bool isScopeIndep /* =
 std::unique_ptr<CodegenContext::LoopScope> CodegenContext::beginLoop(RooAbsArg const *in)
 {
    pushScope();
-   unsigned loopLevel = _code.size() - 2; // substract global + function scope.
+   unsigned loopLevel = _code.size() - 2; // subtract global + function scope.
    std::string idx = "loopIdx" + std::to_string(loopLevel);
 
    std::vector<TNamed const *> vars;
@@ -328,6 +328,9 @@ CodegenContext::buildFunction(RooAbsArg const &arg, std::map<RooFit::Detail::Dat
 
    static int iCodegen = 0;
    auto funcName = "roo_codegen_" + std::to_string(iCodegen++);
+
+   // Make sure the codegen implementations are known to the interpreter
+   gInterpreter->Declare("#include <RooFit/CodegenImpl.h>\n");
 
    ctx.pushScope();
    std::string funcBody = ctx.getResult(arg);

@@ -2,6 +2,10 @@
 set(CMAKE_MODULE_PATH "")
 
 #--- Check if we need to build llvm and clang ------------------------------------------------------
+if (builtin_llvm AND NOT builtin_clang)
+  message(FATAL_ERROR "Cannot enable builtin LLVM, but provide external Clang")
+endif()
+
 if (NOT builtin_clang)
   message(WARNING "Due to ROOT-specific patches you need a special version of clang. You cannot use vanilla clang.")
 endif()
@@ -52,7 +56,7 @@ set(LLVM_FORCE_USE_OLD_TOOLCHAIN ON CACHE BOOL "")
 set(CMAKE_DISABLE_FIND_PACKAGE_CUDA ON)
 
 # will be set again in case NOT builtin_llvm
-set(LLVM_DIR "${CMAKE_BINARY_DIR}/interpreter/llvm-project/llvm")
+set(LLVM_DIR "${CMAKE_CURRENT_BINARY_DIR}/llvm-project/llvm")
 if (clad)
   set(CLING_BUILD_PLUGINS ON)
 endif()
@@ -218,6 +222,12 @@ if(builtin_llvm)
 
   set(LLVM_ENABLE_PROJECTS "clang" CACHE STRING "")
 
+  #---Reduce log level to suppress STATUS messages from LLVM
+  if(NOT DEFINED CMAKE_MESSAGE_LOG_LEVEL)
+    set(CMAKE_MESSAGE_LOG_LEVEL "NOTICE")
+    set(_unset_log_level TRUE)
+  endif()
+
   #---Add the sub-directory excluding all the targets from all-----------------------------------------
   if(CMAKE_GENERATOR MATCHES "Xcode")
     add_subdirectory(llvm-project/llvm)
@@ -225,8 +235,12 @@ if(builtin_llvm)
     add_subdirectory(llvm-project/llvm EXCLUDE_FROM_ALL)
   endif()
 
-  set(LLVM_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/interpreter/llvm-project/llvm/include
-    ${CMAKE_BINARY_DIR}/interpreter/llvm-project/llvm/include
+  if(DEFINED _unset_log_level)
+    unset(CMAKE_MESSAGE_LOG_LEVEL)
+  endif()
+
+  set(LLVM_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/llvm-project/llvm/include
+    ${CMAKE_CURRENT_BINARY_DIR}/llvm-project/llvm/include
     CACHE STRING "LLVM include directories."
     )
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/llvm-project/llvm/cmake/modules")
@@ -448,18 +462,17 @@ endif(builtin_llvm)
 
 if (builtin_clang)
   if (builtin_llvm)
-    # For builtin LLVM this is set in interpreter/llvm-project/llvm/CMakeLists.txt
-    set(Clang_DIR "${LLVM_BINARY_DIR}/tools/clang/")
+    set(CLANG_BINARY_DIR "${LLVM_BINARY_DIR}/tools/clang/")
   else()
-    set(Clang_DIR "${CMAKE_BINARY_DIR}/interpreter/llvm-project/clang/")
-    set(Clang_Config_ExtraPathHints "${Clang_DIR}cmake/modules/CMakeFiles")
+    set(CLANG_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/llvm-project/clang/")
   endif()
   set(CLANG_INCLUDE_DIRS
-    ${CMAKE_SOURCE_DIR}/interpreter/llvm-project/clang/include
-    ${Clang_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/llvm-project/clang/include
+    ${CLANG_BINARY_DIR}/include
     CACHE STRING "Clang include directories.")
+  set(CLANG_CMAKE_DIR "${CMAKE_BINARY_DIR}/lib/cmake/clang/")
 else()
-  set(Clang_DIR "${LLVM_BINARY_DIR}/lib/cmake/clang/")
+  set(CLANG_CMAKE_DIR "${LLVM_BINARY_DIR}/lib/cmake/clang/")
 endif()
 
 # Reset the compiler flags after compiling LLVM and Clang
@@ -507,7 +520,7 @@ if (builtin_cling)
   add_subdirectory(cling EXCLUDE_FROM_ALL)
   add_dependencies(CLING ${CLING_LIBRARIES})
 
-  set(CLING_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/interpreter/cling/include CACHE STRING "")
+  set(CLING_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/cling/include CACHE STRING "")
 
 
 

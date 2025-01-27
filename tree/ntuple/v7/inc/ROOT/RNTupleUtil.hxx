@@ -17,7 +17,6 @@
 #define ROOT7_RNTupleUtil
 
 #include <cstdint>
-
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -25,7 +24,6 @@
 
 #include <ROOT/RError.hxx>
 #include <ROOT/RLogger.hxx>
-#include <ROOT/RNTupleReadOptions.hxx>
 
 namespace ROOT {
 
@@ -50,15 +48,16 @@ struct RNTupleCardinality {
    ValueType fValue;
 };
 
+class RLogChannel;
+
 namespace Experimental {
 
-class RLogChannel;
 /// Log channel for RNTuple diagnostics.
-RLogChannel &NTupleLog();
+ROOT::RLogChannel &NTupleLog();
 
 // clang-format off
 /**
-\class ROOT::Experimental::EColumnType
+\class ROOT::Experimental::ENTupleColumnType
 \ingroup NTuple
 \brief The available trivial, native content types of a column
 
@@ -72,7 +71,7 @@ When changed, remember to update
   - RNTupleSerializer::[Des|S]erializeColumnType
 */
 // clang-format on
-enum class EColumnType {
+enum class ENTupleColumnType {
    kUnknown = 0,
    // type for root columns of (nested) collections; offsets are relative to the current cluster
    kIndex64,
@@ -117,106 +116,73 @@ enum ENTupleStructure : std::uint16_t { kInvalid, kLeaf, kCollection, kRecord, k
 /// Integer type long enough to hold the maximum number of entries in a column
 using NTupleSize_t = std::uint64_t;
 constexpr NTupleSize_t kInvalidNTupleIndex = std::uint64_t(-1);
-/// Wrap the integer in a struct in order to avoid template specialization clash with std::uint64_t
-struct RClusterSize {
-   using ValueType = std::uint64_t;
-
-   RClusterSize() : fValue(0) {}
-   explicit constexpr RClusterSize(ValueType value) : fValue(value) {}
-   RClusterSize &operator=(const ValueType value)
-   {
-      fValue = value;
-      return *this;
-   }
-   RClusterSize &operator+=(const ValueType value)
-   {
-      fValue += value;
-      return *this;
-   }
-   RClusterSize operator++(int)
-   {
-      auto result = *this;
-      fValue++;
-      return result;
-   }
-   operator ValueType() const { return fValue; }
-
-   ValueType fValue;
-};
-using ClusterSize_t = RClusterSize;
-constexpr ClusterSize_t kInvalidClusterIndex(std::uint64_t(-1));
-
-constexpr int kUnknownCompressionSettings = -1;
-
-/// Holds the index and the tag of a kSwitch column
-class RColumnSwitch {
-private:
-   ClusterSize_t fIndex;
-   std::uint32_t fTag = 0;
-
-public:
-   RColumnSwitch() = default;
-   RColumnSwitch(ClusterSize_t index, std::uint32_t tag) : fIndex(index), fTag(tag) {}
-   ClusterSize_t GetIndex() const { return fIndex; }
-   std::uint32_t GetTag() const { return fTag; }
-};
-
-/// Uniquely identifies a physical column within the scope of the current process, used to tag pages
-using ColumnId_t = std::int64_t;
-constexpr ColumnId_t kInvalidColumnId = -1;
 
 /// Distriniguishes elements of the same type within a descriptor, e.g. different fields
 using DescriptorId_t = std::uint64_t;
 constexpr DescriptorId_t kInvalidDescriptorId = std::uint64_t(-1);
 
 /// Addresses a column element or field item relative to a particular cluster, instead of a global NTupleSize_t index
-class RClusterIndex {
+class RNTupleLocalIndex {
 private:
    DescriptorId_t fClusterId = kInvalidDescriptorId;
-   ClusterSize_t::ValueType fIndex = kInvalidClusterIndex;
+   NTupleSize_t fIndexInCluster = kInvalidNTupleIndex;
 
 public:
-   RClusterIndex() = default;
-   RClusterIndex(const RClusterIndex &other) = default;
-   RClusterIndex &operator=(const RClusterIndex &other) = default;
-   constexpr RClusterIndex(DescriptorId_t clusterId, ClusterSize_t::ValueType index)
-      : fClusterId(clusterId), fIndex(index)
+   RNTupleLocalIndex() = default;
+   RNTupleLocalIndex(const RNTupleLocalIndex &other) = default;
+   RNTupleLocalIndex &operator=(const RNTupleLocalIndex &other) = default;
+   constexpr RNTupleLocalIndex(DescriptorId_t clusterId, NTupleSize_t indexInCluster)
+      : fClusterId(clusterId), fIndexInCluster(indexInCluster)
    {
    }
 
-   RClusterIndex operator+(ClusterSize_t::ValueType off) const { return RClusterIndex(fClusterId, fIndex + off); }
-   RClusterIndex operator-(ClusterSize_t::ValueType off) const { return RClusterIndex(fClusterId, fIndex - off); }
-   RClusterIndex operator++(int) /* postfix */
+   RNTupleLocalIndex operator+(NTupleSize_t off) const { return RNTupleLocalIndex(fClusterId, fIndexInCluster + off); }
+
+   RNTupleLocalIndex operator-(NTupleSize_t off) const { return RNTupleLocalIndex(fClusterId, fIndexInCluster - off); }
+
+   RNTupleLocalIndex operator++(int) /* postfix */
    {
       auto r = *this;
-      fIndex++;
+      fIndexInCluster++;
       return r;
    }
-   RClusterIndex &operator++() /* prefix */
+
+   RNTupleLocalIndex &operator++() /* prefix */
    {
-      ++fIndex;
+      ++fIndexInCluster;
       return *this;
    }
-   bool operator==(RClusterIndex other) const { return fClusterId == other.fClusterId && fIndex == other.fIndex; }
-   bool operator!=(RClusterIndex other) const { return !(*this == other); }
+
+   bool operator==(RNTupleLocalIndex other) const
+   {
+      return fClusterId == other.fClusterId && fIndexInCluster == other.fIndexInCluster;
+   }
+
+   bool operator!=(RNTupleLocalIndex other) const { return !(*this == other); }
 
    DescriptorId_t GetClusterId() const { return fClusterId; }
-   ClusterSize_t::ValueType GetIndex() const { return fIndex; }
+   NTupleSize_t GetIndexInCluster() const { return fIndexInCluster; }
 };
 
 /// RNTupleLocator payload that is common for object stores using 64bit location information.
 /// This might not contain the full location of the content. In particular, for page locators this information may be
 /// used in conjunction with the cluster and column ID.
-struct RNTupleLocatorObject64 {
+class RNTupleLocatorObject64 {
+private:
    std::uint64_t fLocation = 0;
+
+public:
+   RNTupleLocatorObject64() = default;
+   explicit RNTupleLocatorObject64(std::uint64_t location) : fLocation(location) {}
    bool operator==(const RNTupleLocatorObject64 &other) const { return fLocation == other.fLocation; }
+   std::uint64_t GetLocation() const { return fLocation; }
 };
 
 /// Generic information about the physical location of data. Values depend on the concrete storage type.  E.g.,
 /// for a local file `fPosition` might be a 64bit file offset. Referenced objects on storage can be compressed
 /// and therefore we need to store their actual size.
-/// TODO(jblomer): consider moving this to `RNTupleDescriptor`
-struct RNTupleLocator {
+class RNTupleLocator {
+public:
    /// Values for the _Type_ field in non-disk locators.  Serializable types must have the MSb == 0; see
    /// `doc/BinaryFormatSpecification.md` for details
    enum ELocatorType : std::uint8_t {
@@ -230,7 +196,8 @@ struct RNTupleLocator {
       kTypeUnknown,
    };
 
-   std::uint64_t fBytesOnStorage = 0;
+private:
+   std::uint64_t fNBytesOnStorage = 0;
    /// Simple on-disk locators consisting of a 64-bit offset use variant type `uint64_t`; extended locators have
    /// `fPosition.index()` > 0
    std::variant<std::uint64_t, RNTupleLocatorObject64> fPosition{};
@@ -240,27 +207,81 @@ struct RNTupleLocator {
    /// Reserved for use by concrete storage backends
    std::uint8_t fReserved = 0;
 
+public:
+   RNTupleLocator() = default;
+
    bool operator==(const RNTupleLocator &other) const
    {
-      return fPosition == other.fPosition && fBytesOnStorage == other.fBytesOnStorage && fType == other.fType;
+      return fPosition == other.fPosition && fNBytesOnStorage == other.fNBytesOnStorage && fType == other.fType;
    }
+
+   std::uint64_t GetNBytesOnStorage() const { return fNBytesOnStorage; }
+   ELocatorType GetType() const { return fType; }
+   std::uint8_t GetReserved() const { return fReserved; }
+
+   void SetNBytesOnStorage(std::uint64_t nBytesOnStorage) { fNBytesOnStorage = nBytesOnStorage; }
+   void SetType(ELocatorType type) { fType = type; }
+   void SetReserved(std::uint8_t reserved) { fReserved = reserved; }
+
    template <typename T>
-   const T &GetPosition() const
+   T GetPosition() const
    {
       return std::get<T>(fPosition);
    }
-};
 
-/// Used to specify the underlying RNTuples in RNTupleProcessor
-struct RNTupleOpenSpec {
-   std::string fNTupleName;
-   std::string fStorage;
-   RNTupleReadOptions fOptions;
-
-   RNTupleOpenSpec(std::string_view n, std::string_view s) : fNTupleName(n), fStorage(s) {}
+   template <typename T>
+   void SetPosition(T position)
+   {
+      fPosition = position;
+   }
 };
 
 namespace Internal {
+
+/// The in-memory representation of a 32bit or 64bit on-disk index column. Wraps the integer in a
+/// named type so that templates can distinguish between integer data columns and index columns.
+class RColumnIndex {
+public:
+   using ValueType = std::uint64_t;
+
+private:
+   ValueType fValue = 0;
+
+public:
+   RColumnIndex() = default;
+   explicit constexpr RColumnIndex(ValueType value) : fValue(value) {}
+   RColumnIndex &operator=(const ValueType value)
+   {
+      fValue = value;
+      return *this;
+   }
+   RColumnIndex &operator+=(const ValueType value)
+   {
+      fValue += value;
+      return *this;
+   }
+   RColumnIndex operator++(int)
+   {
+      auto result = *this;
+      fValue++;
+      return result;
+   }
+   operator ValueType() const { return fValue; }
+};
+
+/// Holds the index and the tag of a kSwitch column
+class RColumnSwitch {
+private:
+   NTupleSize_t fIndex;
+   std::uint32_t fTag = 0;
+
+public:
+   RColumnSwitch() = default;
+   RColumnSwitch(NTupleSize_t index, std::uint32_t tag) : fIndex(index), fTag(tag) {}
+   NTupleSize_t GetIndex() const { return fIndex; }
+   std::uint32_t GetTag() const { return fTag; }
+};
+
 template <typename T>
 auto MakeAliasedSharedPtr(T *rawPtr)
 {
@@ -278,8 +299,8 @@ std::unique_ptr<T[]> MakeUninitArray(std::size_t size)
    return std::unique_ptr<T[]>(new T[size]);
 }
 
-inline constexpr EColumnType kTestFutureType =
-   static_cast<EColumnType>(std::numeric_limits<std::underlying_type_t<EColumnType>>::max() - 1);
+inline constexpr ENTupleColumnType kTestFutureType =
+   static_cast<ENTupleColumnType>(std::numeric_limits<std::underlying_type_t<ENTupleColumnType>>::max() - 1);
 
 inline constexpr ENTupleStructure kTestFutureFieldStructure =
    static_cast<ENTupleStructure>(std::numeric_limits<std::underlying_type_t<ENTupleStructure>>::max() - 1);
@@ -290,15 +311,11 @@ static_assert(kTestLocatorType < RNTupleLocator::ELocatorType::kLastSerializable
 /// Check whether a given string is a valid name according to the RNTuple specification
 RResult<void> EnsureValidNameForRNTuple(std::string_view name, std::string_view where);
 
-/// Helper for the Python interface to perform the assignment to the pointee of a shared_ptr.
-template <typename T, typename U>
-void AssignValueToPointee(T &&value, std::shared_ptr<U> &ptr)
-{
-   static_assert(std::is_convertible_v<T, U>, "Cannot convert type of input argument to type of the pointee.");
-   *ptr = std::forward<T>(value);
-}
-
 } // namespace Internal
+
+// TODO(jblomer): remove before branching ROOT v6.36
+using EColumnType [[deprecated("ROOT::Experimental::EColumnType moved to ROOT::Experimental::ENTupleColumnType")]] =
+   ENTupleColumnType;
 
 } // namespace Experimental
 } // namespace ROOT

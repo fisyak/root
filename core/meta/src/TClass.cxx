@@ -1719,6 +1719,24 @@ void TClass::Init(const char *name, Version_t cversion,
       // std::pairs have implicit conversions
       GetSchemaRules(kTRUE);
    }
+   for (auto ruletype : {ROOT::TSchemaRule::kReadRule, ROOT::TSchemaRule::kReadRawRule}) {
+      auto &registry = GetReadRulesRegistry(ruletype);
+      auto rulesiter = registry.find(GetName());
+      if (rulesiter != registry.end()) {
+         auto rset = GetSchemaRules(kTRUE);
+         for (const auto &helper : rulesiter->second) {
+            auto rule = new ROOT::TSchemaRule(ruletype, GetName(), helper);
+            TString errmsg;
+            if (!rset->AddRule(rule, ROOT::Detail::TSchemaRuleSet::kCheckAll, &errmsg)) {
+               Warning(
+                  "Init",
+                  "The rule for class: \"%s\": version, \"%s\" and data members: \"%s\" has been skipped because %s.",
+                  GetName(), helper.fVersion.c_str(), helper.fTarget.c_str(), errmsg.Data());
+               delete rule;
+            }
+         }
+      }
+   }
 
    ResetBit(kLoading);
 }
@@ -1993,6 +2011,20 @@ void TClass::AdoptSchemaRules( ROOT::Detail::TSchemaRuleSet *rules )
    delete fSchemaRules;
    fSchemaRules = rules;
    fSchemaRules->SetClass( this );
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Return the registry for the unassigned read rules.
+
+TClass::SchemaHelperMap_t &TClass::GetReadRulesRegistry(ROOT::TSchemaRule::RuleType_t type)
+{
+   if (type == ROOT::TSchemaRule::kReadRule) {
+      static SchemaHelperMap_t gReadRulesRegistry;
+      return gReadRulesRegistry;
+   } else {
+      static SchemaHelperMap_t gReadRawRulesRegistry;
+      return gReadRawRulesRegistry;
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3557,7 +3589,7 @@ Longptr_t TClass::GetDataMemberOffset(const char *name) const
          return info->GetOffset(name);
       }
    }
-   return 0;
+   return TVirtualStreamerInfo::kMissing;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3593,23 +3625,19 @@ TRealData* TClass::GetRealData(const char* name) const
 
    // Try ignoring the array dimensions.
    std::string::size_type firstBracket = givenName.find_first_of("[");
-   if (firstBracket != std::string::npos) {
-      // -- We are looking for an array data member.
-      std::string nameNoDim(givenName.substr(0, firstBracket));
-      TObjLink* lnk = fRealData->FirstLink();
-      while (lnk) {
-         TObject* obj = lnk->GetObject();
-         std::string objName(obj->GetName());
-         std::string::size_type pos = objName.find_first_of("[");
-         // Only match arrays to arrays for now.
-         if (pos != std::string::npos) {
-            objName.erase(pos);
-            if (objName == nameNoDim) {
-               return static_cast<TRealData*>(obj);
-            }
-         }
-         lnk = lnk->Next();
+   std::string nameNoDim(givenName.substr(0, firstBracket));
+   TObjLink *lnk = fRealData->FirstLink();
+   while (lnk) {
+      TObject *obj = lnk->GetObject();
+      std::string objName(obj->GetName());
+      std::string::size_type pos = objName.find_first_of("[");
+      if (pos != std::string::npos) {
+         objName.erase(pos);
       }
+      if (objName == nameNoDim) {
+         return static_cast<TRealData *>(obj);
+      }
+      lnk = lnk->Next();
    }
 
    // Now try it as a pointer.
@@ -5014,8 +5042,8 @@ const void *TClass::DynamicCast(const TClass *cl, const void *obj, Bool_t up)
 /// If quiet is true, do not issue a message via Error in case
 /// of problems, just return `nullptr`.
 ///
-/// This method is also used by the I/O subsystem to allocate the right amount 
-/// of memory for the objects. If a default constructor is not defined for a 
+/// This method is also used by the I/O subsystem to allocate the right amount
+/// of memory for the objects. If a default constructor is not defined for a
 /// certain class, some options are available.
 /// The simplest is to define the default I/O constructor, for example
 /// ~~~{.cpp}
@@ -5032,7 +5060,7 @@ const void *TClass::DynamicCast(const TClass *cl, const void *obj, Bool_t up)
 /// ~~~ {.cpp}
 ///    #pragma link C++ ioctortype UserClass;
 /// ~~~
-/// `TClass::New` will then look for a constructor (for a class `MyClass` in the 
+/// `TClass::New` will then look for a constructor (for a class `MyClass` in the
 /// following example) in the following order, constructing the object using the
 /// first one in the list that exists and is declared public:
 /// ~~~ {.cpp}
@@ -6892,10 +6920,17 @@ void TClass::StreamerTObject(const TClass* pThis, void *object, TBuffer &b, cons
 ////////////////////////////////////////////////////////////////////////////////
 /// Case of TObjects when fIsOffsetStreamerSet is known to have been set.
 
-void TClass::StreamerTObjectInitialized(const TClass* pThis, void *object, TBuffer &b, const TClass * /* onfile_class */)
+void TClass::StreamerTObjectInitialized(const TClass *pThis, void *object, TBuffer &b, const TClass *onfile_class)
 {
-   TObject *tobj = (TObject*)((Longptr_t)object + pThis->fOffsetStreamer);
-   tobj->Streamer(b);
+   if (R__likely(onfile_class == nullptr || pThis == onfile_class)) {
+      TObject *tobj = (TObject *)((Longptr_t)object + pThis->fOffsetStreamer);
+      tobj->Streamer(b);
+   } else {
+      // This is the case where we are reading an object of a derived class
+      // but the class is not the same as the one we are streaming.
+      // We need to call the Streamer of the base class.
+      StreamerTObjectEmulated(pThis, object, b, onfile_class);
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7371,6 +7406,40 @@ TVirtualStreamerInfo *TClass::FindConversionStreamerInfo( const TClass* cl, UInt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Register a set of read rules for a target class.
+///
+/// Rules will end up here if they are created in a dictionary file that does not
+/// contain the dictionary for the target class.
+
+void TClass::RegisterReadRules(ROOT::TSchemaRule::RuleType_t type, const char *classname,
+                               std::vector<::ROOT::Internal::TSchemaHelper> &&rules)
+{
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
+
+   auto cl = TClass::GetClass(classname, false, false);
+   if (cl) {
+      auto rset = cl->GetSchemaRules(kTRUE);
+      for (const auto &it : rules) {
+         auto rule = new ROOT::TSchemaRule(type, cl->GetName(), it);
+         TString errmsg;
+         if (!rset->AddRule(rule, ROOT::Detail::TSchemaRuleSet::kCheckAll, &errmsg)) {
+            ::Warning(
+               "TGenericClassInfo",
+               "The rule for class: \"%s\": version, \"%s\" and data members: \"%s\" has been skipped because %s.",
+               cl->GetName(), it.fVersion.c_str(), it.fTarget.c_str(), errmsg.Data());
+            delete rule;
+         }
+      }
+   } else {
+      auto &registry = GetReadRulesRegistry(type);
+      auto ans = registry.try_emplace(classname, std::move(rules));
+      if (!ans.second) {
+         ans.first->second.insert(ans.first->second.end(), rules.begin(), rules.end());
+      }
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Register the StreamerInfo in the given slot, change the State of the
 /// TClass as appropriate.
 
@@ -7403,7 +7472,7 @@ void TClass::RemoveStreamerInfo(Int_t slot)
    if (fStreamerInfo->GetSize() >= slot) {
       R__LOCKGUARD(gInterpreterMutex);
       TVirtualStreamerInfo *info = (TVirtualStreamerInfo*)fStreamerInfo->At(slot);
-      fStreamerInfo->RemoveAt(fClassVersion);
+      fStreamerInfo->RemoveAt(slot);
       if (fLastReadInfo.load() == info)
          fLastReadInfo = nullptr;
       if (fCurrentInfo.load() == info)

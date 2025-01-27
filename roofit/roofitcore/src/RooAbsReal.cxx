@@ -379,7 +379,7 @@ Int_t RooAbsReal::getAnalyticalIntegral(RooArgSet& /*integSet*/, RooArgSet& /*an
 
 double RooAbsReal::analyticalIntegralWN(Int_t code, const RooArgSet* normSet, const char* rangeName) const
 {
-//   cout << "RooAbsReal::analyticalIntegralWN(" << GetName() << ") code = " << code << " normSet = " << (normSet?*normSet:RooArgSet()) << std::endl ;
+//   std::cout << "RooAbsReal::analyticalIntegralWN(" << GetName() << ") code = " << code << " normSet = " << (normSet?*normSet:RooArgSet()) << std::endl ;
   if (code==0) return getVal(normSet) ;
   return analyticalIntegral(code,rangeName) ;
 }
@@ -2269,7 +2269,7 @@ RooPlot* RooAbsReal::plotAsymOn(RooPlot *frame, const RooAbsCategoryLValue& asym
   }
 
 
-  // Take out data-projected dependens from projectedVars
+  // Take out data-projected dependents from projectedVars
   RooArgSet* projDataNeededVars = nullptr ;
   if (o.projData) {
     projDataNeededVars = projectedVars.selectCommon(projDataVars);

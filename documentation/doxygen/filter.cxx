@@ -89,7 +89,9 @@
 #include <stdarg.h>
 #include <memory>
 
-using std::string, std::ios_base, std::unique_ptr;
+using std::string;
+using std::ios_base;
+using std::unique_ptr;
 
 // Auxiliary functions
 void   FilterClass();
@@ -199,7 +201,6 @@ void FilterPythonBox()
                                     "<b>Python interface</b></summary>\n"
                                     "<div class=\"pyrootbox\">\n"
                                     "\\endhtmlonly\n"
-                                    "\\anchor python\n"
                                     "\\ingroup Pythonizations", class_name.c_str());
       }
       if (gLineString.find("\\endpythondoc") != string::npos)

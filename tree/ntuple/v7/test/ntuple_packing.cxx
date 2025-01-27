@@ -21,18 +21,18 @@
 #endif
 #endif
 
-template <typename PodT, typename NarrowT, EColumnType ColumnT>
+template <typename PodT, typename NarrowT, ENTupleColumnType ColumnT>
 struct Helper {
    using Pod_t = PodT;
    using Narrow_t = NarrowT;
-   static constexpr EColumnType kColumnType = ColumnT;
+   static constexpr ENTupleColumnType kColumnType = ColumnT;
 };
 
-template <typename NarrowT, EColumnType ColumnT>
-struct Helper<ClusterSize_t, NarrowT, ColumnT> {
+template <typename NarrowT, ENTupleColumnType ColumnT>
+struct Helper<RColumnIndex, NarrowT, ColumnT> {
    using Pod_t = std::uint64_t;
    using Narrow_t = NarrowT;
-   static constexpr EColumnType kColumnType = ColumnT;
+   static constexpr ENTupleColumnType kColumnType = ColumnT;
 };
 
 template <typename HelperT>
@@ -53,25 +53,25 @@ public:
    using Helper_t = HelperT;
 };
 
-using PackingRealTypes =
-   ::testing::Types<Helper<double, double, EColumnType::kSplitReal64>, Helper<float, float, EColumnType::kSplitReal32>>;
+using PackingRealTypes = ::testing::Types<Helper<double, double, ENTupleColumnType::kSplitReal64>,
+                                          Helper<float, float, ENTupleColumnType::kSplitReal32>>;
 TYPED_TEST_SUITE(PackingReal, PackingRealTypes);
 
-using PackingIntTypes = ::testing::Types<Helper<std::int64_t, std::int64_t, EColumnType::kSplitInt64>,
-                                         Helper<std::uint64_t, std::uint64_t, EColumnType::kSplitUInt64>,
-                                         Helper<std::int32_t, std::int32_t, EColumnType::kSplitInt32>,
-                                         Helper<std::uint32_t, std::uint32_t, EColumnType::kSplitUInt32>,
-                                         Helper<std::int16_t, std::int16_t, EColumnType::kSplitInt16>,
-                                         Helper<std::uint16_t, std::uint16_t, EColumnType::kSplitUInt16>>;
+using PackingIntTypes = ::testing::Types<Helper<std::int64_t, std::int64_t, ENTupleColumnType::kSplitInt64>,
+                                         Helper<std::uint64_t, std::uint64_t, ENTupleColumnType::kSplitUInt64>,
+                                         Helper<std::int32_t, std::int32_t, ENTupleColumnType::kSplitInt32>,
+                                         Helper<std::uint32_t, std::uint32_t, ENTupleColumnType::kSplitUInt32>,
+                                         Helper<std::int16_t, std::int16_t, ENTupleColumnType::kSplitInt16>,
+                                         Helper<std::uint16_t, std::uint16_t, ENTupleColumnType::kSplitUInt16>>;
 TYPED_TEST_SUITE(PackingInt, PackingIntTypes);
 
-using PackingIndexTypes = ::testing::Types<Helper<ClusterSize_t, std::uint32_t, EColumnType::kSplitIndex32>,
-                                           Helper<ClusterSize_t, std::uint64_t, EColumnType::kSplitIndex64>>;
+using PackingIndexTypes = ::testing::Types<Helper<RColumnIndex, std::uint32_t, ENTupleColumnType::kSplitIndex32>,
+                                           Helper<RColumnIndex, std::uint64_t, ENTupleColumnType::kSplitIndex64>>;
 TYPED_TEST_SUITE(PackingIndex, PackingIndexTypes);
 
 TEST(Packing, Bitfield)
 {
-   auto element = RColumnElementBase::Generate<bool>(EColumnType::kBit);
+   auto element = RColumnElementBase::Generate<bool>(ENTupleColumnType::kBit);
    element->Pack(nullptr, nullptr, 0);
    element->Unpack(nullptr, nullptr, 0);
 
@@ -104,8 +104,8 @@ TEST(Packing, Bitfield)
 
 TEST(Packing, HalfPrecisionFloat)
 {
-   auto element32_16 = RColumnElementBase::Generate<float>(EColumnType::kReal16);
-   auto element64_16 = RColumnElementBase::Generate<double>(EColumnType::kReal16);
+   auto element32_16 = RColumnElementBase::Generate<float>(ENTupleColumnType::kReal16);
+   auto element64_16 = RColumnElementBase::Generate<double>(ENTupleColumnType::kReal16);
    element32_16->Pack(nullptr, nullptr, 0);
    element32_16->Unpack(nullptr, nullptr, 0);
    element64_16->Pack(nullptr, nullptr, 0);
@@ -154,11 +154,11 @@ TEST(Packing, HalfPrecisionFloat)
 
 TEST(Packing, RColumnSwitch)
 {
-   auto element = RColumnElementBase::Generate<RColumnSwitch>(EColumnType::kSwitch);
+   auto element = RColumnElementBase::Generate<RColumnSwitch>(ENTupleColumnType::kSwitch);
    element->Pack(nullptr, nullptr, 0);
    element->Unpack(nullptr, nullptr, 0);
 
-   RColumnSwitch s1(ClusterSize_t{0xaa}, 0x55);
+   RColumnSwitch s1(RColumnIndex{0xaa}, 0x55);
    unsigned char out[12];
    element->Pack(out, &s1, 1);
    RColumnSwitch s2;
@@ -224,7 +224,7 @@ TYPED_TEST(PackingIndex, SplitIndex)
    using Pod_t = typename TestFixture::Helper_t::Pod_t;
    using Narrow_t = typename TestFixture::Helper_t::Narrow_t;
 
-   auto element = RColumnElementBase::Generate<ClusterSize_t>(TestFixture::Helper_t::kColumnType);
+   auto element = RColumnElementBase::Generate<RColumnIndex>(TestFixture::Helper_t::kColumnType);
    element->Pack(nullptr, nullptr, 0);
    element->Unpack(nullptr, nullptr, 0);
 
@@ -238,7 +238,7 @@ TYPED_TEST(PackingIndex, SplitIndex)
    EXPECT_EQ(mem, cmp);
 }
 
-template <typename PodT, EColumnType ColumnT>
+template <typename PodT, ENTupleColumnType ColumnT>
 static void AddField(RNTupleModel &model, const std::string &fieldName)
 {
    auto fld = std::make_unique<RField<PodT>>(fieldName);
@@ -249,7 +249,7 @@ static void AddField(RNTupleModel &model, const std::string &fieldName)
 static void AddReal32TruncField(RNTupleModel &model, const std::string &fieldName, std::size_t nBits)
 {
    auto fld = std::make_unique<RField<float>>(fieldName);
-   fld->SetColumnRepresentatives({{EColumnType::kReal32Trunc}});
+   fld->SetColumnRepresentatives({{ENTupleColumnType::kReal32Trunc}});
    fld->SetTruncated(nBits);
    model.AddField(std::move(fld));
 }
@@ -258,7 +258,7 @@ static void
 AddReal32QuantField(RNTupleModel &model, const std::string &fieldName, std::size_t nBits, double min, double max)
 {
    auto fld = std::make_unique<RField<float>>(fieldName);
-   fld->SetColumnRepresentatives({{EColumnType::kReal32Quant}});
+   fld->SetColumnRepresentatives({{ENTupleColumnType::kReal32Quant}});
    fld->SetQuantized(min, max, nBits);
    model.AddField(std::move(fld));
 }
@@ -266,7 +266,7 @@ AddReal32QuantField(RNTupleModel &model, const std::string &fieldName, std::size
 namespace {
 
 // Test writing index32/64 columns
-class RFieldTestIndexColumn final : public ROOT::Experimental::RSimpleField<ClusterSize_t> {
+class RFieldTestIndexColumn final : public ROOT::Experimental::RSimpleField<RColumnIndex> {
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final
    {
@@ -274,12 +274,16 @@ protected:
    }
    const RColumnRepresentations &GetColumnRepresentations() const final
    {
-      static RColumnRepresentations representations({{EColumnType::kSplitIndex64}, {EColumnType::kSplitIndex32}}, {});
+      static RColumnRepresentations representations(
+         {{ENTupleColumnType::kSplitIndex64}, {ENTupleColumnType::kSplitIndex32}}, {});
       return representations;
    }
 
 public:
-   explicit RFieldTestIndexColumn(std::string_view name) : RSimpleField(name, "ROOT::Experimental::RClusterSize") {}
+   explicit RFieldTestIndexColumn(std::string_view name)
+      : RSimpleField(name, "ROOT::Experimental::Internal::RColumnIndex")
+   {
+   }
    RFieldTestIndexColumn(RFieldTestIndexColumn &&other) = default;
    RFieldTestIndexColumn &operator=(RFieldTestIndexColumn &&other) = default;
    ~RFieldTestIndexColumn() override = default;
@@ -295,22 +299,22 @@ TEST(Packing, OnDiskEncoding)
 
    auto model = RNTupleModel::Create();
 
-   AddField<std::int16_t, EColumnType::kSplitInt16>(*model, "int16");
-   AddField<std::int32_t, EColumnType::kSplitInt32>(*model, "int32");
-   AddField<std::int64_t, EColumnType::kSplitInt64>(*model, "int64");
-   AddField<std::uint16_t, EColumnType::kSplitUInt16>(*model, "uint16");
-   AddField<std::uint32_t, EColumnType::kSplitUInt32>(*model, "uint32");
-   AddField<std::uint64_t, EColumnType::kSplitUInt64>(*model, "uint64");
-   AddField<float, EColumnType::kSplitReal32>(*model, "float");
-   AddField<float, EColumnType::kReal16>(*model, "float16");
-   AddField<double, EColumnType::kSplitReal64>(*model, "double");
+   AddField<std::int16_t, ENTupleColumnType::kSplitInt16>(*model, "int16");
+   AddField<std::int32_t, ENTupleColumnType::kSplitInt32>(*model, "int32");
+   AddField<std::int64_t, ENTupleColumnType::kSplitInt64>(*model, "int64");
+   AddField<std::uint16_t, ENTupleColumnType::kSplitUInt16>(*model, "uint16");
+   AddField<std::uint32_t, ENTupleColumnType::kSplitUInt32>(*model, "uint32");
+   AddField<std::uint64_t, ENTupleColumnType::kSplitUInt64>(*model, "uint64");
+   AddField<float, ENTupleColumnType::kSplitReal32>(*model, "float");
+   AddField<float, ENTupleColumnType::kReal16>(*model, "float16");
+   AddField<double, ENTupleColumnType::kSplitReal64>(*model, "double");
    AddReal32TruncField(*model, "float32Trunc", 11);
    AddReal32QuantField(*model, "float32Quant", 7, 0.0, 1.0);
    auto fldIdx32 = std::make_unique<RFieldTestIndexColumn>("index32");
-   fldIdx32->SetColumnRepresentatives({{EColumnType::kSplitIndex32}});
+   fldIdx32->SetColumnRepresentatives({{ENTupleColumnType::kSplitIndex32}});
    model->AddField(std::move(fldIdx32));
    auto fldIdx64 = std::make_unique<RFieldTestIndexColumn>("index64");
-   fldIdx64->SetColumnRepresentatives({{EColumnType::kSplitIndex64}});
+   fldIdx64->SetColumnRepresentatives({{ENTupleColumnType::kSplitIndex64}});
    model->AddField(std::move(fldIdx64));
    auto fldStr = std::make_unique<RField<std::string>>("str");
    model->AddField(std::move(fldStr));
@@ -329,8 +333,8 @@ TEST(Packing, OnDiskEncoding)
       *e->GetPtr<float>("float") = std::nextafterf(1.f, 2.f);   // 0 01111111 00000000000000000000001 == 0x3f800001
       *e->GetPtr<float>("float16") = std::nextafterf(1.f, 2.f); // 0 01111111 00000000000000000000001 == 0x3f800001
       *e->GetPtr<double>("double") = std::nextafter(1., 2.);    // 0x3ff0 0000 0000 0001
-      *e->GetPtr<ClusterSize_t>("index32") = 39916801;          // 0x0261 1501
-      *e->GetPtr<ClusterSize_t>("index64") = 0x0706050403020100L;
+      *e->GetPtr<RColumnIndex>("index32") = 39916801;           // 0x0261 1501
+      *e->GetPtr<RColumnIndex>("index64") = 0x0706050403020100L;
       *e->GetPtr<float>("float32Trunc") = -3.75f; // 1 10000000 11100000000000000000000 == 0xC0700000
       *e->GetPtr<float>("float32Quant") = 0.69f;  // quantized to 88 == 0b1011000
       e->GetPtr<std::string>("str")->assign("abc");
@@ -346,8 +350,8 @@ TEST(Packing, OnDiskEncoding)
       *e->GetPtr<float>("float") = std::nextafterf(1.f, 0.f);     // 0 01111110 11111111111111111111111 = 0x3f7fffff
       *e->GetPtr<float>("float16") = std::nextafterf(0.1f, 0.2f); // 0 01111011 10011001100110011001110 = 0x3dccccce
       *e->GetPtr<double>("double") = std::numeric_limits<double>::max(); // 0x7fef ffff ffff ffff
-      *e->GetPtr<ClusterSize_t>("index32") = 39916808;                   // d(previous) == 7
-      *e->GetPtr<ClusterSize_t>("index64") = 0x070605040302010DL;        // d(previous) == 13
+      *e->GetPtr<RColumnIndex>("index32") = 39916808;                    // d(previous) == 7
+      *e->GetPtr<RColumnIndex>("index64") = 0x070605040302010DL;         // d(previous) == 13
       *e->GetPtr<float>("float32Trunc") = 1.875f; // 0 01111111 11100000000000000000000 == 0x3ff00000
       *e->GetPtr<float>("float32Quant") = 0.875f; // quantized to 111: 0b1101111
       e->GetPtr<std::string>("str")->assign("de");
@@ -366,60 +370,60 @@ TEST(Packing, OnDiskEncoding)
       return descGuard->FindPhysicalColumnId(descGuard->FindFieldId(fieldName), 0, 0);
    };
 
-   source->LoadSealedPage(fnGetColumnId("int16"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("int16"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expInt16[] = {0x02, 0x05, 0x00, 0x00};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expInt16, sizeof(expInt16)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("int32"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("int32"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expInt32[] = {0x06, 0x0d, 0x04, 0x0c, 0x02, 0x0a, 0x00, 0x08};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expInt32, sizeof(expInt32)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("int64"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("int64"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expInt64[] = {0x0e, 0x1d, 0x0c, 0x1c, 0x0a, 0x1a, 0x08, 0x18,
                                0x06, 0x16, 0x04, 0x14, 0x02, 0x12, 0x00, 0x10};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expInt64, sizeof(expInt64)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("uint16"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("uint16"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expUInt16[] = {0x01, 0x02, 0x00, 0x00};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expUInt16, sizeof(expUInt16)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("uint32"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("uint32"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expUInt32[] = {0x03, 0x07, 0x02, 0x06, 0x01, 0x05, 0x00, 0x04};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expUInt32, sizeof(expUInt32)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("uint64"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("uint64"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expUInt64[] = {0x07, 0x0f, 0x06, 0x0e, 0x05, 0x0d, 0x04, 0x0c,
                                 0x03, 0x0b, 0x02, 0x0a, 0x01, 0x09, 0x00, 0x08};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expUInt64, sizeof(expUInt64)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("float"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("float"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expFloat[] = {0x01, 0xff, 0x00, 0xff, 0x80, 0x7f, 0x3f, 0x3f};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expFloat, sizeof(expFloat)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("float16"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("float16"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expFloat16[] = {0x00, 0x3c, 0x66, 0x2e};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expFloat16, sizeof(expFloat16)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("double"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("double"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expDouble[] = {0x01, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff,
                                 0x00, 0xff, 0x00, 0xff, 0xf0, 0xef, 0x3f, 0x7f};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expDouble, sizeof(expDouble)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("index32"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("index32"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expIndex32[] = {0x01, 0x07, 0x15, 0x00, 0x61, 0x00, 0x02, 0x00};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expIndex32, sizeof(expIndex32)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("index64"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("index64"), RNTupleLocalIndex(0, 0), sealedPage);
    unsigned char expIndex64[] = {0x00, 0x0D, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00,
                                  0x04, 0x00, 0x05, 0x00, 0x06, 0x00, 0x07, 0x00};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expIndex64, sizeof(expIndex64)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("float32Trunc"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("float32Trunc"), RNTupleLocalIndex(0, 0), sealedPage);
    // Two tightly packed 11bit floats: 0b0'01111111'11 + 0b1'10000000'11 = 0b11111111111000000011 = 0x03fe0f
    unsigned char expF32Trunc[] = {0x03, 0xFE, 0x0F};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expF32Trunc, sizeof(expF32Trunc)), 0);
 
-   source->LoadSealedPage(fnGetColumnId("float32Quant"), RClusterIndex(0, 0), sealedPage);
+   source->LoadSealedPage(fnGetColumnId("float32Quant"), RNTupleLocalIndex(0, 0), sealedPage);
    // Two tightly packed 7bit quantized ints: 0b1101111 + 0b1011000 = 0b11011111011000 = 0x37d8
    unsigned char expF32Quant[] = {0xd8, 0x37};
    EXPECT_EQ(memcmp(sealedPage.GetBuffer(), expF32Quant, sizeof(expF32Quant)), 0);
@@ -442,7 +446,7 @@ TEST(Packing, Real32TruncFloat)
    namespace BitPacking = ROOT::Experimental::Internal::BitPacking;
    {
       constexpr auto kBitsOnStorage = 10;
-      RColumnElement<float, EColumnType::kReal32Trunc> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.Pack(nullptr, nullptr, 0);
       element.Unpack(nullptr, nullptr, 0);
@@ -483,7 +487,7 @@ TEST(Packing, Real32TruncFloat)
 
    {
       constexpr auto kBitsOnStorage = 11;
-      RColumnElement<float, EColumnType::kReal32Trunc> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.Pack(nullptr, nullptr, 0);
       element.Unpack(nullptr, nullptr, 0);
@@ -514,7 +518,7 @@ TEST(Packing, Real32TruncFloat)
 
    {
       constexpr auto kBitsOnStorage = 31;
-      RColumnElement<float, EColumnType::kReal32Trunc> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.Pack(nullptr, nullptr, 0);
       element.Unpack(nullptr, nullptr, 0);
@@ -532,7 +536,7 @@ TEST(Packing, Real32TruncFloat)
       float f[N];
       for (int i = 0; i < N; ++i)
          f[i] = -2097176.7f;
-      auto out2 = std::make_unique<unsigned char[]>(BitPacking::MinBufSize(N, kBitsOnStorage));
+      auto out2 = MakeUninitArray<unsigned char>(BitPacking::MinBufSize(N, kBitsOnStorage));
       element.Pack(out2.get(), f, N);
 
       float fout[N];
@@ -547,13 +551,13 @@ TEST(Packing, Real32TruncFloat)
    {
       constexpr auto kBitsOnStorage = 18;
       constexpr auto N = 1000;
-      RColumnElement<float, EColumnType::kReal32Trunc> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       float f[N];
       for (int i = 0; i < N; ++i)
          f[i] = 2.f + (0.000001f * i);
 
-      auto out = std::make_unique<unsigned char[]>(BitPacking::MinBufSize(N, kBitsOnStorage));
+      auto out = MakeUninitArray<unsigned char>(BitPacking::MinBufSize(N, kBitsOnStorage));
       element.Pack(out.get(), f, N);
 
       float fout[N];
@@ -567,9 +571,9 @@ TEST(Packing, Real32TruncFloat)
 
    // Exhaustively test, for all valid bit widths, packing and unpacking of 0 to N random floats.
    std::uniform_real_distribution<float> dist(-1000000, 1000000);
-   const auto &[minBits, maxBits] = RColumnElementBase::GetValidBitRange(EColumnType::kReal32Trunc);
+   const auto &[minBits, maxBits] = RColumnElementBase::GetValidBitRange(ENTupleColumnType::kReal32Trunc);
    for (int bitWidth = minBits; bitWidth <= maxBits; ++bitWidth) {
-      RColumnElement<float, EColumnType::kReal32Trunc> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(bitWidth);
 
       std::default_random_engine rng(bitWidth);
@@ -579,7 +583,7 @@ TEST(Packing, Real32TruncFloat)
          inputs[i] = dist(rng);
       }
 
-      auto packed = std::make_unique<std::uint8_t[]>(BitPacking::MinBufSize(N, bitWidth));
+      auto packed = MakeUninitArray<std::uint8_t>(BitPacking::MinBufSize(N, bitWidth));
 
       float outputs[N];
       for (int i = 0; i < N; ++i) {
@@ -601,7 +605,7 @@ TEST(Packing, Real32TruncDouble)
    namespace BitPacking = ROOT::Experimental::Internal::BitPacking;
    {
       constexpr auto kBitsOnStorage = 10;
-      RColumnElement<double, EColumnType::kReal32Trunc> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.Pack(nullptr, nullptr, 0);
       element.Unpack(nullptr, nullptr, 0);
@@ -642,7 +646,7 @@ TEST(Packing, Real32TruncDouble)
 
    {
       constexpr auto kBitsOnStorage = 11;
-      RColumnElement<double, EColumnType::kReal32Trunc> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.Pack(nullptr, nullptr, 0);
       element.Unpack(nullptr, nullptr, 0);
@@ -673,7 +677,7 @@ TEST(Packing, Real32TruncDouble)
 
    {
       constexpr auto kBitsOnStorage = 31;
-      RColumnElement<double, EColumnType::kReal32Trunc> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.Pack(nullptr, nullptr, 0);
       element.Unpack(nullptr, nullptr, 0);
@@ -691,7 +695,7 @@ TEST(Packing, Real32TruncDouble)
       double f[N];
       for (int i = 0; i < N; ++i)
          f[i] = -2097176.7f;
-      auto out2 = std::make_unique<unsigned char[]>(BitPacking::MinBufSize(N, kBitsOnStorage));
+      auto out2 = MakeUninitArray<unsigned char>(BitPacking::MinBufSize(N, kBitsOnStorage));
       element.Pack(out2.get(), f, N);
 
       double fout[N];
@@ -706,13 +710,13 @@ TEST(Packing, Real32TruncDouble)
    {
       constexpr auto kBitsOnStorage = 18;
       constexpr auto N = 1000;
-      RColumnElement<double, EColumnType::kReal32Trunc> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       double f[N];
       for (int i = 0; i < N; ++i)
          f[i] = 2.f + (0.000001f * i);
 
-      auto out = std::make_unique<unsigned char[]>(BitPacking::MinBufSize(N, kBitsOnStorage));
+      auto out = MakeUninitArray<unsigned char>(BitPacking::MinBufSize(N, kBitsOnStorage));
       element.Pack(out.get(), f, N);
 
       double fout[N];
@@ -726,9 +730,9 @@ TEST(Packing, Real32TruncDouble)
 
    // Exhaustively test, for all valid bit widths, packing and unpacking of 0 to N random doubles.
    std::uniform_real_distribution<double> dist(-1000000, 1000000);
-   const auto &[minBits, maxBits] = RColumnElementBase::GetValidBitRange(EColumnType::kReal32Trunc);
+   const auto &[minBits, maxBits] = RColumnElementBase::GetValidBitRange(ENTupleColumnType::kReal32Trunc);
    for (int bitWidth = minBits; bitWidth <= maxBits; ++bitWidth) {
-      RColumnElement<double, EColumnType::kReal32Trunc> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Trunc> element;
       element.SetBitsOnStorage(bitWidth);
 
       std::default_random_engine rng(bitWidth);
@@ -738,7 +742,7 @@ TEST(Packing, Real32TruncDouble)
          inputs[i] = dist(rng);
       }
 
-      auto packed = std::make_unique<std::uint8_t[]>(BitPacking::MinBufSize(N, bitWidth));
+      auto packed = MakeUninitArray<std::uint8_t>(BitPacking::MinBufSize(N, bitWidth));
 
       double outputs[N];
       for (int i = 0; i < N; ++i) {
@@ -792,14 +796,14 @@ TEST(Packing, RealQuantize)
 
       constexpr auto N = 10000;
       constexpr auto kNbits = 20;
-      auto inputs = std::make_unique<decltype(min)[]>(N);
+      auto inputs = MakeUninitArray<decltype(min)>(N);
       for (int i = 0; i < N; ++i)
          inputs.get()[i] = dist(rng);
 
-      auto quant = std::make_unique<Quantized_t[]>(N);
+      auto quant = MakeUninitArray<Quantized_t>(N);
       QuantizeReals(quant.get(), inputs.get(), N, min, max, kNbits);
 
-      auto unquant = std::make_unique<decltype(min)[]>(N);
+      auto unquant = MakeUninitArray<decltype(min)>(N);
       UnquantizeReals(unquant.get(), quant.get(), N, min, max, kNbits);
 
       for (int i = 0; i < N; ++i)
@@ -813,14 +817,14 @@ TEST(Packing, RealQuantize)
 
       constexpr auto N = 10000;
       constexpr auto kNbits = 8;
-      auto inputs = std::make_unique<decltype(min)[]>(N);
+      auto inputs = MakeUninitArray<decltype(min)>(N);
       for (int i = 0; i < N; ++i)
          inputs.get()[i] = dist(rng);
 
-      auto quant = std::make_unique<Quantized_t[]>(N);
+      auto quant = MakeUninitArray<Quantized_t>(N);
       QuantizeReals(quant.get(), inputs.get(), N, min, max, kNbits);
 
-      auto unquant = std::make_unique<decltype(min)[]>(N);
+      auto unquant = MakeUninitArray<decltype(min)>(N);
       UnquantizeReals(unquant.get(), quant.get(), N, min, max, kNbits);
 
       for (int i = 0; i < N; ++i)
@@ -833,7 +837,7 @@ TEST(Packing, Real32QuantFloat)
    namespace BitPacking = ROOT::Experimental::Internal::BitPacking;
    {
       constexpr auto kBitsOnStorage = 10;
-      RColumnElement<float, EColumnType::kReal32Quant> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.SetValueRange(-5.f, 5.f);
       element.Pack(nullptr, nullptr, 0);
@@ -858,7 +862,7 @@ TEST(Packing, Real32QuantFloat)
    }
 
    {
-      RColumnElement<float, EColumnType::kReal32Quant> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(20);
       element.SetValueRange(-10.f, 10.f);
 
@@ -877,7 +881,7 @@ TEST(Packing, Real32QuantFloat)
 
    {
       constexpr auto kBitsOnStorage = 1;
-      RColumnElement<float, EColumnType::kReal32Quant> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.SetValueRange(-10.f, 10.f);
 
@@ -896,7 +900,7 @@ TEST(Packing, Real32QuantFloat)
 
    {
       constexpr auto kBitsOnStorage = 32;
-      RColumnElement<float, EColumnType::kReal32Quant> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.SetValueRange(-10.f, 10.f);
 
@@ -911,11 +915,11 @@ TEST(Packing, Real32QuantFloat)
    // Exhaustively test, for all valid bit widths, packing and unpacking of 0 to N random floats.
    constexpr double kMin = -1000, kMax = 1000;
    std::uniform_real_distribution<float> dist(kMin, kMax);
-   const auto &[minBits, maxBits] = RColumnElementBase::GetValidBitRange(EColumnType::kReal32Quant);
+   const auto &[minBits, maxBits] = RColumnElementBase::GetValidBitRange(ENTupleColumnType::kReal32Quant);
    for (int bitWidth = minBits; bitWidth <= maxBits; ++bitWidth) {
       SCOPED_TRACE(std::string("At bitWidth = ") + std::to_string(bitWidth));
 
-      RColumnElement<float, EColumnType::kReal32Quant> element;
+      RColumnElement<float, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(bitWidth);
       element.SetValueRange(kMin, kMax);
 
@@ -926,7 +930,7 @@ TEST(Packing, Real32QuantFloat)
          inputs[i] = dist(rng);
       }
 
-      auto packed = std::make_unique<std::uint8_t[]>(BitPacking::MinBufSize(N, bitWidth));
+      auto packed = MakeUninitArray<std::uint8_t>(BitPacking::MinBufSize(N, bitWidth));
       float outputs[N];
 
       if (bitWidth == 1) {
@@ -958,7 +962,7 @@ TEST(Packing, Real32QuantDouble)
    namespace BitPacking = ROOT::Experimental::Internal::BitPacking;
    {
       constexpr auto kBitsOnStorage = 10;
-      RColumnElement<double, EColumnType::kReal32Quant> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.SetValueRange(-5.f, 5.f);
       element.Pack(nullptr, nullptr, 0);
@@ -983,7 +987,7 @@ TEST(Packing, Real32QuantDouble)
    }
 
    {
-      RColumnElement<double, EColumnType::kReal32Quant> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(20);
       element.SetValueRange(-10.f, 10.f);
 
@@ -1002,7 +1006,7 @@ TEST(Packing, Real32QuantDouble)
 
    {
       constexpr auto kBitsOnStorage = 1;
-      RColumnElement<double, EColumnType::kReal32Quant> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.SetValueRange(-10.f, 10.f);
 
@@ -1021,7 +1025,7 @@ TEST(Packing, Real32QuantDouble)
 
    {
       constexpr auto kBitsOnStorage = 32;
-      RColumnElement<double, EColumnType::kReal32Quant> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(kBitsOnStorage);
       element.SetValueRange(-10.f, 10.f);
 
@@ -1036,11 +1040,11 @@ TEST(Packing, Real32QuantDouble)
    // Exhaustively test, for all valid bit widths, packing and unpacking of 0 to N random doubles.
    constexpr double kMin = -1000, kMax = 1000;
    std::uniform_real_distribution<double> dist(kMin, kMax);
-   const auto &[minBits, maxBits] = RColumnElementBase::GetValidBitRange(EColumnType::kReal32Quant);
+   const auto &[minBits, maxBits] = RColumnElementBase::GetValidBitRange(ENTupleColumnType::kReal32Quant);
    for (int bitWidth = minBits; bitWidth <= maxBits; ++bitWidth) {
       SCOPED_TRACE(std::string("At bitWidth = ") + std::to_string(bitWidth));
 
-      RColumnElement<double, EColumnType::kReal32Quant> element;
+      RColumnElement<double, ENTupleColumnType::kReal32Quant> element;
       element.SetBitsOnStorage(bitWidth);
       element.SetValueRange(kMin, kMax);
 
@@ -1051,7 +1055,7 @@ TEST(Packing, Real32QuantDouble)
          inputs[i] = dist(rng);
       }
 
-      auto packed = std::make_unique<std::uint8_t[]>(BitPacking::MinBufSize(N, bitWidth));
+      auto packed = MakeUninitArray<std::uint8_t>(BitPacking::MinBufSize(N, bitWidth));
       double outputs[N];
 
       if (bitWidth == 1) {

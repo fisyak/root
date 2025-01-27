@@ -177,6 +177,7 @@ private:
    std::string fProtocol;                           ///<! protocol
    std::string fUserArgs;                           ///<! arbitrary JSON code, which is accessible via conn.getUserArgs() method
    std::shared_ptr<void> fClearOnClose;             ///<! entry which is cleared when last connection is closed
+   static std::string gJSROOTsettings;              ///<! custom settings for JSROOT
 
    std::shared_ptr<RWebWindowWSHandler> CreateWSHandler(std::shared_ptr<RWebWindowsManager> mgr, unsigned id, double tmout);
 
@@ -189,7 +190,9 @@ private:
    /// Find connection with specified websocket id
    std::shared_ptr<WebConn> FindConnection(unsigned wsid);
 
-   std::shared_ptr<WebConn> RemoveConnection(unsigned wsid);
+   void ClearConnection(std::shared_ptr<WebConn> &conn, bool provide_signal = false);
+
+   std::shared_ptr<WebConn> RemoveConnection(unsigned wsid, bool provide_signal = false);
 
    bool _CanTrustIn(std::shared_ptr<WebConn> &conn, const std::string &key, const std::string &ntry, bool remote, bool test_first_time);
 
@@ -385,11 +388,9 @@ public:
 
    std::string GetAddr() const;
 
-   _R__DEPRECATED_LATER("Use GetUrl() to get valid connection URL")
-   std::string GetRelativeAddr(const std::shared_ptr<RWebWindow> &win) const;
+   _R__DEPRECATED_LATER("Use GetUrl() to get valid connection URL") std::string GetRelativeAddr(const std::shared_ptr<RWebWindow> &win) const;
 
-   _R__DEPRECATED_LATER("Use GetAddr() to get valid connection URL")
-   std::string GetRelativeAddr(const RWebWindow &win) const;
+   _R__DEPRECATED_LATER("Use GetAddr() to get valid connection URL") std::string GetRelativeAddr(const RWebWindow &win) const;
 
    void SetCallBacks(WebWindowConnectCallback_t conn, WebWindowDataCallback_t data, WebWindowConnectCallback_t disconn = nullptr);
 
@@ -424,6 +425,8 @@ public:
    static bool IsFileDialogMessage(const std::string &msg);
 
    static bool EmbedFileDialog(const std::shared_ptr<RWebWindow> &window, unsigned connid, const std::string &args);
+
+   static void SetJSROOTSettings(const std::string &json);
 };
 
 } // namespace ROOT

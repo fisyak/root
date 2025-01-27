@@ -41,6 +41,8 @@ protected:
       return descriptor;
    }
 
+   NTupleSize_t GetNEntries() const final { return 0; }
+
    void InitImpl(RNTupleModel &) final {}
    void UpdateSchema(const ROOT::Experimental::Internal::RNTupleModelChangeset &, NTupleSize_t) final {}
    void UpdateExtraTypeInfo(const ROOT::Experimental::RExtraTypeInfoDescriptor &) final {}
@@ -918,12 +920,18 @@ TEST(RPageStorageFile, MultiKeyBlob_Pages)
       auto ntupleComp = RNTupleReader::Open(std::move(modelComp), "myNTuple", fileGuardComp.GetPath());
 
       // Verify that the pages are larger than maxKeySize
-      EXPECT_GT(
-         ntupleComp->GetDescriptor().GetClusterDescriptor(0).GetPageRange(0).fPageInfos[0].fLocator.fBytesOnStorage,
-         kMaxKeySize);
-      EXPECT_GT(
-         ntupleUcmp->GetDescriptor().GetClusterDescriptor(0).GetPageRange(0).fPageInfos[0].fLocator.fBytesOnStorage,
-         kMaxKeySize);
+      EXPECT_GT(ntupleComp->GetDescriptor()
+                   .GetClusterDescriptor(0)
+                   .GetPageRange(0)
+                   .fPageInfos[0]
+                   .fLocator.GetNBytesOnStorage(),
+                kMaxKeySize);
+      EXPECT_GT(ntupleUcmp->GetDescriptor()
+                   .GetClusterDescriptor(0)
+                   .GetPageRange(0)
+                   .fPageInfos[0]
+                   .fLocator.GetNBytesOnStorage(),
+                kMaxKeySize);
 
       TRandom3 rnd(42);
       for (int i = 0; i < 100000; ++i) {
@@ -1089,8 +1097,8 @@ TEST(RPageSink, SamePageMerging)
       const auto pyColId = desc.FindPhysicalColumnId(desc.FindFieldId("py"), 0, 0);
       const auto clusterId = desc.FindClusterId(pxColId, 0);
       const auto &clusterDesc = desc.GetClusterDescriptor(clusterId);
-      EXPECT_EQ(enable, clusterDesc.GetPageRange(pxColId).Find(0).fLocator.fPosition ==
-                           clusterDesc.GetPageRange(pyColId).Find(0).fLocator.fPosition);
+      EXPECT_EQ(enable, clusterDesc.GetPageRange(pxColId).Find(0).fLocator.GetPosition<std::uint64_t>() ==
+                           clusterDesc.GetPageRange(pyColId).Find(0).fLocator.GetPosition<std::uint64_t>());
 
       auto viewPx = reader->GetView<float>("px");
       auto viewPy = reader->GetView<float>("py");

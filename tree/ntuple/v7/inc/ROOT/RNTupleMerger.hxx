@@ -55,11 +55,20 @@ struct RSealedPageMergeData;
 
 class RClusterPool;
 
+/// Set of merging options to pass to RNTupleMerger.
+/// If you're using the merger through TFileMerger you need to give it string-based options instead.
+/// Here is the mapping for the TFileMerger options:
+///   - "rntuple.MergingMode=(Filter|Union|...)" -> sets fMergingMode
+///   - "rntuple.ErrBehavior=(Abort|Skip|...)"   -> sets fErrBehavior
+///   - "rntuple.ExtraVerbose"                   -> sets fExtraVerbose to true
+/// Rules about the string-based options:
+///   1. there must be no space between the separators (i.e. `:` and `=`)
+///   2. all string matching is case insensitive
 struct RNTupleMergeOptions {
-   /// If `fCompressionSettings == kUnknownCompressionSettings` (the default), the merger will not change the
+   /// If fCompressionSettings is empty (the default), the merger will not change the
    /// compression of any of its sources (fast merging). Otherwise, all sources will be converted to the specified
    /// compression algorithm and level.
-   int fCompressionSettings = kUnknownCompressionSettings;
+   std::optional<std::uint32_t> fCompressionSettings;
    /// Determines how the merging treats sources with different models (\see ENTupleMergingMode).
    ENTupleMergingMode fMergingMode = ENTupleMergingMode::kFilter;
    /// Determines how the Merge function behaves upon merging errors
@@ -77,6 +86,7 @@ struct RNTupleMergeOptions {
  */
 // clang-format on
 class RNTupleMerger final {
+   std::unique_ptr<RPageSink> fDestination;
    std::unique_ptr<RPageAllocator> fPageAlloc;
    std::optional<TTaskGroup> fTaskGroup;
 
@@ -88,11 +98,11 @@ class RNTupleMerger final {
                             std::span<RColumnMergeInfo> extraDstColumns, RNTupleMergeData &mergeData);
 
 public:
-   RNTupleMerger();
+   /// Creates a RNTupleMerger with the given destination.
+   explicit RNTupleMerger(std::unique_ptr<RPageSink> destination);
 
    /// Merge a given set of sources into the destination.
-   RResult<void> Merge(std::span<RPageSource *> sources, RPageSink &destination,
-                       const RNTupleMergeOptions &mergeOpts = RNTupleMergeOptions());
+   RResult<void> Merge(std::span<RPageSource *> sources, const RNTupleMergeOptions &mergeOpts = RNTupleMergeOptions());
 
 }; // end of class RNTupleMerger
 

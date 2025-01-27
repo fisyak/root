@@ -196,7 +196,7 @@ TEST(RNTupleCompat, FutureColumnType)
    const auto &fdesc = desc.GetFieldDescriptor(desc.FindFieldId("futureColumn"));
    GTEST_ASSERT_EQ(fdesc.GetLogicalColumnIds().size(), 1);
    const auto &cdesc = desc.GetColumnDescriptor(fdesc.GetLogicalColumnIds()[0]);
-   EXPECT_EQ(cdesc.GetType(), EColumnType::kUnknown);
+   EXPECT_EQ(cdesc.GetType(), ENTupleColumnType::kUnknown);
 
    {
       // Creating a model not in fwd-compatible mode should fail
@@ -248,7 +248,7 @@ TEST(RNTupleCompat, FutureColumnType_Nested)
    const auto &fdesc = desc.GetFieldDescriptor(desc.FindFieldId("vec._0", futureId));
    GTEST_ASSERT_EQ(fdesc.GetLogicalColumnIds().size(), 1);
    const auto &cdesc = desc.GetColumnDescriptor(fdesc.GetLogicalColumnIds()[0]);
-   EXPECT_EQ(cdesc.GetType(), EColumnType::kUnknown);
+   EXPECT_EQ(cdesc.GetType(), ENTupleColumnType::kUnknown);
 
    {
       // Creating a model not in fwd-compatible mode should fail
@@ -371,9 +371,9 @@ class RPageSinkTestLocator : public RPageSinkFile {
    {
       auto payload = ROOT::Experimental::RNTupleLocatorObject64{0x420};
       RNTupleLocator result;
-      result.fPosition = payload;
-      result.fType = ROOT::Experimental::Internal::kTestLocatorType;
-      result.fBytesOnStorage = sealedPage.GetDataSize();
+      result.SetPosition(payload);
+      result.SetType(ROOT::Experimental::Internal::kTestLocatorType);
+      result.SetNBytesOnStorage(sealedPage.GetDataSize());
       return result;
    }
 

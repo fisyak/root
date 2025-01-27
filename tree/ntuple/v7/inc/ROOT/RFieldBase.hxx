@@ -17,6 +17,7 @@
 #define ROOT7_RFieldBase
 
 #include <ROOT/RColumn.hxx>
+#include <ROOT/RCreateFieldOptions.hxx>
 #include <ROOT/RNTupleRange.hxx>
 #include <ROOT/RNTupleUtil.hxx>
 
@@ -41,11 +42,15 @@ struct RFieldCallbackInjector;
 struct RFieldRepresentationModifier;
 class RPageSink;
 class RPageSource;
-// TODO(jblomer): find a better way to not have these four methods in the RFieldBase public API
+// TODO(jblomer): find a better way to not have these methods in the RFieldBase public API
 void CallFlushColumnsOnField(RFieldBase &);
 void CallCommitClusterOnField(RFieldBase &);
 void CallConnectPageSinkOnField(RFieldBase &, RPageSink &, NTupleSize_t firstEntry = 0);
 void CallConnectPageSourceOnField(RFieldBase &, RPageSource &);
+ROOT::RResult<std::unique_ptr<ROOT::Experimental::RFieldBase>>
+CallFieldBaseCreate(const std::string &fieldName, const std::string &canonicalType, const std::string &typeAlias,
+                    const RCreateFieldOptions &options, const RNTupleDescriptor *desc, DescriptorId_t fieldId);
+
 } // namespace Internal
 
 namespace Detail {
@@ -69,13 +74,18 @@ This is and can only be partially enforced through C++.
 // clang-format on
 class RFieldBase {
    friend class ROOT::Experimental::RClassField;                             // to mark members as artificial
-   friend class ROOT::Experimental::RNTupleJoinProcessor;                    // needs ConstuctValue
+   friend class ROOT::Experimental::RNTupleJoinProcessor;                    // needs ConstructValue
    friend struct ROOT::Experimental::Internal::RFieldCallbackInjector;       // used for unit tests
    friend struct ROOT::Experimental::Internal::RFieldRepresentationModifier; // used for unit tests
    friend void Internal::CallFlushColumnsOnField(RFieldBase &);
    friend void Internal::CallCommitClusterOnField(RFieldBase &);
    friend void Internal::CallConnectPageSinkOnField(RFieldBase &, Internal::RPageSink &, NTupleSize_t);
    friend void Internal::CallConnectPageSourceOnField(RFieldBase &, Internal::RPageSource &);
+   friend ROOT::RResult<std::unique_ptr<ROOT::Experimental::RFieldBase>>
+   Internal::CallFieldBaseCreate(const std::string &fieldName, const std::string &canonicalType,
+                                 const std::string &typeAlias, const RCreateFieldOptions &options,
+                                 const RNTupleDescriptor *desc, DescriptorId_t fieldId);
+
    using ReadCallback_t = std::function<void(void *)>;
 
 protected:
@@ -114,20 +124,28 @@ protected:
 
 public:
    static constexpr std::uint32_t kInvalidTypeVersion = -1U;
-   /// No constructor needs to be called, i.e. any bit pattern in the allocated memory represents a valid type
-   /// A trivially constructible field has a no-op ConstructValue() implementation
-   static constexpr int kTraitTriviallyConstructible = 0x01;
-   /// The type is cleaned up just by freeing its memory. I.e. the destructor performs a no-op.
-   static constexpr int kTraitTriviallyDestructible = 0x02;
-   /// A field of a fundamental type that can be directly mapped via `RField<T>::Map()`, i.e. maps as-is to a single
-   /// column
-   static constexpr int kTraitMappable = 0x04;
-   /// The TClass checksum is set and valid
-   static constexpr int kTraitTypeChecksum = 0x08;
-   /// Shorthand for types that are both trivially constructible and destructible
-   static constexpr int kTraitTrivialType = kTraitTriviallyConstructible | kTraitTriviallyDestructible;
+   enum {
+      /// No constructor needs to be called, i.e. any bit pattern in the allocated memory represents a valid type
+      /// A trivially constructible field has a no-op ConstructValue() implementation
+      kTraitTriviallyConstructible = 0x01,
+      /// The type is cleaned up just by freeing its memory. I.e. the destructor performs a no-op.
+      kTraitTriviallyDestructible = 0x02,
+      /// A field of a fundamental type that can be directly mapped via `RField<T>::Map()`, i.e. maps as-is to a single
+      /// column
+      kTraitMappable = 0x04,
+      /// The TClass checksum is set and valid
+      kTraitTypeChecksum = 0x08,
+      /// This field is an instance of RInvalidField and can be safely static_cast to it
+      kTraitInvalidField = 0x10,
+      /// This field is a user defined type that was missing dictionaries and was reconstructed from the on-disk
+      /// information
+      kTraitEmulatedField = 0x20,
 
-   using ColumnRepresentation_t = std::vector<EColumnType>;
+      /// Shorthand for types that are both trivially constructible and destructible
+      kTraitTrivialType = kTraitTriviallyConstructible | kTraitTriviallyDestructible
+   };
+
+   using ColumnRepresentation_t = std::vector<ENTupleColumnType>;
 
    /// During its lifetime, a field undergoes the following possible state transitions:
    ///
@@ -136,7 +154,11 @@ public:
    ///               |      --> ConnectedToSource ---> [*]
    ///               |                             |
    ///               -------------------------------
-   enum class EState { kUnconnected, kConnectedToSink, kConnectedToSource };
+   enum class EState {
+      kUnconnected,
+      kConnectedToSink,
+      kConnectedToSource
+   };
 
    /// Some fields have multiple possible column representations, e.g. with or without split encoding.
    /// All column representations supported for writing also need to be supported for reading. In addition,
@@ -253,7 +275,7 @@ protected:
    /// Contains all columns of all representations in order of representation and column index.
    std::vector<std::unique_ptr<Internal::RColumn>> fAvailableColumns;
    /// Properties of the type that allow for optimizations of collections of that type
-   int fTraits = 0;
+   std::uint32_t fTraits = 0;
    /// A typedef or using name that was used when creating the field
    std::string fTypeAlias;
    /// List of functions to be called after reading a value
@@ -369,7 +391,7 @@ protected:
    /// column type exists.
    virtual std::size_t AppendImpl(const void *from);
    virtual void ReadGlobalImpl(NTupleSize_t globalIndex, void *to);
-   virtual void ReadInClusterImpl(RClusterIndex clusterIndex, void *to);
+   virtual void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to);
 
    /// Write the given value into columns. The value object has to be of the same type as the field.
    /// Returns the number of uncompressed bytes written.
@@ -396,16 +418,16 @@ protected:
    /// Populate a single value with data from the field. The memory location pointed to by to needs to be of the
    /// fitting type. The fast path is conditioned by the field qualifying as simple, i.e. maps as-is
    /// to a single column and has no read callback.
-   void Read(RClusterIndex clusterIndex, void *to)
+   void Read(RNTupleLocalIndex localIndex, void *to)
    {
       if (fIsSimple)
-         return (void)fPrincipalColumn->Read(clusterIndex, to);
+         return (void)fPrincipalColumn->Read(localIndex, to);
 
       if (!fIsArtificial) {
          if (fTraits & kTraitMappable)
-            fPrincipalColumn->Read(clusterIndex, to);
+            fPrincipalColumn->Read(localIndex, to);
          else
-            ReadInClusterImpl(clusterIndex, to);
+            ReadInClusterImpl(localIndex, to);
       }
       if (R__unlikely(!fReadCallbacks.empty()))
          InvokeReadCallbacks(to);
@@ -423,7 +445,7 @@ protected:
 
    /// Allow derived classes to call Append and Read on other (sub) fields.
    static std::size_t CallAppendOn(RFieldBase &other, const void *from) { return other.Append(from); }
-   static void CallReadOn(RFieldBase &other, RClusterIndex clusterIndex, void *to) { other.Read(clusterIndex, to); }
+   static void CallReadOn(RFieldBase &other, RNTupleLocalIndex localIndex, void *to) { other.Read(localIndex, to); }
    static void CallReadOn(RFieldBase &other, NTupleSize_t globalIndex, void *to) { other.Read(globalIndex, to); }
    static void *CallCreateObjectRawPtrOn(RFieldBase &other) { return other.CreateObjectRawPtr(); }
 
@@ -457,11 +479,20 @@ protected:
    virtual void OnConnectPageSource() {}
 
    /// Factory method to resurrect a field from the stored on-disk type information.  This overload takes an already
-   /// normalized type name and type alias
+   /// normalized type name and type alias.
+   /// `desc` and `fieldId` must be passed if `options.fEmulateUnknownTypes` is true, otherwise they can be left blank.
    /// TODO(jalopezg): this overload may eventually be removed leaving only the `RFieldBase::Create()` that takes a
    /// single type name
-   static RResult<std::unique_ptr<RFieldBase>> Create(const std::string &fieldName, const std::string &canonicalType,
-                                                      const std::string &typeAlias, bool continueOnError = false);
+   static RResult<std::unique_ptr<RFieldBase>>
+   Create(const std::string &fieldName, const std::string &canonicalType, const std::string &typeAlias,
+          const RCreateFieldOptions &options = {}, const RNTupleDescriptor *desc = nullptr,
+          DescriptorId_t fieldId = kInvalidDescriptorId);
+
+   /// Same as the above overload of Create, but infers the normalized type name and the canonical type name from
+   /// `typeName`.
+   static RResult<std::unique_ptr<RFieldBase>> Create(const std::string &fieldName, const std::string &typeName,
+                                                      const RCreateFieldOptions &options, const RNTupleDescriptor *desc,
+                                                      DescriptorId_t fieldId);
 
 public:
    template <bool IsConstT>
@@ -497,7 +528,9 @@ public:
    std::unique_ptr<RFieldBase> Clone(std::string_view newName) const;
 
    /// Factory method to resurrect a field from the stored on-disk type information
-   static RResult<std::unique_ptr<RFieldBase>> Create(const std::string &fieldName, const std::string &typeName);
+   static RResult<std::unique_ptr<RFieldBase>>
+   Create(const std::string &fieldName, const std::string &typeName);
+
    /// Checks if the given type is supported by RNTuple. In case of success, the result vector is empty.
    /// Otherwise there is an error record for each failing sub field (sub type).
    static std::vector<RCheckResult> Check(const std::string &fieldName, const std::string &typeName);
@@ -529,7 +562,7 @@ public:
    /// As a rule of thumb, the alignment is equal to the size of the type. There are, however, various exceptions
    /// to this rule depending on OS and CPU architecture. So enforce the alignment to be explicitly spelled out.
    virtual size_t GetAlignment() const = 0;
-   int GetTraits() const { return fTraits; }
+   std::uint32_t GetTraits() const { return fTraits; }
    bool HasReadCallbacks() const { return !fReadCallbacks.empty(); }
 
    const std::string &GetFieldName() const { return fName; }
@@ -670,7 +703,7 @@ public:
 
    std::size_t Append() { return fField->Append(fObjPtr.get()); }
    void Read(NTupleSize_t globalIndex) { fField->Read(globalIndex, fObjPtr.get()); }
-   void Read(RClusterIndex clusterIndex) { fField->Read(clusterIndex, fObjPtr.get()); }
+   void Read(RNTupleLocalIndex localIndex) { fField->Read(localIndex, fObjPtr.get()); }
    void Bind(std::shared_ptr<void> objPtr) { fObjPtr = objPtr; }
    void BindRawPtr(void *rawPtr);
    /// Replace the current object pointer by a pointer to a new object constructed by the field
@@ -696,7 +729,7 @@ struct RFieldBase::RBulkSpec {
    /// independent of the provided masks.
    static const std::size_t kAllSet = std::size_t(-1);
 
-   RClusterIndex fFirstIndex; ///< Start of the bulk range
+   RNTupleLocalIndex fFirstIndex; ///< Start of the bulk range
    std::size_t fCount = 0;    ///< Size of the bulk range
    /// A bool array of size fCount, indicating the required values in the requested range
    const bool *fMaskReq = nullptr;
@@ -726,7 +759,7 @@ private:
    bool fIsAdopted = false;            ///< True if the user provides the memory buffer for fValues
    std::unique_ptr<bool[]> fMaskAvail; ///< Masks invalid values in the array
    std::size_t fNValidValues = 0;      ///< The sum of non-zero elements in the fMask
-   RClusterIndex fFirstIndex;          ///< Index of the first value of the array
+   RNTupleLocalIndex fFirstIndex;      ///< Index of the first value of the array
    /// Reading arrays of complex values may require additional memory, for instance for the elements of
    /// arrays of vectors. A pointer to the fAuxData array is passed to the field's BulkRead method.
    /// The RBulk class does not modify the array in-between calls to the field's BulkRead method.
@@ -735,15 +768,15 @@ private:
    void ReleaseValues();
    /// Sets a new range for the bulk. If there is enough capacity, the fValues array will be reused.
    /// Otherwise a new array is allocated. After reset, fMaskAvail is false for all values.
-   void Reset(RClusterIndex firstIndex, std::size_t size);
+   void Reset(RNTupleLocalIndex firstIndex, std::size_t size);
    void CountValidValues();
 
-   bool ContainsRange(RClusterIndex firstIndex, std::size_t size) const
+   bool ContainsRange(RNTupleLocalIndex firstIndex, std::size_t size) const
    {
       if (firstIndex.GetClusterId() != fFirstIndex.GetClusterId())
          return false;
-      return (firstIndex.GetIndex() >= fFirstIndex.GetIndex()) &&
-             ((firstIndex.GetIndex() + size) <= (fFirstIndex.GetIndex() + fSize));
+      return (firstIndex.GetIndexInCluster() >= fFirstIndex.GetIndexInCluster()) &&
+             ((firstIndex.GetIndexInCluster() + size) <= (fFirstIndex.GetIndexInCluster() + fSize));
    }
 
    void *GetValuePtrAt(std::size_t idx) const { return reinterpret_cast<unsigned char *>(fValues) + idx * fValueSize; }
@@ -767,13 +800,13 @@ public:
    /// relative to a certain cluster. The return value points to the array of read objects.
    /// The 'maskReq' parameter is a bool array of at least 'size' elements. Only objects for which the mask is
    /// true are guaranteed to be read in the returned value array. A 'nullptr' means to read all elements.
-   void *ReadBulk(RClusterIndex firstIndex, const bool *maskReq, std::size_t size)
+   void *ReadBulk(RNTupleLocalIndex firstIndex, const bool *maskReq, std::size_t size)
    {
       if (!ContainsRange(firstIndex, size))
          Reset(firstIndex, size);
 
       // We may read a sub range of the currently available range
-      auto offset = firstIndex.GetIndex() - fFirstIndex.GetIndex();
+      auto offset = firstIndex.GetIndexInCluster() - fFirstIndex.GetIndexInCluster();
 
       if (fNValidValues == fSize)
          return GetValuePtrAt(offset);

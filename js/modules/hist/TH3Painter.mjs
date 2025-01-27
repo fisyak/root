@@ -52,8 +52,7 @@ class TH3Painter extends THistPainter {
       this.draw_content = (this.gmaxbin !== 0) || (this.gminbin !== 0);
 
       this.transferFunc = this.findFunction(clTF1, 'TransferFunction');
-      if (this.transferFunc && !this.transferFunc.TestBit(BIT(9))) // TF1::kNotDraw
-         this.transferFunc.InvertBit(BIT(9));
+      this.transferFunc?.SetBit(BIT(9), true); // TF1::kNotDraw
    }
 
    /** @summary Count TH3 statistic */
@@ -618,11 +617,18 @@ class TH3Painter extends THistPainter {
    async redraw(reason) {
       const main = this.getFramePainter(), // who makes axis and 3D drawing
             histo = this.getHisto();
-      let pr = Promise.resolve(true);
+      let pr = Promise.resolve(true), full_draw = true;
 
       if (reason === 'resize') {
-         if (main.resize3D()) main.render3D();
-      } else {
+         const res = main.resize3D();
+         if (res !== 1) {
+            full_draw = false;
+            if (res)
+               main.render3D();
+         }
+      }
+
+      if (full_draw) {
          assignFrame3DMethods(main);
          pr = main.create3DScene(this.options.Render3D, this.options.x3dscale, this.options.y3dscale, this.options.Ortho).then(() => {
             main.setAxesRanges(histo.fXaxis, this.xmin, this.xmax, histo.fYaxis, this.ymin, this.ymax, histo.fZaxis, this.zmin, this.zmax, this);

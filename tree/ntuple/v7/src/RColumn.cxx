@@ -23,7 +23,7 @@
 #include <cassert>
 #include <utility>
 
-ROOT::Experimental::Internal::RColumn::RColumn(EColumnType type, std::uint32_t columnIndex,
+ROOT::Experimental::Internal::RColumn::RColumn(ENTupleColumnType type, std::uint32_t columnIndex,
                                                std::uint16_t representationIndex)
    : fType(type), fIndex(columnIndex), fRepresentationIndex(representationIndex), fTeam({this})
 {
@@ -97,19 +97,19 @@ bool ROOT::Experimental::Internal::RColumn::TryMapPage(NTupleSize_t globalIndex)
    return fReadPageRef.Get().Contains(globalIndex);
 }
 
-bool ROOT::Experimental::Internal::RColumn::TryMapPage(RClusterIndex clusterIndex)
+bool ROOT::Experimental::Internal::RColumn::TryMapPage(RNTupleLocalIndex localIndex)
 {
    const auto nTeam = fTeam.size();
    std::size_t iTeam = 1;
    do {
-      fReadPageRef = fPageSource->LoadPage(fTeam.at(fLastGoodTeamIdx)->GetHandleSource(), clusterIndex);
+      fReadPageRef = fPageSource->LoadPage(fTeam.at(fLastGoodTeamIdx)->GetHandleSource(), localIndex);
       if (!fReadPageRef.Get().IsNull())
          break;
       fLastGoodTeamIdx = (fLastGoodTeamIdx + 1) % nTeam;
       iTeam++;
    } while (iTeam <= nTeam);
 
-   return fReadPageRef.Get().Contains(clusterIndex);
+   return fReadPageRef.Get().Contains(localIndex);
 }
 
 void ROOT::Experimental::Internal::RColumn::MergeTeams(RColumn &other)

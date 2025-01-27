@@ -86,7 +86,7 @@ private:
    /// _both_ values to be valid. If RPagePosition is used as a search key, only one of the two needs to be set.
    struct RPagePosition {
       NTupleSize_t fGlobalFirstElement = kInvalidNTupleIndex;
-      RClusterIndex fClusterFirstElement;
+      RNTupleLocalIndex fClusterFirstElement;
 
       bool operator<(const RPagePosition &other) const
       {
@@ -94,11 +94,11 @@ private:
             return fGlobalFirstElement < other.fGlobalFirstElement;
 
          assert(fClusterFirstElement.GetClusterId() != kInvalidDescriptorId &&
-                fClusterFirstElement.GetIndex() != kInvalidClusterIndex);
+                fClusterFirstElement.GetIndexInCluster() != kInvalidNTupleIndex);
          assert(other.fClusterFirstElement.GetClusterId() != kInvalidDescriptorId &&
-                other.fClusterFirstElement.GetIndex() != kInvalidClusterIndex);
+                other.fClusterFirstElement.GetIndexInCluster() != kInvalidNTupleIndex);
          if (fClusterFirstElement.GetClusterId() == other.fClusterFirstElement.GetClusterId())
-            return fClusterFirstElement.GetIndex() < other.fClusterFirstElement.GetIndex();
+            return fClusterFirstElement.GetIndexInCluster() < other.fClusterFirstElement.GetIndexInCluster();
          return fClusterFirstElement.GetClusterId() < other.fClusterFirstElement.GetClusterId();
       }
 
@@ -111,7 +111,7 @@ private:
 
       // Search key constructors
       explicit RPagePosition(NTupleSize_t globalIndex) : fGlobalFirstElement(globalIndex) {}
-      explicit RPagePosition(RClusterIndex clusterIndex) : fClusterFirstElement(clusterIndex) {}
+      explicit RPagePosition(RNTupleLocalIndex localIndex) : fClusterFirstElement(localIndex) {}
    };
 
    std::vector<REntry> fEntries; ///< All cached pages in the page pool
@@ -161,7 +161,7 @@ public:
    /// Tries to find the page corresponding to column and index in the cache. If the page is found, its reference
    /// counter is increased
    RPageRef GetPage(RKey key, NTupleSize_t globalIndex);
-   RPageRef GetPage(RKey key, RClusterIndex clusterIndex);
+   RPageRef GetPage(RKey key, RNTupleLocalIndex localIndex);
 };
 
 // clang-format off

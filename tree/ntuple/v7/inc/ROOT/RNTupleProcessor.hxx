@@ -32,6 +32,15 @@
 namespace ROOT {
 namespace Experimental {
 
+/// Used to specify the underlying RNTuples in RNTupleProcessor
+struct RNTupleOpenSpec {
+   std::string fNTupleName;
+   std::string fStorage;
+   RNTupleReadOptions fOptions;
+
+   RNTupleOpenSpec(std::string_view n, std::string_view s) : fNTupleName(n), fStorage(s) {}
+};
+
 // clang-format off
 /**
 \class ROOT::Experimental::RNTupleProcessor
@@ -220,11 +229,7 @@ public:
          return obj;
       }
 
-      reference operator*()
-      {
-         fProcessor.LoadEntry();
-         return *fProcessor.fEntry;
-      }
+      reference operator*() { return *fProcessor.fEntry; }
 
       friend bool operator!=(const iterator &lh, const iterator &rh)
       {

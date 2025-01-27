@@ -35,11 +35,62 @@
 #include <algorithm>
 #include <deque>
 #include <inttypes.h> // for PRIu64
+#include <initializer_list>
 #include <unordered_map>
 #include <vector>
 
 using namespace ROOT::Experimental;
 using namespace ROOT::Experimental::Internal;
+
+// TFile options parsing
+// -------------------------------------------------------------------------------------
+static bool BeginsWithDelimitedWord(const TString &str, const char *word)
+{
+   const Ssiz_t wordLen = strlen(word);
+   if (str.Length() < wordLen)
+      return false;
+   if (!str.BeginsWith(word, TString::ECaseCompare::kIgnoreCase))
+      return false;
+   return str.Length() == wordLen || str(wordLen) == ' ';
+}
+
+template <typename T>
+static std::optional<T> ParseStringOption(const TString &opts, const char *pattern,
+                                          std::initializer_list<std::pair<const char *, T>> validValues)
+{
+   const Ssiz_t patternLen = strlen(pattern);
+   assert(pattern[patternLen - 1] == '='); // we want to parse options with the format `option=Value`
+   if (auto idx = opts.Index(pattern, 0, TString::ECaseCompare::kIgnoreCase);
+       idx >= 0 && opts.Length() > idx + patternLen) {
+      auto sub = TString(opts(idx + patternLen, opts.Length() - idx - patternLen));
+      for (const auto &[name, value] : validValues) {
+         if (BeginsWithDelimitedWord(sub, name)) {
+            return value;
+         }
+      }
+   }
+   return std::nullopt;
+}
+
+static std::optional<ENTupleMergingMode> ParseOptionMergingMode(const TString &opts)
+{
+   return ParseStringOption<ENTupleMergingMode>(opts, "rntuple.MergingMode=",
+                                                {
+                                                   {"Filter", ENTupleMergingMode::kFilter},
+                                                   {"Union", ENTupleMergingMode::kUnion},
+                                                   {"Strict", ENTupleMergingMode::kStrict},
+                                                });
+}
+
+static std::optional<ENTupleMergeErrBehavior> ParseOptionErrBehavior(const TString &opts)
+{
+   return ParseStringOption<ENTupleMergeErrBehavior>(opts, "rntuple.ErrBehavior=",
+                                                     {
+                                                        {"Abort", ENTupleMergeErrBehavior::kAbort},
+                                                        {"Skip", ENTupleMergeErrBehavior::kSkip},
+                                                     });
+}
+// -------------------------------------------------------------------------------------
 
 // Entry point for TFileMerger. Internally calls RNTupleMerger::Merge().
 Long64_t ROOT::RNTuple::Merge(TCollection *inputs, TFileMergeInfo *mergeInfo)
@@ -78,15 +129,15 @@ try {
       // pointer we just got.
    }
 
-   const bool defaultComp = mergeInfo->fOptions.Contains("default_compression");
-   const bool firstSrcComp = mergeInfo->fOptions.Contains("first_source_compression");
+   const bool defaultComp = mergeInfo->fOptions.Contains("DefaultCompression");
+   const bool firstSrcComp = mergeInfo->fOptions.Contains("FirstSrcCompression");
+   const bool extraVerbose = mergeInfo->fOptions.Contains("rntuple.ExtraVerbose");
    if (defaultComp && firstSrcComp) {
-      // this should never happen through hadd, but a user may call RNTuple::Merge() from custom code...
-      Warning(
-         "RNTuple::Merge",
-         "Passed both options \"default_compression\" and \"first_source_compression\": only the latter will apply.");
+      // this should never happen through hadd, but a user may call RNTuple::Merge() from custom code.
+      Warning("RNTuple::Merge", "Passed both options \"DefaultCompression\" and \"FirstSrcCompression\": "
+                                "only the latter will apply.");
    }
-   int compression = kUnknownCompressionSettings;
+   std::optional<std::uint32_t> compression;
    if (firstSrcComp) {
       // user passed -ff or -fk: use the same compression as the first RNTuple we find in the sources.
       // (do nothing here, the compression will be fetched below)
@@ -96,7 +147,7 @@ try {
    } else {
       // user passed no compression-related options: use default
       compression = RCompressionSetting::EDefaults::kUseGeneralPurpose;
-      Info("RNTuple::Merge", "Using the default compression: %d", compression);
+      Info("RNTuple::Merge", "Using the default compression: %u", *compression);
    }
 
    // The remaining entries are the input files
@@ -113,7 +164,7 @@ try {
       }
 
       auto source = RPageSourceFile::CreateFromAnchor(*anchor);
-      if (compression == kUnknownCompressionSettings) {
+      if (!compression) {
          // Get the compression of this RNTuple and use it as the output compression.
          // We currently assume all column ranges have the same compression, so we just peek at the first one.
          source->Attach();
@@ -138,15 +189,15 @@ try {
                   inFile->GetName());
             return -1;
          }
-         compression = (*firstColRange).fCompressionSettings;
-         Info("RNTuple::Merge", "Using the first RNTuple's compression: %d", compression);
+         compression = (*firstColRange).fCompressionSettings.value();
+         Info("RNTuple::Merge", "Using the first RNTuple's compression: %u", *compression);
       }
       sources.push_back(std::move(source));
    }
 
    RNTupleWriteOptions writeOpts;
-   assert(compression != kUnknownCompressionSettings);
-   writeOpts.SetCompression(compression);
+   assert(compression);
+   writeOpts.SetCompression(*compression);
    auto destination = std::make_unique<RPageSinkFile>(ntupleName, *outFile, writeOpts);
 
    // If we already have an existing RNTuple, copy over its descriptor to support incremental merging
@@ -164,10 +215,17 @@ try {
    }
 
    // Now merge
-   RNTupleMerger merger;
+   RNTupleMerger merger{std::move(destination)};
    RNTupleMergeOptions mergerOpts;
-   mergerOpts.fCompressionSettings = compression;
-   merger.Merge(sourcePtrs, *destination, mergerOpts).ThrowOnError();
+   mergerOpts.fCompressionSettings = *compression;
+   mergerOpts.fExtraVerbose = extraVerbose;
+   if (auto mergingMode = ParseOptionMergingMode(mergeInfo->fOptions)) {
+      mergerOpts.fMergingMode = *mergingMode;
+   }
+   if (auto errBehavior = ParseOptionErrBehavior(mergeInfo->fOptions)) {
+      mergerOpts.fErrBehavior = *errBehavior;
+   }
+   merger.Merge(sourcePtrs, mergerOpts).ThrowOnError();
 
    // Provide the caller with a merged anchor object (even though we've already
    // written it).
@@ -197,7 +255,7 @@ struct RChangeCompressionFunc {
       sealConf.fElement = &fDstColElement;
       sealConf.fPage = &page;
       sealConf.fBuffer = fBuffer;
-      sealConf.fCompressionSetting = fMergeOptions.fCompressionSettings;
+      sealConf.fCompressionSetting = *fMergeOptions.fCompressionSettings;
       sealConf.fWriteChecksum = fSealedPage.GetHasChecksum();
       auto refSealedPage = RPageSink::SealPage(sealConf);
       fSealedPage = refSealedPage;
@@ -219,7 +277,7 @@ struct RDescriptorsComparison {
 
 struct RColumnOutInfo {
    DescriptorId_t fColumnId;
-   EColumnType fColumnType;
+   ENTupleColumnType fColumnType;
 };
 
 // { fully.qualified.fieldName.colInputId => colOutputInfo }
@@ -241,7 +299,7 @@ struct RColumnMergeInfo {
    std::string fColumnName;
    DescriptorId_t fInputId;
    DescriptorId_t fOutputId;
-   EColumnType fColumnType;
+   ENTupleColumnType fColumnType;
    // If nullopt, use the default in-memory type
    std::optional<std::type_index> fInMemoryType;
    const RFieldDescriptor *fParentField;
@@ -286,29 +344,29 @@ std::ostream &operator<<(std::ostream &os, const std::optional<RColumnDescriptor
 
 } // namespace ROOT::Experimental::Internal
 
-static bool IsSplitOrUnsplitVersionOf(EColumnType a, EColumnType b)
+static bool IsSplitOrUnsplitVersionOf(ENTupleColumnType a, ENTupleColumnType b)
 {
    // clang-format off
-   if (a == EColumnType::kInt16 && b == EColumnType::kSplitInt16) return true;
-   if (a == EColumnType::kSplitInt16 && b == EColumnType::kInt16) return true;
-   if (a == EColumnType::kInt32 && b == EColumnType::kSplitInt32) return true;
-   if (a == EColumnType::kSplitInt32 && b == EColumnType::kInt32) return true;
-   if (a == EColumnType::kInt64 && b == EColumnType::kSplitInt64) return true;
-   if (a == EColumnType::kSplitInt64 && b == EColumnType::kInt64) return true;
-   if (a == EColumnType::kUInt16 && b == EColumnType::kSplitUInt16) return true;
-   if (a == EColumnType::kSplitUInt16 && b == EColumnType::kUInt16) return true;
-   if (a == EColumnType::kUInt32 && b == EColumnType::kSplitUInt32) return true;
-   if (a == EColumnType::kSplitUInt32 && b == EColumnType::kUInt32) return true;
-   if (a == EColumnType::kUInt64 && b == EColumnType::kSplitUInt64) return true;
-   if (a == EColumnType::kSplitUInt64 && b == EColumnType::kUInt64) return true;
-   if (a == EColumnType::kIndex32 && b == EColumnType::kSplitIndex32) return true;
-   if (a == EColumnType::kSplitIndex32 && b == EColumnType::kIndex32) return true;
-   if (a == EColumnType::kIndex64 && b == EColumnType::kSplitIndex64) return true;
-   if (a == EColumnType::kSplitIndex64 && b == EColumnType::kIndex64) return true;
-   if (a == EColumnType::kReal32 && b == EColumnType::kSplitReal32) return true;
-   if (a == EColumnType::kSplitReal32 && b == EColumnType::kReal32) return true;
-   if (a == EColumnType::kReal64 && b == EColumnType::kSplitReal64) return true;
-   if (a == EColumnType::kSplitReal64 && b == EColumnType::kReal64) return true;
+   if (a == ENTupleColumnType::kInt16 && b == ENTupleColumnType::kSplitInt16) return true;
+   if (a == ENTupleColumnType::kSplitInt16 && b == ENTupleColumnType::kInt16) return true;
+   if (a == ENTupleColumnType::kInt32 && b == ENTupleColumnType::kSplitInt32) return true;
+   if (a == ENTupleColumnType::kSplitInt32 && b == ENTupleColumnType::kInt32) return true;
+   if (a == ENTupleColumnType::kInt64 && b == ENTupleColumnType::kSplitInt64) return true;
+   if (a == ENTupleColumnType::kSplitInt64 && b == ENTupleColumnType::kInt64) return true;
+   if (a == ENTupleColumnType::kUInt16 && b == ENTupleColumnType::kSplitUInt16) return true;
+   if (a == ENTupleColumnType::kSplitUInt16 && b == ENTupleColumnType::kUInt16) return true;
+   if (a == ENTupleColumnType::kUInt32 && b == ENTupleColumnType::kSplitUInt32) return true;
+   if (a == ENTupleColumnType::kSplitUInt32 && b == ENTupleColumnType::kUInt32) return true;
+   if (a == ENTupleColumnType::kUInt64 && b == ENTupleColumnType::kSplitUInt64) return true;
+   if (a == ENTupleColumnType::kSplitUInt64 && b == ENTupleColumnType::kUInt64) return true;
+   if (a == ENTupleColumnType::kIndex32 && b == ENTupleColumnType::kSplitIndex32) return true;
+   if (a == ENTupleColumnType::kSplitIndex32 && b == ENTupleColumnType::kIndex32) return true;
+   if (a == ENTupleColumnType::kIndex64 && b == ENTupleColumnType::kSplitIndex64) return true;
+   if (a == ENTupleColumnType::kSplitIndex64 && b == ENTupleColumnType::kIndex64) return true;
+   if (a == ENTupleColumnType::kReal32 && b == ENTupleColumnType::kSplitReal32) return true;
+   if (a == ENTupleColumnType::kSplitReal32 && b == ENTupleColumnType::kReal32) return true;
+   if (a == ENTupleColumnType::kReal64 && b == ENTupleColumnType::kSplitReal64) return true;
+   if (a == ENTupleColumnType::kSplitReal64 && b == ENTupleColumnType::kReal64) return true;
    // clang-format on
    return false;
 }
@@ -553,11 +611,12 @@ void RNTupleMerger::MergeCommonColumns(RClusterPool &clusterPool, DescriptorId_t
       sealedPages.resize(pages.fPageInfos.size());
 
       // Each column range potentially has a distinct compression settings
-      const auto colRangeCompressionSettings = clusterDesc.GetColumnRange(columnId).fCompressionSettings;
-      const bool needsCompressionChange = colRangeCompressionSettings != mergeData.fMergeOpts.fCompressionSettings;
+      const auto colRangeCompressionSettings = clusterDesc.GetColumnRange(columnId).fCompressionSettings.value();
+      const bool needsCompressionChange =
+         colRangeCompressionSettings != mergeData.fMergeOpts.fCompressionSettings.value();
       if (needsCompressionChange && mergeData.fMergeOpts.fExtraVerbose)
          Info("RNTuple::Merge", "Column %s: changing source compression from %d to %d", column.fColumnName.c_str(),
-              colRangeCompressionSettings, mergeData.fMergeOpts.fCompressionSettings);
+              colRangeCompressionSettings, mergeData.fMergeOpts.fCompressionSettings.value());
 
       size_t pageBufferBaseIdx = sealedPageData.fBuffers.size();
       // If the column range already has the right compression we don't need to allocate any new buffer, so we don't
@@ -578,7 +637,7 @@ void RNTupleMerger::MergeCommonColumns(RClusterPool &clusterPool, DescriptorId_t
          RPageStorage::RSealedPage &sealedPage = sealedPages[pageIdx];
          sealedPage.SetNElements(pageInfo.fNElements);
          sealedPage.SetHasChecksum(pageInfo.fHasChecksum);
-         sealedPage.SetBufferSize(pageInfo.fLocator.fBytesOnStorage + checksumSize);
+         sealedPage.SetBufferSize(pageInfo.fLocator.GetNBytesOnStorage() + checksumSize);
          sealedPage.SetBuffer(onDiskPage->GetAddress());
          // TODO(gparolini): more graceful error handling (skip the page?)
          sealedPage.VerifyChecksumIfEnabled().ThrowOnError();
@@ -659,12 +718,12 @@ static void GenerateExtraDstColumns(size_t nClusterEntries, std::span<RColumnMer
 
       const auto colElement = RColumnElementBase::Generate(columnDesc.GetType());
       const auto nElements = nClusterEntries * nRepetitions;
-      const auto bytesOnStorage = colElement->GetPackedSize(nElements);
+      const auto nBytesOnStorage = colElement->GetPackedSize(nElements);
       constexpr auto kPageSizeLimit = 256 * 1024;
       // TODO(gparolini): consider coalescing the last page if its size is less than some threshold
-      const size_t nPages = bytesOnStorage / kPageSizeLimit + !!(bytesOnStorage % kPageSizeLimit);
+      const size_t nPages = nBytesOnStorage / kPageSizeLimit + !!(nBytesOnStorage % kPageSizeLimit);
       for (size_t i = 0; i < nPages; ++i) {
-         const auto pageSize = (i < nPages - 1) ? kPageSizeLimit : bytesOnStorage - kPageSizeLimit * (nPages - 1);
+         const auto pageSize = (i < nPages - 1) ? kPageSizeLimit : nBytesOnStorage - kPageSizeLimit * (nPages - 1);
          const auto checksumSize = RPageStorage::kNBytesPageChecksum;
          const auto bufSize = pageSize + checksumSize;
          auto &buffer = sealedPageData.fBuffers.emplace_back(new unsigned char[bufSize]);
@@ -738,14 +797,14 @@ void RNTupleMerger::MergeSourceClusters(RPageSource &source, std::span<RColumnMe
    // So currently we simply merge all cluster groups into one.
 }
 
-static std::optional<std::type_index> ColumnInMemoryType(std::string_view fieldType, EColumnType onDiskType)
+static std::optional<std::type_index> ColumnInMemoryType(std::string_view fieldType, ENTupleColumnType onDiskType)
 {
-   if (onDiskType == EColumnType::kIndex32 || onDiskType == EColumnType::kSplitIndex32 ||
-       onDiskType == EColumnType::kIndex64 || onDiskType == EColumnType::kSplitIndex64)
-      return typeid(ClusterSize_t);
+   if (onDiskType == ENTupleColumnType::kIndex32 || onDiskType == ENTupleColumnType::kSplitIndex32 ||
+       onDiskType == ENTupleColumnType::kIndex64 || onDiskType == ENTupleColumnType::kSplitIndex64)
+      return typeid(ROOT::Experimental::Internal::RColumnIndex);
 
-   if (onDiskType == EColumnType::kSwitch)
-      return typeid(ROOT::Experimental::RColumnSwitch);
+   if (onDiskType == ENTupleColumnType::kSwitch)
+      return typeid(ROOT::Experimental::Internal::RColumnSwitch);
 
    if (fieldType == "bool") {
       return typeid(bool);
@@ -869,34 +928,39 @@ GatherColumnInfos(const RDescriptorsComparison &descCmp, const RNTupleDescriptor
    return res;
 }
 
-RNTupleMerger::RNTupleMerger()
+RNTupleMerger::RNTupleMerger(std::unique_ptr<RPageSink> destination)
    // TODO(gparolini): consider using an arena allocator instead, since we know the precise lifetime
    // of the RNTuples we are going to handle (e.g. we can reset the arena at every source)
-   : fPageAlloc(std::make_unique<RPageAllocatorHeap>())
+   : fDestination(std::move(destination)), fPageAlloc(std::make_unique<RPageAllocatorHeap>())
 {
+   R__ASSERT(fDestination);
+
 #ifdef R__USE_IMT
    if (ROOT::IsImplicitMTEnabled())
       fTaskGroup = TTaskGroup();
 #endif
 }
 
-ROOT::RResult<void>
-RNTupleMerger::Merge(std::span<RPageSource *> sources, RPageSink &destination, const RNTupleMergeOptions &mergeOptsIn)
+ROOT::RResult<void> RNTupleMerger::Merge(std::span<RPageSource *> sources, const RNTupleMergeOptions &mergeOptsIn)
 {
    RNTupleMergeOptions mergeOpts = mergeOptsIn;
+
+   assert(fDestination);
+
+   // Set compression settings if unset and verify it's compatible with the sink
    {
-      const auto dstCompSettings = destination.GetWriteOptions().GetCompression();
-      if (mergeOpts.fCompressionSettings == kUnknownCompressionSettings) {
+      const auto dstCompSettings = fDestination->GetWriteOptions().GetCompression();
+      if (!mergeOpts.fCompressionSettings) {
          mergeOpts.fCompressionSettings = dstCompSettings;
-      } else if (mergeOpts.fCompressionSettings != dstCompSettings) {
+      } else if (*mergeOpts.fCompressionSettings != dstCompSettings) {
          return R__FAIL(std::string("The compression given to RNTupleMergeOptions is different from that of the "
                                     "sink! (opts: ") +
-                        std::to_string(mergeOpts.fCompressionSettings) + ", sink: " + std::to_string(dstCompSettings) +
+                        std::to_string(*mergeOpts.fCompressionSettings) + ", sink: " + std::to_string(dstCompSettings) +
                         ") This is currently unsupported.");
       }
    }
 
-   RNTupleMergeData mergeData{sources, destination, mergeOpts};
+   RNTupleMergeData mergeData{sources, *fDestination, mergeOpts};
 
    std::unique_ptr<RNTupleModel> model; // used to initialize the schema of the output RNTuple
 
@@ -917,20 +981,20 @@ RNTupleMerger::Merge(std::span<RPageSource *> sources, RPageSink &destination, c
       mergeData.fSrcDescriptor = &srcDescriptor.GetRef();
 
       // Create sink from the input model if not initialized
-      if (!destination.IsInitialized()) {
+      if (!fDestination->IsInitialized()) {
          auto opts = RNTupleDescriptor::RCreateModelOptions();
          opts.fReconstructProjections = true;
          model = srcDescriptor->CreateModel(opts);
-         destination.Init(*model);
+         fDestination->Init(*model);
       }
 
       for (const auto &extraTypeInfoDesc : srcDescriptor->GetExtraTypeInfoIterable())
-         destination.UpdateExtraTypeInfo(extraTypeInfoDesc);
+         fDestination->UpdateExtraTypeInfo(extraTypeInfoDesc);
 
       auto descCmpRes = CompareDescriptorStructure(mergeData.fDstDescriptor, srcDescriptor.GetRef());
       if (!descCmpRes) {
          SKIP_OR_ABORT(
-            std::string("Source RNTuple will be skipped due to incompatible schema with the destination:\n") +
+            std::string("Source RNTuple will be skipped due to incompatible schema with the fDestination:\n") +
             descCmpRes.GetError()->GetReport());
       }
       auto descCmp = descCmpRes.Unwrap();
@@ -952,7 +1016,7 @@ RNTupleMerger::Merge(std::span<RPageSource *> sources, RPageSink &destination, c
             ExtendDestinationModel(descCmp.fExtraSrcFields, *model, mergeData, descCmp.fCommonFields);
          } else if (mergeOpts.fMergingMode == ENTupleMergingMode::kStrict) {
             // If the current source has extra fields and we're in Strict mode, error
-            std::string msg = "Source RNTuple has extra fields that the destination RNTuple doesn't have:";
+            std::string msg = "Source RNTuple has extra fields that the fDestination RNTuple doesn't have:";
             for (const auto *field : descCmp.fExtraSrcFields) {
                msg += "\n  " + field->GetFieldName() + " : " + field->GetTypeName();
             }
@@ -966,8 +1030,8 @@ RNTupleMerger::Merge(std::span<RPageSource *> sources, RPageSink &destination, c
    } // end loop over sources
 
    // Commit the output
-   destination.CommitClusterGroup();
-   destination.CommitDataset();
+   fDestination->CommitClusterGroup();
+   fDestination->CommitDataset();
 
    return RResult<void>::Success();
 }

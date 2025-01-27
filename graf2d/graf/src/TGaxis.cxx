@@ -314,7 +314,7 @@ only with histograms because the labels'definition is stored in `TAxis`.
 The following example demonstrates how to create such labels.
 
 Begin_Macro(source)
-../../../tutorials/hist/hlabels2.C
+../../../tutorials/hist/hist036_TH2_labels.C
 End_Macro
 
 Because the alphanumeric labels are usually longer that the numeric labels, their
@@ -675,7 +675,7 @@ and `localtime` give with what gives `TGaxis`. It can be used
 as referenced test to check if the time option of `TGaxis` is working properly.
 
 Begin_Macro(source)
-../../../tutorials/visualisation/graphs/timeonaxis3.C
+../../../tutorials/visualisation/graphics/timeonaxis3.C
 End_Macro
 
 
@@ -683,7 +683,7 @@ The following macro illustrates the use, with histograms axis, of the time mode 
 with different time intervals and time formats.
 
 Begin_Macro(source)
-../../../tutorials/visualisation/graphs/timeonaxis.C
+../../../tutorials/hist/hist061_TH1_timeonaxis.C
 End_Macro
 
 */

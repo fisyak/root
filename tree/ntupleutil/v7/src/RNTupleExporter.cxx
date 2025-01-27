@@ -25,7 +25,7 @@ namespace ROOT::Experimental::Internal {
 
 namespace {
 
-ROOT::Experimental::RLogChannel &RNTupleExporterLog()
+ROOT::RLogChannel &RNTupleExporterLog()
 {
    static RLogChannel sLog("ROOT.RNTupleExporter");
    return sLog;
@@ -159,12 +159,17 @@ RNTupleExporter::RPagesResult RNTupleExporter::ExportPages(RPageSource &source, 
             const void *pageBuf = onDiskPage->GetAddress();
             const bool incChecksum = (options.fFlags & RPagesOptions::kIncludeChecksums) != 0 && pageInfo.fHasChecksum;
             const std::size_t maybeChecksumSize = incChecksum * 8;
-            const std::uint64_t pageBufSize = pageInfo.fLocator.fBytesOnStorage + maybeChecksumSize;
+            const std::uint64_t pageBufSize = pageInfo.fLocator.GetNBytesOnStorage() + maybeChecksumSize;
             std::ostringstream ss{options.fOutputPath, std::ios_base::ate};
+            assert(colRange.fCompressionSettings);
             ss << "/cluster_" << clusterDesc.GetId() << "_" << colInfo.fQualifiedName << "_page_" << pageIdx
-               << "_elems_" << pageInfo.fNElements << "_comp_" << colRange.fCompressionSettings << ".page";
+               << "_elems_" << pageInfo.fNElements << "_comp_" << *colRange.fCompressionSettings << ".page";
             const auto outFileName = ss.str();
             std::ofstream outFile{outFileName, std::ios_base::binary};
+            if (!outFile)
+               throw ROOT::RException(
+                  R__FAIL(std::string("output path ") + options.fOutputPath + " does not exist or is not writable!"));
+
             outFile.write(reinterpret_cast<const char *>(pageBuf), pageBufSize);
 
             res.fExportedFileNames.push_back(outFileName);

@@ -66,7 +66,8 @@ ROOT::Experimental::RFieldDescriptor ROOT::Experimental::RFieldDescriptor::Clone
 }
 
 std::unique_ptr<ROOT::Experimental::RFieldBase>
-ROOT::Experimental::RFieldDescriptor::CreateField(const RNTupleDescriptor &ntplDesc, bool continueOnError) const
+ROOT::Experimental::RFieldDescriptor::CreateField(const RNTupleDescriptor &ntplDesc,
+                                                  const RCreateFieldOptions &options) const
 {
    if (GetStructure() == ENTupleStructure::kStreamer) {
       auto streamerField = std::make_unique<RStreamerField>(GetFieldName(), GetTypeName());
@@ -77,8 +78,9 @@ ROOT::Experimental::RFieldDescriptor::CreateField(const RNTupleDescriptor &ntplD
    // The structure may be unknown if the descriptor comes from a deserialized field with an unknown structural role.
    // For forward compatibility, we allow this case and return an InvalidField.
    if (GetStructure() == ENTupleStructure::kUnknown) {
-      if (continueOnError) {
-         auto invalidField = std::make_unique<RInvalidField>(GetFieldName(), GetTypeName(), "");
+      if (options.fReturnInvalidOnError) {
+         auto invalidField = std::make_unique<RInvalidField>(GetFieldName(), GetTypeName(), "",
+                                                             RInvalidField::RCategory::kUnknownStructure);
          invalidField->SetOnDiskId(fFieldId);
          return invalidField;
       } else {
@@ -90,10 +92,11 @@ ROOT::Experimental::RFieldDescriptor::CreateField(const RNTupleDescriptor &ntplD
       switch (GetStructure()) {
       case ENTupleStructure::kRecord: {
          std::vector<std::unique_ptr<RFieldBase>> memberFields;
+         memberFields.reserve(fLinkIds.size());
          for (auto id : fLinkIds) {
             const auto &memberDesc = ntplDesc.GetFieldDescriptor(id);
-            auto field = memberDesc.CreateField(ntplDesc, continueOnError);
-            if (dynamic_cast<RInvalidField *>(field.get()))
+            auto field = memberDesc.CreateField(ntplDesc, options);
+            if (field->GetTraits() & RFieldBase::kTraitInvalidField)
                return field;
             memberFields.emplace_back(std::move(field));
          }
@@ -105,8 +108,8 @@ ROOT::Experimental::RFieldDescriptor::CreateField(const RNTupleDescriptor &ntplD
          if (fLinkIds.size() != 1) {
             throw RException(R__FAIL("unsupported untyped collection for field \"" + GetFieldName() + "\""));
          }
-         auto itemField = ntplDesc.GetFieldDescriptor(fLinkIds[0]).CreateField(ntplDesc, continueOnError);
-         if (dynamic_cast<RInvalidField *>(itemField.get()))
+         auto itemField = ntplDesc.GetFieldDescriptor(fLinkIds[0]).CreateField(ntplDesc, options);
+         if (itemField->GetTraits() & RFieldBase::kTraitInvalidField)
             return itemField;
          auto collectionField = RVectorField::CreateUntyped(GetFieldName(), std::move(itemField));
          collectionField->SetOnDiskId(fFieldId);
@@ -117,14 +120,29 @@ ROOT::Experimental::RFieldDescriptor::CreateField(const RNTupleDescriptor &ntplD
    }
 
    try {
-      auto field = RFieldBase::Create(GetFieldName(), GetTypeAlias().empty() ? GetTypeName() : GetTypeAlias()).Unwrap();
+      const auto &fieldName = GetFieldName();
+      const auto &typeName = GetTypeAlias().empty() ? GetTypeName() : GetTypeAlias();
+      // NOTE: Unwrap() here may throw an exception, hence the try block.
+      // If options.fReturnInvalidOnError is false we just rethrow it, otherwise we return an InvalidField wrapping the
+      // error.
+      auto field = Internal::CallFieldBaseCreate(fieldName, typeName, typeName, options, &ntplDesc, fFieldId).Unwrap();
       field->SetOnDiskId(fFieldId);
-      for (auto &f : *field)
-         f.SetOnDiskId(ntplDesc.FindFieldId(f.GetFieldName(), f.GetParent()->GetOnDiskId()));
+
+      for (auto &subfield : *field) {
+         const auto subfieldId = ntplDesc.FindFieldId(subfield.GetFieldName(), subfield.GetParent()->GetOnDiskId());
+         subfield.SetOnDiskId(subfieldId);
+         if (subfield.GetTraits() & RFieldBase::kTraitInvalidField) {
+            auto &invalidField = static_cast<RInvalidField &>(subfield);
+            // A subfield being invalid "infects" its entire ancestry.
+            return invalidField.Clone(fieldName);
+         }
+      }
+
       return field;
    } catch (RException &ex) {
-      if (continueOnError)
-         return std::make_unique<RInvalidField>(GetFieldName(), GetTypeName(), ex.GetError().GetReport());
+      if (options.fReturnInvalidOnError)
+         return std::make_unique<RInvalidField>(GetFieldName(), GetTypeName(), ex.GetError().GetReport(),
+                                                RInvalidField::RCategory::kGeneric);
       else
          throw ex;
    }
@@ -177,7 +195,7 @@ ROOT::Experimental::RColumnDescriptor ROOT::Experimental::RColumnDescriptor::Clo
 ////////////////////////////////////////////////////////////////////////////////
 
 ROOT::Experimental::RClusterDescriptor::RPageRange::RPageInfoExtended
-ROOT::Experimental::RClusterDescriptor::RPageRange::Find(ClusterSize_t::ValueType idxInCluster) const
+ROOT::Experimental::RClusterDescriptor::RPageRange::Find(NTupleSize_t idxInCluster) const
 {
    const auto N = fCumulativeNElements.size();
    R__ASSERT(N > 0);
@@ -230,8 +248,8 @@ ROOT::Experimental::RClusterDescriptor::RPageRange::ExtendToFitColumnRange(const
    for (auto nRemainingElements = nElementsRequired - nElements; nRemainingElements > 0;) {
       RPageInfo PI;
       PI.fNElements = std::min(nElementsPerPage, nRemainingElements);
-      PI.fLocator.fType = RNTupleLocator::kTypePageZero;
-      PI.fLocator.fBytesOnStorage = element.GetPackedSize(PI.fNElements);
+      PI.fLocator.SetType(RNTupleLocator::kTypePageZero);
+      PI.fLocator.SetNBytesOnStorage(element.GetPackedSize(PI.fNElements));
       pageInfos.emplace_back(PI);
       nRemainingElements -= PI.fNElements;
    }
@@ -248,12 +266,12 @@ bool ROOT::Experimental::RClusterDescriptor::operator==(const RClusterDescriptor
           fNEntries == other.fNEntries && fColumnRanges == other.fColumnRanges && fPageRanges == other.fPageRanges;
 }
 
-std::uint64_t ROOT::Experimental::RClusterDescriptor::GetBytesOnStorage() const
+std::uint64_t ROOT::Experimental::RClusterDescriptor::GetNBytesOnStorage() const
 {
    std::uint64_t nbytes = 0;
    for (const auto &pr : fPageRanges) {
       for (const auto &pi : pr.second.fPageInfos) {
-         nbytes += pi.fLocator.fBytesOnStorage;
+         nbytes += pi.fLocator.GetNBytesOnStorage();
       }
    }
    return nbytes;
@@ -595,11 +613,9 @@ ROOT::Experimental::RNTupleDescriptor::AddClusterGroupDetails(DescriptorId_t clu
          return R__FAIL("invalid attempt to re-populate existing cluster");
       }
    }
-   std::sort(clusterIds.begin(), clusterIds.end(),
-             [this](DescriptorId_t a, DescriptorId_t b)
-             {
-                return fClusterDescriptors[a].GetFirstEntryIndex() < fClusterDescriptors[b].GetFirstEntryIndex();
-             });
+   std::sort(clusterIds.begin(), clusterIds.end(), [this](DescriptorId_t a, DescriptorId_t b) {
+      return fClusterDescriptors[a].GetFirstEntryIndex() < fClusterDescriptors[b].GetFirstEntryIndex();
+   });
    auto cgBuilder = Internal::RClusterGroupDescriptorBuilder::FromSummary(iter->second);
    cgBuilder.AddSortedClusters(clusterIds);
    iter->second = cgBuilder.MoveDescriptor().Unwrap();
@@ -627,10 +643,12 @@ ROOT::Experimental::RNTupleDescriptor::CreateModel(const RCreateModelOptions &op
    fieldZero->SetOnDiskId(GetFieldZeroId());
    auto model =
       options.fCreateBare ? RNTupleModel::CreateBare(std::move(fieldZero)) : RNTupleModel::Create(std::move(fieldZero));
-   bool continueOnError = options.fForwardCompatible;
+   RCreateFieldOptions createFieldOpts{};
+   createFieldOpts.fReturnInvalidOnError = options.fForwardCompatible;
+   createFieldOpts.fEmulateUnknownTypes = options.fEmulateUnknownTypes;
    for (const auto &topDesc : GetTopLevelFields()) {
-      auto field = topDesc.CreateField(*this, continueOnError);
-      if (dynamic_cast<RInvalidField *>(field.get()))
+      auto field = topDesc.CreateField(*this, createFieldOpts);
+      if (field->GetTraits() & RFieldBase::kTraitInvalidField)
          continue;
 
       if (options.fReconstructProjections && topDesc.IsProjectedField()) {
@@ -645,32 +663,32 @@ ROOT::Experimental::RNTupleDescriptor::CreateModel(const RCreateModelOptions &op
    return model;
 }
 
-std::unique_ptr<ROOT::Experimental::RNTupleDescriptor> ROOT::Experimental::RNTupleDescriptor::Clone() const
+ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::RNTupleDescriptor::Clone() const
 {
-   auto clone = std::make_unique<RNTupleDescriptor>();
-   clone->fName = fName;
-   clone->fDescription = fDescription;
-   clone->fOnDiskHeaderXxHash3 = fOnDiskHeaderXxHash3;
-   clone->fOnDiskHeaderSize = fOnDiskHeaderSize;
-   clone->fOnDiskFooterSize = fOnDiskFooterSize;
-   clone->fNEntries = fNEntries;
-   clone->fNClusters = fNClusters;
-   clone->fNPhysicalColumns = fNPhysicalColumns;
-   clone->fFieldZeroId = fFieldZeroId;
-   clone->fGeneration = fGeneration;
+   RNTupleDescriptor clone;
+   clone.fName = fName;
+   clone.fDescription = fDescription;
+   clone.fOnDiskHeaderXxHash3 = fOnDiskHeaderXxHash3;
+   clone.fOnDiskHeaderSize = fOnDiskHeaderSize;
+   clone.fOnDiskFooterSize = fOnDiskFooterSize;
+   clone.fNEntries = fNEntries;
+   clone.fNClusters = fNClusters;
+   clone.fNPhysicalColumns = fNPhysicalColumns;
+   clone.fFieldZeroId = fFieldZeroId;
+   clone.fGeneration = fGeneration;
    for (const auto &d : fFieldDescriptors)
-      clone->fFieldDescriptors.emplace(d.first, d.second.Clone());
+      clone.fFieldDescriptors.emplace(d.first, d.second.Clone());
    for (const auto &d : fColumnDescriptors)
-      clone->fColumnDescriptors.emplace(d.first, d.second.Clone());
+      clone.fColumnDescriptors.emplace(d.first, d.second.Clone());
    for (const auto &d : fClusterGroupDescriptors)
-      clone->fClusterGroupDescriptors.emplace(d.first, d.second.Clone());
-   clone->fSortedClusterGroupIds = fSortedClusterGroupIds;
+      clone.fClusterGroupDescriptors.emplace(d.first, d.second.Clone());
+   clone.fSortedClusterGroupIds = fSortedClusterGroupIds;
    for (const auto &d : fClusterDescriptors)
-      clone->fClusterDescriptors.emplace(d.first, d.second.Clone());
+      clone.fClusterDescriptors.emplace(d.first, d.second.Clone());
    for (const auto &d : fExtraTypeInfoDescriptors)
-      clone->fExtraTypeInfoDescriptors.emplace_back(d.Clone());
+      clone.fExtraTypeInfoDescriptors.emplace_back(d.Clone());
    if (fHeaderExtension)
-      clone->fHeaderExtension = std::make_unique<RHeaderExtension>(*fHeaderExtension);
+      clone.fHeaderExtension = std::make_unique<RHeaderExtension>(*fHeaderExtension);
    return clone;
 }
 
@@ -711,8 +729,7 @@ ROOT::RResult<void> ROOT::Experimental::Internal::RClusterDescriptorBuilder::Com
       return R__FAIL("column ID mismatch");
    if (fCluster.fColumnRanges.count(physicalId) > 0)
       return R__FAIL("column ID conflict");
-   RClusterDescriptor::RColumnRange columnRange{physicalId, firstElementIndex, ClusterSize_t{0}};
-   columnRange.fCompressionSettings = compressionSettings;
+   RClusterDescriptor::RColumnRange columnRange{physicalId, firstElementIndex, 0, compressionSettings};
    for (const auto &pi : pageRange.fPageInfos) {
       columnRange.fNElements += pi.fNElements;
    }
@@ -729,7 +746,6 @@ ROOT::Experimental::Internal::RClusterDescriptorBuilder::MarkSuppressedColumnRan
 
    RClusterDescriptor::RColumnRange columnRange;
    columnRange.fPhysicalColumnId = physicalId;
-   columnRange.fCompressionSettings = kUnknownCompressionSettings;
    columnRange.fIsSuppressed = true;
    fCluster.fColumnRanges[physicalId] = columnRange;
    return RResult<void>::Success();
@@ -949,10 +965,9 @@ ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::Internal::RNTupleDescr
    for (const auto &[id, _] : fDescriptor.fClusterGroupDescriptors)
       fDescriptor.fSortedClusterGroupIds.emplace_back(id);
    std::sort(fDescriptor.fSortedClusterGroupIds.begin(), fDescriptor.fSortedClusterGroupIds.end(),
-             [this](DescriptorId_t a, DescriptorId_t b)
-             {
-               return fDescriptor.fClusterGroupDescriptors[a].GetMinEntry() <
-                      fDescriptor.fClusterGroupDescriptors[b].GetMinEntry();
+             [this](DescriptorId_t a, DescriptorId_t b) {
+                return fDescriptor.fClusterGroupDescriptors[a].GetMinEntry() <
+                       fDescriptor.fClusterGroupDescriptors[b].GetMinEntry();
              });
    RNTupleDescriptor result;
    std::swap(result, fDescriptor);
@@ -988,7 +1003,7 @@ ROOT::Experimental::Internal::RColumnDescriptorBuilder::MakeDescriptor() const
    // as we have no idea what the valid range is.
    // In general, reading the metadata of an unknown column is fine, it becomes an error only when
    // we try to read the actual data contained in it.
-   if (fColumn.GetType() != EColumnType::kUnknown) {
+   if (fColumn.GetType() != ENTupleColumnType::kUnknown) {
       const auto [minBits, maxBits] = RColumnElementBase::GetValidBitRange(fColumn.GetType());
       if (fColumn.GetBitsOnStorage() < minBits || fColumn.GetBitsOnStorage() > maxBits)
          return R__FAIL("invalid column bit width");

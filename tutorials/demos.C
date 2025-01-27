@@ -23,13 +23,13 @@ void demos() {
    bar->AddButton("hsimple",       ".x hsimple.C",            "An Example Creating Histograms/Ntuples on File");
    bar->AddButton("hsum",          ".x hist/hsum.C",          "Filling Histograms and Some Graphics Options");
    bar->AddButton("formula1",      ".x visualisation/graphics/formula1.C",  "Simple Formula and Functions");
-   bar->AddButton("surfaces",      ".x visualisation/graphs/surfaces.C",    "Surface Drawing Options");
+   bar->AddButton("surfaces",      ".x visualisation/graphics/surfaces.C",    "Surface Drawing Options");
    bar->AddButton("fillrandom",    ".x hist/fillrandom.C",    "Histograms with Random Numbers from a Function");
    bar->AddButton("fit1", ".x math/fit/fit1.C", "A Simple Fitting Example");
    bar->AddButton("multifit", ".x math/fit/multifit.C", "Fitting in Subranges of Histograms");
    bar->AddButton("h1ReadAndDraw", ".x hist/h1ReadAndDraw.C", "Drawing Options for 1D Histograms");
-   bar->AddButton("graph",         ".x visualisation/graphs/graph.C",       "Example of a Simple Graph");
-   bar->AddButton("gerrors",       ".x visualisation/graphs/gerrors.C",     "Example of a Graph with Error Bars");
+   bar->AddButton("graph",         ".x visualisation/graphs/gr001_simple.C", "Example of a Simple Graph");
+   bar->AddButton("gerrors",       ".x visualisation/graphs/gr002_errors.C",     "Example of a Graph with Error Bars");
    bar->AddButton("tornado",       ".x visualisation/graphics/tornado.C",   "Examples of 3-D PolyMarkers");
    bar->AddButton("geometry",      ".x visualisation/geom/rootgeom.C",      "Example of TGeoManager drawing");
    bar->AddButton("file",          ".x io/file.C",            "The ROOT File Format");

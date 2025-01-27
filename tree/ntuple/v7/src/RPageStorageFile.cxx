@@ -87,8 +87,8 @@ ROOT::Experimental::Internal::RPageSinkFile::WriteSealedPage(const RPageStorage:
    }
 
    RNTupleLocator result;
-   result.fPosition = offsetData;
-   result.fBytesOnStorage = sealedPage.GetDataSize();
+   result.SetPosition(offsetData);
+   result.SetNBytesOnStorage(sealedPage.GetDataSize());
    fCounters->fNPageCommitted.Inc();
    fCounters->fSzWritePayload.Add(sealedPage.GetBufferSize());
    fNBytesCurrentCluster += sealedPage.GetBufferSize();
@@ -130,8 +130,8 @@ void ROOT::Experimental::Internal::RPageSinkFile::CommitBatchOfPages(CommitBatch
    for (const auto *pagePtr : batch.fSealedPages) {
       fWriter->WriteIntoReservedBlob(pagePtr->GetBuffer(), pagePtr->GetBufferSize(), offset);
       RNTupleLocator locator;
-      locator.fPosition = offset;
-      locator.fBytesOnStorage = pagePtr->GetDataSize();
+      locator.SetPosition(offset);
+      locator.SetNBytesOnStorage(pagePtr->GetDataSize());
       locators.push_back(locator);
       offset += pagePtr->GetBufferSize();
    }
@@ -193,8 +193,8 @@ ROOT::Experimental::Internal::RPageSinkFile::CommitSealedPageVImpl(std::span<RPa
             std::uint64_t offset =
                fWriter->WriteBlob(sealedPageIt->GetBuffer(), sealedPageIt->GetBufferSize(), bytesPacked);
             RNTupleLocator locator;
-            locator.fPosition = offset;
-            locator.fBytesOnStorage = sealedPageIt->GetDataSize();
+            locator.SetPosition(offset);
+            locator.SetNBytesOnStorage(sealedPageIt->GetDataSize());
             locators.push_back(locator);
 
             fCounters->fNPageCommitted.Inc();
@@ -232,8 +232,8 @@ ROOT::Experimental::Internal::RPageSinkFile::CommitClusterGroupImpl(unsigned cha
                                          RNTupleCompressor::MakeMemCopyWriter(bufPageListZip.get()));
 
    RNTupleLocator result;
-   result.fBytesOnStorage = szPageListZip;
-   result.fPosition = fWriter->WriteBlob(bufPageListZip.get(), szPageListZip, length);
+   result.SetNBytesOnStorage(szPageListZip);
+   result.SetPosition(fWriter->WriteBlob(bufPageListZip.get(), szPageListZip, length));
    return result;
 }
 
@@ -365,13 +365,13 @@ ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::Internal::RPageSourceF
 
    std::vector<unsigned char> buffer;
    for (const auto &cgDesc : desc.GetClusterGroupIterable()) {
-      buffer.resize(
-         std::max<size_t>(buffer.size(), cgDesc.GetPageListLength() + cgDesc.GetPageListLocator().fBytesOnStorage));
+      buffer.resize(std::max<size_t>(buffer.size(),
+                                     cgDesc.GetPageListLength() + cgDesc.GetPageListLocator().GetNBytesOnStorage()));
       auto *zipBuffer = buffer.data() + cgDesc.GetPageListLength();
-      fReader.ReadBuffer(zipBuffer, cgDesc.GetPageListLocator().fBytesOnStorage,
+      fReader.ReadBuffer(zipBuffer, cgDesc.GetPageListLocator().GetNBytesOnStorage(),
                          cgDesc.GetPageListLocator().GetPosition<std::uint64_t>());
-      RNTupleDecompressor::Unzip(zipBuffer, cgDesc.GetPageListLocator().fBytesOnStorage, cgDesc.GetPageListLength(),
-                                 buffer.data());
+      RNTupleDecompressor::Unzip(zipBuffer, cgDesc.GetPageListLocator().GetNBytesOnStorage(),
+                                 cgDesc.GetPageListLength(), buffer.data());
 
       RNTupleSerializer::DeserializePageList(buffer.data(), cgDesc.GetPageListLength(), cgDesc.GetId(), desc);
    }
@@ -383,23 +383,24 @@ ROOT::Experimental::RNTupleDescriptor ROOT::Experimental::Internal::RPageSourceF
 }
 
 void ROOT::Experimental::Internal::RPageSourceFile::LoadSealedPage(DescriptorId_t physicalColumnId,
-                                                                   RClusterIndex clusterIndex, RSealedPage &sealedPage)
+                                                                   RNTupleLocalIndex localIndex,
+                                                                   RSealedPage &sealedPage)
 {
-   const auto clusterId = clusterIndex.GetClusterId();
+   const auto clusterId = localIndex.GetClusterId();
 
    RClusterDescriptor::RPageRange::RPageInfo pageInfo;
    {
       auto descriptorGuard = GetSharedDescriptorGuard();
       const auto &clusterDescriptor = descriptorGuard->GetClusterDescriptor(clusterId);
-      pageInfo = clusterDescriptor.GetPageRange(physicalColumnId).Find(clusterIndex.GetIndex());
+      pageInfo = clusterDescriptor.GetPageRange(physicalColumnId).Find(localIndex.GetIndexInCluster());
    }
 
-   sealedPage.SetBufferSize(pageInfo.fLocator.fBytesOnStorage + pageInfo.fHasChecksum * kNBytesPageChecksum);
+   sealedPage.SetBufferSize(pageInfo.fLocator.GetNBytesOnStorage() + pageInfo.fHasChecksum * kNBytesPageChecksum);
    sealedPage.SetNElements(pageInfo.fNElements);
    sealedPage.SetHasChecksum(pageInfo.fHasChecksum);
    if (!sealedPage.GetBuffer())
       return;
-   if (pageInfo.fLocator.fType != RNTupleLocator::kTypePageZero) {
+   if (pageInfo.fLocator.GetType() != RNTupleLocator::kTypePageZero) {
       fReader.ReadBuffer(const_cast<void *>(sealedPage.GetBuffer()), sealedPage.GetBufferSize(),
                          pageInfo.fLocator.GetPosition<std::uint64_t>());
    } else {
@@ -412,8 +413,7 @@ void ROOT::Experimental::Internal::RPageSourceFile::LoadSealedPage(DescriptorId_
 
 ROOT::Experimental::Internal::RPageRef
 ROOT::Experimental::Internal::RPageSourceFile::LoadPageImpl(ColumnHandle_t columnHandle,
-                                                            const RClusterInfo &clusterInfo,
-                                                            ClusterSize_t::ValueType idxInCluster)
+                                                            const RClusterInfo &clusterInfo, NTupleSize_t idxInCluster)
 {
    const auto columnId = columnHandle.fPhysicalId;
    const auto clusterId = clusterInfo.fClusterId;
@@ -423,7 +423,7 @@ ROOT::Experimental::Internal::RPageSourceFile::LoadPageImpl(ColumnHandle_t colum
    const auto elementSize = element->GetSize();
    const auto elementInMemoryType = element->GetIdentifier().fInMemoryType;
 
-   if (pageInfo.fLocator.fType == RNTupleLocator::kTypePageZero) {
+   if (pageInfo.fLocator.GetType() == RNTupleLocator::kTypePageZero) {
       auto pageZero = fPageAllocator->NewPage(elementSize, pageInfo.fNElements);
       pageZero.GrowUnchecked(pageInfo.fNElements);
       memset(pageZero.GetBuffer(), 0, pageZero.GetNBytes());
@@ -435,7 +435,7 @@ ROOT::Experimental::Internal::RPageSourceFile::LoadPageImpl(ColumnHandle_t colum
    RSealedPage sealedPage;
    sealedPage.SetNElements(pageInfo.fNElements);
    sealedPage.SetHasChecksum(pageInfo.fHasChecksum);
-   sealedPage.SetBufferSize(pageInfo.fLocator.fBytesOnStorage + pageInfo.fHasChecksum * kNBytesPageChecksum);
+   sealedPage.SetBufferSize(pageInfo.fLocator.GetNBytesOnStorage() + pageInfo.fHasChecksum * kNBytesPageChecksum);
    std::unique_ptr<unsigned char[]> directReadBuffer; // only used if cluster pool is turned off
 
    if (fOptions.GetClusterCache() == RNTupleReadOptions::EClusterCache::kOff) {
@@ -455,7 +455,7 @@ ROOT::Experimental::Internal::RPageSourceFile::LoadPageImpl(ColumnHandle_t colum
       R__ASSERT(fCurrentCluster->ContainsColumn(columnId));
 
       auto cachedPageRef =
-         fPagePool.GetPage(RPagePool::RKey{columnId, elementInMemoryType}, RClusterIndex(clusterId, idxInCluster));
+         fPagePool.GetPage(RPagePool::RKey{columnId, elementInMemoryType}, RNTupleLocalIndex(clusterId, idxInCluster));
       if (!cachedPageRef.Get().IsNull())
          return cachedPageRef;
 
@@ -506,9 +506,10 @@ ROOT::Experimental::Internal::RPageSourceFile::PrepareSingleCluster(
                       [&](DescriptorId_t physicalColumnId, NTupleSize_t pageNo,
                           const RClusterDescriptor::RPageRange::RPageInfo &pageInfo) {
                          const auto &pageLocator = pageInfo.fLocator;
-                         if (pageLocator.fType == RNTupleLocator::kTypeUnknown)
+                         if (pageLocator.GetType() == RNTupleLocator::kTypeUnknown)
                             throw RException(R__FAIL("tried to read a page with an unknown locator"));
-                         const auto nBytes = pageLocator.fBytesOnStorage + pageInfo.fHasChecksum * kNBytesPageChecksum;
+                         const auto nBytes =
+                            pageLocator.GetNBytesOnStorage() + pageInfo.fHasChecksum * kNBytesPageChecksum;
                          activeSize += nBytes;
                          onDiskPages.push_back(
                             {physicalColumnId, pageNo, pageLocator.GetPosition<std::uint64_t>(), nBytes, 0});

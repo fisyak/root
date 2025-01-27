@@ -191,10 +191,10 @@ void ROOT::Experimental::RClassField::ReadGlobalImpl(NTupleSize_t globalIndex, v
    }
 }
 
-void ROOT::Experimental::RClassField::ReadInClusterImpl(RClusterIndex clusterIndex, void *to)
+void ROOT::Experimental::RClassField::ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to)
 {
    for (unsigned i = 0; i < fSubFields.size(); i++) {
-      CallReadOn(*fSubFields[i], clusterIndex, static_cast<unsigned char *>(to) + fSubFieldsInfo[i].fOffset);
+      CallReadOn(*fSubFields[i], localIndex, static_cast<unsigned char *>(to) + fSubFieldsInfo[i].fOffset);
    }
 }
 
@@ -513,8 +513,8 @@ std::size_t ROOT::Experimental::RProxiedCollectionField::AppendImpl(const void *
 
 void ROOT::Experimental::RProxiedCollectionField::ReadGlobalImpl(NTupleSize_t globalIndex, void *to)
 {
-   ClusterSize_t nItems;
-   RClusterIndex collectionStart;
+   NTupleSize_t nItems;
+   RNTupleLocalIndex collectionStart;
    fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &nItems);
 
    TVirtualCollectionProxy::TPushPop RAII(fProxy.get(), to);
@@ -533,20 +533,22 @@ void ROOT::Experimental::RProxiedCollectionField::ReadGlobalImpl(NTupleSize_t gl
 const ROOT::Experimental::RFieldBase::RColumnRepresentations &
 ROOT::Experimental::RProxiedCollectionField::GetColumnRepresentations() const
 {
-   static RColumnRepresentations representations(
-      {{EColumnType::kSplitIndex64}, {EColumnType::kIndex64}, {EColumnType::kSplitIndex32}, {EColumnType::kIndex32}},
-      {});
+   static RColumnRepresentations representations({{ENTupleColumnType::kSplitIndex64},
+                                                  {ENTupleColumnType::kIndex64},
+                                                  {ENTupleColumnType::kSplitIndex32},
+                                                  {ENTupleColumnType::kIndex32}},
+                                                 {});
    return representations;
 }
 
 void ROOT::Experimental::RProxiedCollectionField::GenerateColumns()
 {
-   GenerateColumnsImpl<ClusterSize_t>();
+   GenerateColumnsImpl<Internal::RColumnIndex>();
 }
 
 void ROOT::Experimental::RProxiedCollectionField::GenerateColumns(const RNTupleDescriptor &desc)
 {
-   GenerateColumnsImpl<ClusterSize_t>(desc);
+   GenerateColumnsImpl<Internal::RColumnIndex>(desc);
 }
 
 void ROOT::Experimental::RProxiedCollectionField::ConstructValue(void *where) const
@@ -684,8 +686,8 @@ std::size_t ROOT::Experimental::RStreamerField::AppendImpl(const void *from)
 
 void ROOT::Experimental::RStreamerField::ReadGlobalImpl(NTupleSize_t globalIndex, void *to)
 {
-   RClusterIndex collectionStart;
-   ClusterSize_t nbytes;
+   RNTupleLocalIndex collectionStart;
+   NTupleSize_t nbytes;
    fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &nbytes);
 
    TBufferFile buffer(TBuffer::kRead, nbytes);
@@ -696,22 +698,22 @@ void ROOT::Experimental::RStreamerField::ReadGlobalImpl(NTupleSize_t globalIndex
 const ROOT::Experimental::RFieldBase::RColumnRepresentations &
 ROOT::Experimental::RStreamerField::GetColumnRepresentations() const
 {
-   static RColumnRepresentations representations({{EColumnType::kSplitIndex64, EColumnType::kByte},
-                                                  {EColumnType::kIndex64, EColumnType::kByte},
-                                                  {EColumnType::kSplitIndex32, EColumnType::kByte},
-                                                  {EColumnType::kIndex32, EColumnType::kByte}},
+   static RColumnRepresentations representations({{ENTupleColumnType::kSplitIndex64, ENTupleColumnType::kByte},
+                                                  {ENTupleColumnType::kIndex64, ENTupleColumnType::kByte},
+                                                  {ENTupleColumnType::kSplitIndex32, ENTupleColumnType::kByte},
+                                                  {ENTupleColumnType::kIndex32, ENTupleColumnType::kByte}},
                                                  {});
    return representations;
 }
 
 void ROOT::Experimental::RStreamerField::GenerateColumns()
 {
-   GenerateColumnsImpl<ClusterSize_t, std::byte>();
+   GenerateColumnsImpl<Internal::RColumnIndex, std::byte>();
 }
 
 void ROOT::Experimental::RStreamerField::GenerateColumns(const RNTupleDescriptor &desc)
 {
-   GenerateColumnsImpl<ClusterSize_t, std::byte>(desc);
+   GenerateColumnsImpl<Internal::RColumnIndex, std::byte>(desc);
 }
 
 void ROOT::Experimental::RStreamerField::ConstructValue(void *where) const
@@ -1038,14 +1040,14 @@ std::size_t ROOT::Experimental::RVariantField::AppendImpl(const void *from)
       nbytes += CallAppendOn(*fSubFields[tag - 1], reinterpret_cast<const unsigned char *>(from) + fVariantOffset);
       index = fNWritten[tag - 1]++;
    }
-   RColumnSwitch varSwitch(ClusterSize_t(index), tag);
+   Internal::RColumnSwitch varSwitch(index, tag);
    fPrincipalColumn->Append(&varSwitch);
-   return nbytes + sizeof(RColumnSwitch);
+   return nbytes + sizeof(Internal::RColumnSwitch);
 }
 
 void ROOT::Experimental::RVariantField::ReadGlobalImpl(NTupleSize_t globalIndex, void *to)
 {
-   RClusterIndex variantIndex;
+   RNTupleLocalIndex variantIndex;
    std::uint32_t tag;
    fPrincipalColumn->GetSwitchInfo(globalIndex, &variantIndex, &tag);
    R__ASSERT(tag < 256);
@@ -1064,18 +1066,18 @@ void ROOT::Experimental::RVariantField::ReadGlobalImpl(NTupleSize_t globalIndex,
 const ROOT::Experimental::RFieldBase::RColumnRepresentations &
 ROOT::Experimental::RVariantField::GetColumnRepresentations() const
 {
-   static RColumnRepresentations representations({{EColumnType::kSwitch}}, {});
+   static RColumnRepresentations representations({{ENTupleColumnType::kSwitch}}, {});
    return representations;
 }
 
 void ROOT::Experimental::RVariantField::GenerateColumns()
 {
-   GenerateColumnsImpl<RColumnSwitch>();
+   GenerateColumnsImpl<Internal::RColumnSwitch>();
 }
 
 void ROOT::Experimental::RVariantField::GenerateColumns(const RNTupleDescriptor &desc)
 {
-   GenerateColumnsImpl<RColumnSwitch>(desc);
+   GenerateColumnsImpl<Internal::RColumnSwitch>(desc);
 }
 
 void ROOT::Experimental::RVariantField::ConstructValue(void *where) const

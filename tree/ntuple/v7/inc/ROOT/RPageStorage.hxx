@@ -187,7 +187,7 @@ public:
    /// Unregisters a column.  A page source decreases the reference counter for the corresponding active column.
    /// For a page sink, dropping columns is currently a no-op.
    virtual void DropColumn(ColumnHandle_t columnHandle) = 0;
-   ColumnId_t GetColumnId(ColumnHandle_t columnHandle) const { return columnHandle.fPhysicalId; }
+   DescriptorId_t GetColumnId(ColumnHandle_t columnHandle) const { return columnHandle.fPhysicalId; }
 
    /// Returns the default metrics object.  Subclasses might alternatively provide their own metrics object by
    /// overriding this.
@@ -266,7 +266,7 @@ public:
 
       struct RColumnInfo {
          RClusterDescriptor::RPageRange fPageRange;
-         ClusterSize_t fNElements = kInvalidClusterIndex;
+         NTupleSize_t fNElements = kInvalidNTupleIndex;
          bool fIsSuppressed = false;
       };
 
@@ -316,6 +316,8 @@ public:
 
    /// Return the RNTupleDescriptor being constructed.
    virtual const RNTupleDescriptor &GetDescriptor() const = 0;
+
+   virtual NTupleSize_t GetNEntries() const = 0;
 
    /// Physically creates the storage container to hold the ntuple (e.g., a keys a TFile or an S3 bucket)
    /// Init() associates column handles to the columns referenced by the model
@@ -519,6 +521,8 @@ public:
 
    const RNTupleDescriptor &GetDescriptor() const final { return fDescriptorBuilder.GetDescriptor(); }
 
+   NTupleSize_t GetNEntries() const final { return fPrevClusterNEntries; }
+
    /// Updates the descriptor and calls InitImpl() that handles the backend-specific details (file, DAOS, etc.)
    void InitImpl(RNTupleModel &model) final;
    void UpdateSchema(const RNTupleModelChangeset &changeset, NTupleSize_t firstEntry) final;
@@ -598,7 +602,7 @@ public:
          fLock.unlock();
       }
       RNTupleDescriptor *operator->() const { return &fDescriptor; }
-      void MoveIn(RNTupleDescriptor &&desc) { fDescriptor = std::move(desc); }
+      void MoveIn(RNTupleDescriptor desc) { fDescriptor = std::move(desc); }
    };
 
 private:
@@ -697,8 +701,8 @@ protected:
    // Only called if a task scheduler is set. No-op be default.
    virtual void UnzipClusterImpl(RCluster *cluster);
    // Returns a page from storage if not found in the page pool. Should be able to handle zero page locators.
-   virtual RPageRef LoadPageImpl(ColumnHandle_t columnHandle, const RClusterInfo &clusterInfo,
-                                 ClusterSize_t::ValueType idxInCluster) = 0;
+   virtual RPageRef
+   LoadPageImpl(ColumnHandle_t columnHandle, const RClusterInfo &clusterInfo, NTupleSize_t idxInCluster) = 0;
 
    /// Prepare a page range read for the column set in `clusterKey`.  Specifically, pages referencing the
    /// `kTypePageZero` locator are filled in `pageZeroMap`; otherwise, `perPageFunc` is called for each page. This is
@@ -776,7 +780,7 @@ public:
    virtual RPageRef LoadPage(ColumnHandle_t columnHandle, NTupleSize_t globalIndex);
    /// Another version of `LoadPage` that allows to specify cluster-relative indexes.
    /// Returns a default-constructed RPage for suppressed columns.
-   virtual RPageRef LoadPage(ColumnHandle_t columnHandle, RClusterIndex clusterIndex);
+   virtual RPageRef LoadPage(ColumnHandle_t columnHandle, RNTupleLocalIndex localIndex);
 
    /// Read the packed and compressed bytes of a page into the memory buffer provided by `sealedPage`. The sealed page
    /// can be used subsequently in a call to `RPageSink::CommitSealedPage`.
@@ -784,7 +788,7 @@ public:
    /// `nullptr`, no data will be copied but the returned size information can be used by the caller to allocate a large
    /// enough buffer and call `LoadSealedPage` again.
    virtual void
-   LoadSealedPage(DescriptorId_t physicalColumnId, RClusterIndex clusterIndex, RSealedPage &sealedPage) = 0;
+   LoadSealedPage(DescriptorId_t physicalColumnId, RNTupleLocalIndex localIndex, RSealedPage &sealedPage) = 0;
 
    /// Populates all the pages of the given cluster ids and columns; it is possible that some columns do not
    /// contain any pages.  The page source may load more columns than the minimal necessary set from `columns`.

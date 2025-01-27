@@ -239,8 +239,8 @@ TEST_F(RPageStorageDaos, DisabledSamePageMerging)
    const auto pyColId = desc.FindPhysicalColumnId(desc.FindFieldId("py"), 0, 0);
    const auto clusterId = desc.FindClusterId(pxColId, 0);
    const auto &clusterDesc = desc.GetClusterDescriptor(clusterId);
-   EXPECT_FALSE(clusterDesc.GetPageRange(pxColId).Find(0).fLocator.fPosition ==
-                clusterDesc.GetPageRange(pyColId).Find(0).fLocator.fPosition);
+   EXPECT_FALSE(clusterDesc.GetPageRange(pxColId).Find(0).fLocator.GetPosition<RNTupleLocatorObject64>() ==
+                clusterDesc.GetPageRange(pyColId).Find(0).fLocator.GetPosition<RNTupleLocatorObject64>());
 
    auto viewPx = reader->GetView<float>("px");
    auto viewPy = reader->GetView<float>("py");
@@ -310,17 +310,17 @@ TEST_F(RPageStorageDaos, CagedPages)
       auto pageSource = RPageSource::Create(ntupleName, daosUri, options);
       pageSource->Attach();
       const auto &desc = pageSource->GetSharedDescriptorGuard()->Clone();
-      const auto colId = desc->FindPhysicalColumnId(desc->FindFieldId("cnt"), 0, 0);
-      const auto clusterId = desc->FindClusterId(colId, 0);
+      const auto colId = desc.FindPhysicalColumnId(desc.FindFieldId("cnt"), 0, 0);
+      const auto clusterId = desc.FindClusterId(colId, 0);
 
       RPageStorage::RSealedPage sealedPage;
-      pageSource->LoadSealedPage(colId, RClusterIndex{clusterId, 0}, sealedPage);
+      pageSource->LoadSealedPage(colId, RNTupleLocalIndex{clusterId, 0}, sealedPage);
       EXPECT_GT(sealedPage.GetNElements(), 0);
-      auto pageBuf = std::make_unique<unsigned char[]>(sealedPage.GetBufferSize());
+      auto pageBuf = MakeUninitArray<unsigned char>(sealedPage.GetBufferSize());
       sealedPage.SetBuffer(pageBuf.get());
-      pageSource->LoadSealedPage(colId, RClusterIndex{clusterId, 0}, sealedPage);
+      pageSource->LoadSealedPage(colId, RNTupleLocalIndex{clusterId, 0}, sealedPage);
 
-      auto colType = desc->GetColumnDescriptor(colId).GetType();
+      auto colType = desc.GetColumnDescriptor(colId).GetType();
       auto elem = ROOT::Experimental::Internal::RColumnElementBase::Generate<std::uint32_t>(colType);
       auto page = pageSource->UnsealPage(sealedPage, *elem).Unwrap();
       EXPECT_GT(page.GetNElements(), 0);
@@ -369,7 +369,7 @@ TEST_F(RPageStorageDaos, Checksum)
       pyColId = descGuard->FindPhysicalColumnId(descGuard->FindFieldId("py"), 0, 0);
       clusterId = descGuard->FindClusterId(pxColId, 0);
    }
-   RClusterIndex index{clusterId, 0};
+   RNTupleLocalIndex index{clusterId, 0};
 
    RPageStorage::RSealedPage sealedPage;
    constexpr std::size_t bufSize = 12;

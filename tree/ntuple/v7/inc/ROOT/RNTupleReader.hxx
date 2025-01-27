@@ -17,6 +17,7 @@
 #define ROOT7_RNTupleReader
 
 #include <ROOT/RConfig.hxx> // for R__unlikely
+#include <ROOT/REntry.hxx>
 #include <ROOT/RError.hxx>
 #include <ROOT/RNTupleDescriptor.hxx>
 #include <ROOT/RNTupleMetrics.hxx>
@@ -37,7 +38,6 @@ namespace ROOT {
 class RNTuple;
 
 namespace Experimental {
-class REntry;
 
 /// Listing of the different options that can be printed by RNTupleReader::GetInfo()
 enum class ENTupleInfo {
@@ -86,7 +86,7 @@ private:
    /// descriptor.  Using the descriptor's generation number, we know if the cached descriptor is stale.
    /// Retrieving descriptor data from an RNTupleReader is supposed to be for testing and information purposes,
    /// not on a hot code path.
-   std::unique_ptr<RNTupleDescriptor> fCachedDescriptor;
+   std::optional<RNTupleDescriptor> fCachedDescriptor;
    Detail::RNTupleMetrics fMetrics;
    /// If not nullopt, these will used when creating the model
    std::optional<RNTupleDescriptor::RCreateModelOptions> fCreateModelOptions;
@@ -180,6 +180,7 @@ public:
 
    NTupleSize_t GetNEntries() const { return fSource->GetNEntries(); }
    const RNTupleModel &GetModel();
+   std::unique_ptr<REntry> CreateEntry();
 
    /// Returns a cached copy of the page source descriptor. The returned pointer remains valid until the next call
    /// to LoadEntry or to any of the views returned from the reader.

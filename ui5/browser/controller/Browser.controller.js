@@ -329,16 +329,18 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
 
          oTabContainer.addItem(item);
 
-         const handle = this.websocket.createNewInstance(url);
+         // with non empty url creates independent connection
+         const handle = this.websocket.createChannel(url);
          handle.setUserArgs({ nobrowser: true });
          item._jsroot_conn = handle; // keep to be able disconnect
 
-         XMLView.create({
+         return XMLView.create({
             viewName: "rootui5.tree.view.TreeViewer",
             viewData: { conn_handle: handle, embeded: true, jsroot: this.jsroot }
-         }).then(oView => item.addContent(oView));
-
-         return item;
+         }).then(oView => {
+            item.addContent(oView);
+            return item;
+         });
       },
 
       /* =========================================== */
@@ -636,11 +638,12 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
 
       /** @summary Search TabContainerItem by key value */
       findTab(name, set_active) {
-         let oTabContainer = this.byId("tabContainer"),
-             items = oTabContainer.getItems();
-         for(let i = 0; i< items.length; i++)
+         const oTabContainer = this.byId("tabContainer"),
+               items = oTabContainer.getItems();
+         for(let i = 0; i < items.length; i++)
             if (items[i].getKey() === name) {
-               if (set_active) oTabContainer.setSelectedItem(items[i]);
+               if (set_active)
+                  oTabContainer.setSelectedItem(items[i]);
                return items[i];
             }
       },
@@ -1091,7 +1094,10 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
             delete this.oWarningDialog;
             delete this.oWarningProgress;
          }
+      },
 
+      sendNewChannel(tabname, chid) {
+         this.websocket.send(`NEWCHANNEL:["${tabname}","${chid}"]`);
       },
 
       onWebsocketOpened(/*handle*/) {
@@ -1181,9 +1187,14 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
             break;
          }
          case "NEWWIDGET": {  // widget created by server, need to establish connection
-            let arr = JSON.parse(msg);
-            this.createElement(arr[0], arr[1], arr[2], arr[3], arr[4]);
+            const arr = JSON.parse(msg);
+            const pr = this.createElement(arr[0], arr[1], arr[2], arr[3], arr[4]);
+
             this.findTab(arr[2], true); // set active
+            Promise.resolve(pr).then(tab => {
+               if (tab?._jsroot_conn?.isChannel())
+                  this.sendNewChannel(arr[2], tab._jsroot_conn.getChannelId());
+            });
             break;
          }
          case "SET_TITLE": {
@@ -1330,7 +1341,11 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
                this._oSettingsModel.setProperty('/optTH2', arr[k][2]|| '<dflt>');
                this._oSettingsModel.setProperty('/optTProfile', arr[k][3]|| '<dflt>');
             } else {
-               this.createElement(kind, arr[k][1], arr[k][2], arr[k][3], arr[k][4]);
+               const pr = this.createElement(kind, arr[k][1], arr[k][2], arr[k][3], arr[k][4]);
+               Promise.resolve(pr).then(tab => {
+                  if (tab?._jsroot_conn?.isChannel())
+                     this.sendNewChannel(arr[k][2], tab._jsroot_conn.getChannelId());
+               });
             }
          }
 
@@ -1372,22 +1387,25 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
          });
 
          oTabContainer.addItem(item);
-         // oTabContainer.setSelectedItem(item);
 
-         const handle = this.websocket.createNewInstance(url);
+         // with non empty url creates independent connection
+         const handle = this.websocket.createChannel(url);
          handle.setUserArgs({ nobrowser: true });
          item._jsroot_conn = handle; // keep to be able disconnect
 
-         XMLView.create({
+         return XMLView.create({
             viewName: 'rootui5.geom.view.GeomViewer',
             viewData: { conn_handle: handle, embeded: true, jsroot: this.jsroot }
-         }).then(oView => item.addContent(oView));
+         }).then(oView => {
+            item.addContent(oView);
+            return item;
 
-         return item;
+         });
       },
 
       createCanvas(kind, url, name, title, tooltip) {
-         if (!url || !name || (kind != "tcanvas" && kind != "rcanvas")) return;
+         if (!name || (kind != "tcanvas" && kind != "rcanvas"))
+            return null;
 
          let item = new TabContainerItem({
             name: (kind == "rcanvas") ? "RCanvas" : "TCanvas",
@@ -1399,11 +1417,11 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
 
          this.byId("tabContainer").addItem(item);
 
-         // argument for connect, makes relative path
-         const conn = this.websocket.createNewInstance(url);
+         // with non empty url creates independent connection
+         const conn = this.websocket.createChannel(url);
          item._jsroot_conn = conn; // keep to be able disconnect
 
-         import('jsroot/draw').then(draw => {
+         return import('jsroot/draw').then(draw => {
             if (kind == "rcanvas")
                return import('jsrootsys/modules/gpad/RCanvasPainter.mjs').then(h => {
                    draw.assignPadPainterDraw(h.RPadPainter);
@@ -1432,9 +1450,13 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
             item.addContent(oView);
             let ctrl = oView.getController();
             ctrl.onCloseCanvasPress = this.doCloseTabItem.bind(this, item);
+            if (!item._jsroot_painter._window_handle)
+               return item;
+            // wait until painter is ready and fully configured to send message to server with newly created channel
+            return new Promise(resolveFunc => {
+               item._jsroot_painter._window_resolve = resolveFunc;
+            }).then(() => item);
          });
-
-         return item;
       }
 
    });

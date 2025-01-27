@@ -17,6 +17,7 @@
 #ifndef ROOT7_RNTupleDescriptor
 #define ROOT7_RNTupleDescriptor
 
+#include <ROOT/RCreateFieldOptions.hxx>
 #include <ROOT/RError.hxx>
 #include <ROOT/RNTupleSerialize.hxx>
 #include <ROOT/RNTupleUtil.hxx>
@@ -49,9 +50,6 @@ class RNTupleModel;
 
 namespace Internal {
 class RColumnElementBase;
-} // namespace Internal
-
-namespace Internal {
 class RColumnDescriptorBuilder;
 class RClusterDescriptorBuilder;
 class RClusterGroupDescriptorBuilder;
@@ -67,7 +65,7 @@ class RNTupleDescriptorBuilder;
 \brief Meta-data stored for every field of an ntuple
 */
 // clang-format on
-class RFieldDescriptor {
+class RFieldDescriptor final {
    friend class Internal::RNTupleDescriptorBuilder;
    friend class Internal::RFieldDescriptorBuilder;
 
@@ -116,9 +114,11 @@ public:
    bool operator==(const RFieldDescriptor &other) const;
    /// Get a copy of the descriptor
    RFieldDescriptor Clone() const;
+
    /// In general, we create a field simply from the C++ type name. For untyped fields, however, we potentially need
    /// access to sub fields, which is provided by the ntuple descriptor argument.
-   std::unique_ptr<RFieldBase> CreateField(const RNTupleDescriptor &ntplDesc, bool continueOnError = false) const;
+   std::unique_ptr<RFieldBase>
+   CreateField(const RNTupleDescriptor &ntplDesc, const RCreateFieldOptions &options = {}) const;
 
    DescriptorId_t GetId() const { return fFieldId; }
    std::uint32_t GetFieldVersion() const { return fFieldVersion; }
@@ -149,7 +149,7 @@ public:
 \brief Meta-data stored for every column of an ntuple
 */
 // clang-format on
-class RColumnDescriptor {
+class RColumnDescriptor final {
    friend class Internal::RColumnDescriptorBuilder;
    friend class Internal::RNTupleDescriptorBuilder;
 
@@ -185,7 +185,7 @@ private:
    /// but low-precision float columns have variable bit widths.
    std::uint16_t fBitsOnStorage = 0;
    /// The on-disk column type
-   EColumnType fType = EColumnType::kUnknown;
+   ENTupleColumnType fType = ENTupleColumnType::kUnknown;
    /// Optional value range (used e.g. by quantized real fields)
    std::optional<RValueRange> fValueRange;
 
@@ -207,7 +207,7 @@ public:
    std::uint16_t GetRepresentationIndex() const { return fRepresentationIndex; }
    std::uint64_t GetFirstElementIndex() const { return std::abs(fFirstElementIndex); }
    std::uint16_t GetBitsOnStorage() const { return fBitsOnStorage; }
-   EColumnType GetType() const { return fType; }
+   ENTupleColumnType GetType() const { return fType; }
    std::optional<RValueRange> GetValueRange() const { return fValueRange; }
    bool IsAliasColumn() const { return fPhysicalColumnId != fLogicalColumnId; }
    bool IsDeferredColumn() const { return fFirstElementIndex != 0; }
@@ -227,7 +227,7 @@ Clusters usually span across all available columns but in some cases they can de
 for instance when describing friend ntuples.
 */
 // clang-format on
-class RClusterDescriptor {
+class RClusterDescriptor final {
    friend class Internal::RClusterDescriptorBuilder;
 
 public:
@@ -237,10 +237,11 @@ public:
       /// The global index of the first column element in the cluster
       NTupleSize_t fFirstElementIndex = kInvalidNTupleIndex;
       /// The number of column elements in the cluster
-      ClusterSize_t fNElements = kInvalidClusterIndex;
+      NTupleSize_t fNElements = kInvalidNTupleIndex;
       /// The usual format for ROOT compression settings (see Compression.h).
       /// The pages of a particular column in a particular cluster are all compressed with the same settings.
-      int fCompressionSettings = kUnknownCompressionSettings;
+      /// If unset, the compression settings are undefined (deferred columns, suppressed columns).
+      std::optional<std::uint32_t> fCompressionSettings;
       /// Suppressed columns have an empty page range and unknown compression settings.
       /// Their element index range, however, is aligned with the corresponding column of the
       /// primary column representation (see Section "Suppressed Columns" in the specification)
@@ -301,12 +302,12 @@ public:
       };
       struct RPageInfoExtended : RPageInfo {
          /// Index (in cluster) of the first element in page.
-         ClusterSize_t::ValueType fFirstInPage = 0;
+         NTupleSize_t fFirstInPage = 0;
          /// Page number in the corresponding RPageRange.
          NTupleSize_t fPageNo = 0;
 
          RPageInfoExtended() = default;
-         RPageInfoExtended(const RPageInfo &pi, ClusterSize_t::ValueType i, NTupleSize_t n)
+         RPageInfoExtended(const RPageInfo &pi, NTupleSize_t i, NTupleSize_t n)
             : RPageInfo(pi), fFirstInPage(i), fPageNo(n)
          {
          }
@@ -328,7 +329,7 @@ public:
       }
 
       /// Find the page in the RPageRange that contains the given element. The element must exist.
-      RPageInfoExtended Find(ClusterSize_t::ValueType idxInCluster) const;
+      RPageInfoExtended Find(NTupleSize_t idxInCluster) const;
 
       DescriptorId_t fPhysicalColumnId = kInvalidDescriptorId;
       std::vector<RPageInfo> fPageInfos;
@@ -344,7 +345,7 @@ private:
    /// Clusters can be swapped by adjusting the entry offsets
    NTupleSize_t fFirstEntryIndex = kInvalidNTupleIndex;
    // TODO(jblomer): change to std::uint64_t
-   ClusterSize_t fNEntries = kInvalidClusterIndex;
+   NTupleSize_t fNEntries = kInvalidNTupleIndex;
 
    std::unordered_map<DescriptorId_t, RColumnRange> fColumnRanges;
    std::unordered_map<DescriptorId_t, RPageRange> fPageRanges;
@@ -364,7 +365,7 @@ public:
 
    DescriptorId_t GetId() const { return fClusterId; }
    NTupleSize_t GetFirstEntryIndex() const { return fFirstEntryIndex; }
-   ClusterSize_t GetNEntries() const { return fNEntries; }
+   NTupleSize_t GetNEntries() const { return fNEntries; }
    const RColumnRange &GetColumnRange(DescriptorId_t physicalId) const { return fColumnRanges.at(physicalId); }
    const RPageRange &GetPageRange(DescriptorId_t physicalId) const { return fPageRanges.at(physicalId); }
    /// Returns an iterator over pairs { columnId, columnRange }. The iteration order is unspecified.
@@ -373,7 +374,7 @@ public:
    {
       return fColumnRanges.find(physicalId) != fColumnRanges.end();
    }
-   std::uint64_t GetBytesOnStorage() const;
+   std::uint64_t GetNBytesOnStorage() const;
 };
 
 class RClusterDescriptor::RColumnRangeIterable {
@@ -426,7 +427,7 @@ Every ntuple has at least one cluster group.  The clusters in a cluster group ar
 the order of page locations in the page list envelope that belongs to the cluster group (see format specification)
 */
 // clang-format on
-class RClusterGroupDescriptor {
+class RClusterGroupDescriptor final {
    friend class Internal::RClusterGroupDescriptorBuilder;
 
 private:
@@ -471,7 +472,10 @@ public:
 };
 
 /// Used in RExtraTypeInfoDescriptor
-enum class EExtraTypeInfoIds { kInvalid, kStreamerInfo };
+enum class EExtraTypeInfoIds {
+   kInvalid,
+   kStreamerInfo
+};
 
 // clang-format off
 /**
@@ -482,7 +486,7 @@ enum class EExtraTypeInfoIds { kInvalid, kStreamerInfo };
 Currently only used by streamer fields to store RNTuple-wide list of streamer info records.
 */
 // clang-format on
-class RExtraTypeInfoDescriptor {
+class RExtraTypeInfoDescriptor final {
    friend class Internal::RExtraTypeInfoDescriptorBuilder;
 
 private:
@@ -532,7 +536,7 @@ the concept of frames: header, footer, and substructures have a preamble with ve
 writte struct. This allows for forward and backward compatibility when the meta-data evolves.
 */
 // clang-format on
-class RNTupleDescriptor {
+class RNTupleDescriptor final {
    friend class Internal::RNTupleDescriptorBuilder;
 
 public:
@@ -601,6 +605,9 @@ public:
       bool fForwardCompatible = false;
       /// If true, the model will be created without a default entry (bare model).
       bool fCreateBare = false;
+      /// If true, fields with a user defined type that have no available dictionaries will be reconstructed
+      /// as record fields from the on-disk information; otherwise, they will cause an error.
+      bool fEmulateUnknownTypes = false;
    };
 
    RNTupleDescriptor() = default;
@@ -609,7 +616,7 @@ public:
    RNTupleDescriptor(RNTupleDescriptor &&other) = default;
    RNTupleDescriptor &operator=(RNTupleDescriptor &&other) = default;
 
-   std::unique_ptr<RNTupleDescriptor> Clone() const;
+   RNTupleDescriptor Clone() const;
 
    bool operator==(const RNTupleDescriptor &other) const;
 
@@ -1061,7 +1068,7 @@ public:
       fColumn.fBitsOnStorage = bitsOnStorage;
       return *this;
    }
-   RColumnDescriptorBuilder &Type(EColumnType type)
+   RColumnDescriptorBuilder &Type(ENTupleColumnType type)
    {
       fColumn.fType = type;
       return *this;

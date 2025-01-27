@@ -22,7 +22,8 @@ std::string ReadFileToString(const char *fname)
    fseek(f, 0, SEEK_SET);
    std::string str;
    str.resize(size);
-   fread(str.data(), 1, size, f);
+   size_t bytesRead = fread(str.data(), 1, size, f);
+   R__ASSERT(bytesRead == size);
    fclose(f);
    return str;
 }
@@ -316,7 +317,7 @@ TEST(RNTupleExporter, ExportToFilesWhitelist)
    auto source = Internal::RPageSource::Create("ntuple", fileGuard.GetPath());
    auto opts = RNTupleExporter::RPagesOptions();
    opts.fColumnTypeFilter.fType = RNTupleExporter::EFilterType::kWhitelist;
-   opts.fColumnTypeFilter.fSet.insert(EColumnType::kIndex64);
+   opts.fColumnTypeFilter.fSet.insert(ENTupleColumnType::kIndex64);
    auto res = RNTupleExporter::ExportPages(*source, opts);
 
    // Should only have exported the page for the index column
@@ -352,7 +353,7 @@ TEST(RNTupleExporter, ExportToFilesBlacklist)
    auto source = Internal::RPageSource::Create("ntuple", fileGuard.GetPath());
    auto opts = RNTupleExporter::RPagesOptions();
    opts.fColumnTypeFilter.fType = RNTupleExporter::EFilterType::kBlacklist;
-   opts.fColumnTypeFilter.fSet.insert(EColumnType::kIndex64);
+   opts.fColumnTypeFilter.fSet.insert(ENTupleColumnType::kIndex64);
    auto res = RNTupleExporter::ExportPages(*source, opts);
 
    // Should not have exported the page for the index column

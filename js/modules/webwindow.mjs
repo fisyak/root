@@ -1,4 +1,4 @@
-import { httpRequest, createHttpRequest, loadScript, decodeUrl,
+import { settings, httpRequest, createHttpRequest, loadScript, decodeUrl,
          browser, setBatchMode, isBatchMode, isObject, isFunc, isStr, btoa_func } from './core.mjs';
 import { closeCurrentWindow, showProgress, loadOpenui5 } from './gui/utils.mjs';
 import { sha256, sha256_2 } from './base/sha256.mjs';
@@ -340,8 +340,10 @@ class WebWindowHandle {
       if (!force_queue && (!this.msgqueue || !this.msgqueue.length))
          return this.invokeReceiver(false, 'onWebsocketMsg', msg, len);
 
-      if (!this.msgqueue) this.msgqueue = [];
-      if (force_queue) len = undefined;
+      if (!this.msgqueue)
+         this.msgqueue = [];
+      if (force_queue)
+         len = undefined;
 
       this.msgqueue.push({ ready: true, msg, len });
    }
@@ -486,8 +488,12 @@ class WebWindowHandle {
    }
 
    /** @summary Method open channel, which will share same connection, but can be used independently from main
+     * If @param url is provided - creates fully independent instance and perform connection with it
      * @private */
-   createChannel() {
+   createChannel(url) {
+      if (url)
+         return this.createNewInstance(url);
+
       if (this.master)
          return this.master.createChannel();
 
@@ -514,6 +520,8 @@ class WebWindowHandle {
 
    /** @summary Returns used channel ID, 1 by default */
    getChannelId() { return this.channelid && this.master ? this.channelid : 1; }
+
+   isChannel() { return this.getChannelId() > 1; }
 
    /** @summary Assign href parameter
      * @param {string} [path] - absolute path, when not specified window.location.url will be used
@@ -566,6 +574,10 @@ class WebWindowHandle {
      * @param [href] - optional URL to widget, use document URL instead
      * @private */
    connect(href) {
+      // ignore connect if channel from master connection configured
+      if (this.master && this.channelid)
+         return;
+
       this.close();
 
       if (href) {
@@ -897,7 +909,8 @@ async function connectWebWindow(arg) {
       if (arg.batch === undefined)
          arg.batch = d.has('headless');
 
-      if (arg.batch) setBatchMode(true);
+      if (arg.batch)
+         setBatchMode(true);
 
       if (!arg.socket_kind)
          arg.socket_kind = d.get('ws');
@@ -917,6 +930,9 @@ async function connectWebWindow(arg) {
       else
          arg.socket_kind = 'websocket';
    }
+
+   if (arg.settings)
+      Object.assign(settings, arg.settings);
 
    // only for debug purposes
    // arg.socket_kind = 'longpoll';
@@ -963,7 +979,8 @@ async function connectWebWindow(arg) {
       handle.connect();
    });
 
-   if (!arg.ui5) return main;
+   if (!arg.ui5)
+      return main;
 
    return Promise.all([main, loadOpenui5(arg)]).then(arr => arr[0]);
 }

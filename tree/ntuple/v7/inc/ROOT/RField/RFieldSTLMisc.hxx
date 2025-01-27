@@ -52,7 +52,7 @@ protected:
 
    std::size_t AppendImpl(const void *from) final { return CallAppendOn(*fSubFields[0], from); }
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final { CallReadOn(*fSubFields[0], globalIndex, to); }
-   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final { CallReadOn(*fSubFields[0], clusterIndex, to); }
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final { CallReadOn(*fSubFields[0], localIndex, to); }
 
 public:
    RAtomicField(std::string_view fieldName, std::string_view typeName, std::unique_ptr<RFieldBase> itemField);
@@ -104,7 +104,7 @@ protected:
    void ConstructValue(void *where) const final { memset(where, 0, GetValueSize()); }
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
-   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final;
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final;
 
 public:
    RBitsetField(std::string_view fieldName, std::size_t N);
@@ -166,7 +166,7 @@ public:
 /// representation.  Nullable fields use a (Split)Index[64|32] column to point to the available items.
 class RNullableField : public RFieldBase {
    /// The number of written non-null items in this cluster
-   ClusterSize_t fNWritten{0};
+   Internal::RColumnIndex fNWritten{0};
 
 protected:
    const RFieldBase::RColumnRepresentations &GetColumnRepresentations() const final;
@@ -178,8 +178,8 @@ protected:
    void CommitClusterImpl() final { fNWritten = 0; }
 
    /// Given the index of the nullable field, returns the corresponding global index of the subfield or,
-   /// if it is null, returns kInvalidClusterIndex
-   RClusterIndex GetItemIndex(NTupleSize_t globalIndex);
+   /// if it is null, returns kInvalidNTupleIndex
+   RNTupleLocalIndex GetItemIndex(NTupleSize_t globalIndex);
 
    RNullableField(std::string_view fieldName, std::string_view typeName, std::unique_ptr<RFieldBase> itemField);
 
@@ -290,7 +290,7 @@ public:
 template <>
 class RField<std::string> final : public RFieldBase {
 private:
-   ClusterSize_t fIndex;
+   Internal::RColumnIndex fIndex;
 
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final
    {
@@ -358,7 +358,7 @@ private:
    size_t fTagOffset = 0;
    /// In the std::variant memory layout, the actual union of types may start at an offset > 0
    size_t fVariantOffset = 0;
-   std::vector<ClusterSize_t::ValueType> fNWritten;
+   std::vector<Internal::RColumnIndex::ValueType> fNWritten;
 
    static std::string GetTypeList(const std::vector<std::unique_ptr<RFieldBase>> &itemFields);
    /// Extracts the index from an std::variant and transforms it into the 1-based index used for the switch column

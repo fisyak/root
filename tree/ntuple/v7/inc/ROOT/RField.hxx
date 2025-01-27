@@ -74,22 +74,38 @@ public:
 /// Also used when deserializing a field that contains unknown values that may come from
 /// future RNTuple versions (e.g. an unknown Structure)
 class RInvalidField final : public RFieldBase {
+public:
+   enum class RCategory {
+      /// Generic unrecoverable error
+      kGeneric,
+      /// The type given to RFieldBase::Create was invalid
+      kTypeError,
+      /// The type given to RFieldBase::Create was unknown
+      kUnknownType,
+      /// The field could not be created because its descriptor had an unknown structural role
+      kUnknownStructure
+   };
+
+private:
    std::string fError;
+   RCategory fCategory;
 
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final
    {
-      return std::make_unique<RInvalidField>(newName, GetTypeName(), fError);
+      return std::make_unique<RInvalidField>(newName, GetTypeName(), fError, fCategory);
    }
    void ConstructValue(void *) const final {}
 
 public:
-   RInvalidField(std::string_view name, std::string_view type, std::string_view error)
-      : RFieldBase(name, type, ENTupleStructure::kLeaf, false /* isSimple */), fError(error)
+   RInvalidField(std::string_view name, std::string_view type, std::string_view error, RCategory category)
+      : RFieldBase(name, type, ENTupleStructure::kLeaf, false /* isSimple */), fError(error), fCategory(category)
    {
+      fTraits |= kTraitInvalidField;
    }
 
    const std::string &GetError() const { return fError; }
+   RCategory GetCategory() const { return fCategory; }
 
    size_t GetValueSize() const final { return 0; }
    size_t GetAlignment() const final { return 0; }
@@ -139,7 +155,7 @@ protected:
 
    std::size_t AppendImpl(const void *from) final;
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
-   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final;
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final;
    void BeforeConnectPageSource(Internal::RPageSource &pageSource) final;
    void OnConnectPageSource() final;
 
@@ -171,7 +187,7 @@ private:
 
    TClass *fClass = nullptr;
    Internal::RNTupleSerializer::StreamerInfoMap_t fStreamerInfos; ///< streamer info records seen during writing
-   ClusterSize_t fIndex;                                          ///< number of bytes written in the current cluster
+   Internal::RColumnIndex fIndex;                                 ///< number of bytes written in the current cluster
 
 private:
    // Note that className may be different from classp->GetName(), e.g. through different canonicalization of RNTuple
@@ -223,7 +239,7 @@ protected:
 
    std::size_t AppendImpl(const void *from) final { return CallAppendOn(*fSubFields[0], from); }
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final { CallReadOn(*fSubFields[0], globalIndex, to); }
-   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final { CallReadOn(*fSubFields[0], clusterIndex, to); }
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final { CallReadOn(*fSubFields[0], localIndex, to); }
 
 public:
    REnumField(std::string_view fieldName, std::string_view enumName);
@@ -270,13 +286,13 @@ class RCardinalityField : public RFieldBase {
    friend class RNTupleCollectionView; // to access GetCollectionInfo()
 
 private:
-   void GetCollectionInfo(NTupleSize_t globalIndex, RClusterIndex *collectionStart, ClusterSize_t *size)
+   void GetCollectionInfo(NTupleSize_t globalIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size)
    {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(RClusterIndex clusterIndex, RClusterIndex *collectionStart, ClusterSize_t *size)
+   void GetCollectionInfo(RNTupleLocalIndex localIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size)
    {
-      fPrincipalColumn->GetCollectionInfo(clusterIndex, collectionStart, size);
+      fPrincipalColumn->GetCollectionInfo(localIndex, collectionStart, size);
    }
 
 protected:
@@ -320,9 +336,9 @@ public:
    ~RSimpleField() override = default;
 
    T *Map(NTupleSize_t globalIndex) { return fPrincipalColumn->Map<T>(globalIndex); }
-   T *Map(RClusterIndex clusterIndex) { return fPrincipalColumn->Map<T>(clusterIndex); }
+   T *Map(RNTupleLocalIndex localIndex) { return fPrincipalColumn->Map<T>(localIndex); }
    T *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) { return fPrincipalColumn->MapV<T>(globalIndex, nItems); }
-   T *MapV(RClusterIndex clusterIndex, NTupleSize_t &nItems) { return fPrincipalColumn->MapV<T>(clusterIndex, nItems); }
+   T *MapV(RNTupleLocalIndex localIndex, NTupleSize_t &nItems) { return fPrincipalColumn->MapV<T>(localIndex, nItems); }
 
    size_t GetValueSize() const final { return sizeof(T); }
    size_t GetAlignment() const final { return alignof(T); }
@@ -353,49 +369,40 @@ protected:
    }
    void ConstructValue(void *where) const final { new (where) RNTupleCardinality<SizeT>(0); }
 
-public:
-   static std::string TypeName() { return "ROOT::RNTupleCardinality<" + RField<SizeT>::TypeName() + ">"; }
-   explicit RField(std::string_view name) : RCardinalityField(name, TypeName()) {}
-   RField(RField &&other) = default;
-   RField &operator=(RField &&other) = default;
-   ~RField() final = default;
-
-   size_t GetValueSize() const final { return sizeof(RNTupleCardinality<SizeT>); }
-   size_t GetAlignment() const final { return alignof(RNTupleCardinality<SizeT>); }
-
    /// Get the number of elements of the collection identified by globalIndex
    void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final
    {
-      RClusterIndex collectionStart;
-      ClusterSize_t size;
+      RNTupleLocalIndex collectionStart;
+      NTupleSize_t size;
       fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &size);
       *static_cast<RNTupleCardinality<SizeT> *>(to) = size;
    }
 
    /// Get the number of elements of the collection identified by clusterIndex
-   void ReadInClusterImpl(RClusterIndex clusterIndex, void *to) final
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final
    {
-      RClusterIndex collectionStart;
-      ClusterSize_t size;
-      fPrincipalColumn->GetCollectionInfo(clusterIndex, &collectionStart, &size);
+      RNTupleLocalIndex collectionStart;
+      NTupleSize_t size;
+      fPrincipalColumn->GetCollectionInfo(localIndex, &collectionStart, &size);
       *static_cast<RNTupleCardinality<SizeT> *>(to) = size;
    }
 
    std::size_t ReadBulkImpl(const RBulkSpec &bulkSpec) final
    {
-      RClusterIndex collectionStart;
-      ClusterSize_t collectionSize;
+      RNTupleLocalIndex collectionStart;
+      NTupleSize_t collectionSize;
       fPrincipalColumn->GetCollectionInfo(bulkSpec.fFirstIndex, &collectionStart, &collectionSize);
 
       auto typedValues = static_cast<RNTupleCardinality<SizeT> *>(bulkSpec.fValues);
       typedValues[0] = collectionSize;
 
-      auto lastOffset = collectionStart.GetIndex() + collectionSize;
-      ClusterSize_t::ValueType nRemainingEntries = bulkSpec.fCount - 1;
+      auto lastOffset = collectionStart.GetIndexInCluster() + collectionSize;
+      NTupleSize_t nRemainingEntries = bulkSpec.fCount - 1;
       std::size_t nEntries = 1;
       while (nRemainingEntries > 0) {
          NTupleSize_t nItemsUntilPageEnd;
-         auto offsets = fPrincipalColumn->MapV<ClusterSize_t>(bulkSpec.fFirstIndex + nEntries, nItemsUntilPageEnd);
+         auto offsets =
+            fPrincipalColumn->MapV<Internal::RColumnIndex>(bulkSpec.fFirstIndex + nEntries, nItemsUntilPageEnd);
          std::size_t nBatch = std::min(nRemainingEntries, nItemsUntilPageEnd);
          for (std::size_t i = 0; i < nBatch; ++i) {
             typedValues[nEntries + i] = offsets[i] - lastOffset;
@@ -406,6 +413,16 @@ public:
       }
       return RBulkSpec::kAllSet;
    }
+
+public:
+   static std::string TypeName() { return "ROOT::RNTupleCardinality<" + RField<SizeT>::TypeName() + ">"; }
+   explicit RField(std::string_view name) : RCardinalityField(name, TypeName()) {}
+   RField(RField &&other) = default;
+   RField &operator=(RField &&other) = default;
+   ~RField() final = default;
+
+   size_t GetValueSize() const final { return sizeof(RNTupleCardinality<SizeT>); }
+   size_t GetAlignment() const final { return alignof(RNTupleCardinality<SizeT>); }
 };
 
 /// TObject requires special handling of the fBits and fUniqueID members

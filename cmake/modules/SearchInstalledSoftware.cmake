@@ -292,28 +292,24 @@ if(builtin_lzma)
   set(LZMA_TARGET LZMA)
   message(STATUS "Building LZMA version ${lzma_version} included in ROOT itself")
   if(WIN32)
-    set(LIBLZMA_LIBRARIES ${CMAKE_BINARY_DIR}/LZMA/src/LZMA/lib/liblzma.lib)
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-      set(LZMA_URL ${CMAKE_SOURCE_DIR}/core/lzma/src/xz-${lzma_version}-win64.tar.gz)
-      set(LZMA_URL_HASH SHA256=76ba7cdff547141f6d6810c8600a9d782feca343debde378fc8f6a307cbfd1d2)
-    else()
-      set(LZMA_URL ${CMAKE_SOURCE_DIR}/core/lzma/src/xz-${lzma_version}-win32.tar.gz)
-      set(LZMA_URL_HASH SHA256=a923ee68d836de5492d8de0fec467b9536f2543c8579ca11f4b5e6f46a8cda8c)
-    endif()
+    set(lzma_version 5.6.3)
+    set(LIBLZMA_LIBRARIES ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}lzma${CMAKE_STATIC_LIBRARY_SUFFIX})
     ExternalProject_Add(
       LZMA
-      URL ${LZMA_URL}
-      URL_HASH ${LZMA_URL_HASH}
-      PREFIX LZMA
+      URL ${CMAKE_SOURCE_DIR}/core/lzma/src/xz-${lzma_version}.tar.gz
+      URL_HASH SHA256=b1d45295d3f71f25a4c9101bd7c8d16cb56348bbef3bbc738da0351e17c73317
       INSTALL_DIR ${CMAKE_BINARY_DIR}
-      CONFIGURE_COMMAND ""
-      BUILD_COMMAND ""
-      INSTALL_COMMAND ""
-      LOG_DOWNLOAD 1
+      CMAKE_ARGS -G ${CMAKE_GENERATOR} -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
+                 -DCMAKE_CXX_FLAGS_RELWITHDEBINFO=${CMAKE_CXX_FLAGS_RELWITHDEBINFO}
+                 -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
+                 -DCMAKE_CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}
+      BUILD_COMMAND ${CMAKE_COMMAND} --build . --config $<CONFIG> --target liblzma
+      INSTALL_COMMAND ${CMAKE_COMMAND} --install . --config $<CONFIG> --component liblzma_Development
+      LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 BUILD_IN_SOURCE 1
       BUILD_BYPRODUCTS ${LIBLZMA_LIBRARIES}
       TIMEOUT 600
     )
-    set(LIBLZMA_INCLUDE_DIR ${CMAKE_BINARY_DIR}/LZMA/src/LZMA/include)
+    set(LIBLZMA_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include)
   else()
     if(CMAKE_CXX_COMPILER_ID MATCHES Clang)
       set(LIBLZMA_CFLAGS "-Wno-format-nonliteral")
@@ -744,7 +740,7 @@ if(ssl AND NOT builtin_openssl)
   if(fail-on-missing)
     find_package(OpenSSL REQUIRED)
   else()
-    find_package(OpenSSL)
+    find_package(OpenSSL COMPONENTS SSL)
     if(NOT OPENSSL_FOUND)
       if(NOT APPLE) # builtin OpenSSL is only supported on macOS
         message(STATUS "Switching OFF 'ssl' option.")
@@ -1661,6 +1657,9 @@ if(tmva)
       else()
         set(tmva-cpu OFF CACHE BOOL "Disabled because BLAS was not found (${tmva-cpu_description})" FORCE)
       endif()
+      set(BLAS_LIBRARIES) # find package set this variable to a literal FALSE when not found.
+    else()
+      set(BLAS_LIBRARIES BLAS::BLAS)
     endif()
   else()
     set(tmva-cpu OFF CACHE BOOL "Disabled because 'imt' is disabled (${tmva-cpu_description})" FORCE)
