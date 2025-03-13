@@ -68,7 +68,6 @@ automatic PDF optimization.
 #include <iostream>
 #include <stdexcept> // logic_error
 
-ClassImp(RooMinimizer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Construct MINUIT interface to given function. Function can be anything,
@@ -512,13 +511,11 @@ RooFit::OwningPtr<RooFitResult> RooMinimizer::save(const char *userName, const c
 
    fitRes->setConstParList(_fcn->constParams());
 
-   double removeOffset = 0.;
    fitRes->setNumInvalidNLL(_fcn->GetNumInvalidNLL());
-   removeOffset = -_fcn->getOffset();
 
    fitRes->setStatus(_status);
    fitRes->setCovQual(_minimizer->CovMatrixStatus());
-   fitRes->setMinNLL(_result->fVal + removeOffset);
+   fitRes->setMinNLL(_result->fVal -_fcn->getOffset());
    fitRes->setEDM(_result->fEdm);
 
    fitRes->setInitParList(_fcn->initFloatParams());

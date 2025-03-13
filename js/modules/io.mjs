@@ -2,7 +2,7 @@ import { createHttpRequest, BIT, internals, settings, browser,
          create, getMethods, addMethods, isNodeJs, isObject, isFunc, isStr,
          clTObject, clTNamed, clTString, clTObjString, clTKey, clTFile, clTList, clTMap, clTObjArray, clTClonesArray,
          clTAttLine, clTAttFill, clTAttMarker, clTStyle, clTImagePalette,
-         clTPad, clTCanvas, clTAttCanvas, clTPolyMarker3D, clTF1, clTF2 } from './core.mjs';
+         clTPad, clTCanvas, clTAttCanvas, clTPolyMarker3D, clTF1, clTF12, clTF2 } from './core.mjs';
 
 const clTStreamerElement = 'TStreamerElement', clTStreamerObject = 'TStreamerObject',
       clTStreamerSTL = 'TStreamerSTL', clTStreamerInfoList = 'TStreamerInfoList',
@@ -695,7 +695,7 @@ function createStreamerElement(name, typename, file) {
       return elem;
    }
 
-   const isptr = (typename.lastIndexOf('*') === typename.length - 1);
+   const isptr = typename.at(-1) === '*';
 
    if (isptr)
       elem.fTypeName = typename = typename.slice(0, typename.length - 1);
@@ -715,14 +715,15 @@ function createStreamerElement(name, typename, file) {
   * @private */
 function getPairStreamer(si, typname, file) {
    if (!si) {
-      if (typname.indexOf('pair') !== 0) return null;
+      if (typname.indexOf('pair') !== 0)
+         return null;
 
       si = file.findStreamerInfo(typname);
 
       if (!si) {
          let p1 = typname.indexOf('<');
          const p2 = typname.lastIndexOf('>');
-         function GetNextName() {
+         function getNextName() {
             let res = '', p = p1 + 1, cnt = 0;
             while ((p < p2) && (cnt >= 0)) {
                switch (typname[p]) {
@@ -737,8 +738,8 @@ function getPairStreamer(si, typname, file) {
             return res.trim();
          }
          si = { _typename: 'TStreamerInfo', fVersion: 1, fName: typname, fElements: create(clTList) };
-         si.fElements.Add(createStreamerElement('first', GetNextName(), file));
-         si.fElements.Add(createStreamerElement('second', GetNextName(), file));
+         si.fElements.Add(createStreamerElement('first', getNextName(), file));
+         si.fElements.Add(createStreamerElement('second', getNextName(), file));
       }
    }
 
@@ -949,7 +950,7 @@ function createMemberStreamer(element, file) {
       case kObjectp:
       case kObject: {
          let classname = (element.fTypeName === kBaseClass) ? element.fName : element.fTypeName;
-         if (classname[classname.length - 1] === '*')
+         if (classname.at(-1) === '*')
             classname = classname.slice(0, classname.length - 1);
 
          const arrkind = getArrayKind(classname);
@@ -979,7 +980,7 @@ function createMemberStreamer(element, file) {
       case kOffsetL + kAnyp:
       case kOffsetL + kObjectp: {
          let classname = element.fTypeName;
-         if (classname[classname.length - 1] === '*')
+         if (classname.at(-1) === '*')
             classname = classname.slice(0, classname.length - 1);
 
          member.arrkind = getArrayKind(classname);
@@ -1132,7 +1133,7 @@ function createMemberStreamer(element, file) {
             } else {
                member.isptr = false;
 
-               if (member.conttype.lastIndexOf('*') === member.conttype.length - 1) {
+               if (member.conttype.at(-1) === '*') {
                   member.isptr = true;
                   member.conttype = member.conttype.slice(0, member.conttype.length - 1);
                }
@@ -1982,9 +1983,7 @@ function LZ4_uncompress(input, output, sIdx, eIdx) {
   * @return {Promise} with unzipped content
   * @private */
 async function R__unzip(arr, tgtsize, noalert, src_shift) {
-   const HDRSIZE = 9, totallen = arr.byteLength,
-         checkChar = (o, symb) => { return String.fromCharCode(arr.getUint8(o)) === symb; },
-         getCode = o => arr.getUint8(o);
+   const HDRSIZE = 9, totallen = arr.byteLength;
 
    let curr = src_shift || 0, fullres = 0, tgtbuf = null;
 
@@ -1997,11 +1996,22 @@ async function R__unzip(arr, tgtsize, noalert, src_shift) {
             return Promise.resolve(null);
          }
 
-         if (checkChar(curr, 'Z') && checkChar(curr+1, 'L') && getCode(curr + 2) === 8) { fmt = 'new'; off = 2; } else
-         if (checkChar(curr, 'C') && checkChar(curr+1, 'S') && getCode(curr + 2) === 8) { fmt = 'old'; off = 0; } else
-         if (checkChar(curr, 'X') && checkChar(curr+1, 'Z') && getCode(curr + 2) === 0) { fmt = 'LZMA'; off = 0; } else
-         if (checkChar(curr, 'Z') && checkChar(curr+1, 'S') && getCode(curr + 2) === 1) fmt = 'ZSTD'; else
-         if (checkChar(curr, 'L') && checkChar(curr+1, '4')) { fmt = 'LZ4'; off = 0; CHKSUM = 8; }
+         const getCode = o => arr.getUint8(o),
+               checkChar = (o, symb) => { return getCode(o) === symb.charCodeAt(0); },
+               checkFmt = (a, b, c) => { return checkChar(curr, a) && checkChar(curr + 1, b) && (getCode(curr + 2) === c); };
+
+         if (checkFmt('Z', 'L', 8)) {
+            fmt = 'new';
+            off = 2;
+         } else if (checkFmt('C', 'S', 8))
+            fmt = 'old';
+         else if (checkFmt('X', 'Z', 0))
+            fmt = 'LZMA';
+         else if (checkFmt('Z', 'S', 1))
+            fmt = 'ZSTD';
+         else if (checkChar(curr, 'L') && checkChar(curr + 1, '4')) {
+            fmt = 'LZ4'; CHKSUM = 8;
+         }
 
          /*   C H E C K   H E A D E R   */
          if ((fmt !== 'new') && (fmt !== 'old') && (fmt !== 'LZ4') && (fmt !== 'ZSTD') && (fmt !== 'LZMA')) {
@@ -2643,17 +2653,17 @@ class TFile {
 
       if (!isStr(this.fURL)) return this;
 
-      if (this.fURL[this.fURL.length - 1] === '+') {
+      if (this.fURL.at(-1) === '+') {
          this.fURL = this.fURL.slice(0, this.fURL.length - 1);
          this.fAcceptRanges = false;
       }
 
-      if (this.fURL[this.fURL.length - 1] === '^') {
+      if (this.fURL.at(-1) === '^') {
          this.fURL = this.fURL.slice(0, this.fURL.length - 1);
          this.fSkipHeadRequest = true;
       }
 
-      if (this.fURL[this.fURL.length - 1] === '-') {
+      if (this.fURL.at(-1) === '-') {
          this.fURL = this.fURL.slice(0, this.fURL.length - 1);
          this.fUseStampPar = false;
       }
@@ -2885,7 +2895,7 @@ class TFile {
          let boundary = '', n = first, o = 0, normal_order = true;
          if (indx > 0) {
             boundary = hdr.slice(indx + 9);
-            if ((boundary[0] === '"') && (boundary[boundary.length - 1] === '"'))
+            if ((boundary[0] === '"') && (boundary.at(-1) === '"'))
                boundary = boundary.slice(1, boundary.length - 1);
             boundary = '--' + boundary;
          } else
@@ -3070,9 +3080,11 @@ class TFile {
          obj_name = obj_name.slice(0, pos);
       }
 
-      if (typeof cycle !== 'number') cycle = -1;
+      if (typeof cycle !== 'number')
+         cycle = -1;
       // remove leading slashes
-      while (obj_name.length && (obj_name[0] === '/')) obj_name = obj_name.slice(1);
+      while (obj_name.length && (obj_name[0] === '/'))
+         obj_name = obj_name.slice(1);
 
       // one uses Promises while in some cases we need to
       // read sub-directory to get list of keys
@@ -3103,7 +3115,7 @@ class TFile {
             buf.mapObject(1, obj); // tag object itself with id == 1
             buf.classStreamer(obj, key.fClassName);
 
-            if ((key.fClassName === clTF1) || (key.fClassName === clTF2))
+            if ((key.fClassName === clTF1) || (key.fClassName === clTF12) || (key.fClassName === clTF2))
                return this._readFormulas(obj);
 
             return obj;
@@ -3137,8 +3149,8 @@ class TFile {
       try {
          buf.classStreamer(lst, clTList);
       } catch (err) {
-          console.error('Fail extract streamer infos', err);
-          return;
+         console.error('Fail extract streamer infos', err);
+         return;
       }
 
       lst._typename = clTStreamerInfoList;
@@ -3153,14 +3165,15 @@ class TFile {
          if (!si.fElements) continue;
          for (let l = 0; l < si.fElements.arr.length; ++l) {
             const elem = si.fElements.arr[l];
-            if (!elem.fTypeName || !elem.fType) continue;
+            if (!elem.fTypeName || !elem.fType)
+               continue;
 
             let typ = elem.fType, typname = elem.fTypeName;
 
             if (typ >= 60) {
                if ((typ === kStreamer) && (elem._typename === clTStreamerSTL) && elem.fSTLtype && elem.fCtype && (elem.fCtype < 20)) {
                   const prefix = (StlNames[elem.fSTLtype] || 'undef') + '<';
-                  if ((typname.indexOf(prefix) === 0) && (typname[typname.length - 1] === '>')) {
+                  if ((typname.indexOf(prefix) === 0) && (typname.at(-1) === '>')) {
                      typ = elem.fCtype;
                      typname = typname.slice(prefix.length, typname.length - 1).trim();
 
@@ -3174,7 +3187,8 @@ class TFile {
                }
                if (typ >= 60) continue;
             } else {
-               if ((typ > 20) && (typname[typname.length - 1] === '*')) typname = typname.slice(0, typname.length - 1);
+               if ((typ > 20) && (typname.at(-1) === '*'))
+                  typname = typname.slice(0, typname.length - 1);
                typ = typ % 20;
             }
 
@@ -3239,7 +3253,8 @@ class TFile {
          nbytes += 4;  // fDatimeM.Sizeof();
          nbytes += 18; // fUUID.Sizeof();
          // assume that the file may be above 2 Gbytes if file version is > 4
-         if (this.fVersion >= 40000) nbytes += 12;
+         if (this.fVersion >= 40000)
+            nbytes += 12;
 
          // this part typically read from the header, no need to optimize
          return this.readBuffer([this.fBEGIN, Math.max(300, nbytes)]);
@@ -3262,7 +3277,7 @@ class TFile {
       }).then(blobs => {
          const buf4 = new TBuffer(blobs[0], 0, this);
 
-         buf4.readTKey(); //
+         buf4.readTKey();
          const nkeys = buf4.ntoi4();
          for (let i = 0; i < nkeys; ++i)
             this.fKeys.push(buf4.readTKey());
@@ -3296,7 +3311,8 @@ class TFile {
      * @param {number} [checksum] - streamer info checksum, have to match when specified
      * @private */
    findStreamerInfo(clname, clversion, checksum) {
-      if (!this.fStreamerInfos) return null;
+      if (!this.fStreamerInfos)
+         return null;
 
       const arr = this.fStreamerInfos.arr, len = arr.length;
 
@@ -3304,7 +3320,8 @@ class TFile {
          let cache = this.fStreamerInfos.cache;
          if (!cache) cache = this.fStreamerInfos.cache = {};
          let si = cache[checksum];
-         if (si !== undefined) return si;
+         if (si !== undefined)
+            return si;
 
          for (let i = 0; i < len; ++i) {
             si = arr[i];
@@ -3317,7 +3334,8 @@ class TFile {
       } else {
          for (let i = 0; i < len; ++i) {
             const si = arr[i];
-            if ((si.fName === clname) && ((si.fClassVersion === clversion) || (clversion === undefined))) return si;
+            if ((si.fName === clname) && ((si.fClassVersion === clversion) || (clversion === undefined)))
+               return si;
          }
       }
 
@@ -3336,7 +3354,8 @@ class TFile {
       if (ver) {
          fullname += (ver.checksum ? `$chksum${ver.checksum}` : `$ver${ver.val}`);
          streamer = this.fStreamers[fullname];
-         if (streamer !== undefined) return streamer;
+         if (streamer !== undefined)
+            return streamer;
       }
 
       const custom = CustomStreamers[clname];
@@ -3389,9 +3408,11 @@ class TFile {
    /** @summary Here we produce list of members, resolving all base classes
      * @private */
    getSplittedStreamer(streamer, tgt) {
-      if (!streamer) return tgt;
+      if (!streamer)
+         return tgt;
 
-      if (!tgt) tgt = [];
+      if (!tgt)
+         tgt = [];
 
       for (let n = 0; n < streamer.length; ++n) {
          const elem = streamer[n];
@@ -3407,7 +3428,8 @@ class TFile {
                   buf.ntoi2(); // read version, why it here??
                   obj.fUniqueID = buf.ntou4();
                   obj.fBits = buf.ntou4();
-                  if (obj.fBits & kIsReferenced) buf.ntou2(); // skip pid
+                  if (obj.fBits & kIsReferenced)
+                     buf.ntou2(); // skip pid
                }
             });
             continue;
@@ -3443,7 +3465,7 @@ class TFile {
 
 /** @summary Reconstruct ROOT object from binary buffer
   * @desc Method can be used to reconstruct ROOT objects from binary buffer
-  * which can be requested from running THttpServer, using **root.bin** request
+  * which can be requested from running `THttpServer`, using **root.bin** request
   * To decode data, one has to request streamer infos data __after__ object data
   * as it shown in example.
   *
@@ -3460,9 +3482,9 @@ class TFile {
   * import { httpRequest } from 'http://localhost:8080/jsrootsys/modules/core.mjs';
   * import { reconstructObject } from 'http://localhost:8080/jsrootsys/modules/io.mjs';
   *
-  * let obj_data = await httpRequest('http://localhost:8080/Files/job1.root/hpx/root.bin', 'buf');
-  * let si_data = await httpRequest('http://localhost:8080/StreamerInfo/root.bin', 'buf');
-  * let histo = await reconstructObject('TH1F', obj_data, si_data);
+  * const obj_data = await httpRequest('http://localhost:8080/Files/job1.root/hpx/root.bin', 'buf');
+  * const si_data = await httpRequest('http://localhost:8080/StreamerInfo/root.bin', 'buf');
+  * const histo = await reconstructObject('TH1F', obj_data, si_data);
   * console.log(`Get histogram with title = ${histo.fTitle}`);
   *
   * // request same data via root.json request

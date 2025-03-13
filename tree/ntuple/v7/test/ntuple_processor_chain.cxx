@@ -88,10 +88,10 @@ TEST_F(RNTupleChainProcessorTest, SingleNTuple)
    auto proc = RNTupleProcessor::CreateChain(ntuples);
    for (const auto &entry : *proc) {
       EXPECT_EQ(++nEntries, proc->GetNEntriesProcessed());
-      EXPECT_EQ(nEntries - 1, proc->GetLocalEntryNumber());
+      EXPECT_EQ(nEntries - 1, proc->GetCurrentEntryNumber());
 
       auto x = entry.GetPtr<float>("x");
-      EXPECT_FLOAT_EQ(static_cast<float>(proc->GetLocalEntryNumber()), *x);
+      EXPECT_FLOAT_EQ(static_cast<float>(proc->GetCurrentEntryNumber()), *x);
    }
    EXPECT_EQ(nEntries, 5);
    EXPECT_EQ(nEntries, proc->GetNEntriesProcessed());
@@ -103,15 +103,19 @@ TEST_F(RNTupleChainProcessorTest, Basic)
 
    std::uint64_t nEntries = 0;
    auto proc = RNTupleProcessor::CreateChain(ntuples);
+
+   EXPECT_STREQ("ntuple", proc->GetProcessorName().c_str());
+
+   {
+      auto namedProc = RNTupleProcessor::CreateChain(ntuples, "my_ntuple");
+      EXPECT_STREQ("my_ntuple", namedProc->GetProcessorName().c_str());
+   }
+
+   auto x = proc->GetEntry().GetPtr<float>("x");
    for (const auto &entry : *proc) {
       EXPECT_EQ(++nEntries, proc->GetNEntriesProcessed());
-      if (proc->GetCurrentNTupleNumber() == 0) {
-         EXPECT_EQ(nEntries - 1, proc->GetLocalEntryNumber());
-      } else {
-         EXPECT_EQ(nEntries - 1, proc->GetLocalEntryNumber() + 5);
-      }
+      EXPECT_EQ(nEntries - 1, proc->GetCurrentEntryNumber());
 
-      auto x = entry.GetPtr<float>("x");
       EXPECT_EQ(static_cast<float>(nEntries - 1), *x);
 
       auto y = entry.GetPtr<std::vector<float>>("y");
@@ -201,17 +205,14 @@ TEST_F(RNTupleChainProcessorTest, EmptyNTuples)
 
    std::uint64_t nEntries = 0;
 
-   try {
-      auto proc = RNTupleProcessor::CreateChain(ntuples);
-      FAIL() << "creating a processor where the first RNTuple does not contain any entries should throw";
-   } catch (const ROOT::RException &err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("first RNTuple does not contain any entries"));
-   }
-
-   // Empty ntuples in the middle are just skipped (as long as their model complies)
-   ntuples = {{fNTupleName, fFileNames[0]}, {fNTupleName, fileGuard.GetPath()}, {fNTupleName, fFileNames[1]}};
+   // Empty ntuples are skipped (as long as their model complies)
+   ntuples = {{fNTupleName, fileGuard.GetPath()},
+              {fNTupleName, fFileNames[0]},
+              {fNTupleName, fileGuard.GetPath()},
+              {fNTupleName, fFileNames[1]}};
 
    auto proc = RNTupleProcessor::CreateChain(ntuples);
+
    for (const auto &entry : *proc) {
       auto x = entry.GetPtr<float>("x");
       EXPECT_EQ(static_cast<float>(nEntries), *x);
@@ -219,4 +220,41 @@ TEST_F(RNTupleChainProcessorTest, EmptyNTuples)
    }
    EXPECT_EQ(nEntries, 8);
    EXPECT_EQ(nEntries, proc->GetNEntriesProcessed());
+}
+
+namespace ROOT::Experimental::Internal {
+struct RNTupleProcessorEntryLoader {
+   static ROOT::NTupleSize_t LoadEntry(RNTupleProcessor &processor, ROOT::NTupleSize_t entryNumber)
+   {
+      return processor.LoadEntry(entryNumber);
+   }
+};
+} // namespace ROOT::Experimental::Internal
+
+TEST_F(RNTupleChainProcessorTest, LoadRandomEntry)
+{
+   using ROOT::Experimental::Internal::RNTupleProcessorEntryLoader;
+
+   std::vector<RNTupleOpenSpec> ntuples = {{fNTupleName, fFileNames[0]}, {fNTupleName, fFileNames[1]}};
+
+   auto proc = RNTupleProcessor::CreateChain(ntuples);
+   auto x = proc->GetEntry().GetPtr<float>("x");
+
+   RNTupleProcessorEntryLoader::LoadEntry(*proc, 3);
+   EXPECT_EQ(3.f, *x);
+   EXPECT_EQ(0, proc->GetCurrentProcessorNumber());
+
+   RNTupleProcessorEntryLoader::LoadEntry(*proc, 7);
+   EXPECT_EQ(7.f, *x);
+   EXPECT_EQ(1, proc->GetCurrentProcessorNumber());
+
+   RNTupleProcessorEntryLoader::LoadEntry(*proc, 6);
+   EXPECT_EQ(6.f, *x);
+   EXPECT_EQ(1, proc->GetCurrentProcessorNumber());
+
+   RNTupleProcessorEntryLoader::LoadEntry(*proc, 2);
+   EXPECT_EQ(2.f, *x);
+   EXPECT_EQ(0, proc->GetCurrentProcessorNumber());
+
+   EXPECT_EQ(ROOT::kInvalidNTupleIndex, RNTupleProcessorEntryLoader::LoadEntry(*proc, 8));
 }

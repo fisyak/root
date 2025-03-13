@@ -13,7 +13,6 @@
 #ifndef ROOT_TTreeReader
 #define ROOT_TTreeReader
 
-
 ////////////////////////////////////////////////////////////////////////////
 //                                                                        //
 // TTreeReader                                                            //
@@ -30,6 +29,7 @@
 #include <deque>
 #include <iterator>
 #include <unordered_map>
+#include <set>
 #include <string>
 
 class TDictionary;
@@ -38,14 +38,13 @@ class TFileCollection;
 
 namespace ROOT {
 namespace Internal {
-   class TBranchProxyDirector;
-   class TFriendProxy;
-}
-}
+class TBranchProxyDirector;
+class TFriendProxy;
+} // namespace Internal
+} // namespace ROOT
 
-class TTreeReader: public TObject {
+class TTreeReader : public TObject {
 public:
-
    ///\class TTreeReader::Iterator_t
    /// Iterate through the entries of a TTree.
    ///
@@ -57,8 +56,8 @@ public:
    /// is reached).
    class Iterator_t {
    private:
-      Long64_t fEntry; ///< Entry number of the tree referenced by this iterator; -1 is invalid.
-      TTreeReader* fReader; ///< The reader we select the entries on.
+      Long64_t fEntry;      ///< Entry number of the tree referenced by this iterator; -1 is invalid.
+      TTreeReader *fReader; ///< The reader we select the entries on.
 
       /// Whether the iterator points to a valid entry.
       bool IsValid() const { return fEntry >= 0; }
@@ -72,12 +71,11 @@ public:
       using reference = const Long64_t &;
 
       /// Default-initialize the iterator as "past the end".
-      Iterator_t(): fEntry(-1), fReader(nullptr) {}
+      Iterator_t() : fEntry(-1), fReader(nullptr) {}
 
       /// Initialize the iterator with the reader it steers and a
       /// tree entry number; -1 is invalid.
-      Iterator_t(TTreeReader& reader, Long64_t entry):
-         fEntry(entry), fReader(&reader) {}
+      Iterator_t(TTreeReader &reader, Long64_t entry) : fEntry(entry), fReader(&reader) {}
 
       /// Compare two iterators for equality.
       bool operator==(const Iterator_t &lhs) const
@@ -106,19 +104,19 @@ public:
       }
 
       /// Compare two iterators for inequality.
-      bool operator!=(const Iterator_t& lhs) const {
-         return !(*this == lhs);
-      }
+      bool operator!=(const Iterator_t &lhs) const { return !(*this == lhs); }
 
       /// Increment the iterator (postfix i++).
-      Iterator_t operator++(int) {
+      Iterator_t operator++(int)
+      {
          Iterator_t ret = *this;
          this->operator++();
          return ret;
       }
 
       /// Increment the iterator (prefix ++i).
-      Iterator_t& operator++() {
+      Iterator_t &operator++()
+      {
          if (IsValid()) {
             ++fEntry;
             // Force validity check of new fEntry.
@@ -131,7 +129,8 @@ public:
       }
 
       /// Set the entry number in the reader and return it.
-      const Long64_t& operator*() {
+      const Long64_t &operator*()
+      {
          if (IsValid()) {
             // If we cannot access that entry, mark the iterator invalid.
             if (fReader->SetEntry(fEntry) != kEntryValid) {
@@ -142,9 +141,7 @@ public:
          return fEntry;
       }
 
-      const Long64_t& operator*() const {
-         return **const_cast<Iterator_t*>(this);
-      }
+      const Long64_t &operator*() const { return **const_cast<Iterator_t *>(this); }
    };
 
    typedef Iterator_t iterator;
@@ -188,24 +185,22 @@ public:
    TTreeReader();
 
    TTreeReader(TTree *tree, TEntryList *entryList = nullptr, bool warnAboutLongerFriends = true,
-               const std::vector<std::string> &suppressErrorsForMissingBranches = {});
-   TTreeReader(const char* keyname, TDirectory* dir, TEntryList* entryList = nullptr);
+               const std::set<std::string> &suppressErrorsForMissingBranches = {});
+   TTreeReader(const char *keyname, TDirectory *dir, TEntryList *entryList = nullptr);
    TTreeReader(const char *keyname, TEntryList *entryList = nullptr) : TTreeReader(keyname, nullptr, entryList) {}
 
    ~TTreeReader() override;
 
-   void SetTree(TTree* tree, TEntryList* entryList = nullptr);
-   void SetTree(const char* keyname, TEntryList* entryList = nullptr) {
-      SetTree(keyname, nullptr, entryList);
-   }
-   void SetTree(const char* keyname, TDirectory* dir, TEntryList* entryList = nullptr);
+   void SetTree(TTree *tree, TEntryList *entryList = nullptr);
+   void SetTree(const char *keyname, TEntryList *entryList = nullptr) { SetTree(keyname, nullptr, entryList); }
+   void SetTree(const char *keyname, TDirectory *dir, TEntryList *entryList = nullptr);
 
    bool IsChain() const { return TestBit(kBitIsChain); }
 
    bool IsInvalid() const { return fLoadTreeStatus == kNoTree; }
 
-   TTree* GetTree() const { return fTree; }
-   TEntryList* GetEntryList() const { return fEntryList; }
+   TTree *GetTree() const { return fTree; }
+   TEntryList *GetEntryList() const { return fEntryList; }
 
    ///\{ \name Entry setters
 
@@ -213,9 +208,7 @@ public:
    ///
    /// \return false if the previous entry was already the last entry. This allows
    ///   the function to be used in `while (reader.Next()) { ... }`
-   bool Next() {
-      return SetEntry(GetCurrentEntry() + 1) == kEntryValid;
-   }
+   bool Next() { return SetEntry(GetCurrentEntry() + 1) == kEntryValid; }
 
    /// Set the next entry (or index of the TEntryList if that is set).
    ///
@@ -263,16 +256,14 @@ public:
    bool Notify() override;
 
    /// Return an iterator to the 0th TTree entry.
-   Iterator_t begin() {
-      return Iterator_t(*this, 0);
-   }
+   Iterator_t begin() { return Iterator_t(*this, 0); }
    /// Return an iterator beyond the last TTree entry.
    Iterator_t end() { return Iterator_t(*this, -1); }
 
 protected:
    using NamedProxies_t = std::unordered_map<std::string, std::unique_ptr<ROOT::Internal::TNamedBranchProxy>>;
    void Initialize();
-   ROOT::Internal::TNamedBranchProxy* FindProxy(const char* branchname) const
+   ROOT::Internal::TNamedBranchProxy *FindProxy(const char *branchname) const
    {
       const auto proxyIt = fProxies.find(branchname);
       return fProxies.end() != proxyIt ? proxyIt->second.get() : nullptr;
@@ -293,8 +284,8 @@ protected:
 
    ROOT::Internal::TFriendProxy &AddFriendProxy(std::size_t friendIdx);
 
-   bool RegisterValueReader(ROOT::Internal::TTreeReaderValueBase* reader);
-   void DeregisterValueReader(ROOT::Internal::TTreeReaderValueBase* reader);
+   bool RegisterValueReader(ROOT::Internal::TTreeReaderValueBase *reader);
+   void DeregisterValueReader(ROOT::Internal::TTreeReaderValueBase *reader);
 
    EEntryStatus SetEntryBase(Long64_t entry, bool local);
 
@@ -304,19 +295,20 @@ private:
    std::string GetProxyKey(const char *branchname)
    {
       std::string key(branchname);
-      //key += reinterpret_cast<std::uintptr_t>(fTree);
+      // key += reinterpret_cast<std::uintptr_t>(fTree);
       return key;
    }
 
    enum EStatusBits {
       kBitIsChain = BIT(14), ///< our tree is a chain
-      kBitHaveWarnedAboutEntryListAttachedToTTree = BIT(15), ///< the tree had a TEntryList and we have warned about that
+      kBitHaveWarnedAboutEntryListAttachedToTTree =
+         BIT(15),                                ///< the tree had a TEntryList and we have warned about that
       kBitSetEntryBaseCallingLoadTree = BIT(16), ///< SetEntryBase is in the process of calling TChain/TTree::%LoadTree.
-      kBitIsExternalTree = BIT(17)  ///< we do not own the tree
+      kBitIsExternalTree = BIT(17)               ///< we do not own the tree
    };
 
-   TTree* fTree = nullptr; ///< tree that's read
-   TEntryList* fEntryList = nullptr; ///< entry list to be used
+   TTree *fTree = nullptr;                      ///< tree that's read
+   TEntryList *fEntryList = nullptr;            ///< entry list to be used
    EEntryStatus fEntryStatus = kEntryNotLoaded; ///< status of most recent read request
    ELoadTreeStatus fLoadTreeStatus = kNoTree;   ///< Indicator on how LoadTree was called 'last' time.
    /// TTree and TChain will notify this object upon LoadTree, leading to a call to TTreeReader::Notify().
@@ -324,8 +316,8 @@ private:
    std::unique_ptr<ROOT::Internal::TBranchProxyDirector> fDirector{nullptr}; ///< proxying director
    /// Proxies to friend trees, created in TTreeReader[Value,Array]::CreateProxy
    std::vector<std::unique_ptr<ROOT::Internal::TFriendProxy>> fFriendProxies;
-   std::deque<ROOT::Internal::TTreeReaderValueBase*> fValues; ///< readers that use our director
-   NamedProxies_t fProxies; ///< attached ROOT::TNamedBranchProxies; owned
+   std::deque<ROOT::Internal::TTreeReaderValueBase *> fValues; ///< readers that use our director
+   NamedProxies_t fProxies;                                    ///< attached ROOT::TNamedBranchProxies; owned
 
    Long64_t fEntry = -1; ///< Current (non-local) entry of fTree or of fEntryList if set.
 
@@ -333,8 +325,8 @@ private:
    /// to stop looping over the TTree when we reach a certain entry: Next()
    /// returns false when GetCurrentEntry() reaches fEndEntry.
    Long64_t fEndEntry = -1LL;
-   Long64_t fBeginEntry = 0LL; ///< This allows us to propagate the range to the TTreeCache
-   bool fProxiesSet = false; ///< True if the proxies have been set, false otherwise
+   Long64_t fBeginEntry = 0LL;                ///< This allows us to propagate the range to the TTreeCache
+   bool fProxiesSet = false;                  ///< True if the proxies have been set, false otherwise
    bool fSetEntryBaseCallingLoadTree = false; ///< True if during the LoadTree execution triggered by SetEntryBase.
 
    // Flag to activate or deactivate warnings in case the friend trees have
@@ -347,7 +339,7 @@ private:
 
    // List of branches for which we want to suppress the printed error about
    // missing branch when switching to a new tree
-   std::vector<std::string> fSuppressErrorsForMissingBranches{};
+   std::set<std::string> fSuppressErrorsForMissingBranches{};
    std::vector<std::string> fMissingProxies{};
 
    friend class ROOT::Internal::TTreeReaderValueBase;

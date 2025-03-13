@@ -17,21 +17,21 @@ histoA->Draw(); // <-- event loop runs here!
 histoB->Draw(); // HistoB has already been filled, no event loop is run here
 ~~~
 
-Explore the examples below or go to [RDataFrame's user guide](classROOT_1_1RDataFrame.html). A list of all the RDataFrame tutorials can be found [here](\ref alltutorials).
+Explore the examples below or go to [RDataFrame's user guide](classROOT_1_1RDataFrame.html). A list of all the RDataFrame tutorials can be found [here](\ref df_alltutorials).
 
 ## Table of contents
-- [Introduction](\ref introduction)
+- [Introduction](\ref df_intro)
 - [Processing your data](\ref processingdata)
 - [Write and read from many sources](\ref readwrite)
 - [Interface with Numpy and Pandas](\ref numpypanda)
-- [Distributed execution in Python](\ref distrdf)
+- [Distributed execution in Python](\ref df_distrdf)
 - [Know more about your analysis](\ref analysisinfo)
 - [Example HEP analyses tutorials](\ref hepanalysis)
-- [List of all the tutorials](\ref alltutorials)
+- [List of all the tutorials](\ref df_alltutorials)
 
 
 
-\anchor introduction
+\anchor df_intro
 ## Introduction
 
 To get started these examples show how to create a simple RDataFrame, how to process the data in a simple analyses and how to plot distributions.
@@ -96,7 +96,7 @@ From Python, NumPy arrays can be imported into RDataFrame and columns from RData
 | df032_RDFFromNumpy.py | Read data from Numpy arrays. |
 | df035_RDFFromPandas.py | Read data from Pandas DataFrame. |
 
-\anchor distrdf
+\anchor df_distrdf
 ##Distributed execution in Python
 
 RDataFrame applications can be executed in parallel through distributed computing frameworks on a set of remote machines via Apache Spark or Dask.
@@ -137,5 +137,5 @@ With RDataFrame advanced analyses can be executed on large amounts of data. Thes
 | df106_HiggsToFourLeptons.C | df106_HiggsToFourLeptons.py | The Higgs to four lepton analysis from the ATLAS Open Data release of 2020. |
 | | df107_SingleTopAnalysis.py | A single top analysis using the ATLAS Open Data release of 2020. |
 
-\anchor alltutorials
+\anchor df_alltutorials
 @}

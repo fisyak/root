@@ -42,6 +42,24 @@
 #include "ROOT/RNTupleDS.hxx"
 #endif
 
+#ifdef R__UNIX
+// Functions needed to perform EOS XRootD redirection in ChangeSpec
+#include "TEnv.h"
+#include "TSystem.h"
+#ifndef R__FBSD
+#include <sys/xattr.h>
+#else
+#include <sys/extattr.h>
+#endif
+#ifdef R__MACOSX
+/* On macOS getxattr takes two extra arguments that should be set to 0 */
+#define getxattr(path, name, value, size) getxattr(path, name, value, size, 0u, 0)
+#endif
+#ifdef R__FBSD
+#define getxattr(path, name, value, size) extattr_get_file(path, EXTATTR_NAMESPACE_USER, name, value, size)
+#endif
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -349,6 +367,15 @@ ColumnNames_t ROOT::Internal::RDF::GetBranchNames(TTree &t, bool allowDuplicates
    return bNames;
 }
 
+ROOT::Detail::RDF::RLoopManager::RLoopManager(const ROOT::Detail::RDF::ColumnNames_t &defaultColumns)
+   : fDefaultColumns(defaultColumns),
+     fNSlots(RDFInternal::GetNSlots()),
+     fNewSampleNotifier(fNSlots),
+     fSampleInfos(fNSlots),
+     fDatasetColumnReaders(fNSlots)
+{
+}
+
 RLoopManager::RLoopManager(TTree *tree, const ColumnNames_t &defaultBranches)
    : fTree(std::shared_ptr<TTree>(tree, [](TTree *) {})),
      fDefaultColumns(defaultBranches),
@@ -403,6 +430,38 @@ RLoopManager::RLoopManager(ROOT::RDF::Experimental::RDatasetSpec &&spec)
    ChangeSpec(std::move(spec));
 }
 
+#ifdef R__UNIX
+namespace {
+std::optional<std::string> GetRedirectedSampleId(std::string_view path, std::string_view datasetName)
+{
+   // Mimick the redirection done in TFile::Open to see if the path points to a FUSE-mounted EOS path.
+   // If so, we create a redirected sample ID with the full xroot URL.
+   TString expandedUrl(path.data());
+   gSystem->ExpandPathName(expandedUrl);
+   if (gEnv->GetValue("TFile.CrossProtocolRedirects", 1) == 1) {
+      TUrl fileurl(expandedUrl, /* default is file */ kTRUE);
+      if (strcmp(fileurl.GetProtocol(), "file") == 0) {
+         ssize_t len = getxattr(fileurl.GetFile(), "eos.url.xroot", nullptr, 0);
+         if (len > 0) {
+            std::string xurl(len, 0);
+            std::string fileNameFromUrl{fileurl.GetFile()};
+            if (getxattr(fileNameFromUrl.c_str(), "eos.url.xroot", &xurl[0], len) == len) {
+               // Sometimes the `getxattr` call may return an invalid URL due
+               // to the POSIX attribute not being yet completely filled by EOS.
+               if (auto baseName = fileNameFromUrl.substr(fileNameFromUrl.find_last_of("/") + 1);
+                   std::equal(baseName.crbegin(), baseName.crend(), xurl.crbegin())) {
+                  return xurl + '/' + datasetName.data();
+               }
+            }
+         }
+      }
+   }
+
+   return std::nullopt;
+}
+} // namespace
+#endif
+
 /**
  * @brief Changes the internal TTree held by the RLoopManager.
  *
@@ -441,6 +500,11 @@ void RLoopManager::ChangeSpec(ROOT::RDF::Experimental::RDatasetSpec &&spec)
          // is exposed to users via RSampleInfo and DefinePerSample).
          const auto sampleId = files[i] + '/' + trees[i];
          fSampleMap.insert({sampleId, &sample});
+#ifdef R__UNIX
+         // Also add redirected EOS xroot URL when available
+         if (auto redirectedSampleId = GetRedirectedSampleId(files[i], trees[i]))
+            fSampleMap.insert({redirectedSampleId.value(), &sample});
+#endif
       }
    }
    SetTree(std::move(chain));
@@ -590,6 +654,15 @@ void RLoopManager::RunTreeProcessorMT()
                                   std::to_string(r.GetEntryStatus()));
       }
    });
+
+   auto &&processedEntries = entryCount.load();
+   if (fEndEntry != std::numeric_limits<Long64_t>::max() &&
+       static_cast<ULong64_t>(fEndEntry - fBeginEntry) > processedEntries) {
+      Warning("RDataFrame::Run",
+              "RDataFrame stopped processing after %lld entries, whereas an entry range (begin=%lld,end=%lld) was "
+              "requested. Consider adjusting the end value of the entry range to a maximum of %lld.",
+              processedEntries, fBeginEntry, fEndEntry, fBeginEntry + processedEntries);
+   }
 #endif // no-op otherwise (will not be called)
 }
 
@@ -613,12 +686,14 @@ void RLoopManager::RunTreeReader()
 
    // recursive call to check filters and conditionally execute actions
    // in the non-MT case processing can be stopped early by ranges, hence the check on fNStopsReceived
+   Long64_t processedEntries{};
    try {
       while (validTTreeReaderRead(r) && fNStopsReceived < fNChildren) {
          if (fNewSampleNotifier.CheckFlag(0)) {
             UpdateSampleInfo(/*slot*/0, r);
          }
          RunAndCheckFilters(0, r.GetCurrentEntry());
+         processedEntries++;
       }
    } catch (...) {
       std::cerr << "RDataFrame::Run: event loop was interrupted\n";
@@ -629,13 +704,28 @@ void RLoopManager::RunTreeReader()
       throw std::runtime_error("An error was encountered while processing the data. TTreeReader status code is: " +
                                std::to_string(r.GetEntryStatus()));
    }
+
+   if (fEndEntry != std::numeric_limits<Long64_t>::max() && (fEndEntry - fBeginEntry) > processedEntries) {
+      Warning("RDataFrame::Run",
+              "RDataFrame stopped processing after %lld entries, whereas an entry range (begin=%lld,end=%lld) was "
+              "requested. Consider adjusting the end value of the entry range to a maximum of %lld.",
+              processedEntries, fBeginEntry, fEndEntry, fBeginEntry + processedEntries);
+   }
 }
+
+namespace {
+struct DSRunRAII {
+   ROOT::RDF::RDataSource &fDS;
+   DSRunRAII(ROOT::RDF::RDataSource &ds) : fDS(ds) { fDS.Initialize(); }
+   ~DSRunRAII() { fDS.Finalize(); }
+};
+} // namespace
 
 /// Run event loop over data accessed through a DataSource, in sequence.
 void RLoopManager::RunDataSource()
 {
    assert(fDataSource != nullptr);
-   fDataSource->Initialize();
+   DSRunRAII _{*fDataSource};
    auto ranges = fDataSource->GetEntryRanges();
    while (!ranges.empty() && fNStopsReceived < fNChildren) {
       InitNodeSlots(nullptr, 0u);
@@ -659,7 +749,6 @@ void RLoopManager::RunDataSource()
       fDataSource->FinalizeSlot(0u);
       ranges = fDataSource->GetEntryRanges();
    }
-   fDataSource->Finalize();
 }
 
 /// Run event loop over data accessed through a DataSource, in parallel.
@@ -693,13 +782,12 @@ void RLoopManager::RunDataSourceMT()
       fDataSource->FinalizeSlot(slot);
    };
 
-   fDataSource->Initialize();
+   DSRunRAII _{*fDataSource};
    auto ranges = fDataSource->GetEntryRanges();
    while (!ranges.empty()) {
       pool.Foreach(runOnRange, ranges);
       ranges = fDataSource->GetEntryRanges();
    }
-   fDataSource->Finalize();
 #endif // not implemented otherwise (never called)
 }
 
@@ -917,6 +1005,9 @@ void RLoopManager::Run(bool jit)
    s.Start();
 
    switch (fLoopType) {
+   case ELoopType::kInvalid:
+      throw std::runtime_error("RDataFrame: executing the computation graph without a data source, aborting.");
+      break;
    case ELoopType::kNoFilesMT: RunEmptySourceMT(); break;
    case ELoopType::kROOTFilesMT: RunTreeProcessorMT(); break;
    case ELoopType::kDataSourceMT: RunDataSourceMT(); break;
@@ -1166,6 +1257,11 @@ void RLoopManager::ChangeBeginAndEndEntries(Long64_t begin, Long64_t end)
    fEndEntry = end;
 }
 
+void ROOT::Detail::RDF::RLoopManager::SetTTreeLifeline(std::any lifeline)
+{
+   fTTreeLifeline = std::move(lifeline);
+}
+
 /**
  * \brief Helper function to open a file (or the first file from a glob).
  * This function is used at construction time of an RDataFrame, to check the
@@ -1308,3 +1404,12 @@ ROOT::Detail::RDF::CreateLMFromFile(std::string_view datasetName, const std::vec
 
 // outlined to pin virtual table
 ROOT::Detail::RDF::RLoopManager::~RLoopManager() = default;
+
+void ROOT::Detail::RDF::RLoopManager::SetDataSource(std::unique_ptr<ROOT::RDF::RDataSource> dataSource)
+{
+   if (dataSource) {
+      fDataSource = std::move(dataSource);
+      fDataSource->SetNSlots(fNSlots);
+      fLoopType = ROOT::IsImplicitMTEnabled() ? ELoopType::kDataSourceMT : ELoopType::kDataSource;
+   }
+}

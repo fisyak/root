@@ -216,9 +216,7 @@ using std::endl, std::string, std::ostream, std::vector, std::pair, std::make_pa
 
 using RooHelpers::getColonSeparatedNameString;
 
-ClassImp(RooAbsPdf);
 
-ClassImp(RooAbsPdf::GenSpec);
 
 
 Int_t RooAbsPdf::_verboseEval = 0;
@@ -685,7 +683,7 @@ void RooAbsPdf::getLogProbabilities(std::span<const double> pdfValues, double * 
 /// \param[in] sumEntries The number of observed events.
 /// \param[in] nset The normalization set when asking the pdf for the expected
 ///            number of events.
-/// \param[in] observedSumW2 The number of observed events when weighting with
+/// \param[in] sumEntriesW2 The number of observed events when weighting with
 ///            squared weights. If non-zero, the weight-squared error
 ///            correction is applied to the extended term.
 /// \param[in] doOffset Offset the extended term by a counterterm where the

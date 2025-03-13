@@ -35,13 +35,13 @@ class TDirectory;
 
 namespace ROOT {
 class RNTuple; // for making RPageSourceFile a friend of RNTuple
+class RNTupleLocator;
 
 namespace Internal {
 class RRawFile;
 }
 
 namespace Experimental {
-class RNTupleLocator;
 
 namespace Internal {
 class RClusterPool;
@@ -72,7 +72,7 @@ private:
    std::unique_ptr<RNTupleFileWriter> fWriter;
    /// Number of bytes committed to storage in the current cluster
    std::uint64_t fNBytesCurrentCluster = 0;
-   RPageSinkFile(std::string_view ntupleName, const RNTupleWriteOptions &options);
+   RPageSinkFile(std::string_view ntupleName, const ROOT::RNTupleWriteOptions &options);
 
    /// We pass bytesPacked so that TFile::ls() reports a reasonable value for the compression ratio of the corresponding
    /// key. It is not strictly necessary to write and read the sealed page.
@@ -87,9 +87,9 @@ private:
 protected:
    using RPagePersistentSink::InitImpl;
    void InitImpl(unsigned char *serializedHeader, std::uint32_t length) final;
-   RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) override;
+   RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const ROOT::Internal::RPage &page) override;
    RNTupleLocator
-   CommitSealedPageImpl(DescriptorId_t physicalColumnId, const RPageStorage::RSealedPage &sealedPage) final;
+   CommitSealedPageImpl(ROOT::DescriptorId_t physicalColumnId, const RPageStorage::RSealedPage &sealedPage) final;
    std::vector<RNTupleLocator>
    CommitSealedPageVImpl(std::span<RPageStorage::RSealedPageGroup> ranges, const std::vector<bool> &mask) final;
    std::uint64_t StageClusterImpl() final;
@@ -98,8 +98,8 @@ protected:
    void CommitDatasetImpl(unsigned char *serializedFooter, std::uint32_t length) final;
 
 public:
-   RPageSinkFile(std::string_view ntupleName, std::string_view path, const RNTupleWriteOptions &options);
-   RPageSinkFile(std::string_view ntupleName, TDirectory &fileOrDirectory, const RNTupleWriteOptions &options);
+   RPageSinkFile(std::string_view ntupleName, std::string_view path, const ROOT::RNTupleWriteOptions &options);
+   RPageSinkFile(std::string_view ntupleName, TDirectory &fileOrDirectory, const ROOT::RNTupleWriteOptions &options);
    RPageSinkFile(const RPageSinkFile &) = delete;
    RPageSinkFile &operator=(const RPageSinkFile &) = delete;
    RPageSinkFile(RPageSinkFile &&) = default;
@@ -147,7 +147,7 @@ private:
    /// Populated by LoadStructureImpl(), reset at the end of Attach()
    RStructureBuffer fStructureBuffer;
 
-   RPageSourceFile(std::string_view ntupleName, const RNTupleReadOptions &options);
+   RPageSourceFile(std::string_view ntupleName, const ROOT::RNTupleReadOptions &options);
 
    /// Helper function for LoadClusters: it prepares the memory buffer (page map) and the
    /// read requests for a given cluster and columns.  The reead requests are appended to
@@ -158,20 +158,21 @@ private:
 
 protected:
    void LoadStructureImpl() final;
-   RNTupleDescriptor AttachImpl() final;
+   RNTupleDescriptor AttachImpl(RNTupleSerializer::EDescriptorDeserializeMode mode) final;
    /// The cloned page source creates a new raw file and reader and opens its own file descriptor to the data.
    std::unique_ptr<RPageSource> CloneImpl() const final;
 
-   RPageRef LoadPageImpl(ColumnHandle_t columnHandle, const RClusterInfo &clusterInfo, NTupleSize_t idxInCluster) final;
+   ROOT::Internal::RPageRef
+   LoadPageImpl(ColumnHandle_t columnHandle, const RClusterInfo &clusterInfo, ROOT::NTupleSize_t idxInCluster) final;
 
 public:
-   RPageSourceFile(std::string_view ntupleName, std::string_view path, const RNTupleReadOptions &options);
+   RPageSourceFile(std::string_view ntupleName, std::string_view path, const ROOT::RNTupleReadOptions &options);
    RPageSourceFile(std::string_view ntupleName, std::unique_ptr<ROOT::Internal::RRawFile> file,
-                   const RNTupleReadOptions &options);
+                   const ROOT::RNTupleReadOptions &options);
    /// Used from the RNTuple class to build a datasource if the anchor is already available.
    /// Requires the RNTuple object to be streamed from a file.
    static std::unique_ptr<RPageSourceFile>
-   CreateFromAnchor(const RNTuple &anchor, const RNTupleReadOptions &options = RNTupleReadOptions());
+   CreateFromAnchor(const RNTuple &anchor, const ROOT::RNTupleReadOptions &options = ROOT::RNTupleReadOptions());
 
    RPageSourceFile(const RPageSourceFile &) = delete;
    RPageSourceFile &operator=(const RPageSourceFile &) = delete;
@@ -179,7 +180,8 @@ public:
    RPageSourceFile &operator=(RPageSourceFile &&) = delete;
    ~RPageSourceFile() override;
 
-   void LoadSealedPage(DescriptorId_t physicalColumnId, RNTupleLocalIndex localIndex, RSealedPage &sealedPage) final;
+   void
+   LoadSealedPage(ROOT::DescriptorId_t physicalColumnId, RNTupleLocalIndex localIndex, RSealedPage &sealedPage) final;
 
    std::vector<std::unique_ptr<RCluster>> LoadClusters(std::span<RCluster::RKey> clusterKeys) final;
 }; // class RPageSourceFile

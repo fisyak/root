@@ -749,6 +749,8 @@ void TStyle::Reset(Option_t *opt)
    fFrameBorderMode= 1;
    fBarWidth       = 1;
    fBarOffset      = 0;
+   fCandleCircleLineWidth = 1;
+   fCandleCrossLineWidth = 1;
    fDrawBorder     = 0;
    fOptLogx        = 0;
    fOptLogy        = 0;
@@ -1891,7 +1893,7 @@ void TStyle::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// \see TColor::CreateColorTableFromFile, (which calls TColor::SetPalette)
+/// \see TColor::CreateColorTableFromFile, TColor::SetPalette
 void TStyle::SetPalette(TString fileName, Float_t alpha)
 {
    TColor::CreateColorTableFromFile(fileName, alpha);
@@ -1962,6 +1964,33 @@ void TStyle::SetCandleBoxRange(Double_t bRange)
    else
       fCandleBoxRange = bRange;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// Set the line width of the circle marker of a candle plot ([1,5]).
+
+void TStyle::SetCandleCircleLineWidth(Int_t CircleLineWidth)
+{
+   if (CircleLineWidth<1 || CircleLineWidth>5) {
+      Error("SetCandleCircleLineWidth", "illegal line width %d. It must be in the range [1,5]\n", (int)CircleLineWidth);
+      fCandleCircleLineWidth = 1;
+      return;
+   }
+   fCandleCircleLineWidth = CircleLineWidth;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Set the line width of the cross marker of a candle plot ([1,5]).
+
+void TStyle::SetCandleCrossLineWidth(Int_t CrossLineWidth)
+{
+   if (CrossLineWidth<1 || CrossLineWidth>5) {
+      Error("SetCandleCrossLineWidth", "illegal line width %d. It must be in the range [1,5]\n", (int)CrossLineWidth);
+      fCandleCrossLineWidth = 1;
+      return;
+   }
+   fCandleCrossLineWidth = CrossLineWidth;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Save the current style in a C++ macro file.

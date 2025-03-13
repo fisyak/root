@@ -45,11 +45,11 @@ class RPageSource;
 // TODO(jblomer): find a better way to not have these methods in the RFieldBase public API
 void CallFlushColumnsOnField(RFieldBase &);
 void CallCommitClusterOnField(RFieldBase &);
-void CallConnectPageSinkOnField(RFieldBase &, RPageSink &, NTupleSize_t firstEntry = 0);
+void CallConnectPageSinkOnField(RFieldBase &, RPageSink &, ROOT::NTupleSize_t firstEntry = 0);
 void CallConnectPageSourceOnField(RFieldBase &, RPageSource &);
 ROOT::RResult<std::unique_ptr<ROOT::Experimental::RFieldBase>>
-CallFieldBaseCreate(const std::string &fieldName, const std::string &canonicalType, const std::string &typeAlias,
-                    const RCreateFieldOptions &options, const RNTupleDescriptor *desc, DescriptorId_t fieldId);
+CallFieldBaseCreate(const std::string &fieldName, const std::string &typeName, const ROOT::RCreateFieldOptions &options,
+                    const RNTupleDescriptor *desc, ROOT::DescriptorId_t fieldId);
 
 } // namespace Internal
 
@@ -79,12 +79,12 @@ class RFieldBase {
    friend struct ROOT::Experimental::Internal::RFieldRepresentationModifier; // used for unit tests
    friend void Internal::CallFlushColumnsOnField(RFieldBase &);
    friend void Internal::CallCommitClusterOnField(RFieldBase &);
-   friend void Internal::CallConnectPageSinkOnField(RFieldBase &, Internal::RPageSink &, NTupleSize_t);
+   friend void Internal::CallConnectPageSinkOnField(RFieldBase &, Internal::RPageSink &, ROOT::NTupleSize_t);
    friend void Internal::CallConnectPageSourceOnField(RFieldBase &, Internal::RPageSource &);
    friend ROOT::RResult<std::unique_ptr<ROOT::Experimental::RFieldBase>>
-   Internal::CallFieldBaseCreate(const std::string &fieldName, const std::string &canonicalType,
-                                 const std::string &typeAlias, const RCreateFieldOptions &options,
-                                 const RNTupleDescriptor *desc, DescriptorId_t fieldId);
+   Internal::CallFieldBaseCreate(const std::string &fieldName, const std::string &typeName,
+                                 const ROOT::RCreateFieldOptions &options, const RNTupleDescriptor *desc,
+                                 ROOT::DescriptorId_t fieldId);
 
    using ReadCallback_t = std::function<void(void *)>;
 
@@ -145,7 +145,7 @@ public:
       kTraitTrivialType = kTraitTriviallyConstructible | kTraitTriviallyDestructible
    };
 
-   using ColumnRepresentation_t = std::vector<ENTupleColumnType>;
+   using ColumnRepresentation_t = std::vector<ROOT::ENTupleColumnType>;
 
    /// During its lifetime, a field undergoes the following possible state transitions:
    ///
@@ -182,7 +182,7 @@ public:
    private:
       Selection_t fSerializationTypes;
       /// The union of the serialization types and the deserialization extra types.  Duplicates the serialization types
-      /// list but the benenfit is that GetDeserializationTypes does not need to compile the list.
+      /// list but the benefit is that GetDeserializationTypes does not need to compile the list.
       Selection_t fDeserializationTypes;
    }; // class RColumnRepresentations
 
@@ -195,7 +195,7 @@ private:
    /// The C++ type captured by this field
    std::string fType;
    /// The role of this field in the data model structure
-   ENTupleStructure fStructure;
+   ROOT::ENTupleStructure fStructure;
    /// For fixed sized arrays, the array length
    std::size_t fNRepetitions;
    /// A field qualifies as simple if it is mappable (which implies it has a single principal column),
@@ -208,7 +208,7 @@ private:
    /// When the columns are connected to a page source or page sink, the field represents a field id in the
    /// corresponding RNTuple descriptor. This on-disk ID is set in RPageSink::Create() for writing and by
    /// RFieldDescriptor::CreateField() when recreating a field / model from the stored descriptor.
-   DescriptorId_t fOnDiskId = kInvalidDescriptorId;
+   ROOT::DescriptorId_t fOnDiskId = ROOT::kInvalidDescriptorId;
    /// Free text set by the user
    std::string fDescription;
    /// Changed by ConnectTo[Sink,Source], reset by Clone()
@@ -228,7 +228,7 @@ private:
    ///
    /// The column element index also depends on the number of repetitions of each field in the hierarchy, e.g., given a
    /// field with type `std::array<std::array<float, 4>, 2>`, this function returns 8 for the inner-most field.
-   NTupleSize_t EntryToColumnElementIndex(NTupleSize_t globalIndex) const;
+   ROOT::NTupleSize_t EntryToColumnElementIndex(ROOT::NTupleSize_t globalIndex) const;
 
    /// Flushes data from active columns
    void FlushColumns();
@@ -237,7 +237,7 @@ private:
    /// Fields and their columns live in the void until connected to a physical page storage.  Only once connected, data
    /// can be read or written.  In order to find the field in the page storage, the field's on-disk ID has to be set.
    /// \param firstEntry The global index of the first entry with on-disk data for the connected field
-   void ConnectPageSink(Internal::RPageSink &pageSink, NTupleSize_t firstEntry = 0);
+   void ConnectPageSink(Internal::RPageSink &pageSink, ROOT::NTupleSize_t firstEntry = 0);
    /// Connects the field and its sub field tree to the given page source. Once connected, data can be read.
    /// Only unconnected fields may be connected, i.e. the method is not idempotent. The field ID has to be set prior to
    /// calling this function. For sub fields, a field ID may or may not be set. If the field ID is unset, it will be
@@ -248,7 +248,7 @@ private:
    {
       fIsSimple = false;
       fIsArtificial = true;
-      for (auto &field : fSubFields) {
+      for (auto &field : fSubfields) {
          field->SetArtificial();
       }
    }
@@ -258,7 +258,7 @@ protected:
    struct RBulkSpec;
 
    /// Collections and classes own sub fields
-   std::vector<std::unique_ptr<RFieldBase>> fSubFields;
+   std::vector<std::unique_ptr<RFieldBase>> fSubfields;
    /// Sub fields point to their mother field
    RFieldBase *fParent;
    /// All fields that have columns have a distinct main column. E.g., for simple fields (float, int, ...), the
@@ -375,7 +375,7 @@ protected:
    /// When connecting a field to a page sink, the field's default column representation is subject
    /// to adjustment according to the write options. E.g., if compression is turned off, encoded columns
    /// are changed to their unencoded counterparts.
-   void AutoAdjustColumnTypes(const RNTupleWriteOptions &options);
+   void AutoAdjustColumnTypes(const ROOT::RNTupleWriteOptions &options);
 
    /// Called by Clone(), which additionally copies the on-disk ID
    virtual std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const = 0;
@@ -390,7 +390,7 @@ protected:
    /// Operations on values of complex types, e.g. ones that involve multiple columns or for which no direct
    /// column type exists.
    virtual std::size_t AppendImpl(const void *from);
-   virtual void ReadGlobalImpl(NTupleSize_t globalIndex, void *to);
+   virtual void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to);
    virtual void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to);
 
    /// Write the given value into columns. The value object has to be of the same type as the field.
@@ -400,7 +400,7 @@ protected:
    /// Populate a single value with data from the field. The memory location pointed to by to needs to be of the
    /// fitting type. The fast path is conditioned by the field qualifying as simple, i.e. maps as-is
    /// to a single column and has no read callback.
-   void Read(NTupleSize_t globalIndex, void *to)
+   void Read(ROOT::NTupleSize_t globalIndex, void *to)
    {
       if (fIsSimple)
          return (void)fPrincipalColumn->Read(globalIndex, to);
@@ -446,7 +446,7 @@ protected:
    /// Allow derived classes to call Append and Read on other (sub) fields.
    static std::size_t CallAppendOn(RFieldBase &other, const void *from) { return other.Append(from); }
    static void CallReadOn(RFieldBase &other, RNTupleLocalIndex localIndex, void *to) { other.Read(localIndex, to); }
-   static void CallReadOn(RFieldBase &other, NTupleSize_t globalIndex, void *to) { other.Read(globalIndex, to); }
+   static void CallReadOn(RFieldBase &other, ROOT::NTupleSize_t globalIndex, void *to) { other.Read(globalIndex, to); }
    static void *CallCreateObjectRawPtrOn(RFieldBase &other) { return other.CreateObjectRawPtr(); }
 
    /// Fields may need direct access to the principal column of their sub fields, e.g. in RRVecField::ReadBulk
@@ -476,23 +476,14 @@ protected:
    virtual void BeforeConnectPageSource(Internal::RPageSource &) {}
 
    /// Called by `ConnectPageSource()` once connected; derived classes may override this as appropriate
-   virtual void OnConnectPageSource() {}
+   virtual void AfterConnectPageSource() {}
 
    /// Factory method to resurrect a field from the stored on-disk type information.  This overload takes an already
    /// normalized type name and type alias.
    /// `desc` and `fieldId` must be passed if `options.fEmulateUnknownTypes` is true, otherwise they can be left blank.
-   /// TODO(jalopezg): this overload may eventually be removed leaving only the `RFieldBase::Create()` that takes a
-   /// single type name
-   static RResult<std::unique_ptr<RFieldBase>>
-   Create(const std::string &fieldName, const std::string &canonicalType, const std::string &typeAlias,
-          const RCreateFieldOptions &options = {}, const RNTupleDescriptor *desc = nullptr,
-          DescriptorId_t fieldId = kInvalidDescriptorId);
-
-   /// Same as the above overload of Create, but infers the normalized type name and the canonical type name from
-   /// `typeName`.
    static RResult<std::unique_ptr<RFieldBase>> Create(const std::string &fieldName, const std::string &typeName,
-                                                      const RCreateFieldOptions &options, const RNTupleDescriptor *desc,
-                                                      DescriptorId_t fieldId);
+                                                      const ROOT::RCreateFieldOptions &options,
+                                                      const RNTupleDescriptor *desc, ROOT::DescriptorId_t fieldId);
 
 public:
    template <bool IsConstT>
@@ -516,7 +507,7 @@ public:
    /// The constructor creates the underlying column objects and connects them to either a sink or a source.
    /// If `isSimple` is `true`, the trait `kTraitMappable` is automatically set on construction. However, the
    /// field might be demoted to non-simple if a post-read callback is set.
-   RFieldBase(std::string_view name, std::string_view type, ENTupleStructure structure, bool isSimple,
+   RFieldBase(std::string_view name, std::string_view type, ROOT::ENTupleStructure structure, bool isSimple,
               std::size_t nRepetitions = 0);
    RFieldBase(const RFieldBase &) = delete;
    RFieldBase(RFieldBase &&) = default;
@@ -527,7 +518,9 @@ public:
    /// Copies the field and its sub fields using a possibly new name and a new, unconnected set of columns
    std::unique_ptr<RFieldBase> Clone(std::string_view newName) const;
 
-   /// Factory method to resurrect a field from the stored on-disk type information
+   /// Factory method to create a field from a certain type given as string.
+   /// Note that the provided type name must be a valid C++ type name. Template arguments of templated types
+   /// must be type names or integers (e.g., no expressions).
    static RResult<std::unique_ptr<RFieldBase>>
    Create(const std::string &fieldName, const std::string &typeName);
 
@@ -570,11 +563,11 @@ public:
    std::string GetQualifiedFieldName() const;
    const std::string &GetTypeName() const { return fType; }
    const std::string &GetTypeAlias() const { return fTypeAlias; }
-   ENTupleStructure GetStructure() const { return fStructure; }
+   ROOT::ENTupleStructure GetStructure() const { return fStructure; }
    std::size_t GetNRepetitions() const { return fNRepetitions; }
    const RFieldBase *GetParent() const { return fParent; }
-   std::vector<RFieldBase *> GetSubFields();
-   std::vector<const RFieldBase *> GetSubFields() const;
+   std::vector<RFieldBase *> GetMutableSubfields();
+   std::vector<const RFieldBase *> GetConstSubfields() const;
    bool IsSimple() const { return fIsSimple; }
    bool IsArtificial() const { return fIsArtificial; }
    /// Get the field's description
@@ -582,8 +575,8 @@ public:
    void SetDescription(std::string_view description);
    EState GetState() const { return fState; }
 
-   DescriptorId_t GetOnDiskId() const { return fOnDiskId; }
-   void SetOnDiskId(DescriptorId_t id);
+   ROOT::DescriptorId_t GetOnDiskId() const { return fOnDiskId; }
+   void SetOnDiskId(ROOT::DescriptorId_t id);
 
    /// Returns the fColumnRepresentative pointee or, if unset (always the case for artificial fields), the field's
    /// default representative
@@ -647,13 +640,13 @@ public:
    void Advance()
    {
       auto itr = fStack.rbegin();
-      if (!itr->fFieldPtr->fSubFields.empty()) {
-         fStack.emplace_back(Position(itr->fFieldPtr->fSubFields[0].get(), 0));
+      if (!itr->fFieldPtr->fSubfields.empty()) {
+         fStack.emplace_back(Position(itr->fFieldPtr->fSubfields[0].get(), 0));
          return;
       }
 
       unsigned int nextIdxInParent = ++(itr->fIdxInParent);
-      while (nextIdxInParent >= itr->fFieldPtr->fParent->fSubFields.size()) {
+      while (nextIdxInParent >= itr->fFieldPtr->fParent->fSubfields.size()) {
          if (fStack.size() == 1) {
             itr->fFieldPtr = itr->fFieldPtr->fParent;
             itr->fIdxInParent = -1;
@@ -663,7 +656,7 @@ public:
          itr = fStack.rbegin();
          nextIdxInParent = ++(itr->fIdxInParent);
       }
-      itr->fFieldPtr = itr->fFieldPtr->fParent->fSubFields[nextIdxInParent].get();
+      itr->fFieldPtr = itr->fFieldPtr->fParent->fSubfields[nextIdxInParent].get();
    }
 
    iterator operator++(int) /* postfix */
@@ -702,7 +695,7 @@ public:
    ~RValue() = default;
 
    std::size_t Append() { return fField->Append(fObjPtr.get()); }
-   void Read(NTupleSize_t globalIndex) { fField->Read(globalIndex, fObjPtr.get()); }
+   void Read(ROOT::NTupleSize_t globalIndex) { fField->Read(globalIndex, fObjPtr.get()); }
    void Read(RNTupleLocalIndex localIndex) { fField->Read(localIndex, fObjPtr.get()); }
    void Bind(std::shared_ptr<void> objPtr) { fObjPtr = objPtr; }
    void BindRawPtr(void *rawPtr);
@@ -832,7 +825,7 @@ public:
    }
 
    /// Overload to read all elements in the given cluster range.
-   void *ReadBulk(RNTupleClusterRange range) { return ReadBulk(*range.begin(), nullptr, range.size()); }
+   void *ReadBulk(ROOT::RNTupleLocalRange range) { return ReadBulk(*range.begin(), nullptr, range.size()); }
 };
 
 namespace Internal {

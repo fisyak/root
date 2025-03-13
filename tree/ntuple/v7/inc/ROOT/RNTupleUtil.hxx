@@ -27,6 +27,12 @@
 
 namespace ROOT {
 
+class RLogChannel;
+namespace Internal {
+/// Log channel for RNTuple diagnostics.
+ROOT::RLogChannel &NTupleLog();
+} // namespace Internal
+
 /// Helper types to present an offset column as array of collection sizes.
 /// See RField<RNTupleCardinality<SizeT>> for details.
 template <typename SizeT>
@@ -48,16 +54,9 @@ struct RNTupleCardinality {
    ValueType fValue;
 };
 
-class RLogChannel;
-
-namespace Experimental {
-
-/// Log channel for RNTuple diagnostics.
-ROOT::RLogChannel &NTupleLog();
-
 // clang-format off
 /**
-\class ROOT::Experimental::ENTupleColumnType
+\class ROOT::ENTupleColumnType
 \ingroup NTuple
 \brief The available trivial, native content types of a column
 
@@ -111,7 +110,15 @@ enum class ENTupleColumnType {
 /// The fields in the ntuple model tree can carry different structural information about the type system.
 /// Leaf fields contain just data, collection fields resolve to offset columns, record fields have no
 /// materialization on the primitive column layer.
-enum ENTupleStructure : std::uint16_t { kInvalid, kLeaf, kCollection, kRecord, kVariant, kStreamer, kUnknown };
+enum class ENTupleStructure : std::uint16_t {
+   kInvalid,
+   kLeaf,
+   kCollection,
+   kRecord,
+   kVariant,
+   kStreamer,
+   kUnknown
+};
 
 /// Integer type long enough to hold the maximum number of entries in a column
 using NTupleSize_t = std::uint64_t;
@@ -124,21 +131,27 @@ constexpr DescriptorId_t kInvalidDescriptorId = std::uint64_t(-1);
 /// Addresses a column element or field item relative to a particular cluster, instead of a global NTupleSize_t index
 class RNTupleLocalIndex {
 private:
-   DescriptorId_t fClusterId = kInvalidDescriptorId;
-   NTupleSize_t fIndexInCluster = kInvalidNTupleIndex;
+   ROOT::DescriptorId_t fClusterId = ROOT::kInvalidDescriptorId;
+   ROOT::NTupleSize_t fIndexInCluster = ROOT::kInvalidNTupleIndex;
 
 public:
    RNTupleLocalIndex() = default;
    RNTupleLocalIndex(const RNTupleLocalIndex &other) = default;
    RNTupleLocalIndex &operator=(const RNTupleLocalIndex &other) = default;
-   constexpr RNTupleLocalIndex(DescriptorId_t clusterId, NTupleSize_t indexInCluster)
+   constexpr RNTupleLocalIndex(ROOT::DescriptorId_t clusterId, ROOT::NTupleSize_t indexInCluster)
       : fClusterId(clusterId), fIndexInCluster(indexInCluster)
    {
    }
 
-   RNTupleLocalIndex operator+(NTupleSize_t off) const { return RNTupleLocalIndex(fClusterId, fIndexInCluster + off); }
+   RNTupleLocalIndex operator+(ROOT::NTupleSize_t off) const
+   {
+      return RNTupleLocalIndex(fClusterId, fIndexInCluster + off);
+   }
 
-   RNTupleLocalIndex operator-(NTupleSize_t off) const { return RNTupleLocalIndex(fClusterId, fIndexInCluster - off); }
+   RNTupleLocalIndex operator-(ROOT::NTupleSize_t off) const
+   {
+      return RNTupleLocalIndex(fClusterId, fIndexInCluster - off);
+   }
 
    RNTupleLocalIndex operator++(int) /* postfix */
    {
@@ -160,8 +173,8 @@ public:
 
    bool operator!=(RNTupleLocalIndex other) const { return !(*this == other); }
 
-   DescriptorId_t GetClusterId() const { return fClusterId; }
-   NTupleSize_t GetIndexInCluster() const { return fIndexInCluster; }
+   ROOT::DescriptorId_t GetClusterId() const { return fClusterId; }
+   ROOT::NTupleSize_t GetIndexInCluster() const { return fIndexInCluster; }
 };
 
 /// RNTupleLocator payload that is common for object stores using 64bit location information.
@@ -236,6 +249,8 @@ public:
    }
 };
 
+namespace Experimental {
+
 namespace Internal {
 
 /// The in-memory representation of a 32bit or 64bit on-disk index column. Wraps the integer in a
@@ -272,15 +287,21 @@ public:
 /// Holds the index and the tag of a kSwitch column
 class RColumnSwitch {
 private:
-   NTupleSize_t fIndex;
+   ROOT::NTupleSize_t fIndex;
    std::uint32_t fTag = 0;
 
 public:
    RColumnSwitch() = default;
-   RColumnSwitch(NTupleSize_t index, std::uint32_t tag) : fIndex(index), fTag(tag) {}
-   NTupleSize_t GetIndex() const { return fIndex; }
+   RColumnSwitch(ROOT::NTupleSize_t index, std::uint32_t tag) : fIndex(index), fTag(tag) {}
+   ROOT::NTupleSize_t GetIndex() const { return fIndex; }
    std::uint32_t GetTag() const { return fTag; }
 };
+
+} // namespace Internal
+
+} // namespace Experimental
+
+namespace Internal {
 
 template <typename T>
 auto MakeAliasedSharedPtr(T *rawPtr)
@@ -299,11 +320,11 @@ std::unique_ptr<T[]> MakeUninitArray(std::size_t size)
    return std::unique_ptr<T[]>(new T[size]);
 }
 
-inline constexpr ENTupleColumnType kTestFutureType =
+inline constexpr ENTupleColumnType kTestFutureColumnType =
    static_cast<ENTupleColumnType>(std::numeric_limits<std::underlying_type_t<ENTupleColumnType>>::max() - 1);
 
-inline constexpr ENTupleStructure kTestFutureFieldStructure =
-   static_cast<ENTupleStructure>(std::numeric_limits<std::underlying_type_t<ENTupleStructure>>::max() - 1);
+inline constexpr ROOT::ENTupleStructure kTestFutureFieldStructure =
+   static_cast<ROOT::ENTupleStructure>(std::numeric_limits<std::underlying_type_t<ROOT::ENTupleStructure>>::max() - 1);
 
 inline constexpr RNTupleLocator::ELocatorType kTestLocatorType = static_cast<RNTupleLocator::ELocatorType>(0x7e);
 static_assert(kTestLocatorType < RNTupleLocator::ELocatorType::kLastSerializableType);
@@ -313,9 +334,16 @@ RResult<void> EnsureValidNameForRNTuple(std::string_view name, std::string_view 
 
 } // namespace Internal
 
+namespace Experimental {
+
 // TODO(jblomer): remove before branching ROOT v6.36
-using EColumnType [[deprecated("ROOT::Experimental::EColumnType moved to ROOT::Experimental::ENTupleColumnType")]] =
-   ENTupleColumnType;
+using EColumnType [[deprecated("ROOT::Experimental::EColumnType moved to ROOT::ENTupleColumnType")]] =
+   ROOT::ENTupleColumnType;
+using ENTupleStructure [[deprecated("ROOT::Experimental::ENTupleStructure moved to ROOT::ENTupleStructure")]] =
+   ROOT::ENTupleStructure;
+using NTupleSize_t [[deprecated("ROOT::Experimental::NTupleSize_t moved to ROOT::NTupleSize_t")]] = ROOT::NTupleSize_t;
+using DescriptorId_t [[deprecated("ROOT::Experimental::DescriptorId_t moved to ROOT::DescriptorId_t")]] =
+   ROOT::DescriptorId_t;
 
 } // namespace Experimental
 } // namespace ROOT

@@ -56,12 +56,13 @@ ROOT::RResult<void>
 ROOT::Experimental::Internal::RProjectedFields::EnsureValidMapping(const RFieldBase *target, const FieldMap_t &fieldMap)
 {
    auto source = fieldMap.at(target);
-   const bool hasCompatibleStructure =
-      (source->GetStructure() == target->GetStructure()) ||
-      ((source->GetStructure() == ENTupleStructure::kCollection) && dynamic_cast<const RCardinalityField *>(target));
+   const bool hasCompatibleStructure = (source->GetStructure() == target->GetStructure()) ||
+                                       ((source->GetStructure() == ROOT::ENTupleStructure::kCollection) &&
+                                        dynamic_cast<const RCardinalityField *>(target));
    if (!hasCompatibleStructure)
       return R__FAIL("field mapping structural mismatch: " + source->GetFieldName() + " --> " + target->GetFieldName());
-   if ((source->GetStructure() == ENTupleStructure::kLeaf) || (source->GetStructure() == ENTupleStructure::kStreamer)) {
+   if ((source->GetStructure() == ROOT::ENTupleStructure::kLeaf) ||
+       (source->GetStructure() == ROOT::ENTupleStructure::kStreamer)) {
       if (target->GetTypeName() != source->GetTypeName())
          return R__FAIL("field mapping type mismatch: " + source->GetFieldName() + " --> " + target->GetFieldName());
    }
@@ -86,8 +87,8 @@ ROOT::Experimental::Internal::RProjectedFields::EnsureValidMapping(const RFieldB
    auto fnBreakPoint = [](const RFieldBase *f) -> const RFieldBase * {
       auto parent = f->GetParent();
       while (parent) {
-         if ((parent->GetStructure() != ENTupleStructure::kRecord) &&
-             (parent->GetStructure() != ENTupleStructure::kLeaf)) {
+         if ((parent->GetStructure() != ROOT::ENTupleStructure::kRecord) &&
+             (parent->GetStructure() != ROOT::ENTupleStructure::kLeaf)) {
             return parent;
          }
          parent = parent->GetParent();
@@ -98,10 +99,10 @@ ROOT::Experimental::Internal::RProjectedFields::EnsureValidMapping(const RFieldB
 
    // If source or target has a variant or reference as a parent, error out
    auto *sourceBreakPoint = fnBreakPoint(source);
-   if (sourceBreakPoint && sourceBreakPoint->GetStructure() != ENTupleStructure::kCollection)
+   if (sourceBreakPoint && sourceBreakPoint->GetStructure() != ROOT::ENTupleStructure::kCollection)
       return R__FAIL("unsupported field mapping (source structure)");
    auto *targetBreakPoint = fnBreakPoint(target);
-   if (targetBreakPoint && sourceBreakPoint->GetStructure() != ENTupleStructure::kCollection)
+   if (targetBreakPoint && sourceBreakPoint->GetStructure() != ROOT::ENTupleStructure::kCollection)
       return R__FAIL("unsupported field mapping (target structure)");
 
    if (!sourceBreakPoint && !targetBreakPoint) {
@@ -194,26 +195,38 @@ void ROOT::Experimental::RNTupleModel::RUpdater::CommitUpdate()
    fWriter.GetSink().UpdateSchema(toCommit, fWriter.GetNEntries());
 }
 
-void ROOT::Experimental::RNTupleModel::RUpdater::AddField(std::unique_ptr<RFieldBase> field)
+void ROOT::Experimental::Internal::RNTupleModelChangeset::AddField(std::unique_ptr<RFieldBase> field)
 {
    auto fieldp = field.get();
-   fOpenChangeset.fModel.AddField(std::move(field));
-   fOpenChangeset.fAddedFields.emplace_back(fieldp);
+   fModel.AddField(std::move(field));
+   fAddedFields.emplace_back(fieldp);
+}
+
+void ROOT::Experimental::RNTupleModel::RUpdater::AddField(std::unique_ptr<RFieldBase> field)
+{
+   fOpenChangeset.AddField(std::move(field));
+}
+
+ROOT::RResult<void>
+ROOT::Experimental::Internal::RNTupleModelChangeset::AddProjectedField(std::unique_ptr<RFieldBase> field,
+                                                                       RNTupleModel::FieldMappingFunc_t mapping)
+{
+   auto fieldp = field.get();
+   auto result = fModel.AddProjectedField(std::move(field), mapping);
+   if (result)
+      fAddedProjectedFields.emplace_back(fieldp);
+   return R__FORWARD_RESULT(result);
 }
 
 ROOT::RResult<void> ROOT::Experimental::RNTupleModel::RUpdater::AddProjectedField(std::unique_ptr<RFieldBase> field,
                                                                                   FieldMappingFunc_t mapping)
 {
-   auto fieldp = field.get();
-   auto result = fOpenChangeset.fModel.AddProjectedField(std::move(field), mapping);
-   if (result)
-      fOpenChangeset.fAddedProjectedFields.emplace_back(fieldp);
-   return R__FORWARD_RESULT(result);
+   return R__FORWARD_RESULT(fOpenChangeset.AddProjectedField(std::move(field), std::move(mapping)));
 }
 
 void ROOT::Experimental::RNTupleModel::EnsureValidFieldName(std::string_view fieldName)
 {
-   RResult<void> nameValid = ROOT::Experimental::Internal::EnsureValidNameForRNTuple(fieldName, "Field");
+   RResult<void> nameValid = ROOT::Internal::EnsureValidNameForRNTuple(fieldName, "Field");
    if (!nameValid) {
       nameValid.Throw();
    }
@@ -239,7 +252,8 @@ void ROOT::Experimental::RNTupleModel::EnsureNotBare() const
 
 ROOT::Experimental::RNTupleModel::RNTupleModel(std::unique_ptr<RFieldZero> fieldZero)
    : fFieldZero(std::move(fieldZero)), fModelId(GetNewModelId()), fSchemaId(fModelId)
-{}
+{
+}
 
 std::unique_ptr<ROOT::Experimental::RNTupleModel> ROOT::Experimental::RNTupleModel::CreateBare()
 {
@@ -286,7 +300,7 @@ std::unique_ptr<ROOT::Experimental::RNTupleModel> ROOT::Experimental::RNTupleMod
    cloneModel->fRegisteredSubfields = fRegisteredSubfields;
    if (fDefaultEntry) {
       cloneModel->fDefaultEntry = std::unique_ptr<REntry>(new REntry(cloneModel->fModelId, cloneModel->fSchemaId));
-      for (const auto &f : cloneModel->fFieldZero->GetSubFields()) {
+      for (const auto &f : cloneModel->fFieldZero->GetMutableSubfields()) {
          cloneModel->fDefaultEntry->AddValue(f->CreateValue());
       }
       for (const auto &f : cloneModel->fRegisteredSubfields) {
@@ -303,7 +317,7 @@ ROOT::Experimental::RFieldBase *ROOT::Experimental::RNTupleModel::FindField(std:
 
    auto *field = static_cast<ROOT::Experimental::RFieldBase *>(fFieldZero.get());
    for (auto subfieldName : ROOT::Split(fieldName, ".")) {
-      const auto subfields = field->GetSubFields();
+      const auto subfields = field->GetMutableSubfields();
       auto it = std::find_if(subfields.begin(), subfields.end(),
                              [&](const auto *f) { return f->GetFieldName() == subfieldName; });
       if (it != subfields.end()) {
@@ -362,8 +376,8 @@ void ROOT::Experimental::RNTupleModel::RegisterSubfield(std::string_view qualifi
 
    auto parent = field->GetParent();
    while (parent && !parent->GetFieldName().empty()) {
-      if (parent->GetStructure() == ENTupleStructure::kCollection || parent->GetNRepetitions() > 0 ||
-          parent->GetStructure() == ENTupleStructure::kVariant) {
+      if (parent->GetStructure() == ROOT::ENTupleStructure::kCollection || parent->GetNRepetitions() > 0 ||
+          parent->GetStructure() == ROOT::ENTupleStructure::kVariant) {
          throw RException(R__FAIL(
             "registering a subfield as part of a collection, fixed-sized array or std::variant is not supported"));
       }
@@ -454,7 +468,7 @@ std::unique_ptr<ROOT::Experimental::REntry> ROOT::Experimental::RNTupleModel::Cr
    }
 
    auto entry = std::unique_ptr<REntry>(new REntry(fModelId, fSchemaId));
-   for (const auto &f : fFieldZero->GetSubFields()) {
+   for (const auto &f : fFieldZero->GetMutableSubfields()) {
       entry->AddValue(f->CreateValue());
    }
    for (const auto &f : fRegisteredSubfields) {
@@ -472,7 +486,7 @@ std::unique_ptr<ROOT::Experimental::REntry> ROOT::Experimental::RNTupleModel::Cr
    }
 
    auto entry = std::unique_ptr<REntry>(new REntry(fModelId, fSchemaId));
-   for (const auto &f : fFieldZero->GetSubFields()) {
+   for (const auto &f : fFieldZero->GetMutableSubfields()) {
       entry->AddValue(f->BindValue(nullptr));
    }
    for (const auto &f : fRegisteredSubfields) {
@@ -483,7 +497,7 @@ std::unique_ptr<ROOT::Experimental::REntry> ROOT::Experimental::RNTupleModel::Cr
 
 ROOT::Experimental::REntry::RFieldToken ROOT::Experimental::RNTupleModel::GetToken(std::string_view fieldName) const
 {
-   const auto &topLevelFields = fFieldZero->GetSubFields();
+   const auto &topLevelFields = fFieldZero->GetConstSubfields();
    auto it = std::find_if(topLevelFields.begin(), topLevelFields.end(),
                           [&fieldName](const RFieldBase *f) { return f->GetFieldName() == fieldName; });
 
@@ -551,7 +565,7 @@ void ROOT::Experimental::RNTupleModel::SetDescription(std::string_view descripti
    fDescription = std::string(description);
 }
 
-std::size_t ROOT::Experimental::RNTupleModel::EstimateWriteMemoryUsage(const RNTupleWriteOptions &options) const
+std::size_t ROOT::Experimental::RNTupleModel::EstimateWriteMemoryUsage(const ROOT::RNTupleWriteOptions &options) const
 {
    std::size_t bytes = 0;
    std::size_t minPageBufferSize = 0;
@@ -573,7 +587,7 @@ std::size_t ROOT::Experimental::RNTupleModel::EstimateWriteMemoryUsage(const RNT
       // Use the target cluster size as an estimate for all compressed pages combined.
       bytes += options.GetApproxZippedClusterSize();
       int compression = options.GetCompression();
-      if (compression != 0 && options.GetUseImplicitMT() == RNTupleWriteOptions::EImplicitMT::kDefault) {
+      if (compression != 0 && options.GetUseImplicitMT() == ROOT::RNTupleWriteOptions::EImplicitMT::kDefault) {
          // With IMT, compression happens asynchronously which means that the uncompressed pages also stay around. Use a
          // compression factor of 2x as a very rough estimate.
          bytes += 2 * options.GetApproxZippedClusterSize();

@@ -92,12 +92,12 @@ RAddColumnsResult AddColumnsFromField(std::vector<RColumnExportInfo> &vec, const
 int CountPages(const RNTupleDescriptor &desc, std::span<const RColumnExportInfo> columns)
 {
    int nPages = 0;
-   DescriptorId_t clusterId = desc.FindClusterId(0, 0);
+   auto clusterId = desc.FindClusterId(0, 0);
    while (clusterId != kInvalidDescriptorId) {
       const auto &clusterDesc = desc.GetClusterDescriptor(clusterId);
       for (const auto &colInfo : columns) {
          const auto &pages = clusterDesc.GetPageRange(colInfo.fColDesc->GetPhysicalId());
-         nPages += pages.fPageInfos.size();
+         nPages += pages.GetPageInfos().size();
       }
       clusterId = desc.FindNextClusterId(clusterId);
    }
@@ -133,37 +133,37 @@ RNTupleExporter::RPagesResult RNTupleExporter::ExportPages(RPageSource &source, 
    res.fExportedFileNames.reserve(nPages);
 
    // Iterate over the clusters in order and dump pages
-   DescriptorId_t clusterId = nPages > 0 ? desc->FindClusterId(0, 0) : kInvalidDescriptorId;
+   auto clusterId = nPages > 0 ? desc->FindClusterId(0, 0) : ROOT::kInvalidDescriptorId;
    int pagesExported = 0;
    int prevIntPercent = 0;
-   while (clusterId != kInvalidDescriptorId) {
+   while (clusterId != ROOT::kInvalidDescriptorId) {
       const auto &clusterDesc = desc->GetClusterDescriptor(clusterId);
       const RCluster *cluster = clusterPool.GetCluster(clusterId, columnSet);
       for (const auto &colInfo : columnInfos) {
-         DescriptorId_t columnId = colInfo.fColDesc->GetPhysicalId();
+         auto columnId = colInfo.fColDesc->GetPhysicalId();
          const auto &pages = clusterDesc.GetPageRange(columnId);
          const auto &colRange = clusterDesc.GetColumnRange(columnId);
          std::uint64_t pageIdx = 0;
 
          R__LOG_DEBUG(0, RNTupleExporterLog())
-            << "exporting column \"" << colInfo.fQualifiedName << "\" (" << pages.fPageInfos.size() << " pages)";
+            << "exporting column \"" << colInfo.fQualifiedName << "\" (" << pages.GetPageInfos().size() << " pages)";
 
          // We should never try to export a suppressed column range
-         assert(!colRange.fIsSuppressed || pages.fPageInfos.empty());
+         assert(!colRange.IsSuppressed() || pages.GetPageInfos().empty());
 
-         for (const auto &pageInfo : pages.fPageInfos) {
+         for (const auto &pageInfo : pages.GetPageInfos()) {
             ROnDiskPage::Key key{columnId, pageIdx};
             const ROnDiskPage *onDiskPage = cluster->GetOnDiskPage(key);
 
             // dump the page
             const void *pageBuf = onDiskPage->GetAddress();
-            const bool incChecksum = (options.fFlags & RPagesOptions::kIncludeChecksums) != 0 && pageInfo.fHasChecksum;
+            const bool incChecksum = (options.fFlags & RPagesOptions::kIncludeChecksums) != 0 && pageInfo.HasChecksum();
             const std::size_t maybeChecksumSize = incChecksum * 8;
-            const std::uint64_t pageBufSize = pageInfo.fLocator.GetNBytesOnStorage() + maybeChecksumSize;
+            const std::uint64_t pageBufSize = pageInfo.GetLocator().GetNBytesOnStorage() + maybeChecksumSize;
             std::ostringstream ss{options.fOutputPath, std::ios_base::ate};
-            assert(colRange.fCompressionSettings);
+            assert(colRange.GetCompressionSettings());
             ss << "/cluster_" << clusterDesc.GetId() << "_" << colInfo.fQualifiedName << "_page_" << pageIdx
-               << "_elems_" << pageInfo.fNElements << "_comp_" << *colRange.fCompressionSettings << ".page";
+               << "_elems_" << pageInfo.GetNElements() << "_comp_" << *colRange.GetCompressionSettings() << ".page";
             const auto outFileName = ss.str();
             std::ofstream outFile{outFileName, std::ios_base::binary};
             if (!outFile)

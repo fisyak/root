@@ -7,7 +7,7 @@ TEST(RFieldDescriptorBuilder, MakeDescriptorErrors)
    // minimum requirements for making a field descriptor from scratch
    RFieldDescriptor fieldDesc = RFieldDescriptorBuilder()
                                    .FieldId(1)
-                                   .Structure(ENTupleStructure::kCollection)
+                                   .Structure(ROOT::ENTupleStructure::kCollection)
                                    .FieldName("someField")
                                    .MakeDescriptor()
                                    .Unwrap();
@@ -27,7 +27,7 @@ TEST(RFieldDescriptorBuilder, MakeDescriptorErrors)
 
    // must set field name
    fieldDescRes =
-      RFieldDescriptorBuilder().FieldId(1).ParentId(1).Structure(ENTupleStructure::kCollection).MakeDescriptor();
+      RFieldDescriptorBuilder().FieldId(1).ParentId(1).Structure(ROOT::ENTupleStructure::kCollection).MakeDescriptor();
    ASSERT_FALSE(fieldDescRes) << "unnamed field descriptors should throw";
    EXPECT_THAT(fieldDescRes.GetError()->GetReport(), testing::HasSubstr("name cannot be empty string"));
 }
@@ -36,12 +36,12 @@ TEST(RNTupleDescriptorBuilder, CatchBadLinks)
 {
    RNTupleDescriptorBuilder descBuilder;
    descBuilder.AddField(
-      RFieldDescriptorBuilder().FieldId(0).Structure(ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
+      RFieldDescriptorBuilder().FieldId(0).Structure(ROOT::ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
    descBuilder.AddField(RFieldDescriptorBuilder()
                            .FieldId(1)
                            .FieldName("field")
                            .TypeName("int32_t")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
    try {
@@ -65,26 +65,26 @@ TEST(RNTupleDescriptorBuilder, CatchBadProjections)
 {
    RNTupleDescriptorBuilder descBuilder;
    descBuilder.AddField(
-      RFieldDescriptorBuilder().FieldId(0).Structure(ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
+      RFieldDescriptorBuilder().FieldId(0).Structure(ROOT::ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
    descBuilder.AddField(RFieldDescriptorBuilder()
                            .FieldId(1)
                            .FieldName("field")
                            .TypeName("int32_t")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
    descBuilder.AddField(RFieldDescriptorBuilder()
                            .FieldId(2)
                            .FieldName("projField")
                            .TypeName("int32_t")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
    descBuilder.AddField(RFieldDescriptorBuilder()
                            .FieldId(3)
                            .FieldName("projField")
                            .TypeName("int32_t")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
 
@@ -126,24 +126,24 @@ TEST(RNTupleDescriptorBuilder, CatchBadColumnDescriptors)
 {
    RNTupleDescriptorBuilder descBuilder;
    descBuilder.AddField(
-      RFieldDescriptorBuilder().FieldId(0).Structure(ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
+      RFieldDescriptorBuilder().FieldId(0).Structure(ROOT::ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
    descBuilder.AddField(RFieldDescriptorBuilder()
                            .FieldId(1)
                            .FieldName("field")
                            .TypeName("int32_t")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
    descBuilder.AddField(RFieldDescriptorBuilder()
                            .FieldId(2)
                            .FieldName("fieldAlias")
                            .TypeName("int32_t")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
    descBuilder.AddFieldLink(0, 1);
    descBuilder.AddFieldLink(0, 2);
-   ENTupleColumnType colType{ENTupleColumnType::kInt32};
+   ROOT::ENTupleColumnType colType{ROOT::ENTupleColumnType::kInt32};
    RColumnDescriptorBuilder colBuilder1;
    colBuilder1.LogicalColumnId(0).PhysicalColumnId(0).BitsOnStorage(32).Type(colType).FieldId(1).Index(0);
    descBuilder.AddColumn(colBuilder1.MakeDescriptor().Unwrap()).ThrowOnError();
@@ -173,7 +173,7 @@ TEST(RNTupleDescriptorBuilder, CatchBadColumnDescriptors)
    }
 
    RColumnDescriptorBuilder colBuilder5;
-   ENTupleColumnType falseType(ENTupleColumnType::kInt64);
+   ROOT::ENTupleColumnType falseType(ROOT::ENTupleColumnType::kInt64);
    colBuilder5.LogicalColumnId(1).PhysicalColumnId(0).BitsOnStorage(64).Type(falseType).FieldId(2).Index(0);
    try {
       descBuilder.AddColumn(colBuilder5.MakeDescriptor().Unwrap()).ThrowOnError();
@@ -206,19 +206,19 @@ TEST(RFieldDescriptorBuilder, HeaderExtension)
    RNTupleDescriptorBuilder descBuilder;
    descBuilder.SetNTuple("ntpl", "");
    descBuilder.AddField(
-      RFieldDescriptorBuilder().FieldId(0).Structure(ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
+      RFieldDescriptorBuilder().FieldId(0).Structure(ROOT::ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
    descBuilder.AddField(RFieldDescriptorBuilder()
                            .FieldId(1)
                            .FieldName("i32")
                            .TypeName("int32_t")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
    descBuilder.AddColumn(RColumnDescriptorBuilder()
                             .LogicalColumnId(0)
                             .PhysicalColumnId(0)
                             .BitsOnStorage(32)
-                            .Type(ENTupleColumnType::kInt32)
+                            .Type(ROOT::ENTupleColumnType::kInt32)
                             .FieldId(1)
                             .Index(0)
                             .MakeDescriptor()
@@ -232,21 +232,21 @@ TEST(RFieldDescriptorBuilder, HeaderExtension)
    descBuilder.AddField(RFieldDescriptorBuilder()
                            .FieldId(2)
                            .FieldName("topLevel1")
-                           .Structure(ENTupleStructure::kRecord)
+                           .Structure(ROOT::ENTupleStructure::kRecord)
                            .MakeDescriptor()
                            .Unwrap());
    descBuilder.AddField(RFieldDescriptorBuilder()
                            .FieldId(3)
                            .FieldName("i64")
                            .TypeName("int64_t")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
    descBuilder.AddColumn(RColumnDescriptorBuilder()
                             .LogicalColumnId(1)
                             .PhysicalColumnId(1)
                             .BitsOnStorage(64)
-                            .Type(ENTupleColumnType::kInt64)
+                            .Type(ROOT::ENTupleColumnType::kInt64)
                             .FieldId(3)
                             .Index(0)
                             .FirstElementIndex(1002)
@@ -258,14 +258,14 @@ TEST(RFieldDescriptorBuilder, HeaderExtension)
                            .FieldId(4)
                            .FieldName("topLevel2")
                            .TypeName("bool")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
    descBuilder.AddColumn(RColumnDescriptorBuilder()
                             .LogicalColumnId(2)
                             .PhysicalColumnId(2)
                             .BitsOnStorage(1)
-                            .Type(ENTupleColumnType::kBit)
+                            .Type(ROOT::ENTupleColumnType::kBit)
                             .FieldId(4)
                             .Index(0)
                             .FirstElementIndex(1100)
@@ -276,14 +276,14 @@ TEST(RFieldDescriptorBuilder, HeaderExtension)
                            .FieldId(5)
                            .FieldName("projected")
                            .TypeName("int64_t")
-                           .Structure(ENTupleStructure::kLeaf)
+                           .Structure(ROOT::ENTupleStructure::kLeaf)
                            .MakeDescriptor()
                            .Unwrap());
    descBuilder.AddColumn(RColumnDescriptorBuilder()
                             .LogicalColumnId(3)
                             .PhysicalColumnId(1)
                             .BitsOnStorage(64)
-                            .Type(ENTupleColumnType::kInt64)
+                            .Type(ROOT::ENTupleColumnType::kInt64)
                             .FieldId(5)
                             .Index(0)
                             .MakeDescriptor()
@@ -516,7 +516,7 @@ TEST(RClusterDescriptor, GetNBytesOnStorage)
    const auto &desc = ntuple->GetDescriptor();
 
    auto clusterID = desc.FindClusterId(0, 0);
-   ASSERT_NE(ROOT::Experimental::kInvalidDescriptorId, clusterID);
+   ASSERT_NE(ROOT::kInvalidDescriptorId, clusterID);
    EXPECT_EQ(8 + 8 + 8 + 3, desc.GetClusterDescriptor(clusterID).GetNBytesOnStorage());
 }
 
@@ -546,19 +546,19 @@ TEST(RNTupleDescriptor, BuildStreamerInfos)
       RNTupleDescriptorBuilder descBuilder;
       descBuilder.SetNTuple("test", "");
       descBuilder.AddField(
-         RFieldDescriptorBuilder().FieldId(0).Structure(ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
+         RFieldDescriptorBuilder().FieldId(0).Structure(ROOT::ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
       auto fieldBuilder = RFieldDescriptorBuilder::FromField(field);
       descBuilder.AddField(fieldBuilder.FieldId(1).MakeDescriptor().Unwrap());
       descBuilder.AddFieldLink(0, 1);
       int i = 2;
       // In this test, we only support field hierarchies up to 2 levels
-      for (const auto &child : field.GetSubFields()) {
+      for (const auto &child : field.GetConstSubfields()) {
          fieldBuilder = RFieldDescriptorBuilder::FromField(*child);
          descBuilder.AddField(fieldBuilder.FieldId(i).MakeDescriptor().Unwrap());
          descBuilder.AddFieldLink(1, i);
          const auto childId = i;
          i++;
-         for (const auto &grandChild : child->GetSubFields()) {
+         for (const auto &grandChild : child->GetConstSubfields()) {
             fieldBuilder = RFieldDescriptorBuilder::FromField(*grandChild);
             descBuilder.AddField(fieldBuilder.FieldId(i).MakeDescriptor().Unwrap());
             descBuilder.AddFieldLink(childId, i);
@@ -620,4 +620,69 @@ TEST(RNTupleDescriptor, BuildStreamerInfos)
    std::sort(typeNames.begin(), typeNames.end());
    EXPECT_STREQ("CustomStruct", typeNames[0].c_str());
    EXPECT_STREQ("DerivedA", typeNames[1].c_str());
+}
+
+TEST(RNTupleDescriptor, CloneSchema)
+{
+   FileRaii fileGuard("test_ntuple_desc_cloneschema.root");
+
+   {
+      auto model = RNTupleModel::Create();
+      auto pFlt = model->MakeField<float>("flt");
+      auto pVec = model->MakeField<std::vector<int>>("vec");
+      auto fProj = RFieldBase::Create("flt2", "float").Unwrap();
+      model->AddProjectedField(std::move(fProj), [](const std::string &) { return "flt"; });
+      auto writer = RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath());
+
+      for (int i = 0; i < 100; ++i) {
+         *pFlt = i;
+         pVec->push_back(i);
+         writer->Fill();
+         if ((i % 10) == 0)
+            writer->CommitCluster();
+      }
+
+      // late model extend to get a header extension in the descriptor
+      auto updater = writer->CreateModelUpdater();
+      updater->BeginUpdate();
+      updater->AddField(RFieldBase::Create("ext", "int").Unwrap());
+      auto fProjDef = RFieldBase::Create("vec2", "std::vector<int>").Unwrap();
+      updater
+         ->AddProjectedField(std::move(fProjDef),
+                             [](const std::string &name) { return name == "vec2" ? "vec" : "vec._0"; })
+         .ThrowOnError();
+      updater->CommitUpdate();
+
+      for (int i = 0; i < 100; ++i) {
+         writer->Fill();
+         if ((i % 10) == 0)
+            writer->CommitCluster();
+      }
+   }
+
+   // Read back the RNTuple
+   auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
+   const auto &desc = reader->GetDescriptor();
+   EXPECT_EQ(desc.GetNFields(), 8);
+   EXPECT_EQ(desc.GetNLogicalColumns(), 7);
+   EXPECT_EQ(desc.GetNPhysicalColumns(), 4);
+   EXPECT_EQ(desc.GetNClusters(), 21);
+   EXPECT_EQ(desc.GetNClusterGroups(), 1);
+   EXPECT_EQ(desc.GetNEntries(), 200);
+   EXPECT_NE(desc.GetHeaderExtension(), nullptr);
+   EXPECT_NE(desc.GetOnDiskHeaderXxHash3(), 0);
+   EXPECT_NE(desc.GetOnDiskHeaderSize(), 0);
+   EXPECT_NE(desc.GetOnDiskFooterSize(), 0);
+
+   const auto descOnlySchema = ROOT::Experimental::Internal::CloneDescriptorSchema(desc);
+   EXPECT_EQ(descOnlySchema.GetNFields(), 8);
+   EXPECT_EQ(descOnlySchema.GetNLogicalColumns(), 7);
+   EXPECT_EQ(descOnlySchema.GetNPhysicalColumns(), 4);
+   EXPECT_EQ(descOnlySchema.GetNClusters(), 0);
+   EXPECT_EQ(descOnlySchema.GetNClusterGroups(), 0);
+   EXPECT_EQ(descOnlySchema.GetNEntries(), 0);
+   EXPECT_NE(descOnlySchema.GetHeaderExtension(), nullptr);
+   EXPECT_EQ(descOnlySchema.GetOnDiskHeaderXxHash3(), 0);
+   EXPECT_EQ(descOnlySchema.GetOnDiskHeaderSize(), 0);
+   EXPECT_EQ(descOnlySchema.GetOnDiskFooterSize(), 0);
 }

@@ -256,7 +256,7 @@ inline double flexibleInterpSingle(unsigned int code, double low, double high, d
       } else if (paramVal < -1) {
          return -1 * (2 * a - b) * (paramVal + 1) + low - nominal;
       } else {
-         return a * std::pow(paramVal, 2) + b * paramVal + c;
+         return a * paramVal * paramVal + b * paramVal + c;
       }
       // According to an old comment in the source code, code 3 was apparently
       // meant to be a "parabolic version of log-normal", but it never got
@@ -306,10 +306,10 @@ inline double flexibleInterpSingle(unsigned int code, double low, double high, d
          low /= nominal;
 
          // GHL: Swagato's suggestions
-         double powUp = std::pow(high, x0);
-         double powDown = std::pow(low, x0);
          double logHi = std::log(high);
          double logLo = std::log(low);
+         double powUp = std::exp(x0 * logHi);
+         double powDown = std::exp(x0 * logLo);
          double powUpLog = high <= 0.0 ? 0.0 : powUp * logHi;
          double powDownLog = low <= 0.0 ? 0.0 : -powDown * logLo;
          double powUpLog2 = high <= 0.0 ? 0.0 : powUpLog * logHi;
@@ -324,12 +324,14 @@ inline double flexibleInterpSingle(unsigned int code, double low, double high, d
 
          // fcns+der+2nd_der are eq at bd
 
+         double x0Sq = x0 * x0;
+
          double a = 1. / (8 * x0) * (15 * A0 - 7 * x0 * S1 + x0 * x0 * A2);
-         double b = 1. / (8 * x0 * x0) * (-24 + 24 * S0 - 9 * x0 * A1 + x0 * x0 * S2);
-         double c = 1. / (4 * std::pow(x0, 3)) * (-5 * A0 + 5 * x0 * S1 - x0 * x0 * A2);
-         double d = 1. / (4 * std::pow(x0, 4)) * (12 - 12 * S0 + 7 * x0 * A1 - x0 * x0 * S2);
-         double e = 1. / (8 * std::pow(x0, 5)) * (+3 * A0 - 3 * x0 * S1 + x0 * x0 * A2);
-         double f = 1. / (8 * std::pow(x0, 6)) * (-8 + 8 * S0 - 5 * x0 * A1 + x0 * x0 * S2);
+         double b = 1. / (8 * x0Sq) * (-24 + 24 * S0 - 9 * x0 * A1 + x0 * x0 * S2);
+         double c = 1. / (4 * x0Sq * x0) * (-5 * A0 + 5 * x0 * S1 - x0 * x0 * A2);
+         double d = 1. / (4 * x0Sq * x0Sq) * (12 - 12 * S0 + 7 * x0 * A1 - x0 * x0 * S2);
+         double e = 1. / (8 * x0Sq * x0Sq * x0) * (+3 * A0 - 3 * x0 * S1 + x0 * x0 * A2);
+         double f = 1. / (8 * x0Sq * x0Sq * x0Sq) * (-8 + 8 * S0 - 5 * x0 * A1 + x0 * x0 * S2);
 
          // evaluate the 6-th degree polynomial using Horner's method
          double value = 1. + x * (a + x * (b + x * (c + x * (d + x * (e + x * f)))));
@@ -414,10 +416,11 @@ inline double cbShape(double m, double m0, double sigma, double alpha, double n)
    if (t >= -absAlpha) {
       return std::exp(-0.5 * t * t);
    } else {
-      double a = std::pow(n / absAlpha, n) * std::exp(-0.5 * absAlpha * absAlpha);
-      double b = n / absAlpha - absAlpha;
+      double r = n / absAlpha;
+      double a = std::exp(-0.5 * absAlpha * absAlpha);
+      double b = r - absAlpha;
 
-      return a / std::pow(b - t, n);
+      return a * std::pow(r / (b - t), n);
    }
 }
 
@@ -697,23 +700,25 @@ inline double cbShapeIntegral(double mMin, double mMax, double m0, double sigma,
    if (tmin >= -absAlpha) {
       result += sig * sqrtPiOver2 * (approxErf(tmax / sqrt2) - approxErf(tmin / sqrt2));
    } else if (tmax <= -absAlpha) {
-      double a = std::pow(n / absAlpha, n) * std::exp(-0.5 * absAlpha * absAlpha);
-      double b = n / absAlpha - absAlpha;
+      double r = n / absAlpha;
+      double a = r * std::exp(-0.5 * absAlpha * absAlpha);
+      double b = r - absAlpha;
 
       if (useLog) {
-         result += a * sig * (std::log(b - tmin) - std::log(b - tmax));
+         result += a * std::pow(r, n-1) * sig * (std::log(b - tmin) - std::log(b - tmax));
       } else {
-         result += a * sig / (1.0 - n) * (1.0 / (std::pow(b - tmin, n - 1.0)) - 1.0 / (std::pow(b - tmax, n - 1.0)));
+         result += a * sig / (1.0 - n) * (std::pow(r / (b - tmin), n - 1.0) - std::pow(r / (b - tmax), n - 1.0));
       }
    } else {
-      double a = std::pow(n / absAlpha, n) * std::exp(-0.5 * absAlpha * absAlpha);
-      double b = n / absAlpha - absAlpha;
+      double r = n / absAlpha;
+      double a = r * std::exp(-0.5 * absAlpha * absAlpha);
+      double b = r - absAlpha;
 
       double term1 = 0.0;
       if (useLog) {
-         term1 = a * sig * (std::log(b - tmin) - std::log(n / absAlpha));
+         term1 = a * std::pow(r, n-1) * sig * (std::log(b - tmin) - std::log(r));
       } else {
-         term1 = a * sig / (1.0 - n) * (1.0 / (std::pow(b - tmin, n - 1.0)) - 1.0 / (std::pow(n / absAlpha, n - 1.0)));
+         term1 = a * sig / (1.0 - n) * (std::pow(r / (b - tmin), n - 1.0) - 1.0);
       }
 
       double term2 = sig * sqrtPiOver2 * (approxErf(tmax / sqrt2) - approxErf(-absAlpha / sqrt2));
@@ -763,6 +768,20 @@ inline double multiVarGaussian(int n, const double *x, const double *mu, const d
       }
    }
    return std::exp(-0.5 * result);
+}
+
+// Integral of a step function defined by `nBins` intervals, where the
+// intervals have values `coefs` and the boundary on the interval `iBin` is
+// given by `[boundaries[i], boundaries[i+1])`.
+inline double stepFunctionIntegral(double xmin, double xmax, std::size_t nBins, double const *boundaries, double const *coefs)
+{
+   double out = 0.0;
+   for (std::size_t i = 0; i < nBins; ++i) {
+      double a = boundaries[i];
+      double b = boundaries[i + 1];
+      out += coefs[i] * std::max(0.0, std::min(b, xmax) - std::max(a, xmin));
+   }
+   return out;
 }
 
 } // namespace MathFuncs

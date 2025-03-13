@@ -28,14 +28,14 @@ void ROOT::Experimental::RNTupleReader::ConnectModel(RNTupleModel &model)
 {
    auto &fieldZero = Internal::GetFieldZeroOfModel(model);
    // We must not use the descriptor guard to prevent recursive locking in field.ConnectPageSource
-   DescriptorId_t fieldZeroId = fSource->GetSharedDescriptorGuard()->GetFieldZeroId();
+   ROOT::DescriptorId_t fieldZeroId = fSource->GetSharedDescriptorGuard()->GetFieldZeroId();
    fieldZero.SetOnDiskId(fieldZeroId);
    // Iterate only over fieldZero's direct subfields; their descendants are recursively handled in
    // RFieldBase::ConnectPageSource
-   for (auto &field : fieldZero.GetSubFields()) {
+   for (auto &field : fieldZero.GetMutableSubfields()) {
       // If the model has been created from the descriptor, the on-disk IDs are already set.
       // User-provided models instead need to find their corresponding IDs in the descriptor.
-      if (field->GetOnDiskId() == kInvalidDescriptorId) {
+      if (field->GetOnDiskId() == ROOT::kInvalidDescriptorId) {
          field->SetOnDiskId(fSource->GetSharedDescriptorGuard()->FindFieldId(field->GetFieldName(), fieldZeroId));
       }
       Internal::CallConnectPageSourceOnField(*field, *fSource);
@@ -46,7 +46,7 @@ void ROOT::Experimental::RNTupleReader::InitPageSource(bool enableMetrics)
 {
 #ifdef R__USE_IMT
    if (IsImplicitMTEnabled() &&
-       fSource->GetReadOptions().GetUseImplicitMT() == RNTupleReadOptions::EImplicitMT::kDefault) {
+       fSource->GetReadOptions().GetUseImplicitMT() == ROOT::RNTupleReadOptions::EImplicitMT::kDefault) {
       fUnzipTasks = std::make_unique<Internal::RNTupleImtTaskScheduler>();
       fSource->SetTaskScheduler(fUnzipTasks.get());
    }
@@ -59,7 +59,7 @@ void ROOT::Experimental::RNTupleReader::InitPageSource(bool enableMetrics)
 
 ROOT::Experimental::RNTupleReader::RNTupleReader(std::unique_ptr<ROOT::Experimental::RNTupleModel> model,
                                                  std::unique_ptr<ROOT::Experimental::Internal::RPageSource> source,
-                                                 const RNTupleReadOptions &options)
+                                                 const ROOT::RNTupleReadOptions &options)
    : fSource(std::move(source)), fModel(std::move(model)), fMetrics("RNTupleReader")
 {
    // TODO(jblomer): properly support projected fields
@@ -68,22 +68,22 @@ ROOT::Experimental::RNTupleReader::RNTupleReader(std::unique_ptr<ROOT::Experimen
       throw RException(R__FAIL("model has projected fields, which is incompatible with providing a read model"));
    }
    fModel->Freeze();
-   InitPageSource(options.HasMetricsEnabled());
+   InitPageSource(options.GetEnableMetrics());
    ConnectModel(*fModel);
 }
 
 ROOT::Experimental::RNTupleReader::RNTupleReader(std::unique_ptr<ROOT::Experimental::Internal::RPageSource> source,
-                                                 const RNTupleReadOptions &options)
+                                                 const ROOT::RNTupleReadOptions &options)
    : fSource(std::move(source)), fModel(nullptr), fMetrics("RNTupleReader")
 {
-   InitPageSource(options.HasMetricsEnabled());
+   InitPageSource(options.GetEnableMetrics());
 }
 
 ROOT::Experimental::RNTupleReader::~RNTupleReader() = default;
 
 std::unique_ptr<ROOT::Experimental::RNTupleReader>
 ROOT::Experimental::RNTupleReader::Open(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
-                                        std::string_view storage, const RNTupleReadOptions &options)
+                                        std::string_view storage, const ROOT::RNTupleReadOptions &options)
 {
    return std::unique_ptr<RNTupleReader>(
       new RNTupleReader(std::move(model), Internal::RPageSource::Create(ntupleName, storage, options), options));
@@ -91,14 +91,14 @@ ROOT::Experimental::RNTupleReader::Open(std::unique_ptr<RNTupleModel> model, std
 
 std::unique_ptr<ROOT::Experimental::RNTupleReader>
 ROOT::Experimental::RNTupleReader::Open(std::string_view ntupleName, std::string_view storage,
-                                        const RNTupleReadOptions &options)
+                                        const ROOT::RNTupleReadOptions &options)
 {
    return std::unique_ptr<RNTupleReader>(
       new RNTupleReader(Internal::RPageSource::Create(ntupleName, storage, options), options));
 }
 
 std::unique_ptr<ROOT::Experimental::RNTupleReader>
-ROOT::Experimental::RNTupleReader::Open(const ROOT::RNTuple &ntuple, const RNTupleReadOptions &options)
+ROOT::Experimental::RNTupleReader::Open(const ROOT::RNTuple &ntuple, const ROOT::RNTupleReadOptions &options)
 {
    return std::unique_ptr<RNTupleReader>(
       new RNTupleReader(Internal::RPageSourceFile::CreateFromAnchor(ntuple, options), options));
@@ -106,7 +106,7 @@ ROOT::Experimental::RNTupleReader::Open(const ROOT::RNTuple &ntuple, const RNTup
 
 std::unique_ptr<ROOT::Experimental::RNTupleReader>
 ROOT::Experimental::RNTupleReader::Open(std::unique_ptr<RNTupleModel> model, const ROOT::RNTuple &ntuple,
-                                        const RNTupleReadOptions &options)
+                                        const ROOT::RNTupleReadOptions &options)
 {
    return std::unique_ptr<RNTupleReader>(
       new RNTupleReader(std::move(model), Internal::RPageSourceFile::CreateFromAnchor(ntuple, options), options));
@@ -115,7 +115,7 @@ ROOT::Experimental::RNTupleReader::Open(std::unique_ptr<RNTupleModel> model, con
 std::unique_ptr<ROOT::Experimental::RNTupleReader>
 ROOT::Experimental::RNTupleReader::Open(const RNTupleDescriptor::RCreateModelOptions &createModelOpts,
                                         std::string_view ntupleName, std::string_view storage,
-                                        const RNTupleReadOptions &options)
+                                        const ROOT::RNTupleReadOptions &options)
 {
    auto reader = std::unique_ptr<RNTupleReader>(
       new RNTupleReader(Internal::RPageSource::Create(ntupleName, storage, options), options));
@@ -125,7 +125,7 @@ ROOT::Experimental::RNTupleReader::Open(const RNTupleDescriptor::RCreateModelOpt
 
 std::unique_ptr<ROOT::Experimental::RNTupleReader>
 ROOT::Experimental::RNTupleReader::Open(const RNTupleDescriptor::RCreateModelOptions &createModelOpts,
-                                        const ROOT::RNTuple &ntuple, const RNTupleReadOptions &options)
+                                        const ROOT::RNTuple &ntuple, const ROOT::RNTupleReadOptions &options)
 {
    auto reader = std::unique_ptr<RNTupleReader>(
       new RNTupleReader(Internal::RPageSourceFile::CreateFromAnchor(ntuple, options), options));
@@ -168,10 +168,10 @@ void ROOT::Experimental::RNTupleReader::PrintInfo(const ENTupleInfo what, std::o
          auto descriptorGuard = fSource->GetSharedDescriptorGuard();
          name = descriptorGuard->GetName();
          RNTupleDescriptor::RCreateModelOptions opts;
-         opts.fCreateBare = true;
+         opts.SetCreateBare(true);
          // When printing the schema we always try to reconstruct the whole thing even when we are missing the
          // dictionaries.
-         opts.fEmulateUnknownTypes = true;
+         opts.SetEmulateUnknownTypes(true);
          fullModel = descriptorGuard->CreateModel(opts);
       }
 
@@ -224,7 +224,7 @@ ROOT::Experimental::RNTupleReader *ROOT::Experimental::RNTupleReader::GetDisplay
    return fDisplayReader.get();
 }
 
-void ROOT::Experimental::RNTupleReader::Show(NTupleSize_t index, std::ostream &output)
+void ROOT::Experimental::RNTupleReader::Show(ROOT::NTupleSize_t index, std::ostream &output)
 {
    auto reader = GetDisplayReader();
    const auto &entry = reader->GetModel().GetDefaultEntry();
@@ -254,10 +254,10 @@ const ROOT::Experimental::RNTupleDescriptor &ROOT::Experimental::RNTupleReader::
    return *fCachedDescriptor;
 }
 
-ROOT::Experimental::DescriptorId_t ROOT::Experimental::RNTupleReader::RetrieveFieldId(std::string_view fieldName) const
+ROOT::DescriptorId_t ROOT::Experimental::RNTupleReader::RetrieveFieldId(std::string_view fieldName) const
 {
    auto fieldId = fSource->GetSharedDescriptorGuard()->FindFieldId(fieldName);
-   if (fieldId == kInvalidDescriptorId) {
+   if (fieldId == ROOT::kInvalidDescriptorId) {
       throw RException(R__FAIL("no field named '" + std::string(fieldName) + "' in RNTuple '" +
                                fSource->GetSharedDescriptorGuard()->GetName() + "'"));
    }

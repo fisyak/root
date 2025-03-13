@@ -37,8 +37,8 @@ ROOT::Experimental::Internal::RColumn::~RColumn()
       fPageSource->DropColumn(fHandleSource);
 }
 
-void ROOT::Experimental::Internal::RColumn::ConnectPageSink(DescriptorId_t fieldId, RPageSink &pageSink,
-                                                            NTupleSize_t firstElementIndex)
+void ROOT::Experimental::Internal::RColumn::ConnectPageSink(ROOT::DescriptorId_t fieldId, RPageSink &pageSink,
+                                                            ROOT::NTupleSize_t firstElementIndex)
 {
    fInitialNElements = pageSink.GetWriteOptions().GetInitialUnzippedPageSize() / fElement->GetSize();
    if (fInitialNElements < 1) {
@@ -54,7 +54,7 @@ void ROOT::Experimental::Internal::RColumn::ConnectPageSink(DescriptorId_t field
       throw RException(R__FAIL("page buffer memory budget too small"));
 }
 
-void ROOT::Experimental::Internal::RColumn::ConnectPageSource(DescriptorId_t fieldId, RPageSource &pageSource)
+void ROOT::Experimental::Internal::RColumn::ConnectPageSource(ROOT::DescriptorId_t fieldId, RPageSource &pageSource)
 {
    fPageSource = &pageSource;
    fHandleSource = fPageSource->AddColumn(fieldId, *this);
@@ -82,7 +82,7 @@ void ROOT::Experimental::Internal::RColumn::CommitSuppressed()
    fPageSink->CommitSuppressedColumn(fHandleSink);
 }
 
-bool ROOT::Experimental::Internal::RColumn::TryMapPage(NTupleSize_t globalIndex)
+bool ROOT::Experimental::Internal::RColumn::TryMapPage(ROOT::NTupleSize_t globalIndex)
 {
    const auto nTeam = fTeam.size();
    std::size_t iTeam = 1;

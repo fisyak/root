@@ -8,7 +8,7 @@
 #include <ROOT/RMiniFile.hxx>
 #include <ROOT/RNTupleDescriptor.hxx>
 #include <ROOT/RNTupleFillStatus.hxx>
-#include <ROOT/RNTupleIndex.hxx>
+#include <ROOT/RNTupleJoinTable.hxx>
 #include <ROOT/RNTupleMerger.hxx>
 #include <ROOT/RNTupleMetrics.hxx>
 #include <ROOT/RNTupleModel.hxx>
@@ -53,13 +53,11 @@
 #include <variant>
 #include <vector>
 
-using ROOT::Experimental::RNTupleLocalIndex;
-using ROOT::Experimental::Internal::RColumnIndex;
-using DescriptorId_t = ROOT::Experimental::DescriptorId_t;
+using ROOT::RNTupleLocalIndex;
+using ROOT::RNTupleLocator;
+using ROOT::RNTupleLocatorObject64;
 using ROOT::Experimental::EExtraTypeInfoIds;
-using ROOT::Experimental::ENTupleColumnType;
-using ENTupleStructure = ROOT::Experimental::ENTupleStructure;
-using NTupleSize_t = ROOT::Experimental::NTupleSize_t;
+using ROOT::Experimental::Internal::RColumnIndex;
 using RClusterDescriptor = ROOT::Experimental::RClusterDescriptor;
 using RClusterDescriptorBuilder = ROOT::Experimental::Internal::RClusterDescriptorBuilder;
 using RClusterGroupDescriptorBuilder = ROOT::Experimental::Internal::RClusterGroupDescriptorBuilder;
@@ -72,24 +70,22 @@ template <class T>
 using RField = ROOT::Experimental::RField<T>;
 using RFieldBase = ROOT::Experimental::RFieldBase;
 using RFieldDescriptor = ROOT::Experimental::RFieldDescriptor;
-using RNTupleLocator = ROOT::Experimental::RNTupleLocator;
-using RNTupleLocatorObject64 = ROOT::Experimental::RNTupleLocatorObject64;
 using RMiniFileReader = ROOT::Experimental::Internal::RMiniFileReader;
 using RNTupleAtomicCounter = ROOT::Experimental::Detail::RNTupleAtomicCounter;
 using RNTupleAtomicTimer = ROOT::Experimental::Detail::RNTupleAtomicTimer;
 using RNTupleCalcPerf = ROOT::Experimental::Detail::RNTupleCalcPerf;
-using RNTupleCompressor = ROOT::Experimental::Internal::RNTupleCompressor;
-using RNTupleDecompressor = ROOT::Experimental::Internal::RNTupleDecompressor;
+using RNTupleCompressor = ROOT::Internal::RNTupleCompressor;
+using RNTupleDecompressor = ROOT::Internal::RNTupleDecompressor;
 using RNTupleDescriptor = ROOT::Experimental::RNTupleDescriptor;
 using RNTupleFillStatus = ROOT::Experimental::RNTupleFillStatus;
 using RNTupleDescriptorBuilder = ROOT::Experimental::Internal::RNTupleDescriptorBuilder;
 using RNTupleFileWriter = ROOT::Experimental::Internal::RNTupleFileWriter;
-using RNTupleIndex = ROOT::Experimental::Internal::RNTupleIndex;
+using RNTupleJoinTable = ROOT::Experimental::Internal::RNTupleJoinTable;
 using RNTupleParallelWriter = ROOT::Experimental::RNTupleParallelWriter;
 using RNTupleReader = ROOT::Experimental::RNTupleReader;
-using RNTupleReadOptions = ROOT::Experimental::RNTupleReadOptions;
+using RNTupleReadOptions = ROOT::RNTupleReadOptions;
 using RNTupleWriter = ROOT::Experimental::RNTupleWriter;
-using RNTupleWriteOptions = ROOT::Experimental::RNTupleWriteOptions;
+using RNTupleWriteOptions = ROOT::RNTupleWriteOptions;
 using RNTupleWriteOptionsDaos = ROOT::Experimental::RNTupleWriteOptionsDaos;
 using RNTupleMetrics = ROOT::Experimental::Detail::RNTupleMetrics;
 using RNTupleMerger = ROOT::Experimental::Internal::RNTupleMerger;
@@ -101,9 +97,9 @@ using RNTuplePlainCounter = ROOT::Experimental::Detail::RNTuplePlainCounter;
 using RNTuplePlainTimer = ROOT::Experimental::Detail::RNTuplePlainTimer;
 using RNTupleProcessor = ROOT::Experimental::RNTupleProcessor;
 using RNTupleSerializer = ROOT::Experimental::Internal::RNTupleSerializer;
-using RPage = ROOT::Experimental::Internal::RPage;
-using RPageAllocatorHeap = ROOT::Experimental::Internal::RPageAllocatorHeap;
-using RPagePool = ROOT::Experimental::Internal::RPagePool;
+using RPage = ROOT::Internal::RPage;
+using RPageAllocatorHeap = ROOT::Internal::RPageAllocatorHeap;
+using RPagePool = ROOT::Internal::RPagePool;
 using RPageSink = ROOT::Experimental::Internal::RPageSink;
 using RPageSinkBuf = ROOT::Experimental::Internal::RPageSinkBuf;
 using RPageSinkFile = ROOT::Experimental::Internal::RPageSinkFile;
@@ -114,8 +110,10 @@ using RPrepareVisitor = ROOT::Experimental::RPrepareVisitor;
 using RPrintSchemaVisitor = ROOT::Experimental::RPrintSchemaVisitor;
 using RRawFile = ROOT::Internal::RRawFile;
 using EContainerFormat = RNTupleFileWriter::EContainerFormat;
+template <typename T>
+using RNTupleView = ROOT::Experimental::RNTupleView<T>;
 
-using ROOT::Experimental::Internal::MakeUninitArray;
+using ROOT::Internal::MakeUninitArray;
 
 /**
  * An RAII wrapper around an open temporary file on disk. It cleans up the guarded file when the wrapper object
@@ -128,7 +126,9 @@ private:
 
 public:
    explicit FileRaii(const std::string &path) : fPath(path) {}
+   FileRaii(FileRaii &&) = default;
    FileRaii(const FileRaii &) = delete;
+   FileRaii &operator=(FileRaii &&) = default;
    FileRaii &operator=(const FileRaii &) = delete;
    ~FileRaii()
    {

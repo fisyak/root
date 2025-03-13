@@ -183,7 +183,7 @@ ClassImp(TTreeReader);
 using namespace ROOT::Internal;
 
 // Provide some storage for the poor little symbol.
-constexpr const char * const TTreeReader::fgEntryStatusText[TTreeReader::kEntryUnknownError + 1];
+constexpr const char *const TTreeReader::fgEntryStatusText[TTreeReader::kEntryUnknownError + 1];
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.  Call SetTree to connect to a TTree.
@@ -201,7 +201,7 @@ TTreeReader::TTreeReader() : fNotify(this), fFriendProxies() {}
 ///                  per chain.SetEntryList(&entryList).
 
 TTreeReader::TTreeReader(TTree *tree, TEntryList *entryList /*= nullptr*/, bool warnAboutLongerFriends,
-                         const std::vector<std::string> &suppressErrorsForMissingBranches)
+                         const std::set<std::string> &suppressErrorsForMissingBranches)
    : fTree(tree),
      fEntryList(entryList),
      fNotify(this),
@@ -234,7 +234,8 @@ TTreeReader::TTreeReader(TTree *tree, TEntryList *entryList /*= nullptr*/, bool 
 TTreeReader::TTreeReader(const char *keyname, TDirectory *dir, TEntryList *entryList /*= nullptr*/)
    : fEntryList(entryList), fNotify(this), fFriendProxies()
 {
-   if (!dir) dir = gDirectory;
+   if (!dir)
+      dir = gDirectory;
    dir->GetObject(keyname, fTree);
    if (!fTree) {
       std::string msg = "No TTree called ";
@@ -250,8 +251,8 @@ TTreeReader::TTreeReader(const char *keyname, TDirectory *dir, TEntryList *entry
 
 TTreeReader::~TTreeReader()
 {
-   for (std::deque<ROOT::Internal::TTreeReaderValueBase*>::const_iterator
-           i = fValues.begin(), e = fValues.end(); i != e; ++i) {
+   for (std::deque<ROOT::Internal::TTreeReaderValueBase *>::const_iterator i = fValues.begin(), e = fValues.end();
+        i != e; ++i) {
       (*i)->MarkTreeReaderUnavailable();
    }
    if (fTree && fNotify.IsLinked())
@@ -335,10 +336,10 @@ bool TTreeReader::Notify()
          // This means that "local" should be set!
          // There are two entities switching trees which is bad.
          Warning("SetEntryBase()",
-                  "The current tree in the TChain %s has changed (e.g. by TTree::Process) "
-                  "even though TTreeReader::SetEntry() was called, which switched the tree "
-                  "again. Did you mean to call TTreeReader::SetLocalEntry()?",
-                  fTree->GetName());
+                 "The current tree in the TChain %s has changed (e.g. by TTree::Process) "
+                 "even though TTreeReader::SetEntry() was called, which switched the tree "
+                 "again. Did you mean to call TTreeReader::SetLocalEntry()?",
+                 fTree->GetName());
       }
       fLoadTreeStatus = kInternalLoadTree;
    } else {
@@ -360,7 +361,7 @@ bool TTreeReader::Notify()
    }
 
    if (fProxiesSet) {
-      for (auto value: fValues) {
+      for (auto value : fValues) {
          value->NotifyNewTree(fTree->GetTree());
       }
    }
@@ -383,9 +384,8 @@ bool TTreeReader::SetProxies()
       // where the first tree of the chain does not contain that branch. In such
       // case, we need to postpone the creation of the corresponding proxy until
       // we find the branch in a following tree of the chain.
-      const bool suppressErrorsForThisBranch =
-         (std::find(fSuppressErrorsForMissingBranches.cbegin(), fSuppressErrorsForMissingBranches.cend(),
-                    reader->fBranchName.View()) != fSuppressErrorsForMissingBranches.cend());
+      const bool suppressErrorsForThisBranch = (fSuppressErrorsForMissingBranches.find(reader->fBranchName.Data()) !=
+                                                fSuppressErrorsForMissingBranches.cend());
       // Because of the situation described above, we may have some proxies
       // already created and some not, if their branch was not available so far.
       // Make sure we do not recreate the proxy unnecessarily, unless the
@@ -559,8 +559,7 @@ TTreeReader::EEntryStatus TTreeReader::SetEntriesRange(Long64_t beginEntry, Long
       // thus adding all the branches to the cache and triggering the learning phase.
       EEntryStatus es = SetEntry(beginEntry - 1);
       if (es != kEntryValid) {
-         Error("SetEntriesRange()", "Error setting first entry %lld: %s",
-               beginEntry, fgEntryStatusText[(int)es]);
+         Error("SetEntriesRange()", "Error setting first entry %lld: %s", beginEntry, fgEntryStatusText[(int)es]);
          return es;
       }
    }
@@ -568,7 +567,8 @@ TTreeReader::EEntryStatus TTreeReader::SetEntriesRange(Long64_t beginEntry, Long
    return kEntryValid;
 }
 
-void TTreeReader::Restart() {
+void TTreeReader::Restart()
+{
    fDirector->SetReadEntry(-1);
    fProxiesSet = false; // we might get more value readers, meaning new proxies.
    fEntry = -1;
@@ -585,15 +585,14 @@ void TTreeReader::Restart() {
 /// of the TTree / TChain, independent of a range set by SetEntriesRange()
 /// by calling TTree/TChain::%GetEntriesFast.
 
-
-Long64_t TTreeReader::GetEntries() const {
+Long64_t TTreeReader::GetEntries() const
+{
    if (fEntryList)
       return fEntryList->GetN();
    if (!fTree)
       return -1;
    return fTree->GetEntriesFast();
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the number of entries of the TEntryList if one is provided, else
@@ -603,7 +602,8 @@ Long64_t TTreeReader::GetEntries() const {
 ///   this TChain should be opened to determine the exact number of entries
 /// of the TChain. If `!IsChain()`, `force` is ignored.
 
-Long64_t TTreeReader::GetEntries(bool force)  {
+Long64_t TTreeReader::GetEntries(bool force)
+{
    if (fEntryList)
       return fEntryList->GetN();
    if (!fTree)
@@ -618,8 +618,6 @@ Long64_t TTreeReader::GetEntries(bool force)  {
    }
    return fTree->GetEntriesFast();
 }
-
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Load an entry into the tree, return the status of the read.
@@ -663,7 +661,7 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, bool local)
       }
    }
 
-   TTree* treeToCallLoadOn = local ? fTree->GetTree() : fTree;
+   TTree *treeToCallLoadOn = local ? fTree->GetTree() : fTree;
 
    fSetEntryBaseCallingLoadTree = true;
    const Long64_t loadResult = treeToCallLoadOn->LoadTree(entryAfterList);
@@ -679,13 +677,12 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, bool local)
       if (loadResult == -3 && TestBit(kBitIsChain) && !fTree->GetTree()) {
          fDirector->Notify();
          if (fProxiesSet) {
-            for (auto value: fValues) {
+            for (auto value : fValues) {
                value->NotifyNewTree(fTree->GetTree());
             }
          }
-         Warning("SetEntryBase()",
-               "There was an issue opening the last file associated to the TChain "
-               "being processed.");
+         Warning("SetEntryBase()", "There was an issue opening the last file associated to the TChain "
+                                   "being processed.");
          fEntryStatus = kEntryChainFileError;
          return fEntryStatus;
       }
@@ -693,11 +690,21 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, bool local)
       if (loadResult == -2) {
          fDirector->Notify();
          if (fProxiesSet) {
-            for (auto value: fValues) {
+            for (auto value : fValues) {
                value->NotifyNewTree(fTree->GetTree());
             }
          }
-         fEntryStatus = kEntryBeyondEnd;
+         auto &&nEntries = treeToCallLoadOn->GetEntriesFast();
+         if (fBeginEntry >= nEntries && nEntries > 0) {
+            // The beginning entry specified via SetEntriesRange was beyond the total number of entries in the dataset
+            Error("SetEntryBase()",
+                  "The beginning entry specified via SetEntriesRange (%lld) is equal to or beyond the "
+                  "total number of entries in the dataset (%lld). Make sure to specify a "
+                  "beginning entry lower than the number of available entries.",
+                  fBeginEntry, nEntries);
+            fEntryStatus = kEntryNotFound;
+         } else
+            fEntryStatus = kEntryBeyondEnd;
          WarnIfFriendsHaveMoreEntries();
          return fEntryStatus;
       }
@@ -713,7 +720,7 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, bool local)
          // the TTree is missing from the file.
          fDirector->Notify();
          if (fProxiesSet) {
-            for (auto value: fValues) {
+            for (auto value : fValues) {
                value->NotifyNewTree(fTree->GetTree());
             }
          }
@@ -739,8 +746,7 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, bool local)
          return fEntryStatus;
       }
 
-      Warning("SetEntryBase()",
-              "Unexpected error '%lld' in %s::LoadTree", loadResult,
+      Warning("SetEntryBase()", "Unexpected error '%lld' in %s::LoadTree", loadResult,
               treeToCallLoadOn->IsA()->GetName());
 
       fEntryStatus = kEntryUnknownError;
@@ -803,7 +809,7 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, bool local)
 /// Set (or update) the which tree to read from. `tree` can be
 /// a TTree or a TChain.
 
-void TTreeReader::SetTree(TTree* tree, TEntryList* entryList /*= nullptr*/)
+void TTreeReader::SetTree(TTree *tree, TEntryList *entryList /*= nullptr*/)
 {
    if (fEntryStatus != kEntryNoTree && !TestBit(kBitIsExternalTree)) {
       // a plain TTree is automatically added to the current directory,
@@ -828,8 +834,7 @@ void TTreeReader::SetTree(TTree* tree, TEntryList* entryList /*= nullptr*/)
 
    if (!fDirector) {
       Initialize();
-   }
-   else {
+   } else {
       fDirector->SetTree(fTree);
       fDirector->SetReadEntry(-1);
    }
@@ -843,9 +848,9 @@ void TTreeReader::SetTree(TTree* tree, TEntryList* entryList /*= nullptr*/)
 /// \param dir - the `TDirectory` to load `keyname` from (or gDirectory if `nullptr`)
 /// \param entryList - the `TEntryList` to attach to the `TTreeReader`.
 
-void TTreeReader::SetTree(const char* keyname, TDirectory* dir, TEntryList* entryList /*= nullptr*/)
+void TTreeReader::SetTree(const char *keyname, TDirectory *dir, TEntryList *entryList /*= nullptr*/)
 {
-   TTree* tree = nullptr;
+   TTree *tree = nullptr;
    if (!dir)
       dir = gDirectory;
    dir->GetObject(keyname, tree);
@@ -855,11 +860,12 @@ void TTreeReader::SetTree(const char* keyname, TDirectory* dir, TEntryList* entr
 ////////////////////////////////////////////////////////////////////////////////
 /// Add a value reader for this tree.
 
-bool TTreeReader::RegisterValueReader(ROOT::Internal::TTreeReaderValueBase* reader)
+bool TTreeReader::RegisterValueReader(ROOT::Internal::TTreeReaderValueBase *reader)
 {
    if (fProxiesSet) {
       Error("RegisterValueReader",
-            "Error registering reader for %s: TTreeReaderValue/Array objects must be created before the call to Next() / SetEntry() / SetLocalEntry(), or after TTreeReader::Restart()!",
+            "Error registering reader for %s: TTreeReaderValue/Array objects must be created before the call to Next() "
+            "/ SetEntry() / SetLocalEntry(), or after TTreeReader::Restart()!",
             reader->GetBranchName());
       return false;
    }
@@ -870,12 +876,13 @@ bool TTreeReader::RegisterValueReader(ROOT::Internal::TTreeReaderValueBase* read
 ////////////////////////////////////////////////////////////////////////////////
 /// Remove a value reader for this tree.
 
-void TTreeReader::DeregisterValueReader(ROOT::Internal::TTreeReaderValueBase* reader)
+void TTreeReader::DeregisterValueReader(ROOT::Internal::TTreeReaderValueBase *reader)
 {
-   std::deque<ROOT::Internal::TTreeReaderValueBase*>::iterator iReader
-      = std::find(fValues.begin(), fValues.end(), reader);
+   std::deque<ROOT::Internal::TTreeReaderValueBase *>::iterator iReader =
+      std::find(fValues.begin(), fValues.end(), reader);
    if (iReader == fValues.end()) {
-      Error("DeregisterValueReader", "Cannot find reader of type %s for branch %s", reader->GetDerivedTypeName(), reader->fBranchName.Data());
+      Error("DeregisterValueReader", "Cannot find reader of type %s for branch %s", reader->GetDerivedTypeName(),
+            reader->fBranchName.Data());
       return;
    }
    fValues.erase(iReader);

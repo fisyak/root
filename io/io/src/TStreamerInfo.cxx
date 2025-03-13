@@ -262,6 +262,7 @@ namespace {
       Int_t datasize = 1;
       auto memClass = TClass::GetClass(localtypename.c_str());
       std::vector<Int_t> dimensions;
+      static TClassRef string_classref("string");
       bool isStdArray = memClass && TClassEdit::IsStdArray(memClass->GetName());
       if (isStdArray) {
          totaldim = 1;
@@ -279,13 +280,13 @@ namespace {
          if (s->GetPointerLevel()) {
             if (memClass->IsTObject()) {
                memType = TVirtualStreamerInfo::kObjectP;
-            } else if (memClass->GetCollectionProxy()) {
+            } else if (memClass->GetCollectionProxy() || memClass == string_classref) {
                memType = TVirtualStreamerInfo::kSTLp;
             } else {
                memType = TVirtualStreamerInfo::kAnyP;
             }
          } else {
-            if (memClass->GetCollectionProxy()) {
+            if (memClass->GetCollectionProxy() || memClass == string_classref) {
                memType = TVirtualStreamerInfo::kSTL;
             } else if (memClass->IsTObject() && memClass == element->GetClassPointer()) {
                // If there is a change in the class type, we can't use the TObject::Streamer
@@ -639,6 +640,23 @@ void TStreamerInfo::Build(Bool_t isTransient)
             }
             // Here we treat data members such as int, float, double[4]
             element = new TStreamerBasicType(dmName, dmTitle, offset, dtype, dmFull);
+         }
+         if (dm->IsEnum()) {
+            if (auto enumdesc = TEnum::GetEnum(dm->GetFullTypeName(), TEnum::kNone)) {
+               // When introducing support for non-default sized enum, it was
+               // decided to keep the file format unchanged and to always
+               // store the enum constant as an int.
+               auto memType = enumdesc->GetUnderlyingType();
+               if (TDataType::GetDataType(memType)->Size() > 4) {
+                  // 4 is the onfile space for an Int_t.
+                  Error("Build",
+                        "Discarding %s %s::%s because the underlying type (%s) for the enum %s is larger than 4 bytes "
+                        "and may result in data loss.",
+                        dmFull, GetName(), dmName, TDataType::GetTypeName(memType), dm->GetFullTypeName());
+                  continue;
+               }
+               element->SetType(TStreamerInfo::kInt);
+            }
          }
       } else {
          // try STL container or string
@@ -2442,7 +2460,9 @@ void TStreamerInfo::BuildOld()
 
                } else if ( (newkind==ROOT::kSTLmap || newkind==ROOT::kSTLmultimap) &&
                            (oldkind!=ROOT::kSTLmap && oldkind!=ROOT::kSTLmultimap) ) {
-                  element->SetNewType(TVirtualStreamerInfo::kUnsupportedConversion);
+                  // This case was not previously not supported, however it is unclear
+                  // why so we keep it as a separate case for the time behind.
+                  element->Update(oldClass, newClass.GetClass());
                } else {
                   element->Update(oldClass, newClass.GetClass());
                }

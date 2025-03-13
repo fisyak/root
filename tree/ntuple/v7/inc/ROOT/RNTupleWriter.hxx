@@ -35,10 +35,10 @@
 class TDirectory;
 
 namespace ROOT {
-namespace Experimental {
 
 class RNTupleWriteOptions;
 
+namespace Experimental {
 namespace Internal {
 // Non-public factory method for an RNTuple writer that uses an already constructed page sink
 std::unique_ptr<RNTupleWriter>
@@ -69,7 +69,7 @@ private:
    RNTupleFillContext fFillContext;
    Detail::RNTupleMetrics fMetrics;
 
-   NTupleSize_t fLastCommittedClusterGroup = 0;
+   ROOT::NTupleSize_t fLastCommittedClusterGroup = 0;
 
    RNTupleWriter(std::unique_ptr<RNTupleModel> model, std::unique_ptr<Internal::RPageSink> sink);
 
@@ -82,20 +82,20 @@ private:
    /// Create a writer, potentially wrapping the sink in a RPageSinkBuf.
    static std::unique_ptr<RNTupleWriter> Create(std::unique_ptr<RNTupleModel> model,
                                                 std::unique_ptr<Internal::RPageSink> sink,
-                                                const RNTupleWriteOptions &options);
+                                                const ROOT::RNTupleWriteOptions &options);
 
 public:
    /// Throws an exception if the model is null.
-   static std::unique_ptr<RNTupleWriter> Recreate(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
-                                                  std::string_view storage,
-                                                  const RNTupleWriteOptions &options = RNTupleWriteOptions());
+   static std::unique_ptr<RNTupleWriter>
+   Recreate(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName, std::string_view storage,
+            const ROOT::RNTupleWriteOptions &options = ROOT::RNTupleWriteOptions());
    static std::unique_ptr<RNTupleWriter>
    Recreate(std::initializer_list<std::pair<std::string_view, std::string_view>> fields, std::string_view ntupleName,
-            std::string_view storage, const RNTupleWriteOptions &options = RNTupleWriteOptions());
+            std::string_view storage, const ROOT::RNTupleWriteOptions &options = ROOT::RNTupleWriteOptions());
    /// Throws an exception if the model is null.
    static std::unique_ptr<RNTupleWriter> Append(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
                                                 TDirectory &fileOrDirectory,
-                                                const RNTupleWriteOptions &options = RNTupleWriteOptions());
+                                                const ROOT::RNTupleWriteOptions &options = ROOT::RNTupleWriteOptions());
    RNTupleWriter(const RNTupleWriter &) = delete;
    RNTupleWriter &operator=(const RNTupleWriter &) = delete;
    ~RNTupleWriter();
@@ -130,13 +130,13 @@ public:
    std::unique_ptr<REntry> CreateEntry() { return fFillContext.CreateEntry(); }
 
    /// Return the entry number that was last flushed in a cluster.
-   NTupleSize_t GetLastFlushed() const { return fFillContext.GetLastFlushed(); }
+   ROOT::NTupleSize_t GetLastFlushed() const { return fFillContext.GetLastFlushed(); }
    /// Return the entry number that was last committed in a cluster.
-   NTupleSize_t GetLastCommitted() const { return fFillContext.GetLastFlushed(); }
+   ROOT::NTupleSize_t GetLastCommitted() const { return fFillContext.GetLastFlushed(); }
    /// Return the entry number that was last committed in a cluster group.
-   NTupleSize_t GetLastCommittedClusterGroup() const { return fLastCommittedClusterGroup; }
+   ROOT::NTupleSize_t GetLastCommittedClusterGroup() const { return fLastCommittedClusterGroup; }
    /// Return the number of entries filled so far.
-   NTupleSize_t GetNEntries() const { return fFillContext.GetNEntries(); }
+   ROOT::NTupleSize_t GetNEntries() const { return fFillContext.GetNEntries(); }
 
    void EnableMetrics() { fMetrics.Enable(); }
    const Detail::RNTupleMetrics &GetMetrics() const { return fMetrics; }

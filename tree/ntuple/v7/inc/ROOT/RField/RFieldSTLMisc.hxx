@@ -47,12 +47,12 @@ class RAtomicField : public RFieldBase {
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final;
 
-   void ConstructValue(void *where) const final { CallConstructValueOn(*fSubFields[0], where); }
-   std::unique_ptr<RDeleter> GetDeleter() const final { return GetDeleterOf(*fSubFields[0]); }
+   void ConstructValue(void *where) const final { CallConstructValueOn(*fSubfields[0], where); }
+   std::unique_ptr<RDeleter> GetDeleter() const final { return GetDeleterOf(*fSubfields[0]); }
 
-   std::size_t AppendImpl(const void *from) final { return CallAppendOn(*fSubFields[0], from); }
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final { CallReadOn(*fSubFields[0], globalIndex, to); }
-   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final { CallReadOn(*fSubFields[0], localIndex, to); }
+   std::size_t AppendImpl(const void *from) final { return CallAppendOn(*fSubfields[0], from); }
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final { CallReadOn(*fSubfields[0], globalIndex, to); }
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final { CallReadOn(*fSubfields[0], localIndex, to); }
 
 public:
    RAtomicField(std::string_view fieldName, std::string_view typeName, std::unique_ptr<RFieldBase> itemField);
@@ -62,8 +62,8 @@ public:
 
    std::vector<RValue> SplitValue(const RValue &value) const final;
 
-   size_t GetValueSize() const final { return fSubFields[0]->GetValueSize(); }
-   size_t GetAlignment() const final { return fSubFields[0]->GetAlignment(); }
+   size_t GetValueSize() const final { return fSubfields[0]->GetValueSize(); }
+   size_t GetAlignment() const final { return fSubfields[0]->GetAlignment(); }
 
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
 };
@@ -103,7 +103,7 @@ protected:
    void GenerateColumns(const RNTupleDescriptor &desc) final;
    void ConstructValue(void *where) const final { memset(where, 0, GetValueSize()); }
    std::size_t AppendImpl(const void *from) final;
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
    void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final;
 
 public:
@@ -179,7 +179,7 @@ protected:
 
    /// Given the index of the nullable field, returns the corresponding global index of the subfield or,
    /// if it is null, returns kInvalidNTupleIndex
-   RNTupleLocalIndex GetItemIndex(NTupleSize_t globalIndex);
+   RNTupleLocalIndex GetItemIndex(ROOT::NTupleSize_t globalIndex);
 
    RNullableField(std::string_view fieldName, std::string_view typeName, std::unique_ptr<RFieldBase> itemField);
 
@@ -218,7 +218,7 @@ protected:
    std::unique_ptr<RDeleter> GetDeleter() const final;
 
    std::size_t AppendImpl(const void *from) final;
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
 
 public:
    ROptionalField(std::string_view fieldName, std::string_view typeName, std::unique_ptr<RFieldBase> itemField);
@@ -260,7 +260,7 @@ protected:
    std::unique_ptr<RDeleter> GetDeleter() const final;
 
    std::size_t AppendImpl(const void *from) final;
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
 
 public:
    RUniquePtrField(std::string_view fieldName, std::string_view typeName, std::unique_ptr<RFieldBase> itemField);
@@ -305,14 +305,14 @@ private:
    std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<std::string>>(); }
 
    std::size_t AppendImpl(const void *from) final;
-   void ReadGlobalImpl(ROOT::Experimental::NTupleSize_t globalIndex, void *to) final;
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
 
    void CommitClusterImpl() final { fIndex = 0; }
 
 public:
    static std::string TypeName() { return "std::string"; }
    explicit RField(std::string_view name)
-      : RFieldBase(name, TypeName(), ENTupleStructure::kLeaf, false /* isSimple */), fIndex(0)
+      : RFieldBase(name, TypeName(), ROOT::ENTupleStructure::kLeaf, false /* isSimple */), fIndex(0)
    {
    }
    RField(RField &&other) = default;
@@ -381,7 +381,7 @@ protected:
    std::unique_ptr<RDeleter> GetDeleter() const final;
 
    std::size_t AppendImpl(const void *from) final;
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
 
    void CommitClusterImpl() final;
 

@@ -29,14 +29,14 @@ int imt_parTreeProcessing()
    ROOT::TThreadedObject<TH2F> pxpyHist("px_py", "p_{X} vs p_{Y} Distribution;p_{X};p_{Y}", 100, -5., 5., 100, -5., 5.);
 
    // Create a TTreeProcessorMT: specify the file and the tree in it
-   ROOT::TTreeProcessorMT tp("http://root.cern/files/tp_process_imt.root", "events");
+   ROOT::TTreeProcessorMT tp("root://eospublic.cern.ch//eos/root-eos/testfiles/tp_process_imt.root", "events");
 
    // Define the function that will process a subrange of the tree.
    // The function must receive only one parameter, a TTreeReader,
    // and it must be thread safe. To enforce the latter requirement,
    // TThreadedObject histograms will be used.
    auto myFunction = [&](TTreeReader &myReader) {
-      TTreeReaderValue<std::vector<ROOT::Math::PxPyPzEVector>> tracksRV(myReader, "tracks");
+      TTreeReaderArray<ROOT::Math::PxPyPzEVector> tracksRA(myReader, "tracks");
 
       // For performance reasons, a copy of the pointer associated to this thread on the
       // stack is used
@@ -45,8 +45,7 @@ int imt_parTreeProcessing()
       auto myPxPyHist = pxpyHist.Get();
 
       while (myReader.Next()) {
-         auto tracks = *tracksRV;
-         for (auto &&track : tracks) {
+         for (auto &&track : tracksRA) {
             myPtHist->Fill(track.Pt(), 1. / track.Pt());
             myPxPyHist->Fill(track.Px(), track.Py());
 

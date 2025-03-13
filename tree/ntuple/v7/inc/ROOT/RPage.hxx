@@ -24,7 +24,6 @@
 #include <memory>
 
 namespace ROOT {
-namespace Experimental {
 namespace Internal {
 
 class RPageAllocator;
@@ -32,7 +31,7 @@ class RPageRef;
 
 // clang-format off
 /**
-\class ROOT::Experimental::Internal::RPage
+\class ROOT::Internal::RPage
 \ingroup NTuple
 \brief A page is a slice of a column that is mapped into memory
 
@@ -56,14 +55,15 @@ public:
    class RClusterInfo {
    private:
       /// The cluster number
-      DescriptorId_t fId = 0;
+      ROOT::DescriptorId_t fId = 0;
       /// The first element index of the column in this cluster
-      NTupleSize_t fIndexOffset = 0;
+      ROOT::NTupleSize_t fIndexOffset = 0;
+
    public:
       RClusterInfo() = default;
-      RClusterInfo(NTupleSize_t id, NTupleSize_t indexOffset) : fId(id), fIndexOffset(indexOffset) {}
-      NTupleSize_t GetId() const { return fId; }
-      NTupleSize_t GetIndexOffset() const { return fIndexOffset; }
+      RClusterInfo(ROOT::NTupleSize_t id, ROOT::NTupleSize_t indexOffset) : fId(id), fIndexOffset(indexOffset) {}
+      ROOT::NTupleSize_t GetId() const { return fId; }
+      ROOT::NTupleSize_t GetIndexOffset() const { return fIndexOffset; }
    };
 
 private:
@@ -74,7 +74,7 @@ private:
    std::uint32_t fNElements = 0;
    /// The capacity of the page in number of elements
    std::uint32_t fMaxElements = 0;
-   NTupleSize_t fRangeFirst = 0;
+   ROOT::NTupleSize_t fRangeFirst = 0;
    RClusterInfo fClusterInfo;
 
 public:
@@ -122,14 +122,15 @@ public:
    std::uint32_t GetElementSize() const { return fElementSize; }
    std::uint32_t GetNElements() const { return fNElements; }
    std::uint32_t GetMaxElements() const { return fMaxElements; }
-   NTupleSize_t GetGlobalRangeFirst() const { return fRangeFirst; }
-   NTupleSize_t GetGlobalRangeLast() const { return fRangeFirst + NTupleSize_t(fNElements) - 1; }
-   NTupleSize_t GetClusterRangeFirst() const { return fRangeFirst - fClusterInfo.GetIndexOffset(); }
-   NTupleSize_t GetClusterRangeLast() const { return GetClusterRangeFirst() + NTupleSize_t(fNElements) - 1; }
+   ROOT::NTupleSize_t GetGlobalRangeFirst() const { return fRangeFirst; }
+   ROOT::NTupleSize_t GetGlobalRangeLast() const { return fRangeFirst + ROOT::NTupleSize_t(fNElements) - 1; }
+   ROOT::NTupleSize_t GetLocalRangeFirst() const { return fRangeFirst - fClusterInfo.GetIndexOffset(); }
+   ROOT::NTupleSize_t GetLocalRangeLast() const { return GetLocalRangeFirst() + ROOT::NTupleSize_t(fNElements) - 1; }
    const RClusterInfo& GetClusterInfo() const { return fClusterInfo; }
 
-   bool Contains(NTupleSize_t globalIndex) const {
-      return (globalIndex >= fRangeFirst) && (globalIndex < fRangeFirst + NTupleSize_t(fNElements));
+   bool Contains(ROOT::NTupleSize_t globalIndex) const
+   {
+      return (globalIndex >= fRangeFirst) && (globalIndex < fRangeFirst + ROOT::NTupleSize_t(fNElements));
    }
 
    bool Contains(RNTupleLocalIndex localIndex) const
@@ -156,12 +157,17 @@ public:
       return static_cast<unsigned char *>(fBuffer) + offset;
    }
    /// Seek the page to a certain position of the column
-   void SetWindow(const NTupleSize_t rangeFirst, const RClusterInfo &clusterInfo) {
+   void SetWindow(const ROOT::NTupleSize_t rangeFirst, const RClusterInfo &clusterInfo)
+   {
       fClusterInfo = clusterInfo;
       fRangeFirst = rangeFirst;
    }
    /// Forget all currently stored elements (size == 0) and set a new starting index.
-   void Reset(NTupleSize_t rangeFirst) { fNElements = 0; fRangeFirst = rangeFirst; }
+   void Reset(ROOT::NTupleSize_t rangeFirst)
+   {
+      fNElements = 0;
+      fRangeFirst = rangeFirst;
+   }
    void ResetCluster(const RClusterInfo &clusterInfo) { fNElements = 0; fClusterInfo = clusterInfo; }
 
    /// Return a pointer to the page zero buffer used if there is no on-disk data for a particular deferred column
@@ -174,7 +180,6 @@ public:
 }; // class RPage
 
 } // namespace Internal
-} // namespace Experimental
 } // namespace ROOT
 
 #endif

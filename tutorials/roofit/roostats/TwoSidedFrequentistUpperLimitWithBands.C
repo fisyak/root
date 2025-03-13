@@ -317,7 +317,7 @@ void TwoSidedFrequentistUpperLimitWithBands(const char *infile = "", const char 
       }
 
       // generate global observables
-      std::unique_ptr<RooDataSet> one{mc->GetPdf()->generate(*mc->GetGlobalObservables(), 1)};
+      std::unique_ptr<RooDataSet> one{mc->GetPdf()->generateSimGlobal(*mc->GetGlobalObservables(), 1)};
       const RooArgSet *values = one->get();
       std::unique_ptr<RooArgSet> allVars{mc->GetPdf()->getVariables()};
       allVars->assign(*values);

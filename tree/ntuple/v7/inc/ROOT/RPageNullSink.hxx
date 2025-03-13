@@ -34,13 +34,15 @@ The RPageNullSink class is for internal testing only and can be used to measure 
 elements into pages, without actually writing them onto disk or even serializing the RNTuple headers and footers.
 */
 class RPageNullSink : public RPageSink {
-   DescriptorId_t fNColumns = 0;
+   ROOT::DescriptorId_t fNColumns = 0;
    std::uint64_t fNBytesCurrentCluster = 0;
 
 public:
-   RPageNullSink(std::string_view ntupleName, const RNTupleWriteOptions &options) : RPageSink(ntupleName, options) {}
+   RPageNullSink(std::string_view ntupleName, const ROOT::RNTupleWriteOptions &options) : RPageSink(ntupleName, options)
+   {
+   }
 
-   ColumnHandle_t AddColumn(DescriptorId_t, RColumn &column) final { return {fNColumns++, &column}; }
+   ColumnHandle_t AddColumn(ROOT::DescriptorId_t, RColumn &column) final { return {fNColumns++, &column}; }
 
    const RNTupleDescriptor &GetDescriptor() const final
    {
@@ -48,9 +50,9 @@ public:
       return descriptor;
    }
 
-   NTupleSize_t GetNEntries() const final { return 0; }
+   ROOT::NTupleSize_t GetNEntries() const final { return 0; }
 
-   void ConnectFields(const std::vector<RFieldBase *> &fields, NTupleSize_t firstEntry)
+   void ConnectFields(const std::vector<RFieldBase *> &fields, ROOT::NTupleSize_t firstEntry)
    {
       auto connectField = [&](RFieldBase &f) { CallConnectPageSinkOnField(f, *this, firstEntry); };
       for (auto *f : fields) {
@@ -63,17 +65,20 @@ public:
    void InitImpl(RNTupleModel &model) final
    {
       auto &fieldZero = GetFieldZeroOfModel(model);
-      ConnectFields(fieldZero.GetSubFields(), 0);
+      ConnectFields(fieldZero.GetMutableSubfields(), 0);
    }
-   void UpdateSchema(const RNTupleModelChangeset &changeset, NTupleSize_t firstEntry) final
+   void UpdateSchema(const RNTupleModelChangeset &changeset, ROOT::NTupleSize_t firstEntry) final
    {
       ConnectFields(changeset.fAddedFields, firstEntry);
    }
    void UpdateExtraTypeInfo(const RExtraTypeInfoDescriptor &) final {}
 
    void CommitSuppressedColumn(ColumnHandle_t) final {}
-   void CommitPage(ColumnHandle_t, const RPage &page) final { fNBytesCurrentCluster += page.GetNBytes(); }
-   void CommitSealedPage(DescriptorId_t, const RSealedPage &page) final
+   void CommitPage(ColumnHandle_t, const ROOT::Internal::RPage &page) final
+   {
+      fNBytesCurrentCluster += page.GetNBytes();
+   }
+   void CommitSealedPage(ROOT::DescriptorId_t, const RSealedPage &page) final
    {
       fNBytesCurrentCluster += page.GetBufferSize();
    }
@@ -86,7 +91,7 @@ public:
       }
    }
 
-   RStagedCluster StageCluster(NTupleSize_t) final
+   RStagedCluster StageCluster(ROOT::NTupleSize_t) final
    {
       RStagedCluster stagedCluster;
       stagedCluster.fNBytesWritten = fNBytesCurrentCluster;

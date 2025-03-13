@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <memory>
 
+using ROOT::Internal::MakeUninitArray;
+
 void ROOT::Experimental::Internal::RPageSinkBuf::RColumnBuf::DropBufferedPages()
 {
    fBufferedPages.clear();
@@ -56,13 +58,13 @@ ROOT::Experimental::Internal::RPageSinkBuf::~RPageSinkBuf()
 }
 
 ROOT::Experimental::Internal::RPageStorage::ColumnHandle_t
-ROOT::Experimental::Internal::RPageSinkBuf::AddColumn(DescriptorId_t /*fieldId*/, RColumn &column)
+ROOT::Experimental::Internal::RPageSinkBuf::AddColumn(ROOT::DescriptorId_t /*fieldId*/, RColumn &column)
 {
    return ColumnHandle_t{fNColumns++, &column};
 }
 
 void ROOT::Experimental::Internal::RPageSinkBuf::ConnectFields(const std::vector<RFieldBase *> &fields,
-                                                               NTupleSize_t firstEntry)
+                                                               ROOT::NTupleSize_t firstEntry)
 {
    auto connectField = [&](RFieldBase &f) {
       // Field Zero would have id 0.
@@ -86,14 +88,14 @@ const ROOT::Experimental::RNTupleDescriptor &ROOT::Experimental::Internal::RPage
 
 void ROOT::Experimental::Internal::RPageSinkBuf::InitImpl(RNTupleModel &model)
 {
-   ConnectFields(Internal::GetFieldZeroOfModel(model).GetSubFields(), 0U);
+   ConnectFields(Internal::GetFieldZeroOfModel(model).GetMutableSubfields(), 0U);
 
    fInnerModel = model.Clone();
    fInnerSink->Init(*fInnerModel);
 }
 
 void ROOT::Experimental::Internal::RPageSinkBuf::UpdateSchema(const RNTupleModelChangeset &changeset,
-                                                              NTupleSize_t firstEntry)
+                                                              ROOT::NTupleSize_t firstEntry)
 {
    ConnectFields(changeset.fAddedFields, firstEntry);
 
@@ -140,7 +142,8 @@ void ROOT::Experimental::Internal::RPageSinkBuf::CommitSuppressedColumn(ColumnHa
    fSuppressedColumns.emplace_back(columnHandle);
 }
 
-void ROOT::Experimental::Internal::RPageSinkBuf::CommitPage(ColumnHandle_t columnHandle, const RPage &page)
+void ROOT::Experimental::Internal::RPageSinkBuf::CommitPage(ColumnHandle_t columnHandle,
+                                                            const ROOT::Internal::RPage &page)
 {
    auto colId = columnHandle.fPhysicalId;
    const auto &element = *columnHandle.fColumn->GetElement();
@@ -174,7 +177,7 @@ void ROOT::Experimental::Internal::RPageSinkBuf::CommitPage(ColumnHandle_t colum
       RSealPageConfig config;
       config.fPage = &page;
       config.fElement = &element;
-      config.fCompressionSetting = GetWriteOptions().GetCompression();
+      config.fCompressionSettings = GetWriteOptions().GetCompression();
       config.fWriteChecksum = GetWriteOptions().GetEnablePageChecksums();
       config.fAllowAlias = false;
       config.fBuffer = zipItem.fBuf.get();
@@ -201,7 +204,7 @@ void ROOT::Experimental::Internal::RPageSinkBuf::CommitPage(ColumnHandle_t colum
       RSealPageConfig config;
       config.fPage = &zipItem.fPage;
       config.fElement = &element;
-      config.fCompressionSetting = GetWriteOptions().GetCompression();
+      config.fCompressionSettings = GetWriteOptions().GetCompression();
       config.fWriteChecksum = GetWriteOptions().GetEnablePageChecksums();
       // Make sure the page buffer is not aliased so that we can free the uncompressed page.
       config.fAllowAlias = false;
@@ -212,11 +215,11 @@ void ROOT::Experimental::Internal::RPageSinkBuf::CommitPage(ColumnHandle_t colum
       shrinkSealedPage();
       zipItem.fSealedPage = &sealedPage;
       // Release the uncompressed page. This works because the "page allocator must be thread-safe."
-      zipItem.fPage = RPage();
+      zipItem.fPage = ROOT::Internal::RPage();
    });
 }
 
-void ROOT::Experimental::Internal::RPageSinkBuf::CommitSealedPage(DescriptorId_t /*physicalColumnId*/,
+void ROOT::Experimental::Internal::RPageSinkBuf::CommitSealedPage(ROOT::DescriptorId_t /*physicalColumnId*/,
                                                                   const RSealedPage & /*sealedPage*/)
 {
    throw RException(R__FAIL("should never commit sealed pages to RPageSinkBuf"));
@@ -258,7 +261,7 @@ void ROOT::Experimental::Internal::RPageSinkBuf::FlushClusterImpl(std::function<
       bufColumn.DropBufferedPages();
 }
 
-std::uint64_t ROOT::Experimental::Internal::RPageSinkBuf::CommitCluster(ROOT::Experimental::NTupleSize_t nNewEntries)
+std::uint64_t ROOT::Experimental::Internal::RPageSinkBuf::CommitCluster(ROOT::NTupleSize_t nNewEntries)
 {
    std::uint64_t nbytes;
    FlushClusterImpl([&] { nbytes = fInnerSink->CommitCluster(nNewEntries); });
@@ -266,7 +269,7 @@ std::uint64_t ROOT::Experimental::Internal::RPageSinkBuf::CommitCluster(ROOT::Ex
 }
 
 ROOT::Experimental::Internal::RPageSink::RStagedCluster
-ROOT::Experimental::Internal::RPageSinkBuf::StageCluster(ROOT::Experimental::NTupleSize_t nNewEntries)
+ROOT::Experimental::Internal::RPageSinkBuf::StageCluster(ROOT::NTupleSize_t nNewEntries)
 {
    ROOT::Experimental::Internal::RPageSink::RStagedCluster stagedCluster;
    FlushClusterImpl([&] { stagedCluster = fInnerSink->StageCluster(nNewEntries); });
@@ -294,7 +297,7 @@ void ROOT::Experimental::Internal::RPageSinkBuf::CommitDatasetImpl()
    fInnerSink->CommitDataset();
 }
 
-ROOT::Experimental::Internal::RPage
+ROOT::Internal::RPage
 ROOT::Experimental::Internal::RPageSinkBuf::ReservePage(ColumnHandle_t columnHandle, std::size_t nElements)
 {
    return fInnerSink->ReservePage(columnHandle, nElements);

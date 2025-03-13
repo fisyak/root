@@ -61,12 +61,12 @@ You can directly see RDataFrame in action in our [tutorials](https://root.cern/d
 
 ## Table of Contents
 - [Cheat sheet](\ref cheatsheet)
-- [Introduction](\ref introduction)
+- [Introduction](\ref rdf_intro)
 - [Crash course](\ref crash-course)
-- [Working with collections](\ref collections)
+- [Working with collections](\ref working_with_collections)
 - [Transformations: manipulating data](\ref transformations)
 - [Actions: getting results](\ref actions)
-- [Distributed execution in Python](classROOT_1_1RDataFrame.html#distrdf)
+- [Distributed execution in Python](\ref rdf_distrdf)
 - [Performance tips and parallel execution](\ref parallel-execution)
 - [More features](\ref more-features)
    - [Systematic variations](\ref systematics)
@@ -168,7 +168,7 @@ These operations do not modify the dataframe or book computations but simply ret
 | GetNSlots() | Return the number of processing slots that RDataFrame will use during the event loop (i.e. the concurrency level). |
 | SaveGraph() | Store the computation graph of an RDataFrame in [DOT format (graphviz)](https://en.wikipedia.org/wiki/DOT_(graph_description_language)) for easy inspection. See the [relevant section](\ref representgraph) for details. |
 
-\anchor introduction
+\anchor rdf_intro
 ## Introduction
 Users define their analysis as a sequence of operations to be performed on the dataframe object; the framework
 takes care of the management of the loop over entries as well as low-level details such as I/O and parallelization.
@@ -508,7 +508,7 @@ ROOT::EnableImplicitMT();
 ~~~
 Simple as that. More details are given [below](#parallel-execution).
 
-\anchor collections
+\anchor working_with_collections
 ## Working with collections and object selections
 
 RDataFrame reads collections as the special type [ROOT::RVec](https://root.cern/doc/master/classROOT_1_1VecOps_1_1RVec.html): for example, a column containing an array of floating point numbers can be read as a ROOT::RVecF. C-style arrays (with variable or static size), STL vectors and most other collection types can be read this way.
@@ -670,7 +670,7 @@ auto graph = df2.Graph<int, int>("x","y");
 The `Graph` action is going to request first the value from column "x", then that of column "y". Specifically, the order
 of execution of the operations of nodes in this branch of the computation graph is guaranteed to be top to bottom.
 
-\anchor distrdf
+\anchor rdf_distrdf
 ## Distributed execution
 
 RDataFrame applications can be executed in parallel through distributed computing frameworks on a set of remote machines
@@ -1784,7 +1784,7 @@ using ColumnNamesPtr_t = std::shared_ptr<const ColumnNames_t>;
 ///
 /// The default columns are looked at in case no column is specified in the
 /// booking of actions or transformations.
-/// \see ROOT::RDF::RInterface for the documentation of the methods available.
+/// \note see ROOT::RDF::RInterface for the documentation of the methods available.
 RDataFrame::RDataFrame(std::string_view treeName, TDirectory *dirPtr, const ColumnNames_t &defaultColumns)
    : RInterface(std::make_shared<RDFDetail::RLoopManager>(nullptr, defaultColumns))
 {
@@ -1804,7 +1804,7 @@ RDataFrame::RDataFrame(std::string_view treeName, TDirectory *dirPtr, const Colu
 ////////////////////////////////////////////////////////////////////////////
 /// \brief Build the dataframe.
 /// \param[in] treeName Name of the tree contained in the directory
-/// \param[in] filenameglob TDirectory where the tree is stored, e.g. a TFile.
+/// \param[in] fileNameGlob TDirectory where the tree is stored, e.g. a TFile.
 /// \param[in] defaultColumns Collection of default columns.
 ///
 /// The filename glob supports the same type of expressions as TChain::Add(), and it is passed as-is to TChain's
@@ -1812,7 +1812,7 @@ RDataFrame::RDataFrame(std::string_view treeName, TDirectory *dirPtr, const Colu
 ///
 /// The default columns are looked at in case no column is specified in the
 /// booking of actions or transformations.
-/// \see ROOT::RDF::RInterface for the documentation of the methods available.
+/// \note see ROOT::RDF::RInterface for the documentation of the methods available.
 #ifdef R__HAS_ROOT7
 RDataFrame::RDataFrame(std::string_view treeName, std::string_view fileNameGlob, const ColumnNames_t &defaultColumns)
    : RInterface(ROOT::Detail::RDF::CreateLMFromFile(treeName, fileNameGlob, defaultColumns))
@@ -1827,15 +1827,15 @@ RDataFrame::RDataFrame(std::string_view treeName, std::string_view fileNameGlob,
 
 ////////////////////////////////////////////////////////////////////////////
 /// \brief Build the dataframe.
-/// \param[in] treeName Name of the tree contained in the directory
-/// \param[in] fileglobs Collection of file names of filename globs
+/// \param[in] datasetName Name of the dataset contained in the directory
+/// \param[in] fileNameGlobs Collection of file names of filename globs
 /// \param[in] defaultColumns Collection of default columns.
 ///
 /// The filename globs support the same type of expressions as TChain::Add(), and each glob is passed as-is
 /// to TChain's constructor.
 ///
 /// The default columns are looked at in case no column is specified in the booking of actions or transformations.
-/// \see ROOT::RDF::RInterface for the documentation of the methods available.
+/// \note see ROOT::RDF::RInterface for the documentation of the methods available.
 #ifdef R__HAS_ROOT7
 RDataFrame::RDataFrame(std::string_view datasetName, const std::vector<std::string> &fileNameGlobs,
                        const ColumnNames_t &defaultColumns)
@@ -1857,7 +1857,7 @@ RDataFrame::RDataFrame(std::string_view datasetName, const std::vector<std::stri
 ///
 /// The default columns are looked at in case no column is specified in the
 /// booking of actions or transformations.
-/// \see ROOT::RDF::RInterface for the documentation of the methods available.
+/// \note see ROOT::RDF::RInterface for the documentation of the methods available.
 RDataFrame::RDataFrame(TTree &tree, const ColumnNames_t &defaultColumns)
    : RInterface(std::make_shared<RDFDetail::RLoopManager>(&tree, defaultColumns))
 {
@@ -1870,7 +1870,7 @@ RDataFrame::RDataFrame(TTree &tree, const ColumnNames_t &defaultColumns)
 /// An empty-source dataframe constructed with a number of entries will
 /// generate those entries on the fly when some action is triggered,
 /// and it will do so for all the previously-defined columns.
-/// \see ROOT::RDF::RInterface for the documentation of the methods available.
+/// \note see ROOT::RDF::RInterface for the documentation of the methods available.
 RDataFrame::RDataFrame(ULong64_t numEntries)
    : RInterface(std::make_shared<RDFDetail::RLoopManager>(numEntries))
 
@@ -1883,7 +1883,7 @@ RDataFrame::RDataFrame(ULong64_t numEntries)
 /// \param[in] defaultColumns Collection of default column names to fall back to when none is specified.
 ///
 /// A dataframe associated to a data source will query it to access column values.
-/// \see ROOT::RDF::RInterface for the documentation of the methods available.
+/// \note see ROOT::RDF::RInterface for the documentation of the methods available.
 RDataFrame::RDataFrame(std::unique_ptr<ROOT::RDF::RDataSource> ds, const ColumnNames_t &defaultColumns)
    : RInterface(std::make_shared<RDFDetail::RLoopManager>(std::move(ds), defaultColumns))
 {
@@ -2072,7 +2072,7 @@ std::string printValue(ROOT::RDataFrame *df)
             }
          }
       }
-   } else if (auto ds = df->fDataSource) {
+   } else if (auto ds = df->GetDataSource()) {
       ret << "A data frame associated to the data source \"" << cling::printValue(ds) << "\"";
    } else {
       ret << "An empty data frame that will create " << lm->GetNEmptyEntries() << " entries\n";

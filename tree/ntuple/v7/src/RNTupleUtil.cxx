@@ -25,14 +25,13 @@
 #include <cstring>
 #include <iostream>
 
-ROOT::RLogChannel &ROOT::Experimental::NTupleLog()
+ROOT::RLogChannel &ROOT::Internal::NTupleLog()
 {
    static RLogChannel sLog("ROOT.NTuple");
    return sLog;
 }
 
-ROOT::RResult<void>
-ROOT::Experimental::Internal::EnsureValidNameForRNTuple(std::string_view name, std::string_view where)
+ROOT::RResult<void> ROOT::Internal::EnsureValidNameForRNTuple(std::string_view name, std::string_view where)
 {
    using codeAndRepr = std::pair<const char *, const char *>;
    constexpr static std::array<codeAndRepr, 4> forbiddenChars{codeAndRepr{"\u002E", "."}, codeAndRepr{"\u002F", "/"},

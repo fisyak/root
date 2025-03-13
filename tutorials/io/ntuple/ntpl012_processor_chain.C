@@ -29,7 +29,7 @@ using ROOT::Experimental::RNTupleWriter;
 // Number of events to generate for each ntuple.
 constexpr int kNEvents = 10000;
 
-void Write(std::string_view ntupleName, std::string_view ntupleFileName)
+void Write(const RNTupleOpenSpec &ntuple)
 {
    auto model = RNTupleModel::Create();
 
@@ -38,7 +38,7 @@ void Write(std::string_view ntupleName, std::string_view ntupleFileName)
    auto fldVpz = model->MakeField<std::vector<float>>("vpz");
    auto fldN = model->MakeField<std::uint64_t>("vn");
 
-   auto ntuple = RNTupleWriter::Recreate(std::move(model), ntupleName, ntupleFileName);
+   auto writer = RNTupleWriter::Recreate(std::move(model), ntuple.fNTupleName, ntuple.fStorage);
 
    for (int i = 0; i < kNEvents; ++i) {
       fldVpx->clear();
@@ -56,7 +56,7 @@ void Write(std::string_view ntupleName, std::string_view ntupleFileName)
          fldVpz->emplace_back(pz);
       }
 
-      ntuple->Fill();
+      writer->Fill();
    }
 }
 
@@ -74,12 +74,14 @@ void Read(const std::vector<RNTupleOpenSpec> &ntuples)
    // Access to the entry values in this case can be achieved through RNTupleProcessor::GetEntry() or through its
    // iterator.
    auto processor = RNTupleProcessor::CreateChain(ntuples, std::move(model));
+   int prevProcessorNumber{-1};
 
    for (const auto &entry : *processor) {
       // The RNTupleProcessor provides some additional bookkeeping information. The local entry number is reset each
       // a new ntuple in the chain is opened for processing.
-      if (processor->GetLocalEntryNumber() == 0) {
-         std::cout << "Processing " << ntuples.at(processor->GetCurrentNTupleNumber()).fNTupleName << " ("
+      if (static_cast<int>(processor->GetCurrentProcessorNumber()) > prevProcessorNumber) {
+         prevProcessorNumber = processor->GetCurrentProcessorNumber();
+         std::cout << "Processing " << ntuples.at(prevProcessorNumber).fNTupleName << " ("
                    << processor->GetNEntriesProcessed() << " total entries processed so far)" << std::endl;
       }
 
@@ -89,6 +91,8 @@ void Read(const std::vector<RNTupleOpenSpec> &ntuples)
          hPx.Fill(x);
       }
    }
+
+   std::cout << "Processed a total of " << processor->GetNEntriesProcessed() << " entries" << std::endl;
 
    hPx.DrawCopy();
 }
@@ -101,7 +105,7 @@ void ntpl012_processor_chain()
       {"ntuple1", "ntuple1.root"}, {"ntuple2", "ntuple2.root"}, {"ntuple3", "ntuple3.root"}};
 
    for (const auto &ntuple : ntuples) {
-      Write(ntuple.fNTupleName, ntuple.fStorage);
+      Write(ntuple);
    }
 
    Read(ntuples);

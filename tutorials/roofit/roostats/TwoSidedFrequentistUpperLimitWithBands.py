@@ -293,7 +293,7 @@ for imc in range(nToyMC):
         toyData = mc.GetPdf().generate(mc.GetObservables(), Extended=True)
 
     # generate global observables
-    one = mc.GetPdf().generate(mc.GetGlobalObservables(), 1)
+    one = mc.GetPdf().generateSimGlobal(mc.GetGlobalObservables(), 1)
     values = one.get()
     allVars = mc.GetPdf().getVariables()
     allVars.assign(values)

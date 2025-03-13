@@ -32,6 +32,9 @@ enum class CustomEnumInt64 : long int {};
 enum class CustomEnumUInt64 : unsigned long int {};
 
 struct CustomStruct {
+   template <typename T>
+   using MyVec = std::vector<T>;
+
    float a = 0.0;
    std::vector<float> v1;
    std::vector<std::vector<float>> v2;
@@ -55,6 +58,10 @@ struct DerivedA : public CustomStruct {
 
 struct DerivedA2 : public CustomStruct {
    float a2_f{};
+};
+
+struct DerivedWithTypedef : public CustomStruct {
+   MyVec<int> m;
 };
 
 struct DerivedB : public DerivedA {
@@ -85,6 +92,46 @@ public:
    bool fIsPresent = true;
    T fMember;
 };
+
+template <typename T>
+struct EdmHashTrait {
+   using value_type = T;
+};
+
+template <int I>
+class EdmHash {
+public:
+   typedef std::string value_type;
+   value_type fHash;
+
+   template <typename T>
+   using value_typeT = typename EdmHashTrait<T>::value_type;
+   value_typeT<value_type> fHash2;
+};
+
+template <typename FirstT, typename SecondT = double>
+class DataVector {
+public:
+   class Inner {
+      FirstT fFirst;
+      SecondT fSecond;
+   };
+
+   template <typename FirstU, typename SecondU = double>
+   class Nested {
+      FirstU fFirst;
+      SecondU fSecond;
+   };
+
+   FirstT fFirst;
+   SecondT fSecond;
+};
+
+template <typename T1, typename T2, typename T3, typename T4>
+class InnerCV {};
+
+template <long long TLL, unsigned long long TULL>
+class IntegerTemplates {};
 
 class IOConstructor {
 public:
@@ -204,11 +251,19 @@ struct StructWithTransientString {
 struct StructWithIORules : StructWithIORulesBase {
    StructWithTransientString s;
    float c = 0.0f; //! transient member
+   float cDerived = 0.0f;    //! should become 2*c after rules for c applied
    float checksumA = 0.0f;   //! transient member, edited by checksum based rule
    float checksumB = 137.0f; //! transient member, skipped by checksum based rule due to checksum mismatch
 
    StructWithIORules() = default;
    StructWithIORules(float _a, char _c[4]) : StructWithIORulesBase{_a, 0.0f}, s{{_c[0], _c[1], _c[2], _c[3]}, {}} {}
+};
+
+struct CoordinatesWithIORules {
+   float fX;
+   float fY;
+   float fR;   //!
+   float fPhi; //!
 };
 
 struct Cyclic {
@@ -303,6 +358,10 @@ struct ThrowForVariant {
    ThrowForVariant() = default;
    ThrowForVariant(const ThrowForVariant &) { throw std::runtime_error("copy ctor"); }
    ThrowForVariant &operator=(const ThrowForVariant &) = default;
+};
+
+struct RelativelyLargeStruct {
+   char fDummy[250];
 };
 
 #endif

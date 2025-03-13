@@ -61,7 +61,7 @@ protected:
    void ConstructValue(void *) const final {}
 
 public:
-   RFieldZero() : RFieldBase("", "", ENTupleStructure::kRecord, false /* isSimple */) {}
+   RFieldZero() : RFieldBase("", "", ROOT::ENTupleStructure::kRecord, false /* isSimple */) {}
 
    using RFieldBase::Attach;
    size_t GetValueSize() const final { return 0; }
@@ -99,7 +99,7 @@ protected:
 
 public:
    RInvalidField(std::string_view name, std::string_view type, std::string_view error, RCategory category)
-      : RFieldBase(name, type, ENTupleStructure::kLeaf, false /* isSimple */), fError(error), fCategory(category)
+      : RFieldBase(name, type, ROOT::ENTupleStructure::kLeaf, false /* isSimple */), fError(error), fCategory(category)
    {
       fTraits |= kTraitInvalidField;
    }
@@ -122,6 +122,13 @@ private:
       ESubFieldRole fRole;
       std::size_t fOffset;
    };
+   // Information to read into the staging area a field that is used as an input to an I/O customization rule
+   struct RStagingItem {
+      /// The field used to read the on-disk data. The fields type may be different from the on-disk type as long
+      /// as the on-disk type can be converted to the fields type (through type cast / schema evolution).
+      std::unique_ptr<RFieldBase> fField;
+      std::size_t fOffset; ///< offset in fStagingArea
+   };
    /// Prefix used in the subfield names generated for base classes
    static constexpr const char *kPrefixInherited{":"};
 
@@ -135,17 +142,42 @@ private:
    };
 
    TClass *fClass;
-   /// Additional information kept for each entry in `fSubFields`
-   std::vector<RSubFieldInfo> fSubFieldsInfo;
+   /// Additional information kept for each entry in `fSubfields`
+   std::vector<RSubFieldInfo> fSubfieldsInfo;
    std::size_t fMaxAlignment = 1;
+
+   /// The staging area stores inputs to I/O rules according to the offsets given by the streamer info of
+   /// "TypeName@@Version". The area is allocated depending on I/O rules resp. the source members of the I/O rules.
+   std::unique_ptr<unsigned char[]> fStagingArea;
+   /// The TClass instance that corresponds to the staging area.
+   /// The staging class exists as <class name>@@<on-disk version> if the on-disk version is different from the
+   /// current in-memory version, or it can be accessed by the first @@alloc streamer element of the current streamer
+   /// info.
+   TClass *fStagingClass = nullptr;
+   std::unordered_map<std::string, RStagingItem> fStagingItems; ///< Lookup staging items by member name
 
 private:
    RClassField(std::string_view fieldName, const RClassField &source); ///< Used by CloneImpl
-   RClassField(std::string_view fieldName, std::string_view className, TClass *classp);
+   RClassField(std::string_view fieldName, TClass *classp);
    void Attach(std::unique_ptr<RFieldBase> child, RSubFieldInfo info);
-   /// Register post-read callbacks corresponding to a list of ROOT I/O customization rules. `classp` is used to
-   /// fill the `TVirtualObject` instance passed to the user function.
-   void AddReadCallbacksFromIORules(const std::span<const TSchemaRule *> rules, TClass *classp = nullptr);
+
+   /// Returns the id of member 'name' in the class field given by 'fieldId', or kInvalidDescriptorId if no such
+   /// member exist. Looks recursively in base classes.
+   ROOT::DescriptorId_t
+   LookupMember(const RNTupleDescriptor &desc, std::string_view memberName, ROOT::DescriptorId_t classFieldId);
+   /// Sets fStagingClass according to the given name and version
+   void SetStagingClass(const std::string &className, unsigned int classVersion);
+   /// If there are rules with inputs (source members), create the staging area according to the TClass instance
+   /// that corresponds to the on-disk field.
+   void PrepareStagingArea(const std::vector<const TSchemaRule *> &rules, const RNTupleDescriptor &desc,
+                           const RFieldDescriptor &classFieldId);
+   /// Register post-read callback corresponding to a ROOT I/O customization rules.
+   void AddReadCallbacksFromIORule(const TSchemaRule *rule);
+   /// Given the on-disk information from the page source, find all the I/O customization rules that apply
+   /// to the class field at hand, to which the fieldDesc descriptor, if provided, must correspond.
+   /// Fields may not have an on-disk representation (e.g., when inserted by schema evolution), in which case the passed
+   /// field descriptor is nullptr.
+   std::vector<const TSchemaRule *> FindRules(const RFieldDescriptor *fieldDesc);
 
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final;
@@ -154,10 +186,9 @@ protected:
    std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RClassDeleter>(fClass); }
 
    std::size_t AppendImpl(const void *from) final;
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
    void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final;
    void BeforeConnectPageSource(Internal::RPageSource &pageSource) final;
-   void OnConnectPageSource() final;
 
 public:
    RClassField(std::string_view fieldName, std::string_view className);
@@ -190,9 +221,7 @@ private:
    Internal::RColumnIndex fIndex;                                 ///< number of bytes written in the current cluster
 
 private:
-   // Note that className may be different from classp->GetName(), e.g. through different canonicalization of RNTuple
-   // vs. TClass. Also, classp may be nullptr for types unsupported by the ROOT I/O.
-   RStreamerField(std::string_view fieldName, std::string_view className, TClass *classp);
+   RStreamerField(std::string_view fieldName, TClass *classp);
 
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final;
@@ -205,7 +234,7 @@ protected:
    std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RStreamerFieldDeleter>(fClass); }
 
    std::size_t AppendImpl(const void *from) final;
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
 
    void CommitClusterImpl() final { fIndex = 0; }
 
@@ -229,17 +258,17 @@ public:
 /// The field for an unscoped or scoped enum with dictionary
 class REnumField : public RFieldBase {
 private:
-   REnumField(std::string_view fieldName, std::string_view enumName, TEnum *enump);
+   REnumField(std::string_view fieldName, TEnum *enump);
    REnumField(std::string_view fieldName, std::string_view enumName, std::unique_ptr<RFieldBase> intField);
 
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final;
 
-   void ConstructValue(void *where) const final { CallConstructValueOn(*fSubFields[0], where); }
+   void ConstructValue(void *where) const final { CallConstructValueOn(*fSubfields[0], where); }
 
-   std::size_t AppendImpl(const void *from) final { return CallAppendOn(*fSubFields[0], from); }
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final { CallReadOn(*fSubFields[0], globalIndex, to); }
-   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final { CallReadOn(*fSubFields[0], localIndex, to); }
+   std::size_t AppendImpl(const void *from) final { return CallAppendOn(*fSubfields[0], from); }
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final { CallReadOn(*fSubfields[0], globalIndex, to); }
+   void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final { CallReadOn(*fSubfields[0], localIndex, to); }
 
 public:
    REnumField(std::string_view fieldName, std::string_view enumName);
@@ -248,8 +277,8 @@ public:
    ~REnumField() override = default;
 
    std::vector<RValue> SplitValue(const RValue &value) const final;
-   size_t GetValueSize() const final { return fSubFields[0]->GetValueSize(); }
-   size_t GetAlignment() const final { return fSubFields[0]->GetAlignment(); }
+   size_t GetValueSize() const final { return fSubfields[0]->GetValueSize(); }
+   size_t GetAlignment() const final { return fSubfields[0]->GetAlignment(); }
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
 };
 
@@ -286,18 +315,18 @@ class RCardinalityField : public RFieldBase {
    friend class RNTupleCollectionView; // to access GetCollectionInfo()
 
 private:
-   void GetCollectionInfo(NTupleSize_t globalIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size)
+   void GetCollectionInfo(ROOT::NTupleSize_t globalIndex, RNTupleLocalIndex *collectionStart, ROOT::NTupleSize_t *size)
    {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(RNTupleLocalIndex localIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size)
+   void GetCollectionInfo(RNTupleLocalIndex localIndex, RNTupleLocalIndex *collectionStart, ROOT::NTupleSize_t *size)
    {
       fPrincipalColumn->GetCollectionInfo(localIndex, collectionStart, size);
    }
 
 protected:
    RCardinalityField(std::string_view fieldName, std::string_view typeName)
-      : RFieldBase(fieldName, typeName, ENTupleStructure::kLeaf, false /* isSimple */)
+      : RFieldBase(fieldName, typeName, ROOT::ENTupleStructure::kLeaf, false /* isSimple */)
    {
    }
 
@@ -327,7 +356,7 @@ protected:
 
 public:
    RSimpleField(std::string_view name, std::string_view type)
-      : RFieldBase(name, type, ENTupleStructure::kLeaf, true /* isSimple */)
+      : RFieldBase(name, type, ROOT::ENTupleStructure::kLeaf, true /* isSimple */)
    {
       fTraits |= kTraitTrivialType;
    }
@@ -335,10 +364,16 @@ public:
    RSimpleField &operator=(RSimpleField &&other) = default;
    ~RSimpleField() override = default;
 
-   T *Map(NTupleSize_t globalIndex) { return fPrincipalColumn->Map<T>(globalIndex); }
+   T *Map(ROOT::NTupleSize_t globalIndex) { return fPrincipalColumn->Map<T>(globalIndex); }
    T *Map(RNTupleLocalIndex localIndex) { return fPrincipalColumn->Map<T>(localIndex); }
-   T *MapV(NTupleSize_t globalIndex, NTupleSize_t &nItems) { return fPrincipalColumn->MapV<T>(globalIndex, nItems); }
-   T *MapV(RNTupleLocalIndex localIndex, NTupleSize_t &nItems) { return fPrincipalColumn->MapV<T>(localIndex, nItems); }
+   T *MapV(ROOT::NTupleSize_t globalIndex, ROOT::NTupleSize_t &nItems)
+   {
+      return fPrincipalColumn->MapV<T>(globalIndex, nItems);
+   }
+   T *MapV(RNTupleLocalIndex localIndex, ROOT::NTupleSize_t &nItems)
+   {
+      return fPrincipalColumn->MapV<T>(localIndex, nItems);
+   }
 
    size_t GetValueSize() const final { return sizeof(T); }
    size_t GetAlignment() const final { return alignof(T); }
@@ -370,10 +405,10 @@ protected:
    void ConstructValue(void *where) const final { new (where) RNTupleCardinality<SizeT>(0); }
 
    /// Get the number of elements of the collection identified by globalIndex
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final
    {
       RNTupleLocalIndex collectionStart;
-      NTupleSize_t size;
+      ROOT::NTupleSize_t size;
       fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &size);
       *static_cast<RNTupleCardinality<SizeT> *>(to) = size;
    }
@@ -382,7 +417,7 @@ protected:
    void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final
    {
       RNTupleLocalIndex collectionStart;
-      NTupleSize_t size;
+      ROOT::NTupleSize_t size;
       fPrincipalColumn->GetCollectionInfo(localIndex, &collectionStart, &size);
       *static_cast<RNTupleCardinality<SizeT> *>(to) = size;
    }
@@ -390,17 +425,17 @@ protected:
    std::size_t ReadBulkImpl(const RBulkSpec &bulkSpec) final
    {
       RNTupleLocalIndex collectionStart;
-      NTupleSize_t collectionSize;
+      ROOT::NTupleSize_t collectionSize;
       fPrincipalColumn->GetCollectionInfo(bulkSpec.fFirstIndex, &collectionStart, &collectionSize);
 
       auto typedValues = static_cast<RNTupleCardinality<SizeT> *>(bulkSpec.fValues);
       typedValues[0] = collectionSize;
 
       auto lastOffset = collectionStart.GetIndexInCluster() + collectionSize;
-      NTupleSize_t nRemainingEntries = bulkSpec.fCount - 1;
+      ROOT::NTupleSize_t nRemainingEntries = bulkSpec.fCount - 1;
       std::size_t nEntries = 1;
       while (nRemainingEntries > 0) {
-         NTupleSize_t nItemsUntilPageEnd;
+         ROOT::NTupleSize_t nItemsUntilPageEnd;
          auto offsets =
             fPrincipalColumn->MapV<Internal::RColumnIndex>(bulkSpec.fFirstIndex + nEntries, nItemsUntilPageEnd);
          std::size_t nBatch = std::min(nRemainingEntries, nItemsUntilPageEnd);
@@ -442,9 +477,9 @@ protected:
    std::unique_ptr<RDeleter> GetDeleter() const final { return std::make_unique<RTypedDeleter<TObject>>(); }
 
    std::size_t AppendImpl(const void *from) final;
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
 
-   void OnConnectPageSource() final;
+   void AfterConnectPageSource() final;
 
 public:
    static std::string TypeName() { return "TObject"; }

@@ -97,9 +97,8 @@ void RooSimultaneous::InitializationOutput::addPdf(const RooAbsPdf &pdf, std::st
    finalCatLabels.emplace_back(catLabel);
 }
 
-using std::string, std::endl;
+using std::string;
 
-ClassImp(RooSimultaneous);
 
 
 
@@ -608,7 +607,7 @@ RooPlot* RooSimultaneous::plotOn(RooPlot *frame, RooLinkedList& cmdList) const
     return frame ;
   }
 
-  const RooAbsData* projData = static_cast<const RooAbsData*>(pc.getObject("projData")) ;
+  RooAbsData* projData = static_cast<RooAbsData*>(pc.getObject("projData")) ;
   const RooArgSet* projDataSet = pc.getSet("projDataSet");
   const RooArgSet* sliceSetTmp = pc.getSet("sliceSet") ;
   std::unique_ptr<RooArgSet> sliceSet( sliceSetTmp ? (static_cast<RooArgSet*>(sliceSetTmp->Clone())) : nullptr );
@@ -749,29 +748,21 @@ RooPlot* RooSimultaneous::plotOn(RooPlot *frame, RooLinkedList& cmdList) const
     // Construct cut string to only select projection data event that match the current slice
 
     // Make cut string to exclude rows from projection data
-    TString cutString ;
-    bool first(true) ;
-    for (const auto arg : *idxCompSliceSet) {
-      auto idxComp = static_cast<RooCategory*>(arg);
-      RooAbsArg* slicedComponent = nullptr;
-      if (sliceSet && (slicedComponent = sliceSet->find(*idxComp)) != nullptr) {
-        auto theCat = static_cast<const RooAbsCategory*>(slicedComponent);
-        idxComp->setIndex(theCat->getCurrentIndex(), false);
+    if (sliceSet) {
+      for (auto *idxComp : static_range_cast<RooCategory *>(*idxCompSliceSet)) {
+        if (auto* slicedComponent = static_cast<const RooAbsCategory*>(sliceSet->find(*idxComp))) {
+          idxComp->setIndex(slicedComponent->getCurrentIndex(), false);
+        }
       }
-
-      if (!first) {
-        cutString.Append("&&") ;
-      } else {
-        first=false ;
-      }
-      cutString.Append(Form("%s==%d",idxComp->GetName(),idxComp->getCurrentIndex())) ;
     }
+    std::string cutString = RooFit::Detail::makeSliceCutString(*idxCompSliceSet);
 
     // Make temporary projData without RooSim index category components
     RooArgSet projDataVars(*projData->get()) ;
     projDataVars.remove(*idxCompSliceSet,true,true) ;
 
-    std::unique_ptr<RooAbsData> projDataTmp( const_cast<RooAbsData*>(projData)->reduce(projDataVars,cutString) );
+    std::unique_ptr<RooAbsData>
+       projDataTmp(projData->reduce(RooFit::SelectVars(projDataVars), RooFit::Cut(cutString.c_str())));
 
     // Override normalization and projection dataset
     RooCmdArg tmp1 = RooFit::Normalization(scaleFactor*wTable->getFrac(idxCatClone->getCurrentLabel()),stype) ;
@@ -837,19 +828,7 @@ RooPlot* RooSimultaneous::plotOn(RooPlot *frame, RooLinkedList& cmdList) const
   if (projData) {
 
     // Construct cut string to only select projection data event that match the current slice
-    TString cutString ;
-    if (!idxCompSliceSet->empty()) {
-      bool first(true) ;
-      for (const auto idxSliceCompArg : *idxCompSliceSet) {
-        const auto idxSliceComp = static_cast<RooAbsCategory*>(idxSliceCompArg);
-        if (!first) {
-          cutString.Append("&&") ;
-        } else {
-          first=false ;
-        }
-        cutString.Append(Form("%s==%d",idxSliceComp->GetName(),idxSliceComp->getCurrentIndex())) ;
-      }
-    }
+    std::string cutString = RooFit::Detail::makeSliceCutString(*idxCompSliceSet);
 
     // Make temporary projData without RooSim index category components
     RooArgSet projDataVars(*projData->get()) ;
@@ -858,11 +837,7 @@ RooPlot* RooSimultaneous::plotOn(RooPlot *frame, RooLinkedList& cmdList) const
 
     projDataVars.remove(idxCatServers,true,true) ;
 
-    if (!idxCompSliceSet->empty()) {
-      projDataTmp = std::unique_ptr<RooAbsData>{const_cast<RooAbsData*>(projData)->reduce(projDataVars,cutString)};
-    } else {
-      projDataTmp = std::unique_ptr<RooAbsData>{const_cast<RooAbsData*>(projData)->reduce(projDataVars)};
-    }
+    projDataTmp = std::unique_ptr<RooAbsData>{projData->reduce(RooFit::SelectVars(projDataVars), RooFit::Cut(cutString.c_str()))};
 
 
 
@@ -976,16 +951,24 @@ RooAbsGenContext* RooSimultaneous::genContext(const RooArgSet &vars, const RooDa
   RooArgSet catsAmongAllVars;
   allVars.selectCommon(flattenedCatList(), catsAmongAllVars);
 
-  // Not generating index cat: return context for pdf associated with present index state
+  // Not generating index cat: we better error out because it's not clear what
+  // the user expects here. Does the user want to generate according to the
+  // currently-selected pdf? Or does the user want to generate global
+  // observable values according to the union of all category pdfs?
+  // Print an error and tell the user what to do to explicitly.
   if(catsAmongAllVars.empty()) {
-    auto* proxy = static_cast<RooRealProxy*>(_pdfProxyList.FindObject(_indexCat->getCurrentLabel()));
-    if (!proxy) {
-      coutE(InputArguments) << "RooSimultaneous::genContext(" << GetName()
-             << ") ERROR: no PDF associated with current state ("
-             << _indexCat.arg().GetName() << "=" << _indexCat.arg().getCurrentLabel() << ")" << std::endl ;
-      return nullptr;
-    }
-    return static_cast<RooAbsPdf*>(proxy->absArg())->genContext(vars,prototype,auxProto,verbose) ;
+    coutE(InputArguments) << "RooSimultaneous::generateSimGlobal(" << GetName()
+           << ") asking to generate without the index category!\n"
+           << "It's not clear what to do. you probably want to either:\n"
+           << "\n"
+           << "    1. Generate according to the currently-selected pdf.\n"
+           << "       Please do this explicitly with:\n"
+           << "           simpdf->getPdf(simpdf->indexCat().getCurrentLabel())->generate(vars, ...)\n"
+           << "\n"
+           << "    1. Generate global observable values according to the union of all component pdfs.\n"
+           << "       For this, please use simpdf->generateSimGlobal(vars, ...)\n"
+           << std::endl;
+    return nullptr;
   }
 
   RooArgSet catsAmongProtoVars;
@@ -1032,10 +1015,30 @@ RooDataHist* RooSimultaneous::fillDataHist(RooDataHist *hist,
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Special generator interface for generation of 'global observables' -- for RooStats tools
+/// Special generator interface for generation of 'global observables' -- for RooStats tools.
+///
+/// \note Why one can't just use RooAbsPdf::generate()? That's because when
+/// using the regular generate() method, a specific component pdf is selected
+/// for each generated entry according to the index category value. However,
+/// global observable values are independent of the current index category,
+/// which can best be illustrated with the case where a global observable
+/// corresponds to a nuisance parameter that is relevant for multiple channels.
+/// So the interpretation of what is an entry in the generated dataset is very
+/// different, hence the separate function.
 
 RooFit::OwningPtr<RooDataSet> RooSimultaneous::generateSimGlobal(const RooArgSet& whatVars, Int_t nEvents)
 {
+  // Generating the index category together with the global observables doesn't make any sense.
+  RooArgSet catsAmongAllVars;
+  whatVars.selectCommon(flattenedCatList(), catsAmongAllVars);
+  if(!catsAmongAllVars.empty()) {
+    coutE(InputArguments) << "RooSimultaneous::generateSimGlobal(" << GetName()
+           << ") asking to generate global obserables at the same time as the index category!\n"
+           << "This doesn't make any sense: global observables are generally not related to a specific channel.\n"
+           << std::endl;
+    return nullptr;
+  }
+
   // Make set with clone of variables (placeholder for output)
   RooArgSet globClone;
   whatVars.snapshot(globClone);

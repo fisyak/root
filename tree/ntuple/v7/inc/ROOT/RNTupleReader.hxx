@@ -92,32 +92,32 @@ private:
    std::optional<RNTupleDescriptor::RCreateModelOptions> fCreateModelOptions;
 
    RNTupleReader(std::unique_ptr<RNTupleModel> model, std::unique_ptr<Internal::RPageSource> source,
-                 const RNTupleReadOptions &options);
+                 const ROOT::RNTupleReadOptions &options);
    /// The model is generated from the ntuple metadata on storage.
-   explicit RNTupleReader(std::unique_ptr<Internal::RPageSource> source, const RNTupleReadOptions &options);
+   explicit RNTupleReader(std::unique_ptr<Internal::RPageSource> source, const ROOT::RNTupleReadOptions &options);
 
    void ConnectModel(RNTupleModel &model);
    RNTupleReader *GetDisplayReader();
    void InitPageSource(bool enableMetrics);
 
-   DescriptorId_t RetrieveFieldId(std::string_view fieldName) const;
+   ROOT::DescriptorId_t RetrieveFieldId(std::string_view fieldName) const;
 
 public:
    // Browse through the entries
    class RIterator {
    private:
-      NTupleSize_t fIndex = kInvalidNTupleIndex;
+      ROOT::NTupleSize_t fIndex = ROOT::kInvalidNTupleIndex;
 
    public:
       using iterator = RIterator;
       using iterator_category = std::forward_iterator_tag;
-      using value_type = NTupleSize_t;
-      using difference_type = NTupleSize_t;
-      using pointer = NTupleSize_t *;
-      using reference = NTupleSize_t &;
+      using value_type = ROOT::NTupleSize_t;
+      using difference_type = ROOT::NTupleSize_t;
+      using pointer = ROOT::NTupleSize_t *;
+      using reference = ROOT::NTupleSize_t &;
 
       RIterator() = default;
-      explicit RIterator(NTupleSize_t index) : fIndex(index) {}
+      explicit RIterator(ROOT::NTupleSize_t index) : fIndex(index) {}
       ~RIterator() = default;
 
       iterator operator++(int) /* postfix */
@@ -152,33 +152,33 @@ public:
    /// std::cout << "myNTuple has " << ntuple->GetNEntries() << " entries\n";
    /// ~~~
    static std::unique_ptr<RNTupleReader> Open(std::string_view ntupleName, std::string_view storage,
-                                              const RNTupleReadOptions &options = RNTupleReadOptions());
+                                              const ROOT::RNTupleReadOptions &options = ROOT::RNTupleReadOptions());
    static std::unique_ptr<RNTupleReader>
-   Open(const RNTuple &ntuple, const RNTupleReadOptions &options = RNTupleReadOptions());
+   Open(const RNTuple &ntuple, const ROOT::RNTupleReadOptions &options = ROOT::RNTupleReadOptions());
 
    /// The caller imposes a model, which must be compatible with the model found in the data on storage.
    static std::unique_ptr<RNTupleReader> Open(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
                                               std::string_view storage,
-                                              const RNTupleReadOptions &options = RNTupleReadOptions());
+                                              const ROOT::RNTupleReadOptions &options = ROOT::RNTupleReadOptions());
    static std::unique_ptr<RNTupleReader> Open(std::unique_ptr<RNTupleModel> model, const RNTuple &ntuple,
-                                              const RNTupleReadOptions &options = RNTupleReadOptions());
+                                              const ROOT::RNTupleReadOptions &options = ROOT::RNTupleReadOptions());
 
    /// The caller imposes the way the model is reconstructed
    static std::unique_ptr<RNTupleReader> Open(const RNTupleDescriptor::RCreateModelOptions &createModelOpts,
                                               std::string_view ntupleName, std::string_view storage,
-                                              const RNTupleReadOptions &options = RNTupleReadOptions());
+                                              const ROOT::RNTupleReadOptions &options = ROOT::RNTupleReadOptions());
    static std::unique_ptr<RNTupleReader> Open(const RNTupleDescriptor::RCreateModelOptions &createModelOpts,
                                               const RNTuple &ntuple,
-                                              const RNTupleReadOptions &options = RNTupleReadOptions());
+                                              const ROOT::RNTupleReadOptions &options = ROOT::RNTupleReadOptions());
    std::unique_ptr<RNTupleReader> Clone()
    {
-      auto options = RNTupleReadOptions{};
-      options.SetMetricsEnabled(fMetrics.IsEnabled());
+      auto options = ROOT::RNTupleReadOptions{};
+      options.SetEnableMetrics(fMetrics.IsEnabled());
       return std::unique_ptr<RNTupleReader>(new RNTupleReader(fSource->Clone(), options));
    }
    ~RNTupleReader();
 
-   NTupleSize_t GetNEntries() const { return fSource->GetNEntries(); }
+   ROOT::NTupleSize_t GetNEntries() const { return fSource->GetNEntries(); }
    const RNTupleModel &GetModel();
    std::unique_ptr<REntry> CreateEntry();
 
@@ -219,11 +219,11 @@ public:
    /// Shows the values of the i-th entry/row, starting with 0 for the first entry. By default,
    /// prints the output in JSON format.
    /// Uses the visitor pattern to traverse through each field of the given entry.
-   void Show(NTupleSize_t index, std::ostream &output = std::cout);
+   void Show(ROOT::NTupleSize_t index, std::ostream &output = std::cout);
 
    /// Analogous to Fill(), fills the default entry of the model. Returns false at the end of the ntuple.
    /// On I/O errors, raises an exception.
-   void LoadEntry(NTupleSize_t index)
+   void LoadEntry(ROOT::NTupleSize_t index)
    {
       // TODO(jblomer): can be templated depending on the factory method / constructor
       if (R__unlikely(!fModel)) {
@@ -234,7 +234,13 @@ public:
       LoadEntry(index, fModel->GetDefaultEntry());
    }
    /// Fills a user provided entry after checking that the entry has been instantiated from the ntuple model
-   void LoadEntry(NTupleSize_t index, REntry &entry) { entry.Read(index); }
+   void LoadEntry(ROOT::NTupleSize_t index, REntry &entry)
+   {
+      if (R__unlikely(entry.GetModelId() != fModel->GetModelId()))
+         throw RException(R__FAIL("mismatch between entry and model"));
+
+      entry.Read(index);
+   }
 
    /// Returns an iterator over the entry indices of the RNTuple.
    ///
@@ -251,11 +257,11 @@ public:
    ///    ntuple->Show(i);
    /// }
    /// ~~~
-   RNTupleGlobalRange GetEntryRange() { return RNTupleGlobalRange(0, GetNEntries()); }
+   ROOT::RNTupleGlobalRange GetEntryRange() { return ROOT::RNTupleGlobalRange(0, GetNEntries()); }
 
    /// Provides access to an individual field that can contain either a scalar value or a collection, e.g.
    /// GetView<double>("particles.pt") or GetView<std::vector<double>>("particle").  It can as well be the index
-   /// field of a collection itself, like GetView<NTupleSize_t>("particle").
+   /// field of a collection itself, like GetView<ROOT::NTupleSize_t>("particle").
    ///
    /// Raises an exception if there is no field with the given name.
    ///
@@ -292,7 +298,7 @@ public:
    }
 
    template <typename T>
-   RNTupleView<T> GetView(DescriptorId_t fieldId)
+   RNTupleView<T> GetView(ROOT::DescriptorId_t fieldId)
    {
       auto field = RNTupleView<T>::CreateField(fieldId, *fSource);
       auto range = Internal::GetFieldRange(*field, *fSource);
@@ -300,7 +306,7 @@ public:
    }
 
    template <typename T>
-   RNTupleView<T> GetView(DescriptorId_t fieldId, std::shared_ptr<T> objPtr)
+   RNTupleView<T> GetView(ROOT::DescriptorId_t fieldId, std::shared_ptr<T> objPtr)
    {
       auto field = RNTupleView<T>::CreateField(fieldId, *fSource);
       auto range = Internal::GetFieldRange(*field, *fSource);
@@ -308,7 +314,7 @@ public:
    }
 
    template <typename T>
-   RNTupleView<T> GetView(DescriptorId_t fieldId, T *rawPtr)
+   RNTupleView<T> GetView(ROOT::DescriptorId_t fieldId, T *rawPtr)
    {
       auto field = RNTupleView<T>::CreateField(fieldId, *fSource);
       auto range = Internal::GetFieldRange(*field, *fSource);
@@ -322,7 +328,7 @@ public:
    }
 
    template <typename T>
-   RNTupleDirectAccessView<T> GetDirectAccessView(DescriptorId_t fieldId)
+   RNTupleDirectAccessView<T> GetDirectAccessView(ROOT::DescriptorId_t fieldId)
    {
       auto field = RNTupleDirectAccessView<T>::CreateField(fieldId, *fSource);
       auto range = Internal::GetFieldRange(field, *fSource);
@@ -335,14 +341,14 @@ public:
    RNTupleCollectionView GetCollectionView(std::string_view fieldName)
    {
       auto fieldId = fSource->GetSharedDescriptorGuard()->FindFieldId(fieldName);
-      if (fieldId == kInvalidDescriptorId) {
+      if (fieldId == ROOT::kInvalidDescriptorId) {
          throw RException(R__FAIL("no field named '" + std::string(fieldName) + "' in RNTuple '" +
                                   fSource->GetSharedDescriptorGuard()->GetName() + "'"));
       }
       return GetCollectionView(fieldId);
    }
 
-   RNTupleCollectionView GetCollectionView(DescriptorId_t fieldId)
+   RNTupleCollectionView GetCollectionView(ROOT::DescriptorId_t fieldId)
    {
       return RNTupleCollectionView::Create(fieldId, fSource.get());
    }

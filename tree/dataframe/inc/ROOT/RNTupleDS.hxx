@@ -17,7 +17,6 @@
 #ifndef ROOT_RNTupleDS
 #define ROOT_RNTupleDS
 
-#include <ROOT/RDataFrame.hxx>
 #include <ROOT/RDataSource.hxx>
 #include <ROOT/RNTupleUtil.hxx>
 #include <ROOT/RNTupleDescriptor.hxx>
@@ -86,17 +85,22 @@ class RNTupleDS final : public ROOT::RDF::RDataSource {
    /// Only the clone connects to the backing page store and acquires I/O resources.
    /// The field IDs are set in the context of the first source and used as keys in fFieldId2QualifiedName.
    std::vector<std::unique_ptr<ROOT::Experimental::RFieldBase>> fProtoFields;
+   /// Columns may be requested with types other than with which they were initially added as proto fields. For example,
+   /// a column with a `ROOT::RVec<float>` proto field may instead be requested as a `std::vector<float>`. In case this
+   /// happens, we create an alternative proto field and store it here, with the original index in `fProtoFields` as
+   /// key. A single column can have more than one alternative proto fields.
+   std::unordered_map<std::size_t, std::vector<std::unique_ptr<ROOT::Experimental::RFieldBase>>>
+      fAlternativeProtoFields;
    /// Connects the IDs of active proto fields and their subfields to their fully qualified name (a.b.c.d).
    /// This enables the column reader to rewire the field IDs when the file changes (chain),
    /// using the fully qualified name as a search key in the descriptor of the other page sources.
-   std::unordered_map<ROOT::Experimental::DescriptorId_t, std::string> fFieldId2QualifiedName;
+   std::unordered_map<ROOT::DescriptorId_t, std::string> fFieldId2QualifiedName;
    std::vector<std::string> fColumnNames;
    std::vector<std::string> fColumnTypes;
    /// List of column readers returned by GetColumnReaders() organized by slot. Used to reconnect readers
    /// to new page sources when the files in the chain change.
    std::vector<std::vector<Internal::RNTupleColumnReader *>> fActiveColumnReaders;
 
-   unsigned int fNSlots = 0;
    ULong64_t fSeenEntries = 0;                ///< The number of entries so far returned by GetEntryRanges()
    std::vector<REntryRangeDS> fCurrentRanges; ///< Basis for the ranges returned by the last GetEntryRanges() call
    std::vector<REntryRangeDS> fNextRanges;    ///< Basis for the ranges populated by the PrepareNextRanges() call
@@ -120,23 +124,34 @@ class RNTupleDS final : public ROOT::RDF::RDataSource {
 
    /// \brief Holds useful information about fields added to the RNTupleDS
    struct RFieldInfo {
-      DescriptorId_t fFieldId;
+      ROOT::DescriptorId_t fFieldId;
       std::size_t fNRepetitions;
       // Enable `std::vector::emplace_back` for this type
-      RFieldInfo(DescriptorId_t fieldId, std::size_t nRepetitions) : fFieldId(fieldId), fNRepetitions(nRepetitions) {}
+      RFieldInfo(ROOT::DescriptorId_t fieldId, std::size_t nRepetitions)
+         : fFieldId(fieldId), fNRepetitions(nRepetitions)
+      {
+      }
    };
 
    /// Provides the RDF column "colName" given the field identified by fieldID. For records and collections,
    /// AddField recurses into the sub fields. The fieldInfos argument is a list of objects holding info
    /// about the fields of the outer collection(s) (w.r.t. fieldId). For instance, if fieldId refers to an
    /// `std::vector<Jet>`, with
+   /// ~~~{.cpp}
    /// struct Jet {
    ///    float pt;
    ///    float eta;
    /// };
-   /// AddField will recurse into Jet.pt and Jet.eta and provide the two inner fields as std::vector<float> each.
-   void AddField(const RNTupleDescriptor &desc, std::string_view colName, DescriptorId_t fieldId,
-                 std::vector<RFieldInfo> fieldInfos);
+   /// ~~~
+   /// AddField will recurse into `Jet.pt` and `Jet.eta` and provide the two inner fields as `ROOT::VecOps::RVec<float>`
+   /// each.
+   ///
+   /// In case the field is a collection of type `ROOT::VecOps::RVec`, `std::vector` or `std::array`, its corresponding
+   /// column is added as a `ROOT::VecOps::RVec`. Otherwise, the collection field's on-disk type is used. Note, however,
+   /// that inner record members of such collections will still be added as `ROOT::VecOps::RVec` (e.g., `std::set<Jet>
+   /// will be added as a `std::set`, but `Jet.[pt|eta] will be added as `ROOT::VecOps::RVec<float>).
+   void AddField(const RNTupleDescriptor &desc, std::string_view colName, ROOT::DescriptorId_t fieldId,
+                 std::vector<RFieldInfo> fieldInfos, bool convertToRVec = true);
 
    /// The main function of the fThreadStaging background thread
    void ExecStaging();
@@ -187,13 +202,14 @@ protected:
 
 } // namespace Experimental
 
+class RDataFrame;
+
 namespace RDF {
 namespace Experimental {
 RDataFrame FromRNTuple(std::string_view ntupleName, std::string_view fileName);
 RDataFrame FromRNTuple(std::string_view ntupleName, const std::vector<std::string> &fileNames);
 } // namespace Experimental
 } // namespace RDF
-
-} // ns ROOT
+} // namespace ROOT
 
 #endif

@@ -25,15 +25,17 @@
 
 #include <memory>
 #include <optional>
-#include <string>
-#include <vector>
-#include <unordered_map>
 
-namespace ROOT::Experimental::Internal {
+namespace ROOT {
+
+class RNTuple;
+
+namespace Experimental::Internal {
 
 enum class ENTupleMergingMode {
    /// The merger will discard all columns that aren't present in the prototype model (i.e. the model of the first
-   /// source)
+   /// source); also all subsequent RNTuples must contain at least all the columns that are present in the prototype
+   /// model
    kFilter,
    /// The merger will refuse to merge any 2 RNTuples whose schema doesn't match exactly
    kStrict,
@@ -62,7 +64,7 @@ class RClusterPool;
 ///   - "rntuple.ErrBehavior=(Abort|Skip|...)"   -> sets fErrBehavior
 ///   - "rntuple.ExtraVerbose"                   -> sets fExtraVerbose to true
 /// Rules about the string-based options:
-///   1. there must be no space between the separators (i.e. `:` and `=`)
+///   1. there must be no space between the separators (i.e. `.` and `=`)
 ///   2. all string matching is case insensitive
 struct RNTupleMergeOptions {
    /// If fCompressionSettings is empty (the default), the merger will not change the
@@ -81,31 +83,43 @@ struct RNTupleMergeOptions {
 /**
  * \class ROOT::Experimental::Internal::RNTupleMerger
  * \ingroup NTuple
- * \brief Given a set of RPageSources merge them into an RPageSink, optionally changing their compression.
+ * \brief Given a set of RPageSources merge them into an RPagePersistentSink, optionally changing their compression.
  *        This can also be used to change the compression of a single RNTuple by just passing a single source.
  */
 // clang-format on
 class RNTupleMerger final {
-   std::unique_ptr<RPageSink> fDestination;
-   std::unique_ptr<RPageAllocator> fPageAlloc;
-   std::optional<TTaskGroup> fTaskGroup;
+   friend class ROOT::RNTuple;
 
-   void MergeCommonColumns(RClusterPool &clusterPool, DescriptorId_t clusterId,
-                           std::span<RColumnMergeInfo> commonColumns, const RCluster::ColumnSet_t &commonColumnSet,
+   std::unique_ptr<RPagePersistentSink> fDestination;
+   std::unique_ptr<ROOT::Internal::RPageAllocator> fPageAlloc;
+   std::optional<TTaskGroup> fTaskGroup;
+   std::unique_ptr<RNTupleModel> fModel;
+
+   void MergeCommonColumns(RClusterPool &clusterPool, const RClusterDescriptor &clusterDesc,
+                           std::span<const RColumnMergeInfo> commonColumns,
+                           const RCluster::ColumnSet_t &commonColumnSet, std::size_t nCommonColumnsInCluster,
                            RSealedPageMergeData &sealedPageData, const RNTupleMergeData &mergeData);
 
-   void MergeSourceClusters(RPageSource &source, std::span<RColumnMergeInfo> commonColumns,
-                            std::span<RColumnMergeInfo> extraDstColumns, RNTupleMergeData &mergeData);
+   void MergeSourceClusters(RPageSource &source, std::span<const RColumnMergeInfo> commonColumns,
+                            std::span<const RColumnMergeInfo> extraDstColumns, RNTupleMergeData &mergeData);
+
+   /// Creates a RNTupleMerger with the given destination.
+   /// The model must be given if and only if `destination` has been initialized with that model
+   /// (i.e. in case of incremental merging).
+   RNTupleMerger(std::unique_ptr<RPagePersistentSink> destination, std::unique_ptr<RNTupleModel> model);
 
 public:
    /// Creates a RNTupleMerger with the given destination.
-   explicit RNTupleMerger(std::unique_ptr<RPageSink> destination);
+   explicit RNTupleMerger(std::unique_ptr<RPagePersistentSink> destination);
 
    /// Merge a given set of sources into the destination.
+   /// Note that sources with an empty schema (i.e. created from a Model that had no fields added to it) are in
+   /// general valid (depending on the merging mode) but add no entries to the destination.
    RResult<void> Merge(std::span<RPageSource *> sources, const RNTupleMergeOptions &mergeOpts = RNTupleMergeOptions());
 
 }; // end of class RNTupleMerger
 
-} // namespace ROOT::Experimental::Internal
+} // namespace Experimental::Internal
+} // namespace ROOT
 
 #endif

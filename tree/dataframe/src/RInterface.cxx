@@ -50,9 +50,14 @@ std::string ROOT::Internal::RDF::GetDataSourceLabel(const ROOT::RDF::RNode &node
 {
    if (node.fLoopManager->GetTree()) {
       return "TTreeDS";
-   } else if (node.fDataSource) {
-      return node.fDataSource->GetLabel();
+   } else if (node.GetDataSource()) {
+      return node.GetDataSource()->GetLabel();
    } else {
       return "EmptyDS";
    }
+}
+
+void ROOT::Internal::RDF::SetTTreeLifeline(ROOT::RDF::RNode &node, std::any lifeline)
+{
+   node.GetLoopManager()->SetTTreeLifeline(std::move(lifeline));
 }

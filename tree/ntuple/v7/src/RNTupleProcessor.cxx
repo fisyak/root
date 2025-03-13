@@ -19,49 +19,109 @@
 
 namespace {
 using ROOT::Experimental::RNTupleOpenSpec;
-void EnsureUniqueNTupleNames(const std::vector<RNTupleOpenSpec> &ntuples)
+void EnsureUniqueNTupleNames(const RNTupleOpenSpec &primaryNTuple, const std::vector<RNTupleOpenSpec> &auxNTuples)
 {
-   std::unordered_set<std::string> uniqueNTupleNames;
-   for (const auto &ntuple : ntuples) {
+   std::unordered_set<std::string> uniqueNTupleNames{primaryNTuple.fNTupleName};
+   for (const auto &ntuple : auxNTuples) {
       auto res = uniqueNTupleNames.emplace(ntuple.fNTupleName);
       if (!res.second) {
-         throw ROOT::RException(R__FAIL("horizontal joining of RNTuples with the same name is not allowed"));
+         throw ROOT::RException(R__FAIL("joining RNTuples with the same name is not allowed"));
       }
    }
 }
 } // anonymous namespace
 
 std::unique_ptr<ROOT::Experimental::RNTupleProcessor>
-ROOT::Experimental::RNTupleProcessor::Create(const RNTupleOpenSpec &ntuple)
+ROOT::Experimental::RNTupleProcessor::Create(const RNTupleOpenSpec &ntuple, std::unique_ptr<RNTupleModel> model)
 {
-   auto pageSource = Internal::RPageSource::Create(ntuple.fNTupleName, ntuple.fStorage);
-   pageSource->Attach();
-   auto model = pageSource->GetSharedDescriptorGuard()->CreateModel();
-   return RNTupleProcessor::Create(ntuple, *model);
+   return Create(ntuple, ntuple.fNTupleName, std::move(model));
 }
 
 std::unique_ptr<ROOT::Experimental::RNTupleProcessor>
-ROOT::Experimental::RNTupleProcessor::Create(const RNTupleOpenSpec &ntuple, RNTupleModel &model)
+ROOT::Experimental::RNTupleProcessor::Create(const RNTupleOpenSpec &ntuple, std::string_view processorName,
+                                             std::unique_ptr<RNTupleModel> model)
 {
-   return std::unique_ptr<RNTupleSingleProcessor>(new RNTupleSingleProcessor(ntuple, model));
+   return std::unique_ptr<RNTupleSingleProcessor>(new RNTupleSingleProcessor(ntuple, processorName, std::move(model)));
 }
 
 std::unique_ptr<ROOT::Experimental::RNTupleProcessor>
 ROOT::Experimental::RNTupleProcessor::CreateChain(const std::vector<RNTupleOpenSpec> &ntuples,
                                                   std::unique_ptr<RNTupleModel> model)
 {
-   return std::unique_ptr<RNTupleChainProcessor>(new RNTupleChainProcessor(ntuples, std::move(model)));
+   if (ntuples.empty())
+      throw RException(R__FAIL("at least one RNTuple must be provided"));
+
+   return CreateChain(ntuples, ntuples[0].fNTupleName, std::move(model));
 }
 
 std::unique_ptr<ROOT::Experimental::RNTupleProcessor>
-ROOT::Experimental::RNTupleProcessor::CreateJoin(const std::vector<RNTupleOpenSpec> &ntuples,
+ROOT::Experimental::RNTupleProcessor::CreateChain(const std::vector<RNTupleOpenSpec> &ntuples,
+                                                  std::string_view processorName, std::unique_ptr<RNTupleModel> model)
+{
+   if (ntuples.empty())
+      throw RException(R__FAIL("at least one RNTuple must be provided"));
+
+   std::vector<std::unique_ptr<RNTupleProcessor>> innerProcessors;
+   innerProcessors.reserve(ntuples.size());
+
+   // If no model is provided, infer it from the first ntuple.
+   if (!model) {
+      auto firstPageSource = Internal::RPageSource::Create(ntuples[0].fNTupleName, ntuples[0].fStorage);
+      firstPageSource->Attach();
+      model = firstPageSource->GetSharedDescriptorGuard()->CreateModel();
+   }
+
+   for (const auto &ntuple : ntuples) {
+      innerProcessors.emplace_back(Create(ntuple, model->Clone()));
+   }
+
+   return CreateChain(std::move(innerProcessors), processorName, std::move(model));
+}
+
+std::unique_ptr<ROOT::Experimental::RNTupleProcessor>
+ROOT::Experimental::RNTupleProcessor::CreateChain(std::vector<std::unique_ptr<RNTupleProcessor>> innerProcessors,
+                                                  std::unique_ptr<RNTupleModel> model)
+{
+   if (innerProcessors.empty())
+      throw RException(R__FAIL("at least one inner processor must be provided"));
+
+   auto processorName = innerProcessors[0]->GetProcessorName();
+   return CreateChain(std::move(innerProcessors), processorName, std::move(model));
+}
+
+std::unique_ptr<ROOT::Experimental::RNTupleProcessor>
+ROOT::Experimental::RNTupleProcessor::CreateChain(std::vector<std::unique_ptr<RNTupleProcessor>> innerProcessors,
+                                                  std::string_view processorName, std::unique_ptr<RNTupleModel> model)
+{
+   if (innerProcessors.empty())
+      throw RException(R__FAIL("at least one inner processor must be provided"));
+
+   // If no model is provided, infer it from the first inner processor.
+   if (!model) {
+      model = innerProcessors[0]->GetModel().Clone();
+   }
+
+   return std::unique_ptr<RNTupleChainProcessor>(
+      new RNTupleChainProcessor(std::move(innerProcessors), processorName, std::move(model)));
+}
+
+std::unique_ptr<ROOT::Experimental::RNTupleProcessor>
+ROOT::Experimental::RNTupleProcessor::CreateJoin(const RNTupleOpenSpec &primaryNTuple,
+                                                 const std::vector<RNTupleOpenSpec> &auxNTuples,
                                                  const std::vector<std::string> &joinFields,
                                                  std::vector<std::unique_ptr<RNTupleModel>> models)
 {
-   if (ntuples.size() < 1)
-      throw RException(R__FAIL("at least one RNTuple must be provided"));
+   return CreateJoin(primaryNTuple, auxNTuples, joinFields, primaryNTuple.fNTupleName, std::move(models));
+}
 
-   if (models.size() > 0 && models.size() != ntuples.size()) {
+std::unique_ptr<ROOT::Experimental::RNTupleProcessor>
+ROOT::Experimental::RNTupleProcessor::CreateJoin(const RNTupleOpenSpec &primaryNTuple,
+                                                 const std::vector<RNTupleOpenSpec> &auxNTuples,
+                                                 const std::vector<std::string> &joinFields,
+                                                 std::string_view processorName,
+                                                 std::vector<std::unique_ptr<RNTupleModel>> models)
+{
+   if (!models.empty() && models.size() != (auxNTuples.size() + 1)) {
       throw RException(R__FAIL("number of provided models must match number of specified ntuples"));
    }
 
@@ -75,20 +135,15 @@ ROOT::Experimental::RNTupleProcessor::CreateJoin(const std::vector<RNTupleOpenSp
 
    // TODO(fdegeus) allow for the provision of aliases for ntuples with the same name, removing the constraint of
    // uniquely-named ntuples.
-   EnsureUniqueNTupleNames(ntuples);
+   EnsureUniqueNTupleNames(primaryNTuple, auxNTuples);
 
    std::unique_ptr<RNTupleJoinProcessor> processor;
-   if (models.size() > 0) {
-      processor = std::unique_ptr<RNTupleJoinProcessor>(new RNTupleJoinProcessor(ntuples[0], std::move(models[0])));
+   if (!models.empty()) {
+      processor = std::unique_ptr<RNTupleJoinProcessor>(
+         new RNTupleJoinProcessor(primaryNTuple, auxNTuples, joinFields, processorName, std::move(models)));
    } else {
-      processor = std::unique_ptr<RNTupleJoinProcessor>(new RNTupleJoinProcessor(ntuples[0]));
-   }
-
-   for (unsigned i = 1; i < ntuples.size(); ++i) {
-      if (models.size() > 0)
-         processor->AddAuxiliary(ntuples[i], joinFields, std::move(models[i]));
-      else
-         processor->AddAuxiliary(ntuples[i], joinFields);
+      processor = std::unique_ptr<RNTupleJoinProcessor>(
+         new RNTupleJoinProcessor(primaryNTuple, auxNTuples, joinFields, processorName));
    }
 
    processor->SetJoinFieldTokens(joinFields);
@@ -103,7 +158,7 @@ void ROOT::Experimental::RNTupleProcessor::ConnectField(RFieldContext &fieldCont
    auto desc = pageSource.GetSharedDescriptorGuard();
 
    const auto fieldId = desc->FindFieldId(fieldContext.GetProtoField().GetFieldName());
-   if (fieldId == kInvalidDescriptorId) {
+   if (fieldId == ROOT::kInvalidDescriptorId) {
       throw RException(
          R__FAIL("field \"" + fieldContext.GetProtoField().GetFieldName() + "\" not found in current RNTuple"));
    }
@@ -119,14 +174,19 @@ void ROOT::Experimental::RNTupleProcessor::ConnectField(RFieldContext &fieldCont
 
 //------------------------------------------------------------------------------
 
-ROOT::Experimental::RNTupleSingleProcessor::RNTupleSingleProcessor(const RNTupleOpenSpec &ntuple, RNTupleModel &model)
-   : RNTupleProcessor({ntuple})
+ROOT::Experimental::RNTupleSingleProcessor::RNTupleSingleProcessor(const RNTupleOpenSpec &ntuple,
+                                                                   std::string_view processorName,
+                                                                   std::unique_ptr<RNTupleModel> model)
+   : RNTupleProcessor(processorName, std::move(model)), fNTupleSpec(ntuple)
 {
-   fPageSource = Internal::RPageSource::Create(ntuple.fNTupleName, ntuple.fStorage);
-   fPageSource->Attach();
+   if (!fModel) {
+      fPageSource = Internal::RPageSource::Create(fNTupleSpec.fNTupleName, fNTupleSpec.fStorage);
+      fPageSource->Attach();
+      fModel = fPageSource->GetSharedDescriptorGuard()->CreateModel();
+   }
 
-   model.Freeze();
-   fEntry = model.CreateEntry();
+   fModel->Freeze();
+   fEntry = fModel->CreateEntry();
 
    for (const auto &value : *fEntry) {
       auto &field = value.GetField();
@@ -135,116 +195,154 @@ ROOT::Experimental::RNTupleSingleProcessor::RNTupleSingleProcessor(const RNTuple
       // If the model has a default entry, use the value pointers from the entry in the entry managed by the
       // processor. This way, the pointers returned by RNTupleModel::MakeField can be used in the processor loop to
       // access the corresponding field values.
-      if (!model.IsBare()) {
-         auto valuePtr = model.GetDefaultEntry().GetPtr<void>(token);
+      if (!fModel->IsBare()) {
+         auto valuePtr = fModel->GetDefaultEntry().GetPtr<void>(token);
          fEntry->BindValue(token, valuePtr);
       }
 
       auto fieldContext = RFieldContext(field.Clone(field.GetFieldName()), token);
-      ConnectField(fieldContext, *fPageSource, *fEntry);
       fFieldContexts.try_emplace(field.GetFieldName(), std::move(fieldContext));
    }
 }
 
-ROOT::Experimental::NTupleSize_t ROOT::Experimental::RNTupleSingleProcessor::Advance()
+ROOT::NTupleSize_t ROOT::Experimental::RNTupleSingleProcessor::LoadEntry(ROOT::NTupleSize_t entryNumber)
 {
-   if (fLocalEntryNumber == kInvalidNTupleIndex || fLocalEntryNumber >= fPageSource->GetNEntries()) {
-      return kInvalidNTupleIndex;
-   }
+   Connect();
 
-   LoadEntry();
+   if (entryNumber >= fNEntries)
+      return kInvalidNTupleIndex;
+
+   fEntry->Read(entryNumber);
 
    fNEntriesProcessed++;
-   return fLocalEntryNumber;
+   fCurrentEntryNumber = entryNumber;
+   return entryNumber;
+}
+
+void ROOT::Experimental::RNTupleSingleProcessor::SetEntryPointers(const REntry &entry)
+{
+   for (const auto &value : *fEntry) {
+      auto &field = value.GetField();
+      auto valuePtr = entry.GetPtr<void>(field.GetQualifiedFieldName());
+
+      fEntry->BindValue(field.GetQualifiedFieldName(), valuePtr);
+   }
+}
+
+void ROOT::Experimental::RNTupleSingleProcessor::Connect()
+{
+   // The processor has already been connected.
+   if (fNEntries != kInvalidNTupleIndex)
+      return;
+
+   if (!fPageSource)
+      fPageSource = Internal::RPageSource::Create(fNTupleSpec.fNTupleName, fNTupleSpec.fStorage);
+   fPageSource->Attach();
+   fNEntries = fPageSource->GetNEntries();
+
+   for (auto &[_, fieldContext] : fFieldContexts) {
+      ConnectField(fieldContext, *fPageSource, *fEntry);
+   }
 }
 
 //------------------------------------------------------------------------------
 
-ROOT::Experimental::RNTupleChainProcessor::RNTupleChainProcessor(const std::vector<RNTupleOpenSpec> &ntuples,
-                                                                 std::unique_ptr<RNTupleModel> model)
-   : RNTupleProcessor(ntuples)
+ROOT::Experimental::RNTupleChainProcessor::RNTupleChainProcessor(
+   std::vector<std::unique_ptr<RNTupleProcessor>> processors, std::string_view processorName,
+   std::unique_ptr<RNTupleModel> model)
+   : RNTupleProcessor(processorName, std::move(model)), fInnerProcessors(std::move(processors))
 {
-   if (fNTuples.empty())
-      throw RException(R__FAIL("at least one RNTuple must be provided"));
+   fInnerNEntries.assign(fInnerProcessors.size(), kInvalidNTupleIndex);
 
-   fPageSource = Internal::RPageSource::Create(fNTuples[0].fNTupleName, fNTuples[0].fStorage);
-   fPageSource->Attach();
-
-   if (fPageSource->GetNEntries() == 0) {
-      throw RException(R__FAIL("first RNTuple does not contain any entries"));
-   }
-
-   if (!model)
-      model = fPageSource->GetSharedDescriptorGuard()->CreateModel();
-
-   model->Freeze();
-   fEntry = model->CreateEntry();
+   fModel->Freeze();
+   fEntry = fModel->CreateEntry();
 
    for (const auto &value : *fEntry) {
       auto &field = value.GetField();
-      auto token = fEntry->GetToken(field.GetFieldName());
+      auto token = fEntry->GetToken(field.GetQualifiedFieldName());
 
       // If the model has a default entry, use the value pointers from the entry in the entry managed by the
       // processor. This way, the pointers returned by RNTupleModel::MakeField can be used in the processor loop to
       // access the corresponding field values.
-      if (!model->IsBare()) {
-         auto valuePtr = model->GetDefaultEntry().GetPtr<void>(token);
+      if (!fModel->IsBare()) {
+         auto valuePtr = fModel->GetDefaultEntry().GetPtr<void>(token);
          fEntry->BindValue(token, valuePtr);
       }
+   }
 
-      const auto &[fieldContext, _] =
-         fFieldContexts.try_emplace(field.GetFieldName(), field.Clone(field.GetFieldName()), token);
-      ConnectField(fieldContext->second, *fPageSource, *fEntry);
+   for (auto &innerProc : fInnerProcessors) {
+      innerProc->SetEntryPointers(*fEntry);
    }
 }
 
-ROOT::Experimental::NTupleSize_t ROOT::Experimental::RNTupleChainProcessor::ConnectNTuple(const RNTupleOpenSpec &ntuple)
+ROOT::NTupleSize_t ROOT::Experimental::RNTupleChainProcessor::GetNEntries()
 {
-   // Before destroying the current page source and replacing it by the new one, we need to reset the concrete fields
-   // belonging to the current page source. Otherwise, these concrete fields become invalid.
-   for (auto &[_, fieldContext] : fFieldContexts) {
-      fieldContext.ResetConcreteField();
-   }
-   // Replace the current page source with a new one, belonging to the provided ntuple.
-   fPageSource = Internal::RPageSource::Create(ntuple.fNTupleName, ntuple.fStorage);
-   fPageSource->Attach();
+   if (fNEntries == kInvalidNTupleIndex) {
+      fNEntries = 0;
 
-   // Now that the new page source has been created and attached, we can create and connect the concrete fields again.
-   for (auto &[_, fieldContext] : fFieldContexts) {
-      ConnectField(fieldContext, *fPageSource, *fEntry);
-   }
-
-   return fPageSource->GetNEntries();
-}
-
-ROOT::Experimental::NTupleSize_t ROOT::Experimental::RNTupleChainProcessor::Advance()
-{
-   if (fLocalEntryNumber == kInvalidNTupleIndex)
-      return kInvalidNTupleIndex;
-
-   if (fLocalEntryNumber >= fPageSource->GetNEntries()) {
-      do {
-         if (++fCurrentNTupleNumber >= fNTuples.size()) {
-            return kInvalidNTupleIndex;
+      for (unsigned i = 0; i < fInnerProcessors.size(); ++i) {
+         if (fInnerNEntries[i] == kInvalidNTupleIndex) {
+            fInnerNEntries[i] = fInnerProcessors[i]->GetNEntries();
          }
-         // Skip over empty ntuples we might encounter.
-      } while (ConnectNTuple(fNTuples.at(fCurrentNTupleNumber)) == 0);
 
-      fLocalEntryNumber = 0;
+         fNEntries += fInnerNEntries[i];
+      }
    }
 
-   LoadEntry();
+   return fNEntries;
+}
+
+void ROOT::Experimental::RNTupleChainProcessor::SetEntryPointers(const REntry &entry)
+{
+   for (const auto &value : *fEntry) {
+      auto &field = value.GetField();
+      auto valuePtr = entry.GetPtr<void>(field.GetQualifiedFieldName());
+
+      fEntry->BindValue(field.GetQualifiedFieldName(), valuePtr);
+   }
+
+   for (auto &innerProc : fInnerProcessors) {
+      innerProc->SetEntryPointers(*fEntry);
+   }
+}
+
+ROOT::NTupleSize_t ROOT::Experimental::RNTupleChainProcessor::LoadEntry(ROOT::NTupleSize_t entryNumber)
+{
+   ROOT::NTupleSize_t localEntryNumber = entryNumber;
+   size_t currProcessor = 0;
+
+   // As long as the entry fails to load from the current processor, we decrement the local entry number with the number
+   // of entries in this processor and try with the next processor until we find the correct local entry number.
+   while (fInnerProcessors[currProcessor]->LoadEntry(localEntryNumber) == kInvalidNTupleIndex) {
+      if (fInnerNEntries[currProcessor] == kInvalidNTupleIndex) {
+         fInnerNEntries[currProcessor] = fInnerProcessors[currProcessor]->GetNEntries();
+      }
+
+      localEntryNumber -= fInnerNEntries[currProcessor];
+
+      // The provided global entry number is larger than the number of available entries.
+      if (++currProcessor >= fInnerProcessors.size())
+         return kInvalidNTupleIndex;
+   }
+
+   if (currProcessor != fCurrentProcessorNumber)
+      fCurrentProcessorNumber = currProcessor;
 
    fNEntriesProcessed++;
-   return fLocalEntryNumber;
+   fCurrentEntryNumber = entryNumber;
+   return entryNumber;
 }
 
 //------------------------------------------------------------------------------
 
 ROOT::Experimental::RNTupleJoinProcessor::RNTupleJoinProcessor(const RNTupleOpenSpec &mainNTuple,
-                                                               std::unique_ptr<RNTupleModel> model)
-   : RNTupleProcessor({mainNTuple})
+                                                               const std::vector<RNTupleOpenSpec> &auxNTuples,
+                                                               const std::vector<std::string> &joinFields,
+                                                               std::string_view processorName,
+                                                               std::vector<std::unique_ptr<RNTupleModel>> models)
+   : RNTupleProcessor(processorName, nullptr)
 {
+   fNTuples.emplace_back(mainNTuple);
    fPageSource = Internal::RPageSource::Create(mainNTuple.fNTupleName, mainNTuple.fStorage);
    fPageSource->Attach();
 
@@ -252,28 +350,41 @@ ROOT::Experimental::RNTupleJoinProcessor::RNTupleJoinProcessor(const RNTupleOpen
       throw RException(R__FAIL("provided RNTuple is empty"));
    }
 
-   if (!model)
-      model = fPageSource->GetSharedDescriptorGuard()->CreateModel();
+   fNEntries = fPageSource->GetNEntries();
 
-   fJoinModel = model->Clone();
-   fJoinModel->Freeze();
-   fEntry = fJoinModel->CreateEntry();
+   if (models.empty())
+      fModel = fPageSource->GetSharedDescriptorGuard()->CreateModel();
+   else
+      fModel = models[0]->Clone();
+
+   fModel->Freeze();
+   fEntry = fModel->CreateEntry();
 
    for (const auto &value : *fEntry) {
       auto &field = value.GetField();
       const auto &fieldName = field.GetQualifiedFieldName();
 
-      // If the model has a default entry, use the value pointers from the default entry of the model that was passed to
-      // this constructor. This way, the pointers returned by RNTupleModel::MakeField can be used in the processor loop
-      // to access the corresponding field values.
-      if (!fJoinModel->IsBare()) {
-         auto valuePtr = model->GetDefaultEntry().GetPtr<void>(fieldName);
+      // If the model provided by the user has a default entry, use the value pointers from the default entry of the
+      // model that was passed to this constructor. This way, the pointers returned by RNTupleModel::MakeField can be
+      // used in the processor loop to access the corresponding field values.
+      if (!models.empty() && !models[0]->IsBare()) {
+         auto valuePtr = models[0]->GetDefaultEntry().GetPtr<void>(fieldName);
          fEntry->BindValue(fieldName, valuePtr);
       }
 
       const auto &[fieldContext, _] =
          fFieldContexts.try_emplace(fieldName, field.Clone(fieldName), fEntry->GetToken(fieldName));
       ConnectField(fieldContext->second, *fPageSource, *fEntry);
+   }
+
+   for (unsigned i = 0; i < auxNTuples.size(); ++i) {
+      if (models.empty()) {
+         AddAuxiliary(auxNTuples[i], joinFields);
+      } else {
+         // The size of `models` is checked in `CreateJoin`; at this point we can safely assume that `models.size() ==
+         // auxNTuples.size() + 1`.
+         AddAuxiliary(auxNTuples[i], joinFields, std::move(models[i + 1]));
+      }
    }
 }
 
@@ -299,7 +410,7 @@ void ROOT::Experimental::RNTupleJoinProcessor::AddAuxiliary(const RNTupleOpenSpe
    auto entry = model->CreateBareEntry();
 
    // Append the auxiliary fields to the join model
-   fJoinModel->Unfreeze();
+   fModel->Unfreeze();
 
    // The fields of the auxiliary ntuple are contained in an anonymous record field and subsequently registered as
    // subfields to the join model. This way they can be accessed through the processor as `auxNTupleName.fieldName`,
@@ -319,17 +430,17 @@ void ROOT::Experimental::RNTupleJoinProcessor::AddAuxiliary(const RNTupleOpenSpe
       throw RException(R__FAIL("could not create auxiliary RNTuple parent field"));
    }
 
-   const auto &subFields = auxParentField->GetSubFields();
-   fJoinModel->AddField(std::move(auxParentField));
-   for (const auto &field : subFields) {
-      fJoinModel->RegisterSubfield(field->GetQualifiedFieldName());
+   const auto &subfields = auxParentField->GetConstSubfields();
+   fModel->AddField(std::move(auxParentField));
+   for (const auto &field : subfields) {
+      fModel->RegisterSubfield(field->GetQualifiedFieldName());
    }
 
-   fJoinModel->Freeze();
+   fModel->Freeze();
    // After modifying the join model, we need to create a new entry since the old one is invalidated. However, we do
    // want to carry over the value pointers, so the pointers returned by `MakeField` during the creation of the original
    // model by the user can be used in the processor loop.
-   auto newEntry = fJoinModel->CreateEntry();
+   auto newEntry = fModel->CreateEntry();
 
    for (const auto &value : *newEntry) {
       const auto &field = value.GetField();
@@ -365,9 +476,9 @@ void ROOT::Experimental::RNTupleJoinProcessor::AddAuxiliary(const RNTupleOpenSpe
 
    fEntry.swap(newEntry);
 
-   // If no join fields have been specified, an aligned join is assumed and an index won't be necessary.
-   if (joinFields.size() > 0)
-      fJoinIndices.emplace_back(Internal::RNTupleIndex::Create(joinFields, *pageSource, true /* deferBuild */));
+   // If no join fields have been specified, an aligned join is assumed and an join table won't be created.
+   if (!joinFields.empty())
+      fJoinTables.emplace_back(Internal::RNTupleJoinTable::Create(joinFields));
 
    fAuxiliaryPageSources.emplace_back(std::move(pageSource));
 }
@@ -381,32 +492,38 @@ void ROOT::Experimental::RNTupleJoinProcessor::ConnectFields()
    }
 }
 
-ROOT::Experimental::NTupleSize_t ROOT::Experimental::RNTupleJoinProcessor::Advance()
+void ROOT::Experimental::RNTupleJoinProcessor::SetEntryPointers(const REntry &entry)
 {
-   if (fLocalEntryNumber == kInvalidNTupleIndex || fLocalEntryNumber >= fPageSource->GetNEntries()) {
-      return kInvalidNTupleIndex;
+   for (const auto &[_, fieldContext] : fFieldContexts) {
+      auto fieldName = fieldContext.GetProtoField().GetQualifiedFieldName();
+      if (fieldContext.IsAuxiliary()) {
+         fieldName = fNTuples[fieldContext.fNTupleIdx].fNTupleName + "." + fieldName;
+      }
+      auto valuePtr = entry.GetPtr<void>(fieldName);
+      fEntry->BindValue(fieldName, valuePtr);
    }
-
-   LoadEntry();
-
-   fNEntriesProcessed++;
-   return fLocalEntryNumber;
 }
 
-void ROOT::Experimental::RNTupleJoinProcessor::LoadEntry()
+ROOT::NTupleSize_t ROOT::Experimental::RNTupleJoinProcessor::LoadEntry(ROOT::NTupleSize_t entryNumber)
 {
-   // Read the values of the primary ntuple. If no index is used (i.e., the join is aligned), also read the values of
-   // auxiliary ntuples.
+   if (entryNumber >= fPageSource->GetNEntries())
+      return ROOT::kInvalidNTupleIndex;
+
+   // Read the values of the primary ntuple. If no join table is used (i.e., the join is aligned), also read the values
+   // of auxiliary ntuples.
    for (const auto &[_, fieldContext] : fFieldContexts) {
-      if (!fieldContext.IsAuxiliary() || !IsUsingIndex()) {
+      if (!fieldContext.IsAuxiliary() || !HasJoinTable()) {
          auto &value = fEntry->GetValue(fieldContext.fToken);
-         value.Read(fLocalEntryNumber);
+         value.Read(entryNumber);
       }
    }
 
-   // If no index is used (i.e., the join is aligned), there's nothing left to do.
-   if (!IsUsingIndex())
-      return;
+   fCurrentEntryNumber = entryNumber;
+   fNEntriesProcessed++;
+
+   // If no join table is used (i.e., the join is aligned), there's nothing left to do.
+   if (!HasJoinTable())
+      return entryNumber;
 
    // Collect the values of the join fields for this entry.
    std::vector<void *> valPtrs;
@@ -416,15 +533,20 @@ void ROOT::Experimental::RNTupleJoinProcessor::LoadEntry()
       valPtrs.push_back(ptr.get());
    }
 
-   // Find the index entry number corresponding to the join field values for each auxiliary ntuple.
-   std::vector<NTupleSize_t> indexEntryNumbers;
-   indexEntryNumbers.reserve(fJoinIndices.size());
-   for (unsigned i = 0; i < fJoinIndices.size(); ++i) {
-      auto &joinIndex = fJoinIndices[i];
-      if (!joinIndex->IsBuilt())
-         joinIndex->Build();
+   // Find the entry index corresponding to the join field values for each auxiliary ntuple.
+   std::vector<ROOT::NTupleSize_t> auxEntryIdxs;
+   auxEntryIdxs.reserve(fJoinTables.size());
+   for (unsigned i = 0; i < fJoinTables.size(); ++i) {
+      auto &joinTable = fJoinTables[i];
+      if (!joinTable->IsBuilt())
+         joinTable->Build(*fAuxiliaryPageSources[i]);
 
-      indexEntryNumbers.push_back(joinIndex->GetFirstEntryNumber(valPtrs));
+      auto entryIdxs = joinTable->GetEntryIndexes(valPtrs);
+
+      if (entryIdxs.empty())
+         auxEntryIdxs.push_back(kInvalidNTupleIndex);
+      else
+         auxEntryIdxs.push_back(entryIdxs[0]);
    }
 
    // For each auxiliary field, load its value according to the entry number we just found of the ntuple it belongs to.
@@ -433,13 +555,15 @@ void ROOT::Experimental::RNTupleJoinProcessor::LoadEntry()
          continue;
 
       auto &value = fEntry->GetValue(fieldContext.fToken);
-      if (indexEntryNumbers[fieldContext.fNTupleIdx - 1] == kInvalidNTupleIndex) {
+      if (auxEntryIdxs[fieldContext.fNTupleIdx - 1] == ROOT::kInvalidNTupleIndex) {
          // No matching entry exists, so we reset the field's value to a default value.
          // TODO(fdegeus): further consolidate how non-existing join matches should be handled. N.B.: in case
          // ConstructValue is not used anymore in the future, remove friend in RFieldBase.
          fieldContext.fProtoField->ConstructValue(value.GetPtr<void>().get());
       } else {
-         value.Read(indexEntryNumbers[fieldContext.fNTupleIdx - 1]);
+         value.Read(auxEntryIdxs[fieldContext.fNTupleIdx - 1]);
       }
    }
+
+   return entryNumber;
 }

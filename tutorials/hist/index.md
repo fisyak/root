@@ -37,18 +37,18 @@ Explore the examples below for [different histogram classes](group__Histograms.h
 
 ## Tutorials sorted after groups
 
-- [Introduction](\ref introduction)
+- [Introduction](\ref hist_intro)
 - [TH1 Histograms](\ref th1)
 - [TH2 Histograms](\ref th2)
 - [THnSparse](\ref thnsparse)
 - [THStack](\ref thstack)
 - [TRatio plots](\ref ratioplots)
 - [TPoly](\ref tpoly)
-- [Graphics](\ref graphics)
+- [Graphics](\ref hist_graphics)
 - [TExec](\ref texec)
 
-[List of all tutorials](\ref alltutorials)
-\anchor introduction
+[List of all tutorials](\ref hist_alltutorials)
+\anchor hist_intro
 
 ## Introduction
 
@@ -150,7 +150,7 @@ These examples shows some of the ratioplots
 |hist056_TPolyMarker_contour.C|Make a contour plot and get the first contour in a TPolyMarker.|
 |hist104_TH2Poly_fibonacci.C|Create a histogram representing the "Fibonacci spiral".|
 
-\anchor graphics
+\anchor hist_graphics
 
 ## Graphics
 
@@ -178,6 +178,6 @@ These examples shows some of the ratioplots
 |hist058_TExec_th2.C||Echo object at mouse position and show a graphics line.|
 |hist105_TExec_dynamic_slice.C|hist105_TExec_dynamic_slice.py|Show the slice of a TH2 following the mouse position.|
 
-\anchor alltutorials
+\anchor hist_alltutorials
 
 @}

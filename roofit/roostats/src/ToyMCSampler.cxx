@@ -50,7 +50,6 @@ using namespace RooFit;
 using std::endl;
 
 
-ClassImp(RooStats::ToyMCSampler);
 
 namespace RooStats {
 
@@ -137,20 +136,6 @@ bool ToyMCSampler::fgAlwaysUseMultiGen = false ;
 ////////////////////////////////////////////////////////////////////////////////
 
 void ToyMCSampler::SetAlwaysUseMultiGen(bool flag) { fgAlwaysUseMultiGen = flag ; }
-
-////////////////////////////////////////////////////////////////////////////////
-/// Proof constructor. Do not use.
-
-ToyMCSampler::ToyMCSampler()
-   : fSamplingDistName("SD"),
-     fNToys(1),
-     fMaxToys(RooNumber::infinity()),
-     fAdaptiveLowLimit(-RooNumber::infinity()),
-     fAdaptiveHighLimit(RooNumber::infinity())
-{
-   //suppress messages for num integration of Roofit
-   RooMsgService::instance().getStream(1).removeTopic(RooFit::NumIntegration);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -410,7 +395,7 @@ void ToyMCSampler::GenerateGlobalObservables(RooAbsPdf& pdf) const {
    } else {
 
       // not using multigen for global observables
-      std::unique_ptr<RooDataSet> one{pdf.generate( *fGlobalObservables, 1 )};
+      std::unique_ptr<RooDataSet> one{pdf.generateSimGlobal( *fGlobalObservables, 1 )};
       const RooArgSet *values = one->get(0);
       std::unique_ptr<RooArgSet> allVars{pdf.getVariables()};
       allVars->assign(*values);

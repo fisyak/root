@@ -154,7 +154,7 @@ protected:
 
    /// Constructor used when the value type of the collection is not known in advance, i.e. in the case of custom
    /// collections.
-   RProxiedCollectionField(std::string_view fieldName, std::string_view typeName, TClass *classp);
+   RProxiedCollectionField(std::string_view fieldName, TClass *classp);
    /// Constructor used when the value type of the collection is known in advance, e.g. in `RSetField`.
    RProxiedCollectionField(std::string_view fieldName, std::string_view typeName,
                            std::unique_ptr<RFieldBase> itemField);
@@ -169,7 +169,7 @@ protected:
    std::unique_ptr<RDeleter> GetDeleter() const final;
 
    std::size_t AppendImpl(const void *from) final;
-   void ReadGlobalImpl(NTupleSize_t globalIndex, void *to) final;
+   void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
 
    void CommitClusterImpl() final { fNWritten = 0; }
 
@@ -183,11 +183,13 @@ public:
    size_t GetValueSize() const final { return fProxy->Sizeof(); }
    size_t GetAlignment() const final { return alignof(std::max_align_t); }
    void AcceptVisitor(Detail::RFieldVisitor &visitor) const final;
-   void GetCollectionInfo(NTupleSize_t globalIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
+   void
+   GetCollectionInfo(ROOT::NTupleSize_t globalIndex, RNTupleLocalIndex *collectionStart, ROOT::NTupleSize_t *size) const
    {
       fPrincipalColumn->GetCollectionInfo(globalIndex, collectionStart, size);
    }
-   void GetCollectionInfo(RNTupleLocalIndex localIndex, RNTupleLocalIndex *collectionStart, NTupleSize_t *size) const
+   void
+   GetCollectionInfo(RNTupleLocalIndex localIndex, RNTupleLocalIndex *collectionStart, ROOT::NTupleSize_t *size) const
    {
       fPrincipalColumn->GetCollectionInfo(localIndex, collectionStart, size);
    }

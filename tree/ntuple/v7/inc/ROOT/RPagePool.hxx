@@ -30,13 +30,11 @@
 #include <vector>
 
 namespace ROOT {
-namespace Experimental {
-
 namespace Internal {
 
 // clang-format off
 /**
-\class ROOT::Experimental::Internal::RPagePool
+\class ROOT::Internal::RPagePool
 \ingroup NTuple
 \brief A thread-safe cache of pages loaded from the page source.
 
@@ -52,7 +50,7 @@ public:
    // Search key for a set of pages covering the same column and in-memory target type.
    // Within the set of pages, one needs to find the page of a given index.
    struct RKey {
-      DescriptorId_t fColumnId = kInvalidDescriptorId;
+      ROOT::DescriptorId_t fColumnId = ROOT::kInvalidDescriptorId;
       std::type_index fInMemoryType = std::type_index(typeid(void));
 
       bool operator==(const RKey &other) const
@@ -69,7 +67,7 @@ private:
       /// Like boost::hash_combine
       std::size_t operator()(const RKey &k) const
       {
-         auto seed = std::hash<DescriptorId_t>()(k.fColumnId);
+         auto seed = std::hash<ROOT::DescriptorId_t>()(k.fColumnId);
          return seed ^ (std::hash<std::type_index>()(k.fInMemoryType) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
       }
    };
@@ -85,18 +83,20 @@ private:
    /// This allows to do binary search for one or the other. Note that elements in fLookupByKey must have
    /// _both_ values to be valid. If RPagePosition is used as a search key, only one of the two needs to be set.
    struct RPagePosition {
-      NTupleSize_t fGlobalFirstElement = kInvalidNTupleIndex;
+      ROOT::NTupleSize_t fGlobalFirstElement = ROOT::kInvalidNTupleIndex;
       RNTupleLocalIndex fClusterFirstElement;
 
       bool operator<(const RPagePosition &other) const
       {
-         if ((fGlobalFirstElement != kInvalidNTupleIndex) && (other.fGlobalFirstElement != kInvalidNTupleIndex))
+         if ((fGlobalFirstElement != ROOT::kInvalidNTupleIndex) &&
+             (other.fGlobalFirstElement != ROOT::kInvalidNTupleIndex)) {
             return fGlobalFirstElement < other.fGlobalFirstElement;
+         }
 
-         assert(fClusterFirstElement.GetClusterId() != kInvalidDescriptorId &&
-                fClusterFirstElement.GetIndexInCluster() != kInvalidNTupleIndex);
-         assert(other.fClusterFirstElement.GetClusterId() != kInvalidDescriptorId &&
-                other.fClusterFirstElement.GetIndexInCluster() != kInvalidNTupleIndex);
+         assert(fClusterFirstElement.GetClusterId() != ROOT::kInvalidDescriptorId &&
+                fClusterFirstElement.GetIndexInCluster() != ROOT::kInvalidNTupleIndex);
+         assert(other.fClusterFirstElement.GetClusterId() != ROOT::kInvalidDescriptorId &&
+                other.fClusterFirstElement.GetIndexInCluster() != ROOT::kInvalidNTupleIndex);
          if (fClusterFirstElement.GetClusterId() == other.fClusterFirstElement.GetClusterId())
             return fClusterFirstElement.GetIndexInCluster() < other.fClusterFirstElement.GetIndexInCluster();
          return fClusterFirstElement.GetClusterId() < other.fClusterFirstElement.GetClusterId();
@@ -105,12 +105,12 @@ private:
       // Constructor used to store a page in fLookupByKey
       explicit RPagePosition(const RPage &page)
          : fGlobalFirstElement(page.GetGlobalRangeFirst()),
-           fClusterFirstElement({page.GetClusterInfo().GetId(), page.GetClusterRangeFirst()})
+           fClusterFirstElement({page.GetClusterInfo().GetId(), page.GetLocalRangeFirst()})
       {
       }
 
       // Search key constructors
-      explicit RPagePosition(NTupleSize_t globalIndex) : fGlobalFirstElement(globalIndex) {}
+      explicit RPagePosition(ROOT::NTupleSize_t globalIndex) : fGlobalFirstElement(globalIndex) {}
       explicit RPagePosition(RNTupleLocalIndex localIndex) : fClusterFirstElement(localIndex) {}
    };
 
@@ -126,7 +126,7 @@ private:
    /// by their page buffer address. The fLookupByBuffer map can be used to resolve the address to a page.
    /// Once a page gets used, it is removed from the unused pages list. Evict will remove all unused pages
    /// from a given cluster id.
-   std::unordered_map<DescriptorId_t, std::unordered_set<void *>> fUnusedPages;
+   std::unordered_map<ROOT::DescriptorId_t, std::unordered_set<void *>> fUnusedPages;
    std::mutex fLock; ///< The page pool is accessed concurrently due to parallel decompression
 
    /// Add a new page to the fLookupByBuffer and fLookupByKey data structures.
@@ -157,16 +157,16 @@ public:
    void PreloadPage(RPage page, RKey key);
    /// Removes unused pages (pages with reference counter 0) from the page pool. Users of PreloadPage() should
    /// use Evict() appropriately to avoid accumulation of unused pages.
-   void Evict(DescriptorId_t clusterId);
+   void Evict(ROOT::DescriptorId_t clusterId);
    /// Tries to find the page corresponding to column and index in the cache. If the page is found, its reference
    /// counter is increased
-   RPageRef GetPage(RKey key, NTupleSize_t globalIndex);
+   RPageRef GetPage(RKey key, ROOT::NTupleSize_t globalIndex);
    RPageRef GetPage(RKey key, RNTupleLocalIndex localIndex);
 };
 
 // clang-format off
 /**
-\class ROOT::Experimental::Internal::RPageRef
+\class ROOT::Internal::RPageRef
 \ingroup NTuple
 \brief Reference to a page stored in the page pool
 
@@ -213,18 +213,10 @@ public:
          fPagePool->ReleasePage(fPage);
    }
 
-   /// Used by the friend virtual page source to map the cluster ID to its virtual counterpart
-   void ChangeClusterId(DescriptorId_t clusterId)
-   {
-      fPage.fClusterInfo = RPage::RClusterInfo(clusterId, fPage.fClusterInfo.GetIndexOffset());
-   }
-
    const RPage &Get() const { return fPage; }
 };
 
 } // namespace Internal
-
-} // namespace Experimental
 } // namespace ROOT
 
 #endif

@@ -74,7 +74,6 @@ The calculator can generate Asimov datasets from two kinds of PDFs:
 using namespace RooStats;
 using std::string, std::unique_ptr;
 
-ClassImp(RooStats::AsymptoticCalculator);
 
 namespace {
 
@@ -425,7 +424,7 @@ double EvaluateNLL(RooStats::ModelConfig const& modelConfig, RooAbsData& data, c
           result = std::unique_ptr<RooFitResult>{minim.save()};
        }
        if (result){
-          if (!RooStats::IsNLLOffset()) {
+          if (RooStats::NLLOffsetMode() != "initial") {
              val = result->minNll();
           } else {
              bool previous = RooAbsReal::hideOffset();

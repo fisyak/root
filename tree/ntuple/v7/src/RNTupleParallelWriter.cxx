@@ -27,15 +27,15 @@
 
 namespace {
 
-using ROOT::Experimental::DescriptorId_t;
-using ROOT::Experimental::NTupleSize_t;
+using ROOT::DescriptorId_t;
+using ROOT::NTupleSize_t;
 using ROOT::Experimental::RExtraTypeInfoDescriptor;
 using ROOT::Experimental::RNTupleDescriptor;
 using ROOT::Experimental::RNTupleModel;
 using ROOT::Experimental::Internal::RColumn;
 using ROOT::Experimental::Internal::RNTupleModelChangeset;
-using ROOT::Experimental::Internal::RPage;
 using ROOT::Experimental::Internal::RPageSink;
+using ROOT::Internal::RPage;
 
 /// An internal RPageSink that enables multiple RNTupleFillContext to write into a single common RPageSink.
 ///
@@ -121,7 +121,7 @@ ROOT::Experimental::RNTupleParallelWriter::RNTupleParallelWriter(std::unique_ptr
                                                                  std::unique_ptr<Internal::RPageSink> sink)
    : fSink(std::move(sink)), fModel(std::move(model)), fMetrics("RNTupleParallelWriter")
 {
-   if (fModel->GetRegisteredSubfields().size() > 0) {
+   if (fModel->GetRegisteredSubfieldNames().size() > 0) {
       throw RException(R__FAIL("cannot create an RNTupleParallelWriter from a model with registered subfields"));
    }
    fModel->Freeze();
@@ -134,7 +134,7 @@ ROOT::Experimental::RNTupleParallelWriter::~RNTupleParallelWriter()
    try {
       CommitDataset();
    } catch (const RException &err) {
-      R__LOG_ERROR(NTupleLog()) << "failure committing ntuple: " << err.GetError().GetReport();
+      R__LOG_ERROR(ROOT::Internal::NTupleLog()) << "failure committing ntuple: " << err.GetError().GetReport();
    }
 }
 
@@ -157,7 +157,7 @@ void ROOT::Experimental::RNTupleParallelWriter::CommitDataset()
 
 std::unique_ptr<ROOT::Experimental::RNTupleParallelWriter>
 ROOT::Experimental::RNTupleParallelWriter::Recreate(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
-                                                    std::string_view storage, const RNTupleWriteOptions &options)
+                                                    std::string_view storage, const ROOT::RNTupleWriteOptions &options)
 {
    if (!options.GetUseBufferedWrite()) {
       throw RException(R__FAIL("parallel writing requires buffering"));
@@ -170,7 +170,7 @@ ROOT::Experimental::RNTupleParallelWriter::Recreate(std::unique_ptr<RNTupleModel
 
 std::unique_ptr<ROOT::Experimental::RNTupleParallelWriter>
 ROOT::Experimental::RNTupleParallelWriter::Append(std::unique_ptr<RNTupleModel> model, std::string_view ntupleName,
-                                                  TDirectory &fileOrDirectory, const RNTupleWriteOptions &options)
+                                                  TDirectory &fileOrDirectory, const ROOT::RNTupleWriteOptions &options)
 {
    auto file = fileOrDirectory.GetFile();
    if (!file) {

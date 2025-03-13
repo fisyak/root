@@ -106,6 +106,7 @@ public:
    virtual void          FitPanel(); // *MENU*
    TList                *GetContourList(Double_t contour);
    TDirectory           *GetDirectory() const {return fDirectory;}
+   TF2                  *GetFunction(const char *name) const;
    Int_t                 GetNpx() const {return fNpx;}
    Int_t                 GetNpy() const {return fNpy;}
    TH2D                 *GetHistogram(Option_t *option="");
@@ -149,6 +150,7 @@ public:
    void                  Paint(Option_t *option="") override;
    void          Print(Option_t *chopt="") const override;
    TH1                  *Project(Option_t *option="x") const; // *MENU*
+   void                  RecursiveRemove(TObject *obj) override;
    Int_t                 RemovePoint(Int_t ipoint); // *MENU*
    void          SavePrimitive(std::ostream &out, Option_t *option = "") override;
    virtual void          Scale(Double_t c1=1., Option_t *option="z"); // *MENU*

@@ -1,4 +1,4 @@
-# RNTuple Binary Format Specification 1.0.0.0
+# RNTuple Binary Format Specification 1.0.0.1
 
 ## Versioning Notes
 
@@ -20,7 +20,7 @@ Such optional features, although unknown to previous software versions,
 won't prevent those software versions from properly reading the file.
 Old readers will safely ignore these features.
 
-_Patch_: an increment of the patch version indicates backported features from newer format versions.
+_Patch_: an increment of the patch version indicates clarifications or backported features from newer format versions.
 The backported features may correspond to a major or a minor release.
 
 Except for the epoch, the versioning is for reporting only.
@@ -150,9 +150,9 @@ Note that this type system is independent (and different) from the regular ROOT 
 _Integer_: Integers are encoded in two's complement, little-endian format.
 They can be signed or unsigned and have lengths up to 64bit.
 
-_String_: A string is stored as a 32bit unsigned integer indicating the length of the string
+_String_: A string is stored as a 32bit unsigned integer indicating the number of bytes of the string
 followed by the characters.
-Strings are ASCII encoded; every character is a signed 8bit integer.
+String data are UTF-8 encoded.
 
 _Compression settings_: A 32bit integer containing both a compression algorithm and the compression level.
 The compression settings are encoded according to this formula: $settings = algorithm * 100 + level$.
@@ -162,7 +162,7 @@ The level is between 1 and 9 and is extrapolated to the spectrum of levels of th
 
 Feature flags are 64bit integers where every bit represents a certain forward-incompatible feature that is used
 in the binary format of the RNTuple at hand (see Versioning Notes).
-The most significant bit is used to indicate that one or more flags is active with a bit higher than 63.
+The most significant bit is used to indicate that one or more flags are active with a bit number higher than 62.
 That means that readers need to continue reading feature flags as long as their signed integer value is negative.
 
 Readers should gracefully abort reading when they encounter unknown bits set.
@@ -293,7 +293,7 @@ The following envelope types exist
 
 | Type              |  ID  | Contents                                                          |
 |-------------------|------|-------------------------------------------------------------------|
-| _reserved_        | 0x00 | unused and reserved
+| _reserved_        | 0x00 | unused and reserved                                               |
 | Header            | 0x01 | RNTuple schema: field and column types                            |
 | Footer            | 0x02 | Description of clusters                                           |
 | Page list         | 0x03 | Location of data pages                                            |
@@ -357,7 +357,7 @@ Every field record frame of the list of fields has the following contents
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |                          Type Version                         |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-+                        Parent Field ID                        +
+|                        Parent Field ID                        |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |        Structural Role        |             Flags             |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -422,9 +422,9 @@ Depending on the flags, the following optional values follow:
 +               Array Size (if flag 0x01 is set)                +
 |                                                               |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-+             Source Field ID (if flag 0x02 is set)             +
+|             Source Field ID (if flag 0x02 is set)             |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-+            ROOT Type Checksum (if flag 0x04 is set)           +
+|            ROOT Type Checksum (if flag 0x04 is set)           |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
@@ -442,7 +442,7 @@ Top-level fields have their own field ID set as parent ID.
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |              Type             |        Bits on Storage        |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-+                            Field ID                           +
+|                            Field ID                           |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |             Flags             |      Representation Index     |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -497,7 +497,7 @@ The column type and bits on storage integers can have one of the following value
 | 0x10 |   96 | Switch       | Tuple of a kIndex64 value followed by a 32 bits dispatch tag to a column ID                   |
 | 0x11 |   16 | SplitInt16   | Like Int16 but in split + zigzag encoding                                                     |
 | 0x12 |   16 | SplitUInt16  | Like UInt16 but in split encoding                                                             |
-| 0x13 |   64 | SplitInt32   | Like Int32 but in split + zigzag encoding                                                     |
+| 0x13 |   32 | SplitInt32   | Like Int32 but in split + zigzag encoding                                                     |
 | 0x14 |   32 | SplitUInt32  | Like UInt32 but in split encoding                                                             |
 | 0x15 |   64 | SplitInt64   | Like Int64 but in split + zigzag encoding                                                     |
 | 0x16 |   64 | SplitUInt64  | Like UInt64 but in split encoding                                                             |
@@ -571,7 +571,7 @@ An alias column has the following format
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-+                      Physical Column ID                       +
+|                      Physical Column ID                       |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |                           Field ID                            |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -583,7 +583,7 @@ The second 32-bit integer references the associated "projected" field.
 A projected field is a field using alias columns to present available data by an alternative C++ type.
 Alias columns have no prescribed column ID of their own, since alias columns are not referenced.
 In the footer and page list envelopes, only physical column IDs must be referenced.
-However, columns should be attached to projected fields in their serialization order (first header then footer).
+However, columns should be attached to projected fields in their serialization order (first header, then footer).
 
 
 #### Extra type information
@@ -595,7 +595,7 @@ The type information record frame has the following contents followed by a strin
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-+                       Content Identifier                      +
+|                       Content Identifier                      |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |                          Type Version                         |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -730,7 +730,7 @@ See next Section on "Suppressed Columns" for additional details.
 Note that the size of the inner list frame includes the element offset and compression settings.
 The order of the outer items must match the order of columns in the header and the extension header (small to large).
 
-The order of the inner items must match the order of pages or elements, resp.
+The order of the inner items must match the order of pages or elements, respectively.
 Every inner item (that describes a page) has the following structure followed by a locator for the page.
 
 ```
@@ -802,6 +802,30 @@ This section is a comprehensive list of the C++ types with RNTuple I/O support.
 Within the supported type system complex types can be freely composed,
 e.g. `std::vector<MyEvent>` or `std::vector<std::vector<float>>`.
 
+### Type Name Normalization
+
+Type names are stored according to the following normalization rules
+  - The type name of a field has typedefs and usings fully resolved (except for the following rule).
+  - The integer types `signed char`, `unsigned char`, and `[signed|unsigned](short|int|long[ long])`
+    are replaced by the corresponding (at the time of writing) `std::[u]int(8|16|32|64)_t` standard integer typedef.
+  - Qualifiers `volatile` and `const` that do not appear in template arguments are removed.
+  - The `class`, `struct`, and `enum` keywords are removed.
+  - Type names are fully qualified by the namespace in which they are declared;
+    the root namespace ('::' prefix) is stripped.
+  - Type names used as template arguments are themselves normalized.
+  - For user-defined types, default-initialized template arguments are explicitly spelled out;
+    optional template arguments of stdlib types such as allocators are omitted.
+  - Integer template arguments are written in standard decimal notation;
+    only if integer values are larger than 2^63, the suffix `u` (`unsigned long long`) is added.
+  - Only whitespaces strictly required by C++ semantic are kept.
+
+Both the field type name and the field alias type name are normalized,
+except that the field alias type name does not apply any type name resolution.
+
+For example, the type name `const pair<size_t, array<class ::Event, 2>>` will be normalized on 64bit architectures to
+`std::pair<std::uint64_t,std::array<Event,2>>` with an alias type name
+`std::pair<size_t,std::array<Event,2>>`.
+
 ### Fundamental Types
 
 The following fundamental types are stored as `leaf` fields with a single column each.
@@ -829,7 +853,6 @@ Such cases are marked as `R` in the table.
 | Real32Trunc                        |        |             |        |          |           |           |            |           |            |           |            |    W    |    W     |
 | Real32Quant                        |        |             |        |          |           |           |            |           |            |           |            |    W    |    W     |
 
-Possibly available `const` and `volatile` qualifiers of the C++ types are ignored for serialization.
 The default column for serialization is denoted with an asterisk.
 If the ntuple is stored uncompressed, the default changes from split encoding to non-split encoding where applicable.
 
@@ -849,7 +872,7 @@ and a value column `[1.0, 1.0, 2.0]`.
 #### std::string
 
 A string is stored as a single field with two columns.
-The first (principle) column is of type `(Split)Index[64|32]`.
+The first (principal) column is of type `(Split)Index[64|32]`.
 The second column is of type `Char`.
 
 #### std::vector\<T\> and ROOT::RVec\<T\>
@@ -946,14 +969,16 @@ The behavior depends on whether the class has an associated collection proxy.
 #### Regular class / struct
 
 User defined C++ classes are supported with the following limitations
-  - The class must have a dictionary
-  - All persistent members and base classes must be themselves types with RNTuple I/O support
-  - Transient members must be marked, e.g. by a `//!` comment
-  - The class must not be in the `std` namespace
-  - The class must be empty or splittable (e.g., the class must not provide a custom streamer)
+  - The class must have a dictionary.
+  - All persistent members and base classes must be themselves types with RNTuple I/O support.
+  - Transient members must be marked, e.g. by a `//!` comment.
+  - The class must not be in the `std` namespace.
+  - The class must be empty or splittable (e.g., the class must not provide a custom streamer).
   - There is no support for polymorphism,
-    i.e. a field of class `A` cannot store class `B` that derives from `A`
-  - Virtual inheritance is unsupported
+    i.e. a field of class `A` cannot store class `B` that derives from `A`.
+  - Virtual inheritance is unsupported.
+  - Bit-field declarations (data member with an explicit size in bits) are unsupported.
+  - Template arguments of templated classes are restricted to integers and types that have RNTuple type support.
 
 User classes are stored as a record parent field with no attached columns.
 Direct base classes and persistent members are stored as subfields with their respective types.
@@ -994,9 +1019,11 @@ The valid types are `std::uint32_t` and `std::uint64_t`.
 A field with the structural role 0x04 ("streamer") represents an object serialized by the ROOT streamer
 into a single `Byte` column.
 It can have any type supported by `TClass` (even types that are not available in the native RNTuple type system).
+For templated types, however,
+the restrictions on template arguments (only RNTuple supported types and integers) still apply.
 The first (principal) column is of type `(Split)Index[32|64]`.
 The second column is of type `Byte`.
-
+In effect, the column representation is identical to a collection of `std::byte`.
 
 ### Untyped collections and records
 

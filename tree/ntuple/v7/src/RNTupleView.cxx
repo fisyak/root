@@ -19,29 +19,29 @@
 #include <ROOT/RNTupleView.hxx>
 #include <ROOT/RPageStorage.hxx>
 
-ROOT::Experimental::RNTupleGlobalRange
+ROOT::RNTupleGlobalRange
 ROOT::Experimental::Internal::GetFieldRange(const RFieldBase &field, const RPageSource &pageSource)
 {
    const auto &desc = pageSource.GetSharedDescriptorGuard().GetRef();
 
-   auto fnGetPrincipalColumnId = [&desc](DescriptorId_t fieldId) -> DescriptorId_t {
+   auto fnGetPrincipalColumnId = [&desc](ROOT::DescriptorId_t fieldId) -> ROOT::DescriptorId_t {
       auto columnIterable = desc.GetColumnIterable(fieldId);
-      return (columnIterable.size() > 0) ? columnIterable.begin()->GetPhysicalId() : kInvalidDescriptorId;
+      return (columnIterable.size() > 0) ? columnIterable.begin()->GetPhysicalId() : ROOT::kInvalidDescriptorId;
    };
 
    auto columnId = fnGetPrincipalColumnId(field.GetOnDiskId());
-   if (columnId == kInvalidDescriptorId) {
+   if (columnId == ROOT::kInvalidDescriptorId) {
       for (const auto &f : field) {
          columnId = fnGetPrincipalColumnId(f.GetOnDiskId());
-         if (columnId != kInvalidDescriptorId)
+         if (columnId != ROOT::kInvalidDescriptorId)
             break;
       }
    }
 
-   if (columnId == kInvalidDescriptorId) {
-      return RNTupleGlobalRange(kInvalidNTupleIndex, kInvalidNTupleIndex);
+   if (columnId == ROOT::kInvalidDescriptorId) {
+      return ROOT::RNTupleGlobalRange(ROOT::kInvalidNTupleIndex, ROOT::kInvalidNTupleIndex);
    }
 
    auto arraySize = std::max(std::uint64_t(1), desc.GetFieldDescriptor(field.GetOnDiskId()).GetNRepetitions());
-   return RNTupleGlobalRange(0, desc.GetNElements(columnId) / arraySize);
+   return ROOT::RNTupleGlobalRange(0, desc.GetNElements(columnId) / arraySize);
 }

@@ -22,7 +22,7 @@
 #include "Compression.h"
 #include <string_view>
 #include "ROOT/RVec.hxx"
-#include "ROOT/TBufferMerger.hxx" // for SnapshotHelper
+#include "ROOT/TBufferMerger.hxx" // for SnapshotTTreeHelper
 #include "ROOT/RDF/RCutFlowReport.hxx"
 #include "ROOT/RDF/RSampleInfo.hxx"
 #include "ROOT/RDF/Utils.hxx"
@@ -35,17 +35,23 @@
 #include "TClassRef.h"
 #include "TDirectory.h"
 #include "TError.h" // for R__ASSERT, Warning
-#include "TFile.h" // for SnapshotHelper
+#include "TFile.h"  // for SnapshotTTreeHelper
 #include "TH1.h"
 #include "TGraph.h"
 #include "TGraphAsymmErrors.h"
 #include "TLeaf.h"
 #include "TObject.h"
 #include "TTree.h"
-#include "TTreeReader.h" // for SnapshotHelper
+#include "TTreeReader.h" // for SnapshotTTreeHelper
 #include "TStatistic.h"
 #include "ROOT/RDF/RActionImpl.hxx"
 #include "ROOT/RDF/RMergeableValue.hxx"
+#include "ROOT/RDF/RLoopManager.hxx"
+
+#ifdef R__HAS_ROOT7
+#include "ROOT/RNTupleDS.hxx"
+#include "ROOT/RNTupleWriter.hxx" // for SnapshotRNTupleHelper
+#endif
 
 #include <algorithm>
 #include <functional>
@@ -1335,7 +1341,7 @@ void *GetData(T & /*v*/)
 template <typename T>
 void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &inName, const std::string &name,
                        TBranch *&branch, void *&branchAddress, T *address, RBranchSet &outputBranches,
-                       bool /*isDefine*/)
+                       bool /*isDefine*/, const std::optional<int> &basketSize)
 {
    static TClassRef TBOClRef("TBranchObject");
 
@@ -1366,7 +1372,10 @@ void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &i
       // In particular, by keeping splitlevel equal to 0 if this was the case for `inputBranch`, we avoid
       // writing garbage when unsplit objects cannot be written as split objects (e.g. in case of a polymorphic
       // TObject branch, see https://bit.ly/2EjLMId ).
-      const auto bufSize = inputBranch->GetBasketSize();
+      const auto bufSize = basketSize.has_value()
+                              ? basketSize.value()
+                              : inputBranch->GetBasketSize(); // Use original basket size for existing branches
+                                                              // otherwise custom basket size for new branches
       const auto splitLevel = inputBranch->GetSplitLevel();
 
       if (inputBranch->IsA() == TBOClRef) {
@@ -1377,7 +1386,10 @@ void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &i
          outputBranch = outputTree.Branch(name.c_str(), address, bufSize, splitLevel);
       }
    } else {
-      outputBranch = outputTree.Branch(name.c_str(), address);
+      // Set Custom basket size for new branches.
+      const auto buffSize =
+         basketSize.has_value() ? basketSize.value() : (inputBranch ? inputBranch->GetBasketSize() : 32000);
+      outputBranch = outputTree.Branch(name.c_str(), address, buffSize);
    }
    outputBranches.Insert(name, outputBranch);
    // This is not an array branch, so we don't register the address of the output branch here
@@ -1385,8 +1397,8 @@ void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &i
    branchAddress = nullptr;
 }
 
-/// Helper function for SnapshotHelper and SnapshotHelperMT. It creates new branches for the output TTree of a Snapshot.
-/// This overload is called for columns of type `RVec<T>`. For RDF, these can represent:
+/// Helper function for SnapshotTTreeHelper and SnapshotTTreeHelperMT. It creates new branches for the output TTree of a
+/// Snapshot. This overload is called for columns of type `RVec<T>`. For RDF, these can represent:
 /// 1. c-style arrays in ROOT files, so we are sure that there are input trees to which we can ask the correct branch
 /// title
 /// 2. RVecs coming from a custom column or the input file/data-source
@@ -1397,7 +1409,8 @@ void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &i
 /// `branchAddress`) so we can intercept changes in the address of the input branch and tell the output branch.
 template <typename T>
 void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &inName, const std::string &outName,
-                       TBranch *&branch, void *&branchAddress, RVec<T> *ab, RBranchSet &outputBranches, bool isDefine)
+                       TBranch *&branch, void *&branchAddress, RVec<T> *ab, RBranchSet &outputBranches, bool isDefine,
+                       const std::optional<int> &basketSize)
 {
    TBranch *inputBranch = nullptr;
    if (inputTree) {
@@ -1434,7 +1447,10 @@ void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &i
          // needs to be SetObject (not SetAddress) to mimic what happens when this TBranchElement is constructed
          outputBranch->SetObject(ab);
       } else {
-         auto *b = outputTree.Branch(outName.c_str(), ab);
+         // Set Custom basket size for new branches if specified, otherwise get basket size from input branches
+         const auto buffSize =
+            basketSize.has_value() ? basketSize.value() : (inputBranch ? inputBranch->GetBasketSize() : 32000);
+         auto *b = outputTree.Branch(outName.c_str(), ab, buffSize);
          outputBranches.Insert(outName, b);
       }
       return;
@@ -1462,7 +1478,8 @@ void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &i
          // added to the output tree yet. However, the size leaf has to be available for the creation of the array
          // branch to be successful. So we create the size leaf here.
          const auto sizeTypeStr = TypeName2ROOTTypeName(sizeLeaf->GetTypeName());
-         const auto sizeBufSize = sizeLeaf->GetBranch()->GetBasketSize();
+         // Use Original basket size for Existing Branches otherwise use Custom basket Size.
+         const auto sizeBufSize = basketSize.has_value() ? basketSize.value() : sizeLeaf->GetBranch()->GetBasketSize();
          // The null branch address is a placeholder. It will be set when SetBranchesHelper is called for `sizeLeafName`
          auto *sizeBranch = outputTree.Branch(sizeLeafName.c_str(), (void *)nullptr,
                                               (sizeLeafName + '/' + sizeTypeStr).c_str(), sizeBufSize);
@@ -1478,7 +1495,9 @@ void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &i
                  bname);
       } else {
          const auto leaflist = std::string(bname) + "[" + sizeLeafName + "]/" + rootbtype;
-         outputBranch = outputTree.Branch(outName.c_str(), dataPtr, leaflist.c_str());
+         // Use original basket size for existing branches and new basket size for new branches
+         const auto branchBufSize = basketSize.has_value() ? basketSize.value() : inputBranch->GetBasketSize();
+         outputBranch = outputTree.Branch(outName.c_str(), dataPtr, leaflist.c_str(), branchBufSize);
          outputBranch->SetTitle(inputBranch->GetTitle());
          outputBranches.Insert(outName, outputBranch);
          branch = outputBranch;
@@ -1487,11 +1506,15 @@ void SetBranchesHelper(TTree *inputTree, TTree &outputTree, const std::string &i
    }
 }
 
-void ValidateSnapshotOutput(const RSnapshotOptions &opts, const std::string &treeName, const std::string &fileName);
+/// Ensure that the TTree with the resulting snapshot can be written to the target TFile. This means checking that the
+/// TFile can be opened in the mode specified in `opts`, deleting any existing TTrees in case
+/// `opts.fOverwriteIfExists = true`, or throwing an error otherwise.
+void EnsureValidSnapshotTTreeOutput(const RSnapshotOptions &opts, const std::string &treeName,
+                                    const std::string &fileName);
 
-/// Helper object for a single-thread Snapshot action
+/// Helper object for a single-thread TTree-based Snapshot action
 template <typename... ColTypes>
-class R__CLING_PTRCHECK(off) SnapshotHelper : public RActionImpl<SnapshotHelper<ColTypes...>> {
+class R__CLING_PTRCHECK(off) SnapshotTTreeHelper : public RActionImpl<SnapshotTTreeHelper<ColTypes...>> {
    std::string fFileName;
    std::string fDirName;
    std::string fTreeName;
@@ -1510,19 +1533,25 @@ class R__CLING_PTRCHECK(off) SnapshotHelper : public RActionImpl<SnapshotHelper<
 
 public:
    using ColumnTypes_t = TypeList<ColTypes...>;
-   SnapshotHelper(std::string_view filename, std::string_view dirname, std::string_view treename,
-                  const ColumnNames_t &vbnames, const ColumnNames_t &bnames, const RSnapshotOptions &options,
-                  std::vector<bool> &&isDefine)
-      : fFileName(filename), fDirName(dirname), fTreeName(treename), fOptions(options), fInputBranchNames(vbnames),
-        fOutputBranchNames(ReplaceDotWithUnderscore(bnames)), fBranches(vbnames.size(), nullptr),
-        fBranchAddresses(vbnames.size(), nullptr), fIsDefine(std::move(isDefine))
+   SnapshotTTreeHelper(std::string_view filename, std::string_view dirname, std::string_view treename,
+                       const ColumnNames_t &vbnames, const ColumnNames_t &bnames, const RSnapshotOptions &options,
+                       std::vector<bool> &&isDefine)
+      : fFileName(filename),
+        fDirName(dirname),
+        fTreeName(treename),
+        fOptions(options),
+        fInputBranchNames(vbnames),
+        fOutputBranchNames(ReplaceDotWithUnderscore(bnames)),
+        fBranches(vbnames.size(), nullptr),
+        fBranchAddresses(vbnames.size(), nullptr),
+        fIsDefine(std::move(isDefine))
    {
-      ValidateSnapshotOutput(fOptions, fTreeName, fFileName);
+      EnsureValidSnapshotTTreeOutput(fOptions, fTreeName, fFileName);
    }
 
-   SnapshotHelper(const SnapshotHelper &) = delete;
-   SnapshotHelper(SnapshotHelper &&) = default;
-   ~SnapshotHelper()
+   SnapshotTTreeHelper(const SnapshotTTreeHelper &) = delete;
+   SnapshotTTreeHelper(SnapshotTTreeHelper &&) = default;
+   ~SnapshotTTreeHelper()
    {
       if (!fTreeName.empty() /*not moved from*/ && !fOutputFile /* did not run */ && fOptions.fLazy) {
          const auto fileOpenMode = [&]() {
@@ -1577,10 +1606,11 @@ public:
    void SetBranches(ColTypes &... values, std::index_sequence<S...> /*dummy*/)
    {
       // create branches in output tree
-      int expander[] = {(SetBranchesHelper(fInputTree, *fOutputTree, fInputBranchNames[S], fOutputBranchNames[S],
-                                           fBranches[S], fBranchAddresses[S], &values, fOutputBranches, fIsDefine[S]),
-                         0)...,
-                        0};
+      int expander[] = {
+         (SetBranchesHelper(fInputTree, *fOutputTree, fInputBranchNames[S], fOutputBranchNames[S], fBranches[S],
+                            fBranchAddresses[S], &values, fOutputBranches, fIsDefine[S], fOptions.fBasketSize),
+          0)...,
+         0};
       fOutputBranches.AssertNoNullBranchAddresses();
       (void)expander; // avoid unused variable warnings for older compilers such as gcc 4.9
    }
@@ -1630,27 +1660,27 @@ public:
    }
 
    /**
-    * @brief Create a new SnapshotHelper with a different output file name
+    * @brief Create a new SnapshotTTreeHelper with a different output file name
     *
     * @param newName A type-erased string with the output file name
-    * @return SnapshotHelper
+    * @return SnapshotTTreeHelper
     *
     * This MakeNew implementation is tied to the cloning feature of actions
     * of the computation graph. In particular, cloning a Snapshot node usually
     * also involves changing the name of the output file, otherwise the cloned
     * Snapshot would overwrite the same file.
     */
-   SnapshotHelper MakeNew(void *newName, std::string_view /*variation*/ = "nominal")
+   SnapshotTTreeHelper MakeNew(void *newName, std::string_view /*variation*/ = "nominal")
    {
       const std::string finalName = *reinterpret_cast<const std::string *>(newName);
-      return SnapshotHelper{
+      return SnapshotTTreeHelper{
          finalName, fDirName, fTreeName, fInputBranchNames, fOutputBranchNames, fOptions, std::vector<bool>(fIsDefine)};
    }
 };
 
-/// Helper object for a multi-thread Snapshot action
+/// Helper object for a multi-thread TTree-based Snapshot action
 template <typename... ColTypes>
-class R__CLING_PTRCHECK(off) SnapshotHelperMT : public RActionImpl<SnapshotHelperMT<ColTypes...>> {
+class R__CLING_PTRCHECK(off) SnapshotTTreeHelperMT : public RActionImpl<SnapshotTTreeHelperMT<ColTypes...>> {
    unsigned int fNSlots;
    std::unique_ptr<ROOT::TBufferMerger> fMerger; // must use a ptr because TBufferMerger is not movable
    std::vector<std::shared_ptr<ROOT::TBufferMergerFile>> fOutputFiles;
@@ -1672,21 +1702,30 @@ class R__CLING_PTRCHECK(off) SnapshotHelperMT : public RActionImpl<SnapshotHelpe
 
 public:
    using ColumnTypes_t = TypeList<ColTypes...>;
-   SnapshotHelperMT(const unsigned int nSlots, std::string_view filename, std::string_view dirname,
-                    std::string_view treename, const ColumnNames_t &vbnames, const ColumnNames_t &bnames,
-                    const RSnapshotOptions &options, std::vector<bool> &&isDefine)
-      : fNSlots(nSlots), fOutputFiles(fNSlots), fOutputTrees(fNSlots), fBranchAddressesNeedReset(fNSlots, 1),
-        fFileName(filename), fDirName(dirname), fTreeName(treename), fOptions(options), fInputBranchNames(vbnames),
-        fOutputBranchNames(ReplaceDotWithUnderscore(bnames)), fInputTrees(fNSlots),
+   SnapshotTTreeHelperMT(const unsigned int nSlots, std::string_view filename, std::string_view dirname,
+                         std::string_view treename, const ColumnNames_t &vbnames, const ColumnNames_t &bnames,
+                         const RSnapshotOptions &options, std::vector<bool> &&isDefine)
+      : fNSlots(nSlots),
+        fOutputFiles(fNSlots),
+        fOutputTrees(fNSlots),
+        fBranchAddressesNeedReset(fNSlots, 1),
+        fFileName(filename),
+        fDirName(dirname),
+        fTreeName(treename),
+        fOptions(options),
+        fInputBranchNames(vbnames),
+        fOutputBranchNames(ReplaceDotWithUnderscore(bnames)),
+        fInputTrees(fNSlots),
         fBranches(fNSlots, std::vector<TBranch *>(vbnames.size(), nullptr)),
-        fBranchAddresses(fNSlots, std::vector<void *>(vbnames.size(), nullptr)), fOutputBranches(fNSlots),
+        fBranchAddresses(fNSlots, std::vector<void *>(vbnames.size(), nullptr)),
+        fOutputBranches(fNSlots),
         fIsDefine(std::move(isDefine))
    {
-      ValidateSnapshotOutput(fOptions, fTreeName, fFileName);
+      EnsureValidSnapshotTTreeOutput(fOptions, fTreeName, fFileName);
    }
-   SnapshotHelperMT(const SnapshotHelperMT &) = delete;
-   SnapshotHelperMT(SnapshotHelperMT &&) = default;
-   ~SnapshotHelperMT()
+   SnapshotTTreeHelperMT(const SnapshotTTreeHelperMT &) = delete;
+   SnapshotTTreeHelperMT(SnapshotTTreeHelperMT &&) = default;
+   ~SnapshotTTreeHelperMT()
    {
       if (!fTreeName.empty() /*not moved from*/ && fOptions.fLazy && !fOutputFiles.empty() &&
           std::all_of(fOutputFiles.begin(), fOutputFiles.end(), [](const auto &f) { return !f; }) /* never run */) {
@@ -1779,7 +1818,7 @@ public:
       // hack to call TTree::Branch on all variadic template arguments
       int expander[] = {(SetBranchesHelper(fInputTrees[slot], *fOutputTrees[slot], fInputBranchNames[S],
                                            fOutputBranchNames[S], fBranches[slot][S], fBranchAddresses[slot][S],
-                                           &values, fOutputBranches[slot], fIsDefine[S]),
+                                           &values, fOutputBranches[slot], fIsDefine[S], fOptions.fBasketSize),
                          0)...,
                         0};
       fOutputBranches[slot].AssertNoNullBranchAddresses();
@@ -1826,23 +1865,168 @@ public:
    }
 
    /**
-    * @brief Create a new SnapshotHelperMT with a different output file name
+    * @brief Create a new SnapshotTTreeHelperMT with a different output file name
     *
     * @param newName A type-erased string with the output file name
-    * @return SnapshotHelperMT
+    * @return SnapshotTTreeHelperMT
     *
     * This MakeNew implementation is tied to the cloning feature of actions
     * of the computation graph. In particular, cloning a Snapshot node usually
     * also involves changing the name of the output file, otherwise the cloned
     * Snapshot would overwrite the same file.
     */
-   SnapshotHelperMT MakeNew(void *newName, std::string_view /*variation*/ = "nominal")
+   SnapshotTTreeHelperMT MakeNew(void *newName, std::string_view /*variation*/ = "nominal")
    {
       const std::string finalName = *reinterpret_cast<const std::string *>(newName);
-      return SnapshotHelperMT{fNSlots,           finalName,          fDirName, fTreeName,
-                              fInputBranchNames, fOutputBranchNames, fOptions, std::vector<bool>(fIsDefine)};
+      return SnapshotTTreeHelperMT{fNSlots,           finalName,          fDirName, fTreeName,
+                                   fInputBranchNames, fOutputBranchNames, fOptions, std::vector<bool>(fIsDefine)};
    }
 };
+
+#ifdef R__HAS_ROOT7
+/// Ensure that the RNTuple with the resulting snapshot can be written to the target TFile. This means checking that the
+/// TFile can be opened in the mode specified in `opts`, deleting any existing RNTuples in case
+/// `opts.fOverwriteIfExists = true`, or throwing an error otherwise.
+void EnsureValidSnapshotRNTupleOutput(const RSnapshotOptions &opts, const std::string &ntupleName,
+                                      const std::string &fileName);
+
+/// Helper function to update the value of an RNTuple's field in the provided entry.
+template <typename T>
+void SetFieldsHelper(T &value, std::string_view fieldName, ROOT::Experimental::REntry *entry)
+{
+   entry->BindRawPtr(fieldName, &value);
+}
+
+/// Helper object for a single-thread RNTuple-based Snapshot action
+template <typename... ColTypes>
+class R__CLING_PTRCHECK(off) SnapshotRNTupleHelper : public RActionImpl<SnapshotRNTupleHelper<ColTypes...>> {
+   std::string fFileName;
+   std::string fNTupleName;
+
+   std::unique_ptr<TFile> fOutputFile{nullptr};
+
+   RSnapshotOptions fOptions;
+   ROOT::Detail::RDF::RLoopManager *fLoopManager;
+   ColumnNames_t fInputFieldNames; // This contains the resolved aliases
+   ColumnNames_t fOutputFieldNames;
+   std::unique_ptr<ROOT::Experimental::RNTupleWriter> fWriter{nullptr};
+
+   ROOT::Experimental::REntry *fOutputEntry;
+
+   std::vector<bool> fIsDefine;
+
+public:
+   using ColumnTypes_t = TypeList<ColTypes...>;
+   SnapshotRNTupleHelper(std::string_view filename, std::string_view ntuplename, const ColumnNames_t &vfnames,
+                         const ColumnNames_t &fnames, const RSnapshotOptions &options,
+                         ROOT::Detail::RDF::RLoopManager *lm, std::vector<bool> &&isDefine)
+      : fFileName(filename),
+        fNTupleName(ntuplename),
+        fOptions(options),
+        fLoopManager(lm),
+        fInputFieldNames(vfnames),
+        fOutputFieldNames(ReplaceDotWithUnderscore(fnames)),
+        fIsDefine(std::move(isDefine))
+   {
+      EnsureValidSnapshotRNTupleOutput(fOptions, fNTupleName, fFileName);
+   }
+
+   SnapshotRNTupleHelper(const SnapshotRNTupleHelper &) = delete;
+   SnapshotRNTupleHelper &operator=(const SnapshotRNTupleHelper &) = delete;
+   SnapshotRNTupleHelper(SnapshotRNTupleHelper &&) = default;
+   SnapshotRNTupleHelper &operator=(SnapshotRNTupleHelper &&) = default;
+   ~SnapshotRNTupleHelper()
+   {
+      if (!fNTupleName.empty() && !fLoopManager->GetDataSource() && fOptions.fLazy)
+         Warning("Snapshot", "A lazy Snapshot action was booked but never triggered.");
+   }
+
+   void InitTask(TTreeReader *, unsigned int /* slot */) {}
+
+   void Exec(unsigned int /* slot */, ColTypes &...values)
+   {
+      using ind_t = std::index_sequence_for<ColTypes...>;
+
+      SetFields(values..., ind_t{});
+      fWriter->Fill();
+   }
+
+   template <std::size_t... S>
+   void SetFields(ColTypes &...values, std::index_sequence<S...> /*dummy*/)
+   {
+      int expander[] = {(SetFieldsHelper(values, fOutputFieldNames[S], fOutputEntry), 0)..., 0};
+      (void)expander; // avoid unused variable warnings for older compilers (gcc 14.1)
+   }
+
+   void Initialize()
+   {
+      using ind_t = std::index_sequence_for<ColTypes...>;
+
+      auto model = ROOT::Experimental::RNTupleModel::Create();
+      MakeFields(*model, ind_t{});
+      fOutputEntry = &model->GetDefaultEntry();
+
+      ROOT::RNTupleWriteOptions writeOptions;
+      writeOptions.SetCompression(fOptions.fCompressionAlgorithm, fOptions.fCompressionLevel);
+
+      TString checkupdate = fOptions.fMode;
+      checkupdate.ToLower();
+
+      if (checkupdate == "update") {
+         fOutputFile = std::unique_ptr<TFile>(TFile::Open(fFileName.c_str(), fOptions.fMode.c_str()));
+         if (!fOutputFile)
+            throw std::runtime_error("Snapshot: could not create output file " + fFileName);
+         fWriter = ROOT::Experimental::RNTupleWriter::Append(std::move(model), fNTupleName, *fOutputFile, writeOptions);
+      } else {
+         fWriter = ROOT::Experimental::RNTupleWriter::Recreate(std::move(model), fNTupleName, fFileName, writeOptions);
+      }
+   }
+
+   template <std::size_t... S>
+   void MakeFields(ROOT::Experimental::RNTupleModel &model, std::index_sequence<S...> /*dummy*/)
+   {
+      int expander[] = {(model.MakeField<ColTypes>(fOutputFieldNames[S]), 0)..., 0};
+      (void)expander; // avoid unused variable warnings for older compilers (gcc 14.1)
+   }
+
+   void Finalize()
+   {
+      fWriter.reset();
+      // We can now set the data source of the loop manager for the RDataFrame that is returned by the Snapshot call.
+      fLoopManager->SetDataSource(std::make_unique<ROOT::Experimental::RNTupleDS>(fNTupleName, fFileName));
+   }
+
+   std::string GetActionName() { return "Snapshot"; }
+
+   ROOT::RDF::SampleCallback_t GetSampleCallback() final
+   {
+      return [](unsigned int, const RSampleInfo &) mutable {};
+   }
+
+   /**
+    * @brief Create a new SnapshotRNTupleHelper with a different output file name
+    *
+    * @param newName A type-erased string with the output file name
+    * @return SnapshotRNTupleHelper
+    *
+    * This MakeNew implementation is tied to the cloning feature of actions
+    * of the computation graph. In particular, cloning a Snapshot node usually
+    * also involves changing the name of the output file, otherwise the cloned
+    * Snapshot would overwrite the same file.
+    */
+   SnapshotRNTupleHelper MakeNew(void *newName)
+   {
+      const std::string finalName = *reinterpret_cast<const std::string *>(newName);
+      return SnapshotRNTupleHelper{finalName,
+                                   fNTupleName,
+                                   fInputFieldNames,
+                                   fOutputFieldNames,
+                                   fOptions,
+                                   fLoopManager,
+                                   std::vector<bool>(fIsDefine)};
+   }
+};
+#endif
 
 template <typename Acc, typename Merge, typename R, typename T, typename U,
           bool MustCopyAssign = std::is_same<R, U>::value>

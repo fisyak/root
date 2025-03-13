@@ -115,6 +115,8 @@ clang/LLVM technology.
 #include "cling/Utils/SourceNormalization.h"
 #include "cling/Interpreter/Exception.h"
 
+#include "clang/Interpreter/CppInterOp.h"
+
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Module.h"
 
@@ -1146,7 +1148,7 @@ static GlobalModuleIndex *loadGlobalModuleIndex(cling::Interpreter &interp)
 #ifndef NDEBUG
                   SourceManager &SM = ND->getASTContext().getSourceManager();
                   SourceLocation Loc = ND->getLocation();
-                  const FileEntry *FE = SM.getFileEntryForID(SM.getFileID(Loc));
+                  OptionalFileEntryRef FE = SM.getFileEntryRefForID(SM.getFileID(Loc));
                   (void)FE;
                   assert(FE->getName().contains("input_line_"));
 #endif
@@ -1333,6 +1335,7 @@ static void RegisterPreIncludedHeaders(cling::Interpreter &clingInterp)
 /// \param title title for TInterpreter
 /// \param argv - array of arguments passed to the cling::Interpreter constructor
 ///               e.g. `-DFOO=bar`. The last element of the array must be `nullptr`.
+/// \param interpLibHandle handle to interpreter library
 
 TCling::TCling(const char *name, const char *title, const char* const argv[], void *interpLibHandle)
 : TInterpreter(name, title), fGlobalsListSerial(-1), fMapfile(nullptr),
@@ -1539,6 +1542,11 @@ TCling::TCling(const char *name, const char *title, const char* const argv[], vo
    if (!fInterpreter->getCI()) { // Compiler instance could not be created. See https://its.cern.ch/jira/browse/ROOT-10239
       return;
    }
+
+   // Tell CppInterOp that the cling::Interpreter instance is managed externally by ROOT
+   // Sets the interpreter by passing the fInterpreter handle as soon as TCling is initialized
+   Cpp::UseExternalInterpreter((Cpp::TInterp_t*)fInterpreter.get());
+
    // Don't check whether modules' files exist.
    fInterpreter->getCI()->getPreprocessorOpts().DisablePCHOrModuleValidation =
       DisableValidationForModuleKind::All;
@@ -1607,7 +1615,7 @@ TCling::TCling(const char *name, const char *title, const char* const argv[], vo
                         /*prepend=*/true);
       auto ShouldPermanentlyIgnore = [](llvm::StringRef FileName) -> bool{
          llvm::StringRef stem = llvm::sys::path::stem(FileName);
-         return stem.startswith("libNew") || stem.startswith("libcppyy_backend");
+         return stem.starts_with("libNew") || stem.starts_with("libcppyy_backend");
       };
       // Initialize the dyld for AutoloadLibraryGenerator.
       DLM.initializeDyld(ShouldPermanentlyIgnore);
@@ -2266,7 +2274,7 @@ void TCling::RegisterModule(const char* modulename,
    bool ModuleWasSuccessfullyLoaded = false;
    if (hasCxxModule) {
       std::string ModuleName = modulename;
-      if (llvm::StringRef(modulename).startswith("lib"))
+      if (llvm::StringRef(modulename).starts_with("lib"))
          ModuleName = llvm::StringRef(modulename).substr(3).str();
 
       // In case we are directly loading the library via gSystem->Load() without
@@ -6623,8 +6631,7 @@ void* TCling::LazyFunctionCreatorAutoload(const std::string& mangled_name) {
    std::string libName = DLM.searchLibrariesForSymbol(mangled_name,
                                                       /*searchSystem=*/ true);
 
-   assert(!llvm::StringRef(libName).startswith("libNew") &&
-          "We must not resolve symbols from libNew!");
+   assert(!llvm::StringRef(libName).starts_with("libNew") && "We must not resolve symbols from libNew!");
 
    if (libName.empty())
       return nullptr;
@@ -7266,7 +7273,7 @@ static bool hasParsedRootmapForLibrary(llvm::StringRef lib)
 {
    // Check if we have parsed a rootmap file.
    llvm::SmallString<256> rootmapName;
-   if (!lib.startswith("lib"))
+   if (!lib.starts_with("lib"))
       rootmapName.append("lib");
 
    rootmapName.append(llvm::sys::path::filename(lib));
@@ -9601,14 +9608,6 @@ bool TCling::IsVoidPointerType(const void * QualTypePtr) const
 {
    clang::QualType QT = clang::QualType::getFromOpaquePtr(QualTypePtr);
    return QT->isVoidPointerType();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool TCling::FunctionDeclId_IsMethod(DeclId_t fdeclid) const
-{
-   clang::FunctionDecl *FD = (clang::FunctionDecl *) fdeclid;
-   return llvm::isa_and_nonnull<clang::CXXMethodDecl>(FD);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

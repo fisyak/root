@@ -20,17 +20,18 @@
 #include <memory>
 #include <vector>
 
-using ROOT::Experimental::ENTupleColumnType;
-using ROOT::Experimental::NTupleSize_t;
+using ROOT::ENTupleColumnType;
+using ROOT::NTupleSize_t;
 using ROOT::Experimental::RNTupleDescriptor;
 using ROOT::Experimental::RNTupleModel;
 using ROOT::Experimental::Internal::RCluster;
+using ROOT::Experimental::Internal::RColumn;
 using ROOT::Experimental::Internal::RColumnElementBase;
-using ROOT::Experimental::Internal::RPage;
-using ROOT::Experimental::Internal::RPageRef;
 using ROOT::Experimental::Internal::RPageSink;
 using ROOT::Experimental::Internal::RPageSource;
 using ROOT::Experimental::Internal::RPageStorage;
+using ROOT::Internal::RPage;
+using ROOT::Internal::RPageRef;
 
 namespace {
 class RPageSinkMock : public RPageSink {
@@ -38,10 +39,7 @@ protected:
    const RColumnElementBase &fElement;
    std::vector<RPageStorage::RSealedPage> fPages;
 
-   ColumnHandle_t AddColumn(ROOT::Experimental::DescriptorId_t, ROOT::Experimental::Internal::RColumn &) final
-   {
-      return {};
-   }
+   ColumnHandle_t AddColumn(ROOT::DescriptorId_t, RColumn &) final { return {}; }
 
    const RNTupleDescriptor &GetDescriptor() const final
    {
@@ -55,7 +53,7 @@ protected:
    void UpdateSchema(const ROOT::Experimental::Internal::RNTupleModelChangeset &, NTupleSize_t) final {}
    void UpdateExtraTypeInfo(const ROOT::Experimental::RExtraTypeInfoDescriptor &) final {}
    void CommitSuppressedColumn(ColumnHandle_t) final {}
-   void CommitSealedPage(ROOT::Experimental::DescriptorId_t, const RPageStorage::RSealedPage &) final {}
+   void CommitSealedPage(ROOT::DescriptorId_t, const RPageStorage::RSealedPage &) final {}
    void CommitSealedPageV(std::span<RPageStorage::RSealedPageGroup>) final {}
    RStagedCluster StageCluster(NTupleSize_t) final { return {}; }
    void CommitStagedClusters(std::span<RStagedCluster>) final {}
@@ -63,11 +61,9 @@ protected:
    void CommitDatasetImpl() final {}
 
 public:
-   RPageSinkMock(const RColumnElementBase &elt)
-      : RPageSink("test", ROOT::Experimental::RNTupleWriteOptions()), fElement(elt)
+   RPageSinkMock(const RColumnElementBase &elt) : RPageSink("test", ROOT::RNTupleWriteOptions()), fElement(elt)
    {
       fOptions->SetEnablePageChecksums(false);
-      fCompressor = std::make_unique<ROOT::Experimental::Internal::RNTupleCompressor>();
    }
    void CommitPage(ColumnHandle_t /*columnHandle*/, const RPage &page) final
    {
@@ -86,29 +82,27 @@ protected:
    const std::vector<RPageStorage::RSealedPage> &fPages;
 
    void LoadStructureImpl() final {}
-   RNTupleDescriptor AttachImpl() final { return RNTupleDescriptor(); }
-   std::unique_ptr<RPageSource> CloneImpl() const final { return nullptr; }
-   RPageRef LoadPageImpl(ColumnHandle_t, const RClusterInfo &, ROOT::Experimental::NTupleSize_t) final
+   RNTupleDescriptor AttachImpl(ROOT::Experimental::Internal::RNTupleSerializer::EDescriptorDeserializeMode) final
    {
-      return RPageRef();
+      return RNTupleDescriptor();
    }
+   std::unique_ptr<RPageSource> CloneImpl() const final { return nullptr; }
+   RPageRef LoadPageImpl(ColumnHandle_t, const RClusterInfo &, ROOT::NTupleSize_t) final { return RPageRef(); }
 
 public:
    RPageSourceMock(const std::vector<RPageStorage::RSealedPage> &pages, const RColumnElementBase &elt)
-      : RPageSource("test", ROOT::Experimental::RNTupleReadOptions()), fElement(elt), fPages(pages)
+      : RPageSource("test", ROOT::RNTupleReadOptions()), fElement(elt), fPages(pages)
    {
    }
 
    RPageRef LoadPage(ColumnHandle_t columnHandle, NTupleSize_t i) final
    {
       auto page = RPageSource::UnsealPage(fPages[i], fElement).Unwrap();
-      ROOT::Experimental::Internal::RPagePool::RKey key{columnHandle.fPhysicalId, std::type_index(typeid(void))};
+      ROOT::Internal::RPagePool::RKey key{columnHandle.fPhysicalId, std::type_index(typeid(void))};
       return fPagePool.RegisterPage(std::move(page), key);
    }
-   RPageRef LoadPage(ColumnHandle_t, ROOT::Experimental::RNTupleLocalIndex) final { return RPageRef(); }
-   void LoadSealedPage(ROOT::Experimental::DescriptorId_t, ROOT::Experimental::RNTupleLocalIndex, RSealedPage &) final
-   {
-   }
+   RPageRef LoadPage(ColumnHandle_t, ROOT::RNTupleLocalIndex) final { return RPageRef(); }
+   void LoadSealedPage(ROOT::DescriptorId_t, ROOT::RNTupleLocalIndex, RSealedPage &) final {}
    std::vector<std::unique_ptr<RCluster>> LoadClusters(std::span<RCluster::RKey>) final { return {}; }
 };
 } // anonymous namespace

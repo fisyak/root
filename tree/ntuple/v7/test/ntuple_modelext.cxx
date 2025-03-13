@@ -5,14 +5,14 @@ namespace {
 struct RFieldBaseTest : public ROOT::Experimental::RFieldBase {
    /// Returns the global index of the first entry that has a stored on-disk value.  For deferred fields, this allows
    /// for differentiating zero-initialized values read before the addition of the field from actual stored data.
-   NTupleSize_t GetFirstEntry() const
+   ROOT::NTupleSize_t GetFirstEntry() const
    {
-      auto fnColumnElementIndexToEntry = [&](NTupleSize_t columnElementIndex) -> std::size_t {
+      auto fnColumnElementIndexToEntry = [&](ROOT::NTupleSize_t columnElementIndex) -> std::size_t {
          std::size_t result = columnElementIndex;
          for (auto f = static_cast<const RFieldBase *>(this); f != nullptr; f = f->GetParent()) {
             auto parent = f->GetParent();
-            if (parent && (parent->GetStructure() == ROOT::Experimental::kCollection ||
-                           parent->GetStructure() == ROOT::Experimental::kVariant))
+            if (parent && (parent->GetStructure() == ROOT::ENTupleStructure::kCollection ||
+                           parent->GetStructure() == ROOT::ENTupleStructure::kVariant))
                return 0U;
             result /= std::max(f->GetNRepetitions(), std::size_t{1U});
          }
@@ -21,8 +21,8 @@ struct RFieldBaseTest : public ROOT::Experimental::RFieldBase {
 
       if (fPrincipalColumn)
          return fnColumnElementIndexToEntry(fPrincipalColumn->GetFirstElementIndex());
-      if (!fSubFields.empty())
-         return static_cast<const RFieldBaseTest &>(*fSubFields[0]).GetFirstEntry();
+      if (!fSubfields.empty())
+         return static_cast<const RFieldBaseTest &>(*fSubfields[0]).GetFirstEntry();
       R__ASSERT(false);
       return 0;
    }

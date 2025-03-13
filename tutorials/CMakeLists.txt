@@ -44,6 +44,9 @@ set(TUTORIAL_ENV ${ROOT_environ} OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NU
 #---Copy the CTestCustom.cmake file into the build directory--------
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/CTestCustom.cmake ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 
+#---Copy the input file of the quadp portfolio example to the build directory--------
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/math/quadp/stock.root ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+
 #---Provide a rootlogon.C file in the current build directory that
 #   will affect the way we run all tutorials.
 #   This overwrites the existing rootlogon.C and rootalias.C in the
@@ -257,6 +260,8 @@ endif()
 if(MSVC)
   #---Multiproc is not supported on Windows
   set(imt_veto ${imt_veto} analysis/mp*.C io/tree/mp*.C legacy/multicore/mp*.C  multicore/mp*.C ./analysis/mtbb_parallelHistoFill.C)
+  #---XRootD is not supported on Windows
+  set(imt_veto ${imt_veto} io/tree/imt_parTreeProcessing.C)
 endif()
 
 if(ROOT_CLASSIC_BUILD)
@@ -294,6 +299,12 @@ endif()
 if (NOT ROOT_tmva_FOUND)
   list(APPEND tmva_veto machine_learning/*.C machine_learning/*.py machine_learning/envelope/*.C machine_learning/keras/*.C machine_learning/keras/*.py machine_learning/pytorch/*.py )
 else()
+  #copy input data files
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/machine_learning/data/tmva_class_example.root ${CMAKE_CURRENT_BINARY_DIR}/machine_learning/data COPYONLY)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/machine_learning/data/tmva_reg_example.root ${CMAKE_CURRENT_BINARY_DIR}/machine_learning/data COPYONLY)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/machine_learning/data/tmva_multiclass_example.root ${CMAKE_CURRENT_BINARY_DIR}/machine_learning/data COPYONLY)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/machine_learning/data/Higgs_data.root ${CMAKE_CURRENT_BINARY_DIR}/machine_learning/data COPYONLY)
+
   #---These do not need to run for TMVA
   list(APPEND tmva_veto machine_learning/createData.C)
   if(MSVC AND NOT win_broken_tests)
@@ -425,6 +436,7 @@ if(MSVC)
   # disable run_h1analysis.C because of Endpoint Security HTTP traffic scanning,
   # which is corrupting the data on Windows
   list(APPEND extra_veto analysis/tree/run_h1analysis.C)
+  list(APPEND extra_veto legacy/hist040_TH2Poly_europe.C) # needs to download from the web
 endif()
 
 if(MSVC AND NOT llvm13_broken_tests)
@@ -449,7 +461,7 @@ if(MSVC AND NOT llvm13_broken_tests)
 endif()
 
 set(all_veto hsimple.C
-             visualisation/geom/geometry.C
+             legacy/g3d/geometry.C
              ${extra_veto}
              ${gdml_veto}
              ${gui_veto}
@@ -545,13 +557,13 @@ set(benchmarks-depends tutorial-hsimple
                        tutorial-math-fit-myfit
                        tutorial-hist-hist015_TH1_read_and_draw
                        tutorial-hist-hist056_TPolyMarker_contour
-                       tutorial-visualisation-geom-na49view
+                       tutorial-legacy-g3d-na49view
                        tutorial-io-tree-tree120_ntuple.C
                        tutorial-io-tree-spider
                        tutorial-io-hadd
                        tutorial-io-loopdir
                        tutorial-io-copyFiles)
-set(visualisation-geom-na49view-depends tutorial-visualisation-geom-geometry)
+set(legacy-g3d-na49view-depends tutorial-legacy-g3d-geometry)
 set(io-tree-mt_readNtuplesFillHistosAndFit-depends tutorial-io-tree-mt_fillNtuples)
 set(io-tree-mp_readNtuplesFillHistosAndFit-depends tutorial-io-tree-mp_fillNtuples)
 
@@ -637,7 +649,7 @@ file(GLOB multithreaded RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${multithreaded})
 ROOT_ADD_TEST(tutorial-hsimple COMMAND ${ROOT_root_CMD} -b -l -n -q ${CMAKE_CURRENT_SOURCE_DIR}/hsimple.C
     PASSRC 255 FAILREGEX "Error in" "error:" "warning: Failed to call" LABELS tutorial ENVIRONMENT ${TUTORIAL_ENV})
 if(ROOT_geom_FOUND)
-  ROOT_ADD_TEST(tutorial-visualisation-geom-geometry COMMAND ${ROOT_root_CMD} -b -l -n -q ${CMAKE_CURRENT_SOURCE_DIR}/visualisation/geom/geometry.C
+  ROOT_ADD_TEST(tutorial-legacy-g3d-geometry COMMAND ${ROOT_root_CMD} -b -l -n -q ${CMAKE_CURRENT_SOURCE_DIR}/legacy/g3d/geometry.C
                 FAILREGEX "Error in" "error:" "warning: Failed to call" LABELS tutorial ENVIRONMENT ${TUTORIAL_ENV})
 endif()
 # define Python GNN parsing tutorial needed to run before
@@ -647,6 +659,13 @@ if (ROOT_SONNET_FOUND AND ROOT_GRAPH_NETS_FOUND)
   PASSRC 0 FAILREGEX "Error in" ": error:" LABELS tutorial ENVIRONMENT ${TUTORIAL_ENV})
   set (machine_learning-TMVA_SOFIE_GNN_Application-depends tutorial-machine_learning-TMVA_SOFIE_GNN_Parser)
 endif()
+
+# Download open data csv only once from a python tutorial, the C++ ones depend on it
+set(analysis-dataframe-df014_CSVDataSource-depends tutorial-analysis-dataframe-df014_CSVDataSource-py)
+set(analysis-dataframe-df015_LazyDataSource-depends tutorial-analysis-dataframe-df014_CSVDataSource-py)
+
+# Download the input root file only once from a python tutorial, the C++ one depends on it
+set(hist-hist039_TH2Poly_usa-depends tutorial-hist-hist039_TH2Poly_usa-py)
 
 #---Loop over all tutorials and define the corresponding test---------
 foreach(t ${tutorials})
@@ -702,6 +721,12 @@ foreach(t ${tutorials})
   endif()
 endforeach()
 
+if(root7 AND MSVC)
+  # This test should take 15-25 seconds but fails (timeout) often in the CI on Windows,
+  # so decrease its timeout to 2 minutes to prevent waiting hours to complete the tests
+  set_tests_properties(tutorial-io-ntuple-ntpl013_staged PROPERTIES TIMEOUT 120)
+endif()
+
 #---Loop over all MPI tutorials and define the corresponding test---------
 foreach(t ${mpi_tutorials})
   list(FIND returncode_1 ${t} index)
@@ -744,8 +769,8 @@ if(ROOT_pyroot_FOUND)
              math/fit/fit1_py.py      # not a tutorial
              visualisation/gui/gui_simple.py       # requires GUI
              io/tree/csv2tntuple.py          # not really a tutorial
-             visualisation/geom/na49geomfile.py # ????
-             visualisation/geom/na49visible.py  # ????
+             legacy/g3d/na49geomfile.py # ????
+             legacy/g3d/na49visible.py  # ????
              io/tree/csv2tree_ReadStream.py # not a tutorial
              visualisation/gui/numberEntry.py  # requires GUI
              legacy/pyroot/*py      # legacy ...
@@ -759,13 +784,8 @@ if(ROOT_pyroot_FOUND)
              )
 
   if(NOT dataframe
-     OR DEFINED ENV{ROOTTEST_IGNORE_NUMBA_PY3}
      OR (MSVC AND NOT win_broken_tests))
     list(APPEND pyveto analysis/dataframe/df038_NumbaDeclare.py)
-  endif()
-
-  if(dataframe AND DEFINED ENV{ROOTTEST_IGNORE_PANDAS_PY3})
-    list(APPEND pyveto analysis/dataframe/df026_AsNumpyArrays.py)
   endif()
 
   # Rules specific to distributed RDataFrame
@@ -846,11 +866,11 @@ if(ROOT_pyroot_FOUND)
   set(hist-hist015_TH1_read_and_draw-depends tutorial-hsimple-py)
   set(pyroot-benchmarks-depends tutorial-hsimple-py
                                 tutorial-math-fit-fit1-py
-                                tutorial-visualisation-geom-na49view-py
+                                tutorial-legacy-g3d-na49view-py
                                 tutorial-hist-hist015_TH1_read_and_draw-py
                                 tutorial-io-tree-ntuple1-py)
   set(math-fit-fit1-depends tutorial-hist-hist001_TH1_fillrandom-py)
-  set(visualisation-geom-na49view-depends tutorial-visualisation-geom-geometry-py)
+  set(legacy-g3d-na49view-depends tutorial-legacy-g3d-geometry-py)
   set(roofit-roofit-rf503_wspaceread-depends tutorial-roofit-roofit-rf502_wspacewrite-py)
   set(roofit-roofit-rf618_mixture_models-depends tutorial-analysis-dataframe-df106_HiggsToFourLeptons-py)
 
@@ -931,11 +951,17 @@ if(ROOT_pyroot_FOUND)
       endif()
     endforeach()
 
+    if(NOT ${${tname}-depends} STREQUAL ${tutorial_name})
+      set(tutorial_dependency ${${tname}-depends})
+    else()
+      set(tutorial_dependency "")
+    endif()
+
     ROOT_ADD_TEST(${tutorial_name}
                 COMMAND ${Python3_EXECUTABLE} ${setThreadPoolSize} ${thisTestPoolSize} ${CMAKE_CURRENT_SOURCE_DIR}/${t}
                 PASSRC ${rc} FAILREGEX "Error in" ": error:" "segmentation violation"
                 LABELS ${labels}
-                DEPENDS ${${tname}-depends}
+                DEPENDS ${tutorial_dependency}
                 ENVIRONMENT ${TUTORIAL_ENV}
                 PYTHON_DEPS ${python_deps}
                 ${py_will_fail})

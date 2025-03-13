@@ -121,9 +121,9 @@ private:
 protected:
    using RPagePersistentSink::InitImpl;
    void InitImpl(unsigned char *serializedHeader, std::uint32_t length) final;
-   RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const RPage &page) final;
+   RNTupleLocator CommitPageImpl(ColumnHandle_t columnHandle, const ROOT::Internal::RPage &page) final;
    RNTupleLocator
-   CommitSealedPageImpl(DescriptorId_t physicalColumnId, const RPageStorage::RSealedPage &sealedPage) final;
+   CommitSealedPageImpl(ROOT::DescriptorId_t physicalColumnId, const RPageStorage::RSealedPage &sealedPage) final;
    std::vector<RNTupleLocator>
    CommitSealedPageVImpl(std::span<RPageStorage::RSealedPageGroup> ranges, const std::vector<bool> &mask) final;
    std::uint64_t StageClusterImpl() final;
@@ -135,7 +135,7 @@ protected:
    void WriteNTupleAnchor();
 
 public:
-   RPageSinkDaos(std::string_view ntupleName, std::string_view uri, const RNTupleWriteOptions &options);
+   RPageSinkDaos(std::string_view ntupleName, std::string_view uri, const ROOT::RNTupleWriteOptions &options);
    ~RPageSinkDaos() override;
 }; // class RPageSinkDaos
 
@@ -161,19 +161,21 @@ private:
 
    RNTupleDescriptorBuilder fDescriptorBuilder;
 
-   RPageRef LoadPageImpl(ColumnHandle_t columnHandle, const RClusterInfo &clusterInfo, NTupleSize_t idxInCluster) final;
+   ROOT::Internal::RPageRef
+   LoadPageImpl(ColumnHandle_t columnHandle, const RClusterInfo &clusterInfo, ROOT::NTupleSize_t idxInCluster) final;
 
 protected:
    void LoadStructureImpl() final {}
-   RNTupleDescriptor AttachImpl() final;
+   RNTupleDescriptor AttachImpl(RNTupleSerializer::EDescriptorDeserializeMode mode) final;
    /// The cloned page source creates a new connection to the pool/container.
    std::unique_ptr<RPageSource> CloneImpl() const final;
 
 public:
-   RPageSourceDaos(std::string_view ntupleName, std::string_view uri, const RNTupleReadOptions &options);
+   RPageSourceDaos(std::string_view ntupleName, std::string_view uri, const ROOT::RNTupleReadOptions &options);
    ~RPageSourceDaos() override;
 
-   void LoadSealedPage(DescriptorId_t physicalColumnId, RNTupleLocalIndex localIndex, RSealedPage &sealedPage) final;
+   void
+   LoadSealedPage(ROOT::DescriptorId_t physicalColumnId, RNTupleLocalIndex localIndex, RSealedPage &sealedPage) final;
 
    std::vector<std::unique_ptr<RCluster>> LoadClusters(std::span<RCluster::RKey> clusterKeys) final;
 

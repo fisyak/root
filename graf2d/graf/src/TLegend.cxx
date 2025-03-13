@@ -809,14 +809,12 @@ void TLegend::PaintPrimitives()
       // bar are drawn differently.
       Int_t endcaps  = 0; // no endcaps.
       if (eobj) { // eobj == nullptr for the legend header
-         TString eobjopt = eobj->GetDrawOption();
-         eobjopt.ToLower();
-         if (eobjopt.Contains("e1") && eobj->InheritsFrom(TH1::Class())) endcaps = 1; // a bar
+         if (opt.Contains("e1") && eobj->InheritsFrom(TH1::Class())) endcaps = 1; // a bar
          if (eobj->InheritsFrom(TGraph::Class())) {
             endcaps = 1; // a bar, default for TGraph
-            if (eobjopt.Contains("z"))  endcaps = 0; // no endcaps.
-            if (eobjopt.Contains(">"))  endcaps = 2; // empty arrow.
-            if (eobjopt.Contains("|>")) endcaps = 3; // filled arrow.
+            if (opt.Contains("z"))  endcaps = 0; // no endcaps.
+            if (opt.Contains(">"))  endcaps = 2; // empty arrow.
+            if (opt.Contains("|>")) endcaps = 3; // filled arrow.
          }
       }
       float arrow_shift = 0.3;
@@ -1034,30 +1032,21 @@ void TLegend::RecursiveRemove(TObject *obj)
 
 void TLegend::SavePrimitive(std::ostream &out, Option_t* )
 {
+   SavePrimitiveConstructor(out, Class(), "leg",
+                            TString::Format("%g, %g, %g, %g, nullptr, \"%s\"", GetX1NDC(), GetY1NDC(), GetX2NDC(),
+                                            GetY2NDC(), TString(fOption).ReplaceSpecialCppChars().Data()));
 
-   out << "   " << std::endl;
-   char quote = '"';
-   if ( gROOT->ClassSaved( TLegend::Class() ) ) {
-      out << "   ";
-   } else {
-      out << "   TLegend *";
-   }
-   // note, we can always use NULL header, since its included in primitives
-   out << "leg = new TLegend("<<GetX1NDC()<<","<<GetY1NDC()<<","
-       <<GetX2NDC()<<","<<GetY2NDC()<<","
-       << "NULL" << "," <<quote<< fOption <<quote<<");" << std::endl;
-   if (fBorderSize != 4) {
-      out<<"   leg->SetBorderSize("<<fBorderSize<<");"<<std::endl;
-   }
-   SaveTextAttributes(out,"leg",12,0,1,42,0);
-   SaveLineAttributes(out,"leg",-1,-1,-1);
-   SaveFillAttributes(out,"leg",-1,-1);
-   if ( fPrimitives ) {
+   if (fBorderSize != 4)
+      out << "   leg->SetBorderSize(" << fBorderSize << ");" << std::endl;
+   SaveTextAttributes(out, "leg", 12, 0, 1, 42, 0);
+   SaveLineAttributes(out, "leg", -1, -1, -1);
+   SaveFillAttributes(out, "leg", -1, -1);
+   if (fPrimitives) {
       TIter next(fPrimitives);
-      TLegendEntry *entry;
-      while (( entry = (TLegendEntry *)next() )) entry->SaveEntry(out,"leg");
+      while (auto entry = static_cast<TLegendEntry *>(next()))
+         entry->SaveEntry(out, "leg");
    }
-   out << "   leg->Draw();"<<std::endl;
+   out << "   leg->Draw();" << std::endl;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

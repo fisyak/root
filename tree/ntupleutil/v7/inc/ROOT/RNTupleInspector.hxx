@@ -107,7 +107,7 @@ public:
       std::uint64_t GetUncompressedSize() const { return fElementSize * fNElements; }
       std::uint64_t GetElementSize() const { return fElementSize; }
       std::uint64_t GetNElements() const { return fNElements; }
-      ENTupleColumnType GetType() const { return fColumnDescriptor.GetType(); }
+      ROOT::ENTupleColumnType GetType() const { return fColumnDescriptor.GetType(); }
    };
 
    /////////////////////////////////////////////////////////////////////////////
@@ -161,7 +161,7 @@ private:
    /// \return The RFieldTreeInspector for the provided field ID.
    ///
    /// This method is called when the RNTupleInspector is initially created.
-   RFieldTreeInspector CollectFieldTreeInfo(DescriptorId_t fieldId);
+   RFieldTreeInspector CollectFieldTreeInfo(ROOT::DescriptorId_t fieldId);
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the columns that make up the given field, including its subfields.
@@ -169,7 +169,7 @@ private:
    /// \param [in] fieldId The ID of the field for which to collect the columns.
    ///
    /// \return A vector containing the IDs of all columns for the provided field ID.
-   std::vector<DescriptorId_t> GetColumnsByFieldId(DescriptorId_t fieldId) const;
+   std::vector<ROOT::DescriptorId_t> GetColumnsByFieldId(ROOT::DescriptorId_t fieldId) const;
 
 public:
    RNTupleInspector(const RNTupleInspector &other) = delete;
@@ -253,29 +253,29 @@ public:
    /// \param[in] physicalColumnId The physical ID of the column for which to get the information.
    ///
    /// \return The storage information for the provided column.
-   const RColumnInspector &GetColumnInspector(DescriptorId_t physicalColumnId) const;
+   const RColumnInspector &GetColumnInspector(ROOT::DescriptorId_t physicalColumnId) const;
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the number of columns of a given type present in the RNTuple.
    ///
-   /// \param[in] colType The column type to count, as defined by ROOT::Experimental::ENTupleColumnType.
+   /// \param[in] colType The column type to count, as defined by ROOT::ENTupleColumnType.
    ///
    /// \return The number of columns present in the inspected RNTuple of the provided type.
-   size_t GetColumnCountByType(ENTupleColumnType colType) const;
+   size_t GetColumnCountByType(ROOT::ENTupleColumnType colType) const;
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the IDs of all columns with the given type.
    ///
-   /// \param[in] colType The column type to collect, as defined by ROOT::Experimental::ENTupleColumnType.
+   /// \param[in] colType The column type to collect, as defined by ROOT::ENTupleColumnType.
    ///
    /// \return A vector containing the physical IDs of columns of the provided type.
-   const std::vector<DescriptorId_t> GetColumnsByType(ENTupleColumnType colType);
+   const std::vector<ROOT::DescriptorId_t> GetColumnsByType(ROOT::ENTupleColumnType colType);
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get all column types present in the RNTuple being inspected.
    ///
    /// \return A vector containing all column types present in the RNTuple.
-   const std::vector<ENTupleColumnType> GetColumnTypes();
+   const std::vector<ROOT::ENTupleColumnType> GetColumnTypes();
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Print storage information per column type.
@@ -348,14 +348,13 @@ public:
    /// \return A pointer to a `TH1D` containing the page size distribution.
    ///
    /// The x-axis will range from the smallest page size, to the largest (inclusive).
-   std::unique_ptr<TH1D> GetPageSizeDistribution(DescriptorId_t physicalColumnId, std::string histName = "",
+   std::unique_ptr<TH1D> GetPageSizeDistribution(ROOT::DescriptorId_t physicalColumnId, std::string histName = "",
                                                  std::string histTitle = "", size_t nBins = 64);
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get a histogram containing the size distribution of the compressed pages for all columns of a given type.
    ///
-   /// \param[in] colType The column type for which to get the size distribution, as defined by
-   /// ROOT::Experimental::ENTupleColumnType.
+   /// \param[in] colType The column type for which to get the size distribution, as defined by ROOT::ENTupleColumnType.
    /// \param[in] histName The name of the histogram. An empty string means a default name will be used.
    /// \param[in] histTitle The title of the histogram. An empty string means a default title will be used.
    /// \param[in] nBins The desired number of histogram bins.
@@ -363,7 +362,7 @@ public:
    /// \return A pointer to a `TH1D` containing the page size distribution.
    ///
    /// The x-axis will range from the smallest page size, to the largest (inclusive).
-   std::unique_ptr<TH1D> GetPageSizeDistribution(ENTupleColumnType colType, std::string histName = "",
+   std::unique_ptr<TH1D> GetPageSizeDistribution(ROOT::ENTupleColumnType colType, std::string histName = "",
                                                  std::string histTitle = "", size_t nBins = 64);
 
    /////////////////////////////////////////////////////////////////////////////
@@ -377,7 +376,7 @@ public:
    /// \return A pointer to a `TH1D` containing the (cumulative) page size distribution.
    ///
    /// The x-axis will range from the smallest page size, to the largest (inclusive).
-   std::unique_ptr<TH1D> GetPageSizeDistribution(std::initializer_list<DescriptorId_t> colIds,
+   std::unique_ptr<TH1D> GetPageSizeDistribution(std::initializer_list<ROOT::DescriptorId_t> colIds,
                                                  std::string histName = "", std::string histTitle = "",
                                                  size_t nBins = 64);
 
@@ -386,7 +385,7 @@ public:
    /// of types.
    ///
    /// \param[in] colTypes The column types for which to get the size distribution, as defined by
-   /// ROOT::Experimental::ENTupleColumnType. The default is an empty vector, which indicates that the distribution
+   /// ROOT::ENTupleColumnType. The default is an empty vector, which indicates that the distribution
    /// for *all* physical columns will be returned.
    /// \param[in] histName The name of the histogram. An empty string means a default name will be used. The name of
    /// each histogram inside the `THStack` will be `histName + colType`.
@@ -404,15 +403,14 @@ public:
    ///
    /// // We want to show the page size distributions of columns with type `kSplitReal32` and `kSplitReal64`.
    /// auto hist = inspector->GetPageSizeDistribution(
-   ///     {ROOT::Experimental::ENTupleColumnType::kSplitReal32,
-   ///      ROOT::Experimental::ENTupleColumnType::kSplitReal64});
+   ///     {ROOT::ENTupleColumnType::kSplitReal32, ROOT::ENTupleColumnType::kSplitReal64});
    /// // The "PLC" option automatically sets the line color for each histogram in the `THStack`.
    /// // The "NOSTACK" option will draw the histograms on top of each other instead of stacked.
    /// hist->DrawClone("PLC NOSTACK");
    /// canvas->BuildLegend(0.7, 0.8, 0.89, 0.89);
    /// canvas->DrawClone();
    /// ~~~
-   std::unique_ptr<THStack> GetPageSizeDistribution(std::initializer_list<ENTupleColumnType> colTypes = {},
+   std::unique_ptr<THStack> GetPageSizeDistribution(std::initializer_list<ROOT::ENTupleColumnType> colTypes = {},
                                                     std::string histName = "", std::string histTitle = "",
                                                     size_t nBins = 64);
 
@@ -422,7 +420,7 @@ public:
    /// \param[in] fieldId The ID of the (sub)field for which to get the information.
    ///
    /// \return The storage information inspector for the provided (sub)field tree.
-   const RFieldTreeInspector &GetFieldTreeInspector(DescriptorId_t fieldId) const;
+   const RFieldTreeInspector &GetFieldTreeInspector(ROOT::DescriptorId_t fieldId) const;
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get a storage information inspector for a given (sub)field by name, including its subfields.
@@ -437,18 +435,18 @@ public:
    ///
    /// \param[in] typeNamePattern The type or class name to count. May contain regular expression patterns for grouping
    /// multiple kinds of types or classes.
-   /// \param[in] searchInSubFields If set to `false`, only top-level fields will be considered.
+   /// \param[in] searchInSubfields If set to `false`, only top-level fields will be considered.
    ///
    /// \return The number of fields that matches the provided type.
-   size_t GetFieldCountByType(const std::regex &typeNamePattern, bool searchInSubFields = true) const;
+   size_t GetFieldCountByType(const std::regex &typeNamePattern, bool searchInSubfields = true) const;
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the number of fields of a given type or class present in the RNTuple.
    ///
-   /// \see GetFieldCountByType(const std::regex &typeNamePattern, bool searchInSubFields) const
-   size_t GetFieldCountByType(std::string_view typeNamePattern, bool searchInSubFields = true) const
+   /// \see GetFieldCountByType(const std::regex &typeNamePattern, bool searchInSubfields) const
+   size_t GetFieldCountByType(std::string_view typeNamePattern, bool searchInSubfields = true) const
    {
-      return GetFieldCountByType(std::regex{std::string(typeNamePattern)}, searchInSubFields);
+      return GetFieldCountByType(std::regex{std::string(typeNamePattern)}, searchInSubfields);
    }
 
    /////////////////////////////////////////////////////////////////////////////
@@ -457,19 +455,20 @@ public:
    /// \param[in] fieldNamePattern The name of the field name to get. Because field names are unique by design,
    /// providing a single field name will return a vector containing just the ID of that field. However, regular
    /// expression patterns are supported in order to get the IDs of all fields whose name follow a certain structure.
-   /// \param[in] searchInSubFields If set to `false`, only top-level fields will be considered.
+   /// \param[in] searchInSubfields If set to `false`, only top-level fields will be considered.
    ///
    /// \return A vector containing the IDs of fields that match the provided name.
-   const std::vector<DescriptorId_t>
-   GetFieldsByName(const std::regex &fieldNamePattern, bool searchInSubFields = true) const;
+   const std::vector<ROOT::DescriptorId_t>
+   GetFieldsByName(const std::regex &fieldNamePattern, bool searchInSubfields = true) const;
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the IDs of (sub-)fields whose name matches the given string.
    ///
-   /// \see GetFieldsByName(const std::regex &fieldNamePattern, bool searchInSubFields) const
-   const std::vector<DescriptorId_t> GetFieldsByName(std::string_view fieldNamePattern, bool searchInSubFields = true)
+   /// \see GetFieldsByName(const std::regex &fieldNamePattern, bool searchInSubfields) const
+   const std::vector<ROOT::DescriptorId_t>
+   GetFieldsByName(std::string_view fieldNamePattern, bool searchInSubfields = true)
    {
-      return GetFieldsByName(std::regex{std::string(fieldNamePattern)}, searchInSubFields);
+      return GetFieldsByName(std::regex{std::string(fieldNamePattern)}, searchInSubfields);
    }
 };
 } // namespace Experimental

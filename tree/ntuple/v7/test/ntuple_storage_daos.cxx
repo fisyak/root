@@ -112,7 +112,7 @@ TEST_F(RPageStorageDaos, Extended)
    }
 
    RNTupleReadOptions options;
-   options.SetClusterBunchSize(5);
+   ROOT::Internal::RNTupleReadOptionsManip::SetClusterBunchSize(options, 5);
    auto ntuple = RNTupleReader::Open(ntupleName, daosUri, options);
    auto rdVector = ntuple->GetModel().GetDefaultEntry().GetPtr<std::vector<double>>("vector");
 
@@ -155,11 +155,11 @@ TEST_F(RPageStorageDaos, Options)
    }
 
    auto readOptions = RNTupleReadOptions();
-   readOptions.SetClusterBunchSize(3);
+   ROOT::Internal::RNTupleReadOptionsManip::SetClusterBunchSize(readOptions, 3);
    ROOT::Experimental::Internal::RPageSourceDaos source(ntupleName, daosUri, readOptions);
    source.Attach();
    EXPECT_STREQ("RP_XSF", source.GetObjectClass().c_str());
-   EXPECT_EQ(3U, source.GetReadOptions().GetClusterBunchSize());
+   EXPECT_EQ(3U, ROOT::Internal::RNTupleReadOptionsManip::GetClusterBunchSize(source.GetReadOptions()));
    EXPECT_EQ(1U, source.GetNEntries());
 }
 
@@ -239,8 +239,8 @@ TEST_F(RPageStorageDaos, DisabledSamePageMerging)
    const auto pyColId = desc.FindPhysicalColumnId(desc.FindFieldId("py"), 0, 0);
    const auto clusterId = desc.FindClusterId(pxColId, 0);
    const auto &clusterDesc = desc.GetClusterDescriptor(clusterId);
-   EXPECT_FALSE(clusterDesc.GetPageRange(pxColId).Find(0).fLocator.GetPosition<RNTupleLocatorObject64>() ==
-                clusterDesc.GetPageRange(pyColId).Find(0).fLocator.GetPosition<RNTupleLocatorObject64>());
+   EXPECT_FALSE(clusterDesc.GetPageRange(pxColId).Find(0).GetLocator().GetPosition<RNTupleLocatorObject64>() ==
+                clusterDesc.GetPageRange(pyColId).Find(0).GetLocator().GetPosition<RNTupleLocatorObject64>());
 
    auto viewPx = reader->GetView<float>("px");
    auto viewPy = reader->GetView<float>("py");
@@ -286,7 +286,7 @@ TEST_F(RPageStorageDaos, CagedPages)
    {
       RNTupleReadOptions options;
       options.SetClusterCache(RNTupleReadOptions::EClusterCache::kOn);
-      options.SetClusterBunchSize(5);
+      ROOT::Internal::RNTupleReadOptionsManip::SetClusterBunchSize(options, 5);
       auto ntuple = RNTupleReader::Open(ntupleName, daosUri, options);
       auto rdVector = ntuple->GetModel().GetDefaultEntry().GetPtr<std::vector<double>>("vector");
 
@@ -358,9 +358,9 @@ TEST_F(RPageStorageDaos, Checksum)
    EXPECT_THROW(viewPy(0), ROOT::RException);
    EXPECT_FLOAT_EQ(3.0, viewPz(0));
 
-   DescriptorId_t pxColId;
-   DescriptorId_t pyColId;
-   DescriptorId_t clusterId;
+   ROOT::DescriptorId_t pxColId;
+   ROOT::DescriptorId_t pyColId;
+   ROOT::DescriptorId_t clusterId;
    auto pageSource = RPageSource::Create("ntpl", daosUri);
    pageSource->Attach();
    {

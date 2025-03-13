@@ -12,6 +12,8 @@ on:
 
 jobs:
   build-docs:
+    if: github.repository_owner == 'root-project'
+
     runs-on:
       - self-hosted
       - linux
@@ -29,8 +31,8 @@ jobs:
       contents: read
 
     container:
-      image: registry.cern.ch/root-ci/alma9:buildready # ALSO UPDATE BELOW!
-      options: '--security-opt label=disable --rm --name rootdoc' # ALSO UPDATE BELOW!
+      image: registry.cern.ch/root-ci/alma9:buildready
+      options: '--security-opt label=disable --rm'
       env:
         OS_APPLICATION_CREDENTIAL_ID: '7f5b64a265244623a3a933308569bdba'
         OS_APPLICATION_CREDENTIAL_SECRET: ${{ secrets.OS_APPLICATION_CREDENTIAL_SECRET }}
@@ -64,17 +66,25 @@ jobs:
         mkdir -p ${{ github.workspace }}/doxygen
         curl -L https://github.com/doxygen/doxygen/releases/download/Release_1_10_0/doxygen-1.10.0.linux.bin.tar.gz | tar -xz -C ${{ github.workspace }}/doxygen/ --strip-components=1
         echo PATH=$PATH:${{ github.workspace }}/doxygen/bin >> $GITHUB_ENV
+#         git clone --branch Release_1_12_0 https://github.com/doxygen/doxygen.git
+#         cd doxygen
+#         mkdir build
+#         cd build
+#         cmake ..
+#         make -j$(nproc)
+#         echo PATH=$PATH:${{ github.workspace }}/doxygen/build/bin >> $GITHUB_ENV
+#         cd ${{ github.workspace }}
+#         doxygen --version
 
     - name: Install qhelpgenerator-qt5
       run: |
-        dnf update -y
         dnf upgrade -y
         dnf install -y qt5-doctools
         which qhelpgenerator-qt5
 
     - name: Apply option overrides
       env:
-        OVERRIDES: "testing=Off roottest=Off minimal=On"
+        OVERRIDES: "testing=Off roottest=Off"
         CONFIGFILE: '.github/workflows/root-ci-config/buildconfig/alma9.txt'
       shell: bash
       run: |
@@ -161,6 +171,29 @@ jobs:
         pwd
         ls -l
         aws s3 sync ${DOC_DIR}/html/ s3://root/doc/${WEB_DIR_NAME}/
-        rm -rf ${DOC_DIR}/html
-        aws s3 sync ${DOC_DIR}/ s3://root/doc/${WEB_DIR_NAME}/
+        aws s3 sync ${DOC_DIR}/ s3://root/doc/${WEB_DIR_NAME}/ --exclude "${DOC_DIR}/html/*"
         aws s3 cp ${TAR_NAME}.gz s3://root/download/
+
+    - name: Install Kerberos utilities
+      run: dnf -y install krb5-workstation
+
+    - name: Install XRootD client
+      run: dnf -y install xrootd-client
+
+    - name: Sync documentation to EOS
+      env:
+        RWEBEOS_KT: ${{ secrets.RWEBEOS_KT }}
+        KRB5USER: ${{ secrets.KRB5USER }}
+        KRB5REALM: ${{ secrets.KRB5REALM }}
+        KT_FILE_NAME: /tmp/decoded.keytab
+        EOS_BASE_PATH: /eos/project/r/root-eos/website/
+        EOS_ENDPOINT: root://eosproject-r.cern.ch
+        KRB5CCNAME: /tmp/krb5cc
+      working-directory: ${{ env.DOC_LOCATION }}
+      run: |
+        echo ${RWEBEOS_KT} | base64 -d > ${KT_FILE_NAME}
+        kinit -p ${{ secrets.KRB5USER }}@${{ secrets.KRB5REALM }} -kt ${KT_FILE_NAME}
+        xrdcp -rf ${DOC_DIR}/html/* ${EOS_ENDPOINT}/${EOS_BASE_PATH}/doc/${WEB_DIR_NAME}
+        rm -r ${DOC_DIR}/html
+        xrdcp --streams 12 -rf ${DOC_DIR}/* ${EOS_ENDPOINT}/${EOS_BASE_PATH}/doc/${WEB_DIR_NAME}
+        xrdcp -rf ${TAR_NAME}.gz ${EOS_ENDPOINT}/${EOS_BASE_PATH}/download

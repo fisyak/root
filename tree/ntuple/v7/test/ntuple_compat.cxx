@@ -44,12 +44,12 @@ TEST(RNTupleCompat, FeatureFlag)
    auto writer = RNTupleFileWriter::Recreate("ntpl", fileGuard.GetPath(), EContainerFormat::kTFile, options);
    RNTupleSerializer serializer;
 
-   auto ctx = serializer.SerializeHeader(nullptr, descBuilder.GetDescriptor());
+   auto ctx = serializer.SerializeHeader(nullptr, descBuilder.GetDescriptor()).Unwrap();
    auto buffer = std::make_unique<unsigned char[]>(ctx.GetHeaderSize());
-   ctx = serializer.SerializeHeader(buffer.get(), descBuilder.GetDescriptor());
+   ctx = serializer.SerializeHeader(buffer.get(), descBuilder.GetDescriptor()).Unwrap();
    writer->WriteNTupleHeader(buffer.get(), ctx.GetHeaderSize(), ctx.GetHeaderSize());
 
-   auto szFooter = serializer.SerializeFooter(nullptr, descBuilder.GetDescriptor(), ctx);
+   auto szFooter = serializer.SerializeFooter(nullptr, descBuilder.GetDescriptor(), ctx).Unwrap();
    buffer = std::make_unique<unsigned char[]>(szFooter);
    serializer.SerializeFooter(buffer.get(), descBuilder.GetDescriptor(), ctx);
    writer->WriteNTupleFooter(buffer.get(), szFooter, szFooter);
@@ -163,7 +163,7 @@ protected:
    }
    const RColumnRepresentations &GetColumnRepresentations() const final
    {
-      static const RColumnRepresentations representations{{{Internal::kTestFutureType}}, {}};
+      static const RColumnRepresentations representations{{{ROOT::Internal::kTestFutureColumnType}}, {}};
       return representations;
    }
 
@@ -196,7 +196,7 @@ TEST(RNTupleCompat, FutureColumnType)
    const auto &fdesc = desc.GetFieldDescriptor(desc.FindFieldId("futureColumn"));
    GTEST_ASSERT_EQ(fdesc.GetLogicalColumnIds().size(), 1);
    const auto &cdesc = desc.GetColumnDescriptor(fdesc.GetLogicalColumnIds()[0]);
-   EXPECT_EQ(cdesc.GetType(), ENTupleColumnType::kUnknown);
+   EXPECT_EQ(cdesc.GetType(), ROOT::ENTupleColumnType::kUnknown);
 
    {
       // Creating a model not in fwd-compatible mode should fail
@@ -205,7 +205,7 @@ TEST(RNTupleCompat, FutureColumnType)
 
    {
       auto modelOpts = RNTupleDescriptor::RCreateModelOptions();
-      modelOpts.fForwardCompatible = true;
+      modelOpts.SetForwardCompatible(true);
       auto model = desc.CreateModel(modelOpts);
 
       // The future column should not show up in the model
@@ -248,7 +248,7 @@ TEST(RNTupleCompat, FutureColumnType_Nested)
    const auto &fdesc = desc.GetFieldDescriptor(desc.FindFieldId("vec._0", futureId));
    GTEST_ASSERT_EQ(fdesc.GetLogicalColumnIds().size(), 1);
    const auto &cdesc = desc.GetColumnDescriptor(fdesc.GetLogicalColumnIds()[0]);
-   EXPECT_EQ(cdesc.GetType(), ENTupleColumnType::kUnknown);
+   EXPECT_EQ(cdesc.GetType(), ROOT::ENTupleColumnType::kUnknown);
 
    {
       // Creating a model not in fwd-compatible mode should fail
@@ -257,7 +257,7 @@ TEST(RNTupleCompat, FutureColumnType_Nested)
 
    {
       auto modelOpts = RNTupleDescriptor::RCreateModelOptions();
-      modelOpts.fForwardCompatible = true;
+      modelOpts.SetForwardCompatible(true);
       auto model = desc.CreateModel(modelOpts);
 
       // The future column should not show up in the model
@@ -285,10 +285,7 @@ class RFutureField : public RFieldBase {
    std::size_t AppendImpl(const void *) final { return 0; }
 
 public:
-   RFutureField(std::string_view name)
-      : RFieldBase(name, "Future", ROOT::Experimental::Internal::kTestFutureFieldStructure, false)
-   {
-   }
+   RFutureField(std::string_view name) : RFieldBase(name, "Future", ROOT::Internal::kTestFutureFieldStructure, false) {}
 
    std::size_t GetValueSize() const final { return 0; }
    std::size_t GetAlignment() const final { return 0; }
@@ -317,7 +314,7 @@ TEST(RNTupleCompat, FutureFieldStructuralRole)
    EXPECT_THROW(desc.CreateModel(), ROOT::RException);
 
    auto modelOpts = RNTupleDescriptor::RCreateModelOptions();
-   modelOpts.fForwardCompatible = true;
+   modelOpts.SetForwardCompatible(true);
    auto model = desc.CreateModel(modelOpts);
    try {
       model->GetConstField("future");
@@ -354,7 +351,7 @@ TEST(RNTupleCompat, FutureFieldStructuralRole_Nested)
    EXPECT_THROW(desc.CreateModel(), ROOT::RException);
 
    auto modelOpts = RNTupleDescriptor::RCreateModelOptions();
-   modelOpts.fForwardCompatible = true;
+   modelOpts.SetForwardCompatible(true);
    auto model = desc.CreateModel(modelOpts);
    const auto &floatFld = model->GetConstField("float");
    EXPECT_EQ(floatFld.GetTypeName(), "float");
@@ -367,12 +364,12 @@ TEST(RNTupleCompat, FutureFieldStructuralRole_Nested)
 }
 
 class RPageSinkTestLocator : public RPageSinkFile {
-   ROOT::Experimental::RNTupleLocator WriteSealedPage(const RPageStorage::RSealedPage &sealedPage, std::size_t)
+   ROOT::RNTupleLocator WriteSealedPage(const RPageStorage::RSealedPage &sealedPage, std::size_t)
    {
-      auto payload = ROOT::Experimental::RNTupleLocatorObject64{0x420};
+      auto payload = ROOT::RNTupleLocatorObject64{0x420};
       RNTupleLocator result;
       result.SetPosition(payload);
-      result.SetType(ROOT::Experimental::Internal::kTestLocatorType);
+      result.SetType(ROOT::Internal::kTestLocatorType);
       result.SetNBytesOnStorage(sealedPage.GetDataSize());
       return result;
    }

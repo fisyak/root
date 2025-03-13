@@ -38,16 +38,16 @@ struct ClusterInfo {
 };
 
 struct ColumnInfo {
-   ROOT::Experimental::DescriptorId_t fPhysicalColumnId = 0;
-   ROOT::Experimental::DescriptorId_t fLogicalColumnId = 0;
-   ROOT::Experimental::DescriptorId_t fFieldId = 0;
+   ROOT::DescriptorId_t fPhysicalColumnId = 0;
+   ROOT::DescriptorId_t fLogicalColumnId = 0;
+   ROOT::DescriptorId_t fFieldId = 0;
    std::uint64_t fNElements = 0;
    std::uint64_t fNPages = 0;
    std::uint64_t fNBytesOnStorage = 0;
    std::uint32_t fElementSize = 0;
    std::uint32_t fColumnIndex = 0;
    std::uint16_t fRepresentationIndex = 0;
-   ROOT::Experimental::ENTupleColumnType fType;
+   ROOT::ENTupleColumnType fType;
    std::string fFieldName;
    std::string fFieldDescription;
 
@@ -62,17 +62,15 @@ struct ColumnInfo {
    }
 };
 
-std::string
-GetFieldName(ROOT::Experimental::DescriptorId_t fieldId, const ROOT::Experimental::RNTupleDescriptor &ntupleDesc)
+std::string GetFieldName(ROOT::DescriptorId_t fieldId, const ROOT::Experimental::RNTupleDescriptor &ntupleDesc)
 {
    const auto &fieldDesc = ntupleDesc.GetFieldDescriptor(fieldId);
-   if (fieldDesc.GetParentId() == ROOT::Experimental::kInvalidDescriptorId)
+   if (fieldDesc.GetParentId() == ROOT::kInvalidDescriptorId)
       return fieldDesc.GetFieldName();
    return GetFieldName(fieldDesc.GetParentId(), ntupleDesc) + "." + fieldDesc.GetFieldName();
 }
 
-std::string GetFieldDescription(ROOT::Experimental::DescriptorId_t fFieldId,
-                                const ROOT::Experimental::RNTupleDescriptor &ntupleDesc)
+std::string GetFieldDescription(ROOT::DescriptorId_t fFieldId, const ROOT::Experimental::RNTupleDescriptor &ntupleDesc)
 {
    const auto &fieldDesc = ntupleDesc.GetFieldDescriptor(fFieldId);
    return fieldDesc.GetFieldDescription();
@@ -84,7 +82,7 @@ void ROOT::Experimental::RNTupleDescriptor::PrintInfo(std::ostream &output) cons
 {
    std::vector<ColumnInfo> columns;
    std::vector<ClusterInfo> clusters;
-   std::unordered_map<DescriptorId_t, unsigned int> cluster2Idx;
+   std::unordered_map<ROOT::DescriptorId_t, unsigned int> cluster2Idx;
    clusters.reserve(fClusterDescriptors.size());
    for (const auto &cluster : fClusterDescriptors) {
       ClusterInfo info;
@@ -119,22 +117,22 @@ void ROOT::Experimental::RNTupleDescriptor::PrintInfo(std::ostream &output) cons
 
       for (const auto &cluster : fClusterDescriptors) {
          auto columnRange = cluster.second.GetColumnRange(column.second.GetPhysicalId());
-         if (columnRange.fIsSuppressed)
+         if (columnRange.IsSuppressed())
             continue;
 
-         info.fNElements += columnRange.fNElements;
-         if (compression == -1 && columnRange.fCompressionSettings) {
-            compression = *columnRange.fCompressionSettings;
+         info.fNElements += columnRange.GetNElements();
+         if (compression == -1 && columnRange.GetCompressionSettings()) {
+            compression = *columnRange.GetCompressionSettings();
          }
          const auto &pageRange = cluster.second.GetPageRange(column.second.GetPhysicalId());
          auto idx = cluster2Idx[cluster.first];
-         for (const auto &page : pageRange.fPageInfos) {
-            nBytesOnStorage += page.fLocator.GetNBytesOnStorage();
-            nBytesInMemory += page.fNElements * elementSize;
-            clusters[idx].fNBytesOnStorage += page.fLocator.GetNBytesOnStorage();
-            clusters[idx].fNBytesInMemory += page.fNElements * elementSize;
+         for (const auto &page : pageRange.GetPageInfos()) {
+            nBytesOnStorage += page.GetLocator().GetNBytesOnStorage();
+            nBytesInMemory += page.GetNElements() * elementSize;
+            clusters[idx].fNBytesOnStorage += page.GetLocator().GetNBytesOnStorage();
+            clusters[idx].fNBytesInMemory += page.GetNElements() * elementSize;
             ++clusters[idx].fNPages;
-            info.fNBytesOnStorage += page.fLocator.GetNBytesOnStorage();
+            info.fNBytesOnStorage += page.GetLocator().GetNBytesOnStorage();
             ++info.fNPages;
             ++nPages;
          }

@@ -81,28 +81,25 @@ protected:
    }
 };
 
-TEST_F(RNTupleJoinProcessorTest, Basic)
+TEST_F(RNTupleJoinProcessorTest, PrimaryOnly)
 {
-   std::vector<RNTupleOpenSpec> ntuples;
-   try {
-      auto proc = RNTupleProcessor::CreateJoin(ntuples, {});
-      FAIL() << "creating a processor without at least one RNTuple should throw";
-   } catch (const ROOT::RException &err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("at least one RNTuple must be provided"));
+   // Primary ntuple only
+   auto proc = RNTupleProcessor::CreateJoin({fNTupleNames[0], fFileNames[0]}, {}, {});
+   EXPECT_STREQ("ntuple1", proc->GetProcessorName().c_str());
+
+   {
+      auto namedProc = RNTupleProcessor::CreateJoin({fNTupleNames[0], fFileNames[0]}, {}, {}, "my_ntuple");
+      EXPECT_STREQ("my_ntuple", namedProc->GetProcessorName().c_str());
    }
-
-   ntuples = {{fNTupleNames[0], fFileNames[0]}};
-
-   auto proc = RNTupleProcessor::CreateJoin(ntuples, {});
 
    int nEntries = 0;
    for (const auto &entry : *proc) {
       EXPECT_EQ(++nEntries, proc->GetNEntriesProcessed());
-      EXPECT_EQ(nEntries - 1, proc->GetLocalEntryNumber());
+      EXPECT_EQ(nEntries - 1, proc->GetCurrentEntryNumber());
       ;
 
       auto i = entry.GetPtr<int>("i");
-      EXPECT_EQ(proc->GetLocalEntryNumber() * 2, *i);
+      EXPECT_EQ(proc->GetCurrentEntryNumber() * 2, *i);
    }
 
    EXPECT_EQ(5, proc->GetNEntriesProcessed());
@@ -111,22 +108,20 @@ TEST_F(RNTupleJoinProcessorTest, Basic)
 TEST_F(RNTupleJoinProcessorTest, Aligned)
 {
    try {
-      std::vector<RNTupleOpenSpec> ntuples = {{fNTupleNames[0], fFileNames[0]}, {fNTupleNames[0], fFileNames[0]}};
-      auto proc = RNTupleProcessor::CreateJoin(ntuples, {});
+      auto proc =
+         RNTupleProcessor::CreateJoin({fNTupleNames[0], fFileNames[0]}, {{fNTupleNames[0], fFileNames[0]}}, {});
       FAIL() << "ntuples with the same name cannot be joined horizontally";
    } catch (const ROOT::RException &err) {
-      EXPECT_THAT(err.what(), testing::HasSubstr("horizontal joining of RNTuples with the same name is not allowed"));
+      EXPECT_THAT(err.what(), testing::HasSubstr("joining RNTuples with the same name is not allowed"));
    }
 
-   std::vector<RNTupleOpenSpec> ntuples = {{fNTupleNames[1], fFileNames[1]}, {fNTupleNames[2], fFileNames[2]}};
-
-   auto proc = RNTupleProcessor::CreateJoin(ntuples, {});
+   auto proc = RNTupleProcessor::CreateJoin({fNTupleNames[1], fFileNames[1]}, {{fNTupleNames[2], fFileNames[2]}}, {});
 
    int nEntries = 0;
    std::vector<float> yExpected;
    for (auto &entry : *proc) {
       EXPECT_EQ(++nEntries, proc->GetNEntriesProcessed());
-      EXPECT_EQ(nEntries - 1, proc->GetLocalEntryNumber());
+      EXPECT_EQ(nEntries - 1, proc->GetCurrentEntryNumber());
 
       auto i = entry.GetPtr<int>("i");
 
@@ -141,9 +136,7 @@ TEST_F(RNTupleJoinProcessorTest, Aligned)
 
 TEST_F(RNTupleJoinProcessorTest, IdenticalFieldNames)
 {
-   std::vector<RNTupleOpenSpec> ntuples = {{fNTupleNames[1], fFileNames[1]}, {fNTupleNames[2], fFileNames[2]}};
-
-   auto proc = RNTupleProcessor::CreateJoin(ntuples, {});
+   auto proc = RNTupleProcessor::CreateJoin({fNTupleNames[1], fFileNames[1]}, {{fNTupleNames[2], fFileNames[2]}}, {});
 
    auto i = proc->GetEntry().GetPtr<int>("i");
    for (auto &entry : *proc) {
@@ -156,9 +149,8 @@ TEST_F(RNTupleJoinProcessorTest, IdenticalFieldNames)
 
 TEST_F(RNTupleJoinProcessorTest, UnalignedSingleJoinField)
 {
-   std::vector<RNTupleOpenSpec> ntuples = {{fNTupleNames[0], fFileNames[0]}, {fNTupleNames[1], fFileNames[1]}};
-
-   auto proc = RNTupleProcessor::CreateJoin(ntuples, {"i"});
+   auto proc =
+      RNTupleProcessor::CreateJoin({fNTupleNames[0], fFileNames[0]}, {{fNTupleNames[1], fFileNames[1]}}, {"i"});
 
    int nEntries = 0;
    auto i = proc->GetEntry().GetPtr<int>("i");
@@ -166,9 +158,9 @@ TEST_F(RNTupleJoinProcessorTest, UnalignedSingleJoinField)
    auto y = proc->GetEntry().GetPtr<std::vector<float>>("ntuple2.y");
    std::vector<float> yExpected;
    for ([[maybe_unused]] auto &entry : *proc) {
-      EXPECT_EQ(proc->GetLocalEntryNumber(), nEntries++);
+      EXPECT_EQ(proc->GetCurrentEntryNumber(), nEntries++);
 
-      EXPECT_FLOAT_EQ(proc->GetLocalEntryNumber() * 2, *i);
+      EXPECT_FLOAT_EQ(proc->GetCurrentEntryNumber() * 2, *i);
       EXPECT_FLOAT_EQ(*i * 0.5f, *x);
 
       yExpected = {static_cast<float>(*i * 0.2), 3.14, static_cast<float>(*i * 1.3)};
@@ -180,40 +172,41 @@ TEST_F(RNTupleJoinProcessorTest, UnalignedSingleJoinField)
 
 TEST_F(RNTupleJoinProcessorTest, UnalignedMultipleJoinFields)
 {
-   std::vector<RNTupleOpenSpec> ntuples = {{fNTupleNames[0], fFileNames[0]}, {fNTupleNames[3], fFileNames[3]}};
-
    try {
-      RNTupleProcessor::CreateJoin(ntuples, {"i", "j", "k", "l", "m"});
+      RNTupleProcessor::CreateJoin({fNTupleNames[0], fFileNames[0]}, {{fNTupleNames[3], fFileNames[3]}},
+                                   {"i", "j", "k", "l", "m"});
       FAIL() << "trying to create a join processor with more than four join fields should throw";
    } catch (const ROOT::RException &err) {
       EXPECT_THAT(err.what(), testing::HasSubstr("a maximum of four join fields is allowed"));
    }
 
    try {
-      RNTupleProcessor::CreateJoin(ntuples, {"i", "i"});
+      RNTupleProcessor::CreateJoin({fNTupleNames[0], fFileNames[0]}, {{fNTupleNames[3], fFileNames[3]}}, {"i", "i"});
       FAIL() << "trying to create a join processor with duplicate join fields should throw";
    } catch (const ROOT::RException &err) {
       EXPECT_THAT(err.what(), testing::HasSubstr("join fields must be unique"));
    }
 
    try {
-      std::vector<RNTupleOpenSpec> unfitNTuples = {{fNTupleNames[0], fFileNames[0]}, {fNTupleNames[1], fFileNames[1]}};
-      RNTupleProcessor::CreateJoin(unfitNTuples, {"i", "j", "k"});
-      FAIL() << "trying to create a join processor where not all join fields are present should throw";
+      auto proc = RNTupleProcessor::CreateJoin({fNTupleNames[0], fFileNames[0]}, {{fNTupleNames[1], fFileNames[1]}},
+                                               {"i", "j", "k"});
+      proc->begin();
+      FAIL() << "trying to use a join processor where not all join fields are present should throw";
    } catch (const ROOT::RException &err) {
       EXPECT_THAT(err.what(), testing::HasSubstr("could not find join field \"j\" in RNTuple \"ntuple2\""));
    }
 
-   auto proc = RNTupleProcessor::CreateJoin(ntuples, {"i", "j", "k"});
+   auto proc = RNTupleProcessor::CreateJoin({fNTupleNames[0], fFileNames[0]}, {{fNTupleNames[3], fFileNames[3]}},
+                                            {"i", "j", "k"});
 
    int nEntries = 0;
    auto i = proc->GetEntry().GetPtr<int>("i");
    auto x = proc->GetEntry().GetPtr<float>("x");
    auto a = proc->GetEntry().GetPtr<float>("ntuple4.a");
    for ([[maybe_unused]] auto &entry : *proc) {
-      EXPECT_EQ(proc->GetLocalEntryNumber(), nEntries++);
+      EXPECT_EQ(proc->GetCurrentEntryNumber(), nEntries++);
 
-      EXPECT_FLOAT_EQ(proc->GetLocalEntryNumber() * 2, *i);
+      EXPECT_FLOAT_EQ(proc->GetCurrentEntryNumber() * 2, *i);
       EXPECT_FLOAT_EQ(*i * 0.5f, *x);
       EXPECT_EQ(*i * 0.1f, *a);
    }
@@ -223,18 +216,17 @@ TEST_F(RNTupleJoinProcessorTest, UnalignedMultipleJoinFields)
 
 TEST_F(RNTupleJoinProcessorTest, MissingEntries)
 {
-   std::vector<RNTupleOpenSpec> ntuples = {{fNTupleNames[1], fFileNames[1]}, {fNTupleNames[3], fFileNames[3]}};
-
-   auto proc = RNTupleProcessor::CreateJoin(ntuples, {"i"});
+   auto proc =
+      RNTupleProcessor::CreateJoin({fNTupleNames[1], fFileNames[1]}, {{fNTupleNames[3], fFileNames[3]}}, {"i"});
 
    int nEntries = 0;
    auto i = proc->GetEntry().GetPtr<int>("i");
    auto a = proc->GetEntry().GetPtr<float>("ntuple4.a");
    std::vector<float> yExpected;
    for ([[maybe_unused]] auto &entry : *proc) {
-      EXPECT_EQ(proc->GetLocalEntryNumber(), nEntries++);
+      EXPECT_EQ(proc->GetCurrentEntryNumber(), nEntries++);
 
-      EXPECT_FLOAT_EQ(proc->GetLocalEntryNumber(), *i);
+      EXPECT_FLOAT_EQ(proc->GetCurrentEntryNumber(), *i);
 
       if (*i == 3 || *i == 9) {
          EXPECT_EQ(0.f, *a) << "entries with i=3 and i=9 are missing from ntuple4, ntuple4.a should have been "
@@ -264,17 +256,16 @@ TEST_F(RNTupleJoinProcessorTest, WithModel)
    models.push_back(std::move(model2));
    models.push_back(std::move(model3));
 
-   std::vector<RNTupleOpenSpec> ntuples = {
-      {fNTupleNames[0], fFileNames[0]}, {fNTupleNames[1], fFileNames[1]}, {fNTupleNames[2], fFileNames[2]}};
-
-   auto proc = RNTupleProcessor::CreateJoin(ntuples, {"i"}, std::move(models));
+   auto proc = RNTupleProcessor::CreateJoin({fNTupleNames[0], fFileNames[0]},
+                                            {{fNTupleNames[1], fFileNames[1]}, {fNTupleNames[2], fFileNames[2]}}, {"i"},
+                                            std::move(models));
 
    int nEntries = 0;
    std::vector<float> yExpected;
    for (auto &entry : *proc) {
-      EXPECT_EQ(proc->GetLocalEntryNumber(), nEntries++);
+      EXPECT_EQ(proc->GetCurrentEntryNumber(), nEntries++);
 
-      EXPECT_EQ(proc->GetLocalEntryNumber() * 2, *i);
+      EXPECT_EQ(proc->GetCurrentEntryNumber() * 2, *i);
       EXPECT_EQ(*entry.GetPtr<int>("i"), *i);
 
       EXPECT_FLOAT_EQ(*i * 0.5f, *x);
