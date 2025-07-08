@@ -28,9 +28,9 @@
 #
 # \author Lorenzo Moneta (C++ version), and P. P. (Python translation)
 
-from warnings import warn
+import array
 from gc import collect
-import numpy as np
+from warnings import warn
 
 import ROOT
 
@@ -151,7 +151,7 @@ def StandardHypoTestDemo(
     # get the workspace out of the file
     w = file.Get(workspaceName)
     if not w:
-        print(f"workspace not found")
+        print("workspace not found")
         return
 
     w.Print()
@@ -165,7 +165,7 @@ def StandardHypoTestDemo(
     # make sure ingredients are found
     if not data or not sbModel:
         w.Print()
-        print(f"data or ModelConfig was not found")
+        print("data or ModelConfig was not found")
         return
 
     # make b model
@@ -176,14 +176,14 @@ def StandardHypoTestDemo(
     if noSystematics:
         nuisPar = sbModel.GetNuisanceParameters()
         if nuisPar and nuisPar.getSize() > 0:
-            print(f"StandardHypoTestInvDemo")
+            print("StandardHypoTestInvDemo")
             print("  -  Switch off all systematics by setting them constant to their initial values")
-            RooStats.SetAllConstant(nuisPar)
+            ROOT.RooStats.SetAllConstant(nuisPar)
 
         if bModel:
             bnuisPar = bModel.GetNuisanceParameters()
             if bnuisPar:
-                RooStats.SetAllConstant(bnuisPar)
+                ROOT.RooStats.SetAllConstant(bnuisPar)
 
     if not bModel:
         ROOT.Info("StandardHypoTestInvDemo", "The background model {} does not exist".format(modelBName))
@@ -298,7 +298,7 @@ def StandardHypoTestDemo(
                     nuisPdf.GetName(),
                 )
             else:
-                Error(
+                ROOT.Error(
                     "StandardHypoTestDemo",
                     "Cannot run Hybrid calculator because no prior on the nuisance parameter is "
                     "specified or can be derived",
@@ -396,8 +396,8 @@ def StandardHypoTestDemo(
         htExp = ROOT.RooStats.HypoTestResult("Expected Result")
         htExp.Append(htr)
         # find quantiles in alt (S+B) distribution
-        p = np.array([i for i in range(5)], dtype=float)
-        q = np.array([0.5 for i in range(5)], dtype=float)
+        p = array.array("d", [i for i in range(5)])
+        q = array.array("d", [0.5 for i in range(5)])
         for i in range(5):
             sig = -2 + i
             p[i] = ROOT.Math.normal_cdf(sig, 1)

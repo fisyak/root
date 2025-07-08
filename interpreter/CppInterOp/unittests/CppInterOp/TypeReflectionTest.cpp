@@ -1,9 +1,13 @@
 #include "Utils.h"
 
+#include "CppInterOp/CppInterOp.h"
+
 #include "clang/AST/ASTContext.h"
-#include "clang/Interpreter/CppInterOp.h"
+#include "clang/Basic/Version.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Sema/Sema.h"
+
+#include "clang-c/CXCppInterOp.h"
 
 #include "gtest/gtest.h"
 
@@ -74,7 +78,8 @@ TEST(TypeReflectionTest, GetSizeOfType) {
   EXPECT_EQ(Cpp::GetSizeOfType(Cpp::GetVariableType(Decls[1])), 1);
   EXPECT_EQ(Cpp::GetSizeOfType(Cpp::GetVariableType(Decls[2])), 4);
   EXPECT_EQ(Cpp::GetSizeOfType(Cpp::GetVariableType(Decls[3])), 8);
-  EXPECT_EQ(Cpp::GetSizeOfType(Cpp::GetVariableType(Decls[4])), 16);
+  struct B {int a; double b;};
+  EXPECT_EQ(Cpp::GetSizeOfType(Cpp::GetVariableType(Decls[4])), sizeof(B));
   EXPECT_EQ(Cpp::GetSizeOfType(Cpp::GetTypeFromScope(Decls[5])), 0);
   EXPECT_EQ(Cpp::GetSizeOfType(Cpp::GetVariableType(Decls[6])),
             sizeof(intptr_t));
@@ -354,7 +359,7 @@ TEST(TypeReflectionTest, GetComplexType) {
   EXPECT_EQ(get_complex_type_as_string("double"), "_Complex double");
 
   // C API
-  auto I = clang_createInterpreterFromRawPtr(Cpp::GetInterpreter());
+  auto* I = clang_createInterpreterFromRawPtr(Cpp::GetInterpreter());
   auto C_API_SHIM = [&](const std::string& element_type) {
     auto ElementQT = Cpp::GetType(element_type);
     CXQualType EQT = {CXType_Unexposed, {ElementQT, I}};
@@ -382,7 +387,7 @@ TEST(TypeReflectionTest, GetTypeFromScope) {
     struct S {};
     int a = 10;
     )";
-  
+
   GetAllTopLevelDecls(code, Decls);
 
   EXPECT_EQ(Cpp::GetTypeAsString(Cpp::GetTypeFromScope(Decls[0])), "C");
@@ -474,7 +479,7 @@ TEST(TypeReflectionTest, GetDimensions) {
   {
     EXPECT_EQ(dims[i], truth_dims[i]);
   }
-  
+
   // Variable c
   dims = Cpp::GetDimensions(Cpp::GetVariableType(Decls[2]));
   truth_dims = std::vector<long int>({1, 2});
@@ -546,9 +551,15 @@ TEST(TypeReflectionTest, IsPODType) {
 }
 
 TEST(TypeReflectionTest, IsSmartPtrType) {
+#if CLANG_VERSION_MAJOR == 18 && defined(CPPINTEROP_USE_CLING) &&              \
+    defined(_WIN32) && (defined(_M_ARM) || defined(_M_ARM64))
+  GTEST_SKIP() << "Test fails with Cling on Windows on ARM";
+#endif
   if (llvm::sys::RunningOnValgrind())
     GTEST_SKIP() << "XFAIL due to Valgrind report";
-  Cpp::CreateInterpreter();
+
+  std::vector<const char*> interpreter_args = {"-include", "new"};
+  Cpp::CreateInterpreter(interpreter_args);
 
   Interp->declare(R"(
     #include <memory>
@@ -586,7 +597,8 @@ TEST(TypeReflectionTest, IsSmartPtrType) {
 }
 
 TEST(TypeReflectionTest, IsFunctionPointerType) {
-  Cpp::CreateInterpreter();
+  std::vector<const char*> interpreter_args = {"-include", "new"};
+  Cpp::CreateInterpreter(interpreter_args);
 
   Interp->declare(R"(
     typedef int (*int_func)(int, int);
@@ -599,4 +611,12 @@ TEST(TypeReflectionTest, IsFunctionPointerType) {
       Cpp::IsFunctionPointerType(Cpp::GetVariableType(Cpp::GetNamed("f"))));
   EXPECT_FALSE(
       Cpp::IsFunctionPointerType(Cpp::GetVariableType(Cpp::GetNamed("i"))));
+}
+
+TEST(TypeReflectionTest, OperatorSpelling) {
+  EXPECT_EQ(Cpp::GetSpellingFromOperator(Cpp::OP_Less), "<");
+  EXPECT_EQ(Cpp::GetSpellingFromOperator(Cpp::OP_Plus), "+");
+  EXPECT_EQ(Cpp::GetOperatorFromSpelling("->"), Cpp::OP_Arrow);
+  EXPECT_EQ(Cpp::GetOperatorFromSpelling("()"), Cpp::OP_Call);
+  EXPECT_EQ(Cpp::GetOperatorFromSpelling("invalid"), Cpp::OP_None);
 }

@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <fstream>
 #include <limits>
@@ -3940,7 +3941,7 @@ TFitResultPtr TH1::Fit(const char *fname ,Option_t *option ,Option_t *goption, D
 ///   "C"  | In case of linear fitting, do no calculate the chisquare (saves CPU time).
 ///   "G"  | Uses the gradient implemented in `TF1::GradientPar` for the minimization. This allows to use Automatic Differentiation when it is supported by the provided TF1 function.
 ///   "WIDTH" | Scales the histogran bin content by the bin width (useful for variable bins histograms)
-///   "SERIAL" | Runs in serial mode. By defult if ROOT is built with MT support and MT is enables, the fit is perfomed in multi-thread     - "E"  Perform better Errors estimation using Minos technique
+///   "SERIAL" | Runs in serial mode. By default if ROOT is built with MT support and MT is enables, the fit is perfomed in multi-thread     - "E"  Perform better Errors estimation using Minos technique
 ///   "MULTITHREAD" | Forces usage of multi-thread execution whenever possible
 ///
 /// The default fitting of an histogram (when no option is given) is perfomed as following:
@@ -4507,8 +4508,8 @@ TVirtualHistPainter *TH1::GetPainter(Option_t *option)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Compute Quantiles for this histogram
-/// Quantile x_p := Q(p) is defined as the value x_p such that the cumulative
+/// Compute Quantiles for this histogram.
+/// A quantile x_p := Q(p) is defined as the value x_p such that the cumulative
 /// probability distribution Function F of variable X yields:
 ///
 /// ~~~ {.cpp}
@@ -4527,16 +4528,20 @@ TVirtualHistPainter *TH1::GetPainter(Option_t *option)
 /// \author Eddy Offermann
 /// code from Eddy Offermann, Renaissance
 ///
-/// \param[in] n maximum size of array xp and size of array p (if given)
+/// \param[in] n maximum size of the arrays xp and p (if given)
 /// \param[out] xp array to be filled with nq quantiles evaluated at (p). Memory has to be preallocated by caller.
-/// If p is null (default value), then xp is actually set to the (first n) histogram bin edges
+///   - If `p == nullptr`, the quantiles are computed at the (first `n`) probabilities p given by the CDF of the histogram;
+///   `n` must thus be smaller or equal Nbins+1, otherwise the extra values of `xp` will not be filled and `nq` will be smaller than `n`.
+///     If all bins have non-zero entries, the quantiles happen to be the bin centres.
+///     Empty bins will, however, be skipped in the quantiles.
+///     If the CDF is e.g. [0., 0., 0.1, ...], the quantiles would be, [3., 3., 3., ...], with the third bin starting
+///     at 3.
 /// \param[in] p array of cumulative probabilities where quantiles should be evaluated.
-///   - if p is null, the CDF of the histogram will be used instead as array, and will
-///     have a size = number of bins + 1 in h. It will correspond to the
-///     quantiles calculated at the lowest edge of the histogram (quantile=0) and
-///     all the upper edges of the bins. (nbins might be > n).
-///   - if p is not null, it is assumed to contain at least n values.
-/// \return value nq (<=n) with the number of quantiles computed
+///   - if `p == nullptr`, the CDF of the histogram will be used to compute the quantiles, and will
+///     have a size of n.
+///   - Otherwise, it is assumed to contain at least n values.
+/// \return number of quantiles computed
+/// \note Unlike in TF1::GetQuantiles, `p` is here an optional argument
 ///
 /// Note that the Integral of the histogram is automatically recomputed
 /// if the number of entries is different of the number of entries when
@@ -4599,16 +4604,17 @@ Int_t TH1::GetQuantiles(Int_t n, Double_t *xp, const Double_t *p)
    if (fIntegral[nbins+1] != fEntries) ComputeIntegral();
 
    Int_t i, ibin;
-   Double_t *prob = (Double_t*)p;
    Int_t nq = n;
+   std::unique_ptr<Double_t[]> localProb;
    if (p == nullptr) {
       nq = nbins+1;
-      prob = new Double_t[nq];
-      prob[0] = 0;
+      localProb.reset(new Double_t[nq]);
+      localProb[0] = 0;
       for (i=1;i<nq;i++) {
-         prob[i] = fIntegral[i]/fIntegral[nbins];
+         localProb[i] = fIntegral[i] / fIntegral[nbins];
       }
    }
+   Double_t const *const prob = p ? p : localProb.get();
 
    for (i = 0; i < nq; i++) {
       ibin = TMath::BinarySearch(nbins,fIntegral,prob[i]);
@@ -4642,7 +4648,6 @@ Int_t TH1::GetQuantiles(Int_t n, Double_t *xp, const Double_t *p)
       }
    }
 
-   if (!p) delete [] prob;
    return nq;
 }
 
@@ -6198,6 +6203,39 @@ Bool_t TH1::Multiply(const TH1 *h1, const TH1 *h2, Double_t c1, Double_t c2, Opt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// @brief Normalize a histogram to its integral or to its maximum.
+/// @note Works for TH1, TH2, TH3, ...
+/// @param option: normalization strategy ("", "max" or "sum")
+/// - "": Scale to `1/(sum*bin_width)`.
+/// - max: Scale to `1/GetMaximum()`
+/// - sum: Scale to `1/sum`.
+///
+/// In case the norm is zero, it raises an error.
+/// @sa https://root-forum.cern.ch/t/different-ways-of-normalizing-histograms/15582/
+
+void TH1::Normalize(Option_t *option)
+{
+   TString opt = option;
+   opt.ToLower();
+   if (!opt.IsNull() && (opt != "max") && (opt != "sum")) {
+      Error("Normalize", "Unrecognized option %s", option);
+      return;
+   }
+
+   const Double_t norm = (opt == "max") ? GetMaximum() : Integral(opt.IsNull() ? "width" : "");
+
+   if (norm == 0) {
+      Error("Normalize", "Attempt to normalize histogram with zero integral");
+   } else {
+      Scale(1.0 / norm, "");
+      // An alternative could have been to call Integral("") and Scale(1/norm, "width"), but this
+      // will lead to a different value of GetEntries.
+      // Instead, doing simultaneously Integral("width") and Scale(1/norm, "width") leads to an error since you are
+      // dividing twice by bin width.
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Control routine to paint any kind of histograms.
 ///
 /// This function is automatically called by TCanvas::Update.
@@ -6832,7 +6870,7 @@ void  TH1::SmoothArray(Int_t nn, Double_t *xx, Int_t ntimes)
             const double tmp1 = zz[ii + 2] - zz[ii];
             if  (tmp0 * tmp1 <= 0) continue;
             int jk = 1;
-            if  ( std::abs(tmp0) > std::abs(tmp0) ) jk = -1;
+            if  ( std::abs(tmp1) > std::abs(tmp0) ) jk = -1;
             yy[ii] = -0.5*zz[ii - 2*jk] + zz[ii]/0.75 + zz[ii + 2*jk] /6.;
             yy[ii + jk] = 0.5*(zz[ii + 2*jk] - zz[ii - 2*jk]) + zz[ii];
          }
@@ -7278,17 +7316,17 @@ void TH1::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
    // Check if the histogram has equidistant X bins or not.  If not, we
    // create an array holding the bins.
    if (GetXaxis()->GetXbins()->fN && GetXaxis()->GetXbins()->fArray)
-      sxaxis = SavePrimitiveArray(out, hname + "_x", GetXaxis()->GetXbins()->fN, GetXaxis()->GetXbins()->fArray);
+      sxaxis = SavePrimitiveVector(out, hname + "_x", GetXaxis()->GetXbins()->fN, GetXaxis()->GetXbins()->fArray);
    // If the histogram is 2 or 3 dimensional, check if the histogram
    // has equidistant Y bins or not.  If not, we create an array
    // holding the bins.
    if (fDimension > 1 && GetYaxis()->GetXbins()->fN && GetYaxis()->GetXbins()->fArray)
-      syaxis = SavePrimitiveArray(out, hname + "_y", GetYaxis()->GetXbins()->fN, GetYaxis()->GetXbins()->fArray);
+      syaxis = SavePrimitiveVector(out, hname + "_y", GetYaxis()->GetXbins()->fN, GetYaxis()->GetXbins()->fArray);
    // IF the histogram is 3 dimensional, check if the histogram
    // has equidistant Z bins or not.  If not, we create an array
    // holding the bins.
    if (fDimension > 2 && GetZaxis()->GetXbins()->fN && GetZaxis()->GetXbins()->fArray)
-      szaxis = SavePrimitiveArray(out, hname + "_z", GetZaxis()->GetXbins()->fN, GetZaxis()->GetXbins()->fArray);
+      szaxis = SavePrimitiveVector(out, hname + "_z", GetZaxis()->GetXbins()->fN, GetZaxis()->GetXbins()->fArray);
 
    const auto old_precision{out.precision()};
    constexpr auto max_precision{std::numeric_limits<double>::digits10 + 1};
@@ -7297,20 +7335,20 @@ void TH1::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
    out << "   " << ClassName() << " *" << hname << " = new " << ClassName() << "(\"" << hname << "\", \""
        << TString(GetTitle()).ReplaceSpecialCppChars() << "\", " << GetXaxis()->GetNbins();
    if (!sxaxis.IsNull())
-      out << ", " << sxaxis;
+      out << ", " << sxaxis << ".data()";
    else
       out << ", " << GetXaxis()->GetXmin() << ", " << GetXaxis()->GetXmax();
    if (fDimension > 1) {
       out << ", " << GetYaxis()->GetNbins();
       if (!syaxis.IsNull())
-         out << ", " << syaxis;
+         out << ", " << syaxis << ".data()";
       else
          out << ", " << GetYaxis()->GetXmin() << ", " << GetYaxis()->GetXmax();
    }
    if (fDimension > 2) {
       out << ", " << GetZaxis()->GetNbins();
       if (!szaxis.IsNull())
-         out << ", " << szaxis;
+         out << ", " << szaxis << ".data()";
       else
          out << ", " << GetZaxis()->GetXmin() << ", " << GetZaxis()->GetXmax();
    }
@@ -7344,16 +7382,16 @@ void TH1::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
          }
    } else {
       if (numbins > 0) {
-         TString arr = SavePrimitiveArray(out, hname, fNcells, content.data());
+         TString vectname = SavePrimitiveVector(out, hname, fNcells, content.data());
          out << "   for (Int_t bin = 0; bin < " << fNcells << "; bin++)\n";
-         out << "      if (" << arr << "[bin])\n";
-         out << "         " << hname << "->SetBinContent(bin, " << arr << "[bin]);\n";
+         out << "      if (" << vectname << "[bin])\n";
+         out << "         " << hname << "->SetBinContent(bin, " << vectname << "[bin]);\n";
       }
       if (numerrors > 0) {
-         TString arr = SavePrimitiveArray(out, hname, fNcells, errors.data());
+         TString vectname = SavePrimitiveVector(out, hname, fNcells, errors.data());
          out << "   for (Int_t bin = 0; bin < " << fNcells << "; bin++)\n";
-         out << "      if (" << arr << "[bin])\n";
-         out << "         " << hname << "->SetBinError(bin, " << arr << "[bin]);\n";
+         out << "      if (" << vectname << "[bin])\n";
+         out << "         " << hname << "->SetBinError(bin, " << vectname << "[bin]);\n";
       }
    }
 
@@ -7390,16 +7428,17 @@ void TH1::SavePrimitiveHelp(std::ostream &out, const char *hname, Option_t *opti
    // save contour levels
    Int_t ncontours = GetContour();
    if (ncontours > 0) {
-      out << "   " << hname << "->SetContour(" << ncontours << ");\n";
-      Double_t zlevel;
-      for (Int_t bin = 0; bin < ncontours; bin++) {
-         if (gPad->GetLogz()) {
-            zlevel = TMath::Power(10, GetContourLevel(bin));
-         } else {
-            zlevel = GetContourLevel(bin);
-         }
-         out << "   " << hname << "->SetContourLevel(" << bin << "," << zlevel << ");\n";
+      TString vectname;
+      if (TestBit(kUserContour)) {
+         std::vector<Double_t> levels(ncontours);
+         for (Int_t bin = 0; bin < ncontours; bin++)
+            levels[bin] = GetContourLevel(bin);
+         vectname = SavePrimitiveVector(out, hname, ncontours, levels.data());
       }
+      out << "   " << hname << "->SetContour(" << ncontours;
+      if (!vectname.IsNull())
+         out << ", " << vectname << ".data()";
+      out << ");\n";
    }
 
    SavePrimitiveFunctions(out, hname, fFunctions);
@@ -7412,8 +7451,7 @@ void TH1::SavePrimitiveHelp(std::ostream &out, const char *hname, Option_t *opti
    fYaxis.SaveAttributes(out, hname, "->GetYaxis()");
    fZaxis.SaveAttributes(out, hname, "->GetZaxis()");
 
-   if (!option || !strstr(option, "nodraw"))
-      out << "   " << hname << "->Draw(\"" << TString(option).ReplaceSpecialCppChars() << "\");\n";
+   SavePrimitiveDraw(out, hname, option);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7884,7 +7922,7 @@ void TH1::PutStats(Double_t *stats)
 /// The number of entries is set to the total bin content or (in case of weighted histogram)
 /// to number of effective entries
 ///
-/// Note that, by default, before calling this function, statistics are those
+/// \note By default, before calling this function, statistics are those
 /// computed at fill time, which are unbinned. See TH1::GetStats.
 
 void TH1::ResetStats()
@@ -7900,18 +7938,23 @@ void TH1::ResetStats()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return the sum of weights excluding under/overflows.
+/// Return the sum of all weights
+/// \param includeOverflow true to include under/overflows bins, false to exclude those.
+/// \note Different from TH1::GetSumOfWeights, that always excludes those
 
-Double_t TH1::GetSumOfWeights() const
+Double_t TH1::GetSumOfAllWeights(const bool includeOverflow) const
 {
    if (fBuffer) const_cast<TH1*>(this)->BufferEmpty();
 
-   Int_t bin,binx,biny,binz;
+   const Int_t start = (includeOverflow ? 0 : 1);
+   const Int_t lastX = fXaxis.GetNbins() + (includeOverflow ? 1 : 0);
+   const Int_t lastY = fYaxis.GetNbins() + (includeOverflow ? 1 : 0);
+   const Int_t lastZ = fZaxis.GetNbins() + (includeOverflow ? 1 : 0);
    Double_t sum =0;
-   for(binz=1; binz<=fZaxis.GetNbins(); binz++) {
-      for(biny=1; biny<=fYaxis.GetNbins(); biny++) {
-         for(binx=1; binx<=fXaxis.GetNbins(); binx++) {
-            bin = GetBin(binx,biny,binz);
+   for(auto binz = start; binz <= lastZ; binz++) {
+      for(auto biny = start; biny <= lastY; biny++) {
+         for(auto binx = start; binx <= lastX; binx++) {
+            const auto bin = GetBin(binx, biny, binz);
             sum += RetrieveBinContent(bin);
          }
       }

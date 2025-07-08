@@ -29,11 +29,11 @@ public:
          fOutputTensorNames = { fNY };
       }
 
-   std::vector<ETensorType> TypeInference(std::vector<ETensorType> input){
+   std::vector<ETensorType> TypeInference(std::vector<ETensorType> input) override {
       return input;
    }
 
-   std::vector<std::vector<size_t>> ShapeInference(std::vector<std::vector<size_t>> input){
+   std::vector<std::vector<size_t>> ShapeInference(std::vector<std::vector<size_t>> input) override {
       auto ret = input; //suggest copy to compiler
       return ret;
    }
@@ -47,8 +47,7 @@ public:
    }
 
 
-   std::string Generate(std::string OpName){
-      OpName = "op_" + OpName;
+   std::string Generate(std::string opName) override {
       if (fShape.empty()){
          throw std::runtime_error("TMVA SOFIE Operator Sigmoid called to Generate without being initialized first");
       }
@@ -57,13 +56,14 @@ public:
       for(auto& i: fShape){
          length *= i;
       }
-      out << "\t" << "for (int id = 0; id < " << length << " ; id++){\n";
-      out << "\t\t" << "tensor_" << fNY << "[id] = 1 / (1 + std::exp( - tensor_"  << fNX << "[id]));\n";
-      out << "\t}\n";
+      out << "\n//------ Sigmoid -- " << opName << "\n";
+      out << SP << "for (int id = 0; id < " << length << " ; id++){\n";
+      out << SP << SP  << "tensor_" << fNY << "[id] = 1 / (1 + std::exp( - tensor_"  << fNX << "[id]));\n";
+      out << SP << "}\n";
       return out.str();
    }
 
-   std::vector<std::string> GetStdLibs() { return { std::string("cmath") };}
+   std::vector<std::string> GetStdLibs() override { return { std::string("cmath") };}
 };
 
 }//SOFIE

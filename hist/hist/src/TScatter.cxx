@@ -45,9 +45,10 @@ End_Macro
 ### TScatter's plotting options
 TScatter can be drawn with the following options:
 
-| Option   | Description                                                       |
-|----------|-------------------------------------------------------------------|
-| "A"      | Produce a new plot with Axis around the graph |
+| Option    | Description                                                       |
+|-----------|-------------------------------------------------------------------|
+| "A"       | Produce a new plot with Axis around the graph |
+| "SKIPCOL" | Do not draw the points outside the color range. By default, such points' color is clipped to the minimum or maximum color, depending on whether the color is smaller or bigger than the color range |
 
 */
 
@@ -256,17 +257,17 @@ void TScatter::SetMargin(Double_t margin)
 ////////////////////////////////////////////////////////////////////////////////
 /// Save primitive as a C++ statement(s) on output stream out
 
-void TScatter::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
+void TScatter::SavePrimitive(std::ostream &out, Option_t *option)
 {
-   TString arr_x = SavePrimitiveArray(out, "scat_x", fNpoints, fGraph->GetX(), kTRUE);
-   TString arr_y = SavePrimitiveArray(out, "scat_y", fNpoints, fGraph->GetY());
-   TString arr_col = SavePrimitiveArray(out, "scat_col", fNpoints, fColor);
-   TString arr_size = SavePrimitiveArray(out, "scat_size", fNpoints, fSize);
+   TString arr_x = SavePrimitiveVector(out, "scat_x", fNpoints, fGraph->GetX(), kTRUE);
+   TString arr_y = SavePrimitiveVector(out, "scat_y", fNpoints, fGraph->GetY());
+   TString arr_col = SavePrimitiveVector(out, "scat_col", fNpoints, fColor);
+   TString arr_size = SavePrimitiveVector(out, "scat_size", fNpoints, fSize);
 
-   SavePrimitiveConstructor(
-      out, Class(), "scat",
-      TString::Format("%d, %s, %s, %s, %s", fNpoints, arr_x.Data(), arr_y.Data(), arr_col.Data(), arr_size.Data()),
-      kFALSE);
+   SavePrimitiveConstructor(out, Class(), "scat",
+                            TString::Format("%d, %s.data(), %s.data(), %s.data(), %s.data()", fNpoints, arr_x.Data(),
+                                            arr_y.Data(), arr_col.Data(), arr_size.Data()),
+                            kFALSE);
 
    SavePrimitiveNameTitle(out, "scat");
    SaveFillAttributes(out, "scat", 0, 1001);
@@ -287,5 +288,5 @@ void TScatter::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
       fHistogram->SetName(hname);
    }
 
-   out << "   scat->Draw(\"" << TString(option).ReplaceSpecialCppChars() << "\");\n";
+   SavePrimitiveDraw(out, "scat", option);
 }

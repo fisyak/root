@@ -1,5 +1,5 @@
 ### \file
-### \ingroup tutorial_tmva
+### \ingroup tutorial_ml
 ### \notebook -nodraw
 ### This macro provides an example of using a trained model with Keras
 ### and make inference using SOFIE directly from Numpy
@@ -49,7 +49,7 @@ print("Generating inference code for the Keras model from ",modelFile,"in the he
 #Generating inference
 
 inputFileName = "Higgs_data.root"
-inputFile = ROOT.gROOT.GetTutorialDir() + "/machine_learning/data/" + inputFileName
+inputFile = str(ROOT.gROOT.GetTutorialDir()) + "/machine_learning/data/" + inputFileName
 
 
 

@@ -1,12 +1,10 @@
-import py
+import py, pytest, os
 from pytest import raises, skip
-from .support import setup_make, pylong, ispypy
+from support import setup_make, pylong, ispypy
 
-currpath = py.path.local(__file__).dirpath()
-test_dct = str(currpath.join("example01Dict"))
 
-def setup_module(mod):
-    setup_make("example01")
+currpath = os.getcwd()
+test_dct = currpath + "/libexample01Dict"
 
 
 class TestPYTHONIFY:
@@ -511,6 +509,10 @@ class TestPYTHONIFY:
 
         void foobar(const MyClass& m1 = MyClass(), const MyClass& m2 = MyClass()) {
             /* empty */
+        }
+
+        bool barfoo(bool opt1=false, bool opt2=true) {
+            return opt1 && opt2;
         } }""")
 
         def pyfoo(a=10, b=20, c=5, d=4):
@@ -532,6 +534,12 @@ class TestPYTHONIFY:
         assert ns.bar(b = " greeting") == "a greeting"
 
         ns.foobar(m2 = ns.MyClass())
+
+        assert not ns.barfoo()
+        assert not ns.barfoo(opt2=True)
+        assert not ns.barfoo(opt2=False)
+        assert     ns.barfoo(opt1=True, opt2=True)
+        assert not ns.barfoo(opt1=True, opt2=False)
 
 
 class TestPYTHONIFY_UI:
@@ -580,3 +588,7 @@ class TestPYTHONIFY_UI:
         assert proxy.__get__(proxy, None) == 3
 
         cppyy.gbl.ns_example01.gMyGlobalInt = oldval
+
+
+if __name__ == "__main__":
+    exit(pytest.main(args=['-sv', '-ra', __file__]))

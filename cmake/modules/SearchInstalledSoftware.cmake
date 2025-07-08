@@ -54,7 +54,7 @@ endmacro()
 # stop the configuration with a FATAL_ERROR in case of fail-on-missing=ON.
 #----------------------------------------------------------------------------
 macro(ROOT_CHECK_CONNECTION_AND_DISABLE_OPTION option_name)
-  ROOT_CHECK_CONNECTION("$(option_name)=OFF")
+  ROOT_CHECK_CONNECTION("${option_name}=OFF")
   if(NO_CONNECTION)
     message(STATUS "No internet connection, disabling '${option_name}' option")
     set(${option_name} OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
@@ -110,7 +110,7 @@ endif()
 if(NOT builtin_zlib)
   message(STATUS "Looking for ZLib")
   # Clear cache variables, or LLVM may use old values for ZLIB
-  foreach(suffix FOUND INCLUDE_DIR LIBRARY LIBRARY_DEBUG LIBRARY_RELEASE)
+  foreach(suffix FOUND INCLUDE_DIR LIBRARY LIBRARY_DEBUG LIBRARY_RELEASE CF)
     unset(ZLIB_${suffix} CACHE)
   endforeach()
   if(fail-on-missing)
@@ -143,6 +143,16 @@ if(NOT builtin_nlohmannjson)
       message(STATUS "nlohmann/json.hpp not found. Switching on builtin_nlohmannjson option")
       set(builtin_nlohmannjson ON CACHE BOOL "Enabled because nlohmann/json.hpp not found" FORCE)
     endif()
+  endif()
+
+  # ROOTEve wants to know if it comes with json_fwd.hpp:
+  if(TARGET nlohmann_json::nlohmann_json)
+    get_target_property(inc_dirs nlohmann_json::nlohmann_json INTERFACE_INCLUDE_DIRECTORIES)
+    foreach(dir ${inc_dirs})
+      if(EXISTS "${dir}/nlohmann/json_fwd.hpp")
+        target_compile_definitions(nlohmann_json::nlohmann_json INTERFACE NLOHMANN_JSON_PROVIDES_FWD_HPP)
+      endif()
+    endforeach()
   endif()
 endif()
 
@@ -209,6 +219,7 @@ if(builtin_freetype)
       INSTALL_DIR ${CMAKE_BINARY_DIR}
       CMAKE_ARGS -G ${CMAKE_GENERATOR} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                  -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX} -DFT_DISABLE_BZIP2=TRUE
+                 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       BUILD_COMMAND ${CMAKE_COMMAND} --build . ${FREETYPE_EXTRA_BUILD_ARGS}
       INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FREETYPE_LIB_DIR}/${freetypelib} ${FREETYPE_LIBRARY}
       LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
@@ -341,6 +352,11 @@ if(builtin_lzma)
     )
     set(LIBLZMA_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include)
   endif()
+
+  add_library(LibLZMA STATIC IMPORTED GLOBAL)
+  add_library(LibLZMA::LibLZMA ALIAS LibLZMA)
+  target_include_directories(LibLZMA INTERFACE ${LIBLZMA_INCLUDE_DIR})
+  set_target_properties(LibLZMA PROPERTIES IMPORTED_LOCATION ${LIBLZMA_LIBRARIES})
 endif()
 
 #---Check for xxHash-----------------------------------------------------------------
@@ -386,6 +402,7 @@ if(NOT builtin_zstd)
 endif()
 
 if(builtin_zstd)
+  list(APPEND ROOT_BUILTINS zstd)
   list(APPEND ROOT_BUILTINS ZSTD)
   add_subdirectory(builtins/zstd)
 endif()
@@ -440,26 +457,59 @@ if(asimage)
   endif()
 endif()
 if(asimage)
-  set(ASEXTRA_LIBRARIES)
-  find_Package(GIF)
-  if(GIF_FOUND)
-    set(ASEXTRA_LIBRARIES ${ASEXTRA_LIBRARIES} ${GIF_LIBRARIES})
+
+  if(NOT builtin_gif)
+    find_Package(GIF)
+    if(GIF_FOUND)
+      list(APPEND ASEXTRA_LIBRARIES GIF::GIF)
+    else()
+      if(fail-on-missing)
+          message(SEND_ERROR "Dependency libgif not found. Please make sure it's installed on the system, or force the builtin libgif with '-Dbuiltin_gif=ON', or set '-Dfail-on-missing=OFF' to fall back to builtins if a dependency is not found.")
+      else()
+        set(builtin_gif ON CACHE BOOL "Enabled because needed for asimage" FORCE)
+      endif()
+    endif()
   endif()
-  find_Package(TIFF)
-  if(TIFF_FOUND)
-    set(ASEXTRA_LIBRARIES ${ASEXTRA_LIBRARIES} ${TIFF_LIBRARIES})
+
+  if(NOT builtin_png)
+    find_Package(PNG)
+    if(PNG_FOUND)
+      list(APPEND ASEXTRA_LIBRARIES PNG::PNG)
+      # apparently there will be two set of includes here (needs to be selected only last that was passed: PNG_INCLUDE_DIR)
+      list(GET PNG_INCLUDE_DIRS 0 PNG_INCLUDE_DIR)
+    else()
+      if(fail-on-missing)
+          message(SEND_ERROR "Dependency libpng not found. Please make sure it's installed on the system, or force the builtin libpng with '-Dbuiltin_png=ON', or set '-Dfail-on-missing=OFF' to fall back to builtins if a dependency is not found.")
+      else()
+        set(builtin_png ON CACHE BOOL "Enabled because needed for asimage" FORCE)
+      endif()
+    endif()
   endif()
-  find_Package(PNG)
-  if(PNG_FOUND)
-    set(ASEXTRA_LIBRARIES ${ASEXTRA_LIBRARIES} ${PNG_LIBRARIES})
-    # Some missing variables needed for external PNG build
-    set(PNG_LIBRARY_RELEASE ${PNG_LIBRARY})
-    # apparently there will be two set of includes here (needs to be selected only last that was passed: PNG_INCLUDE_DIR)
-    list(GET PNG_INCLUDE_DIRS 0 PNG_INCLUDE_DIR)
+
+  if(NOT builtin_jpeg)
+    find_Package(JPEG)
+    if(JPEG_FOUND)
+      list(APPEND ASEXTRA_LIBRARIES JPEG::JPEG)
+    else()
+      if(fail-on-missing)
+          message(SEND_ERROR "Dependency libjpeg not found. Please make sure it's installed on the system, or force the builtin libjpeg with '-Dbuiltin_jpeg=ON', or set '-Dfail-on-missing=OFF' to fall back to builtins if a dependency is not found.")
+      else()
+        set(builtin_jpeg ON CACHE BOOL "Enabled because needed for asimage" FORCE)
+      endif()
+    endif()
   endif()
-  find_Package(JPEG)
-  if(JPEG_FOUND)
-    set(ASEXTRA_LIBRARIES ${ASEXTRA_LIBRARIES} ${JPEG_LIBRARIES})
+
+  if(asimage_tiff)
+    find_Package(TIFF)
+    if(TIFF_FOUND)
+      list(APPEND ASEXTRA_LIBRARIES TIFF::TIFF)
+    else()
+      if(fail-on-missing)
+          message(SEND_ERROR "Dependency libtiff not found. Please make sure it's installed on the system, or disable TIFF support with '-Dasimage_tiff=OFF', or set '-Dfail-on-missing=OFF' to automatically disable features")
+      else()
+        set(asimage_tiff OFF CACHE BOOL "Disabled because libtiff was not found" FORCE)
+      endif()
+    endif()
   endif()
 
   #---AfterImage---------------------------------------------------------------
@@ -490,34 +540,33 @@ if(asimage)
     )
     set(AFTERIMAGE_INCLUDE_DIR ${CMAKE_BINARY_DIR}/AFTERIMAGE-prefix/src/AFTERIMAGE)
   else()
-    if(JPEG_FOUND)
-      set(_jpeginclude --with-jpeg-includes=${JPEG_INCLUDE_DIR})
+    if(NOT builtin_jpeg)
+      list(APPEND afterimage_extra_args --with-jpeg-includes=${JPEG_INCLUDE_DIR})
     else()
-      set(_jpeginclude --with-builtin-jpeg)
+      list(APPEND afterimage_extra_args --with-builtin-jpeg)
     endif()
-    if(GIF_FOUND)
-       set(_gifinclude  --with-gif --with-gif-includes=${GIF_INCLUDE_DIR} --without-builtin-gif)
+    if(NOT builtin_gif)
+      list(APPEND afterimage_extra_args --with-gif-includes=${GIF_INCLUDE_DIR} --without-builtin-gif)
     else()
-       set(_gifinclude)
+      list(APPEND afterimage_extra_args --with-builtin-ungif)
     endif()
-    if(PNG_FOUND)
-      set(_pnginclude  --with-png-includes=${PNG_INCLUDE_DIR})
+    if(NOT builtin_png)
+      list(APPEND afterimage_extra_args --with-png-includes=${PNG_INCLUDE_DIR})
     else()
-       set(_pnginclude  --with-builtin-png)
+      list(APPEND afterimage_extra_args --with-builtin-png)
     endif()
-    if(TIFF_FOUND)
-      set(_tiffinclude --with-tiff-includes=${TIFF_INCLUDE_DIR})
+    if(asimage_tiff)
+      list(APPEND afterimage_extra_args --with-tiff-includes=${TIFF_INCLUDE_DIR})
     else()
-      set(_tiffinclude --with-tiff=no)
+      list(APPEND afterimage_extra_args --with-tiff=no)
     endif()
-    if(cocoa)
-      set(_jpeginclude --without-x --with-builtin-jpeg)
-      set(_gifinclude  --with-builtin-ungif)
-      set(_pnginclude  --with-builtin-png)
-      set(_tiffinclude --with-tiff=no)
+    if(x11)
+      list(APPEND afterimage_extra_args --with-x)
+    else()
+      list(APPEND afterimage_extra_args --without-x)
     endif()
     if(builtin_freetype)
-      set(_ttf_include --with-ttf-includes=-I${FREETYPE_INCLUDE_DIR})
+      list(APPEND afterimage_extra_args --with-ttf-includes=-I${FREETYPE_INCLUDE_DIR})
       set(_after_cflags "${_after_cflags} -DHAVE_FREETYPE_FREETYPE -DPNG_ARM_NEON_OPT=0")
     endif()
     if(CMAKE_OSX_SYSROOT)
@@ -526,16 +575,20 @@ if(asimage)
     if(builtin_zlib)
       set(_after_cflags "${_after_cflags} -I${ZLIB_INCLUDE_DIR}")
     endif()
+    if(CMAKE_SYSTEM_NAME MATCHES FreeBSD)
+      set(AFTERIMAGE_LIBRARIES ${CMAKE_BINARY_DIR}/AFTERIMAGE-prefix/src/AFTERIMAGE/libAfterImage${CMAKE_STATIC_LIBRARY_SUFFIX})
+    endif()
     ExternalProject_Add(
       AFTERIMAGE
       DOWNLOAD_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/graf2d/asimage/src/libAfterImage AFTERIMAGE
       INSTALL_DIR ${CMAKE_BINARY_DIR}
       CONFIGURE_COMMAND ./configure --prefix <INSTALL_DIR>
                         --libdir=<INSTALL_DIR>/lib
-                        --with-ttf ${_ttf_include} --with-afterbase=no
-                        --without-svg --disable-glx ${_after_mmx}
-                        ${_gifinclude} --with-jpeg ${_jpeginclude}
-                        --with-png ${_pnginclude} ${_tiffinclude}
+                        --with-ttf --with-afterbase=no
+                        --without-svg --disable-glx
+                        --with-jpeg
+                        --with-png
+                        ${afterimage_extra_args}
                         CC=${CMAKE_C_COMPILER} CFLAGS=${_after_cflags}
       LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
       BUILD_IN_SOURCE 1
@@ -543,6 +596,9 @@ if(asimage)
       TIMEOUT 600
     )
     set(AFTERIMAGE_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include/libAfterImage)
+    if(CMAKE_SYSTEM_NAME MATCHES FreeBSD)
+      set(AFTERIMAGE_INCLUDE_DIR ${CMAKE_BINARY_DIR}/AFTERIMAGE-prefix/src/AFTERIMAGE)
+    endif()
   endif()
   if(builtin_freetype)
     add_dependencies(AFTERIMAGE FREETYPE)
@@ -551,7 +607,7 @@ if(asimage)
 endif()
 
 #---Check for GSL library---------------------------------------------------------------
-if(mathmore OR builtin_gsl)
+if(mathmore OR builtin_gsl OR (tmva-cpu AND use_gsl_cblas))
   if(builtin_gsl)
     ROOT_CHECK_CONNECTION_AND_DISABLE_OPTION("builtin_gsl")
   endif()
@@ -560,7 +616,7 @@ if(mathmore OR builtin_gsl)
     find_package(GSL 1.10)
     if(NOT GSL_FOUND)
       if(fail-on-missing)
-        message(FATAL_ERROR "GSL package not found and 'mathmore' component if required ('fail-on-missing' enabled). "
+        message(SEND_ERROR "GSL package not found and 'mathmore' component if required ('fail-on-missing' enabled). "
                             "Alternatively, you can enable the option 'builtin_gsl' to build the GSL libraries internally.")
       else()
         message(STATUS "GSL not found. Set variable GSL_ROOT_DIR to point to your GSL installation")
@@ -602,7 +658,7 @@ if(mathmore OR builtin_gsl)
     # FIXME: one need to find better way to extract path with GSL include files
     set(GSL_INCLUDE_DIR ${CMAKE_BINARY_DIR}/GSL-prefix/src/GSL-build)
     set(GSL_FOUND ON)
-    set(mathmore ON CACHE BOOL "Enabled because builtin_gls requested (${mathmore_description})" FORCE)
+    set(mathmore ON CACHE BOOL "Enabled because builtin_gsl requested (${mathmore_description})" FORCE)
   endif()
 endif()
 
@@ -637,7 +693,7 @@ if(opengl OR cocoa)
   endif()
   if(NOT OPENGL_FOUND OR NOT OPENGL_GLU_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "OpenGL package (with GLU) not found and opengl option required")
+      message(SEND_ERROR "OpenGL package (with GLU) not found and opengl option required")
     elseif(cocoa)
       message(FATAL_ERROR "OpenGL package (with GLU) not found and opengl option required for \"cocoa=ON\"")
     else()
@@ -715,7 +771,7 @@ if(gviz)
   find_package(Graphviz)
   if(NOT GRAPHVIZ_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "Graphviz package not found and gviz option required")
+      message(SEND_ERROR "Graphviz package not found and gviz option required")
     else()
       message(STATUS "Graphviz not found. Switching off gviz option")
       set(gviz OFF CACHE BOOL "Disabled because Graphviz not found (${gviz_description})" FORCE)
@@ -729,7 +785,7 @@ if(xml)
   find_package(LibXml2)
   if(NOT LIBXML2_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "LibXml2 libraries not found and they are required (xml option enabled)")
+      message(SEND_ERROR "LibXml2 libraries not found and they are required (xml option enabled)")
     else()
       message(STATUS "LibXml2 not found. Switching off xml option")
       set(xml OFF CACHE BOOL "Disabled because LibXml2 not found (${xml_description})" FORCE)
@@ -777,27 +833,13 @@ if(builtin_openssl)
   endif()
 endif()
 
-#---Check for MySQL-------------------------------------------------------------------
-if(mysql)
-  message(STATUS "Looking for MySQL")
-  find_package(MySQL)
-  if(NOT MYSQL_FOUND)
-    if(fail-on-missing)
-      message(FATAL_ERROR "MySQL libraries not found and they are required (mysql option enabled)")
-    else()
-      message(STATUS "MySQL not found. Switching off mysql option")
-      set(mysql OFF CACHE BOOL "Disabled because MySQL not found (${mysql_description})" FORCE)
-    endif()
-  endif()
-endif()
-
 #---Check for FastCGI-----------------------------------------------------------
 if(fcgi)
   message(STATUS "Looking for FastCGI")
   find_package(FastCGI)
   if(NOT FASTCGI_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "FastCGI library not found and they are required (fcgi option enabled)")
+      message(SEND_ERROR "FastCGI library not found and they are required (fcgi option enabled)")
     else()
       message(STATUS "FastCGI not found. Switching off fcgi option")
       set(fcgi OFF CACHE BOOL "Disabled because FastCGI not found" FORCE)
@@ -805,20 +847,6 @@ if(fcgi)
   endif()
 endif()
 
-
-#---Check for ODBC-------------------------------------------------------------------
-if(odbc)
-  message(STATUS "Looking for ODBC")
-  find_package(ODBC)
-  if(NOT ODBC_FOUND)
-    if(fail-on-missing)
-      message(FATAL_ERROR "ODBC libraries not found and they are required (odbc option enabled)")
-    else()
-      message(STATUS "ODBC not found. Switching off odbc option")
-      set(odbc OFF CACHE BOOL "Disabled because ODBC not found (${odbc_description})" FORCE)
-    endif()
-  endif()
-endif()
 
 #---Check for Pythia6-------------------------------------------------------------------
 if(pythia6)
@@ -834,27 +862,13 @@ if(pythia6)
   endif()
 endif()
 
-#---Check for PostgreSQL-------------------------------------------------------------------
-if(pgsql)
-  message(STATUS "Looking for PostgreSQL")
-  find_package(PostgreSQL)
-  if(NOT PostgreSQL_FOUND)
-    if(fail-on-missing)
-      message(FATAL_ERROR "PostgreSQL libraries not found and they are required (pgsql option enabled)")
-    else()
-      message(STATUS "PostgreSQL not found. Switching off pgsql option")
-      set(pgsql OFF CACHE BOOL "Disabled because PostgreSQL not found (${pgsql_description})" FORCE)
-    endif()
-  endif()
-endif()
-
 #---Check for SQLite-------------------------------------------------------------------
 if(sqlite)
   message(STATUS "Looking for SQLite")
   find_package(Sqlite)
   if(NOT SQLITE_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "SQLite libraries not found and they are required (sqlite option enabled)")
+      message(SEND_ERROR "SQLite libraries not found and they are required (sqlite option enabled)")
     else()
       message(STATUS "SQLite not found. Switching off sqlite option")
       set(sqlite OFF CACHE BOOL "Disabled because SQLite not found (${sqlite_description})" FORCE)
@@ -868,7 +882,7 @@ if(pythia8)
   find_package(Pythia8)
   if(NOT PYTHIA8_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "Pythia8 libraries not found and they are required (pythia8 option enabled)")
+      message(SEND_ERROR "Pythia8 libraries not found and they are required (pythia8 option enabled)")
     else()
       message(STATUS "Pythia8 not found. Switching off pythia8 option")
       set(pythia8 OFF CACHE BOOL "Disabled because Pythia8 not found (${pythia8_description})" FORCE)
@@ -887,7 +901,7 @@ if(fftw3)
     find_package(FFTW)
     if(NOT FFTW_FOUND)
       if(fail-on-missing)
-        message(FATAL_ERROR "FFTW3 libraries not found and they are required (fftw3 option enabled)")
+        message(SEND_ERROR "FFTW3 libraries not found and they are required (fftw3 option enabled)")
       else()
         message(STATUS "FFTW3 not found. Set [environment] variable FFTW_DIR to point to your FFTW3 installation")
         message(STATUS "                 Alternatively, you can also enable the option 'builtin_fftw3' to build FFTW3 internally'")
@@ -958,19 +972,12 @@ foreach(suffix FOUND INCLUDE_DIR INCLUDE_DIRS LIBRARY LIBRARIES)
   unset(XROOTD_${suffix} CACHE)
 endforeach()
 
-if(xrootd OR builtin_xrootd)
-  # This is the target that ROOT will use, irrespective of whether XRootD is a builtin or in the system.
-  # All targets should only link to ROOT::XRootD. Refrain from using XRootD variables.
-  add_library(XRootD INTERFACE IMPORTED GLOBAL)
-  add_library(ROOT::XRootD ALIAS XRootD)
-endif()
-
 if(xrootd AND NOT builtin_xrootd)
   message(STATUS "Looking for XROOTD")
   find_package(XRootD)
   if(NOT XROOTD_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "XROOTD not found. Set environment variable XRDSYS to point to your XROOTD installation, "
+      message(SEND_ERROR "XROOTD not found. Set environment variable XRDSYS to point to your XROOTD installation, "
                           "or include the installation of XROOTD in the CMAKE_PREFIX_PATH. "
                           "Alternatively, you can also enable the option 'builtin_xrootd' to build XROOTD internally")
     else()
@@ -984,6 +991,17 @@ if(xrootd AND NOT builtin_xrootd)
       endif()
     endif()
   endif()
+
+  if(XRootD_VERSION VERSION_LESS 5.8.4)
+    # Remove -D from XRootD's exported compile definitions. https://github.com/xrootd/xrootd/issues/2543
+    foreach(XRDTarget XRootD::XrdCl XRootD::XrdUtils)
+      if(TARGET ${XRDTarget})
+        get_target_property(PROP ${XRDTarget} INTERFACE_COMPILE_DEFINITIONS)
+        list(TRANSFORM PROP REPLACE "^-D" "")
+        set_property(TARGET ${XRDTarget} PROPERTY INTERFACE_COMPILE_DEFINITIONS ${PROP})
+      endif()
+    endforeach()
+  endif()
 endif()
 
 if(builtin_xrootd)
@@ -992,30 +1010,28 @@ if(builtin_xrootd)
     message(FATAL_ERROR "No internet connection. Please check your connection, or either disable the 'builtin_xrootd'"
       " option or the 'fail-on-missing' to automatically disable options requiring internet access")
   endif()
+  if(NOT ssl AND NOT builtin_openssl)
+    message(FATAL_ERROR "Building XRootD ('builtin_xrootd'=On) requires ssl support ('ssl' or 'builtin_openssl').")
+  endif()
   list(APPEND ROOT_BUILTINS BUILTIN_XROOTD)
-  # The builtin XRootD requires OpenSSL.
-  # We have to find it here, such that OpenSSL is available in this scope to
-  # finalize the XRootD target configuration.
-  # See also: https://github.com/root-project/root/issues/16374
-  find_package(OpenSSL REQUIRED)
   add_subdirectory(builtins/xrootd)
   set(xrootd ON CACHE BOOL "Enabled because builtin_xrootd requested (${xrootd_description})" FORCE)
 endif()
 
-# Finalise the XRootD target configuration
-if(TARGET XRootD)
-
-  # The XROOTD_INCLUDE_DIRS provided by XRootD is actually a list with two
-  # paths, like:
+# Backward compatibility for XRootD <v5.8 without CMake targets:
+if(xrootd AND NOT TARGET XRootD::XrdCl)
+  # Before v5.7.0, XROOTD_INCLUDE_DIRS includes private headers, like:
   #   <xrootd_include_dir>;<xrootd_include_dir>/private
-  # We don't need the private headers, and we have to exclude this path from
-  # the build configuration if we don't want it to fail on systems were the
-  # private headers are not installed (most linux distributions).
-  list(GET XROOTD_INCLUDE_DIRS 0 XROOTD_INCLUDE_DIR_PRIMARY)
+  # The private headers are not always installed, so the configure step might fail.
+  # ROOT doesn't need these headers, so it's best to remove them.
+  list(FILTER XROOTD_INCLUDE_DIRS EXCLUDE REGEX .*/private)
 
-  target_include_directories(XRootD SYSTEM INTERFACE "$<BUILD_INTERFACE:${XROOTD_INCLUDE_DIR_PRIMARY}>")
-  target_link_libraries(XRootD INTERFACE $<BUILD_INTERFACE:${XROOTD_CLIENT_LIBRARIES}>)
-  target_link_libraries(XRootD INTERFACE $<BUILD_INTERFACE:${XROOTD_UTILS_LIBRARIES}>)
+  add_library(XRootD::XrdCl SHARED IMPORTED)
+  set_target_properties(XRootD::XrdCl PROPERTIES IMPORTED_LOCATION ${XROOTD_CLIENT_LIBRARIES})
+  target_include_directories(XRootD::XrdCl SYSTEM INTERFACE $<BUILD_INTERFACE:${XROOTD_INCLUDE_DIRS}>)
+
+  add_library(XRootD::XrdUtils SHARED IMPORTED)
+  set_target_properties(XRootD::XrdUtils PROPERTIES IMPORTED_LOCATION ${XROOTD_UTILS_LIBRARIES})
 endif()
 
 #---check if netxng can be built-------------------------------
@@ -1026,7 +1042,7 @@ endif()
 #---make sure non-builtin xrootd is not using builtin_openssl-----------
 if(xrootd AND NOT builtin_xrootd AND builtin_openssl)
   if(fail-on-missing)
-    message(FATAL_ERROR "Non-builtin XROOTD must not be used with builtin OpenSSL. If you want to use non-builtin XROOTD, please use the system OpenSSL")
+    message(SEND_ERROR "Non-builtin XROOTD must not be used with builtin OpenSSL. If you want to use non-builtin XROOTD, please use the system OpenSSL")
   else()
     message(STATUS "Non-builtin XROOTD must not be used with builtin OpenSSL. Disabling the 'xrootd' option.")
     set(xrootd OFF CACHE BOOL "Disabled because non-builtin xrootd cannot be used with builtin OpenSSL" FORCE)
@@ -1038,23 +1054,13 @@ if(arrow)
   find_package(Arrow)
   if(NOT ARROW_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "Apache Arrow not found. Please set ARROW_HOME to point to your Arrow installation, "
+      message(SEND_ERROR "Apache Arrow not found. Please set ARROW_HOME to point to your Arrow installation, "
                           "or include the installation of Arrow in the CMAKE_PREFIX_PATH.")
     else()
       message(STATUS "Apache Arrow API not found. Set variable ARROW_HOME to point to your Arrow installation, "
                      "or include the installation of Arrow in the CMAKE_PREFIX_PATH.")
       message(STATUS "For the time being switching OFF 'arrow' option")
       set(arrow OFF CACHE BOOL "Disabled because Apache Arrow API not found (${arrow_description})" FORCE)
-    endif()
-  else()
-    if(${ARROW_VERSION} VERSION_GREATER_EQUAL 10.0.0 AND CMAKE_CXX_STANDARD LESS 17)
-      if(fail-on-missing)
-        message(FATAL_ERROR "The Apache Arrow version found on the system (${ARROW_VERSION}) requires at least CMAKE_CXX_STANDARD=17")
-      else()
-        message(STATUS "The Apache Arrow version found on the system (${ARROW_VERSION}) requires at least CMAKE_CXX_STANDARD=17")
-        message(STATUS "For the time being switching OFF 'arrow' option")
-        set(arrow OFF CACHE BOOL "Disabled because Apache Arrow Version ${ARROW_VERSION} requires CMAKE_CXX_STANDARD=17)" FORCE)
-      endif()
     endif()
   endif()
 
@@ -1065,7 +1071,7 @@ if(dcache)
   find_package(DCAP)
   if(NOT DCAP_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "dCap library not found and is required (dcache option enabled)")
+      message(SEND_ERROR "dCap library not found and is required (dcache option enabled)")
     else()
       message(STATUS "dCap library not found. Set variable DCAP_DIR to point to your dCache installation")
       message(STATUS "For the time being switching OFF 'dcache' option")
@@ -1079,7 +1085,7 @@ if(opengl AND NOT builtin_ftgl)
   find_package(FTGL)
   if(NOT FTGL_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "ftgl library not found and is required ('builtin_ftgl' is OFF). Set varible FTGL_ROOT_DIR to installation location")
+      message(SEND_ERROR "ftgl library not found and is required ('builtin_ftgl' is OFF). Set varible FTGL_ROOT_DIR to installation location")
     else()
       message(STATUS "ftgl library not found. Set variable FTGL_ROOT_DIR to point to your installation")
       message(STATUS "For the time being switching ON 'builtin_ftgl' option")
@@ -1107,7 +1113,7 @@ if(r)
   find_package(R COMPONENTS Rcpp RInside)
   if(NOT R_FOUND)
     if(fail-on-missing)
-       message(FATAL_ERROR "R installation not found and is required ('r' option enabled)")
+       message(SEND_ERROR "R installation not found and is required ('r' option enabled)")
     else()
        message(STATUS "R installation not found. Set variable R_DIR to point to your R installation")
        message(STATUS "For the time being switching OFF 'r' option")
@@ -1180,7 +1186,7 @@ if (uring)
     find_package(liburing)
     if(NOT LIBURING_FOUND)
       if(fail-on-missing)
-        message(FATAL_ERROR "liburing not found and uring option required")
+        message(SEND_ERROR "liburing not found and uring option required")
       else()
         message(STATUS "liburing not found. Switching off uring option")
         set(uring OFF CACHE BOOL "Disabled because liburing was not found (${uring_description})" FORCE)
@@ -1249,7 +1255,7 @@ if(imt AND NOT builtin_tbb)
 int main() { return 0; }" tbb_exception_result)
     if(NOT tbb_exception_result)
       if(fail-on-missing)
-        message(FATAL_ERROR "Found TBB uses tbb::captured_exception, not suitable for ROOT!")
+        message(SEND_ERROR "Found TBB uses tbb::captured_exception, not suitable for ROOT!")
       endif()
       message(STATUS "Found TBB uses tbb::captured_exception, enabling 'builtin_tbb' option")
       set(builtin_tbb ON CACHE BOOL "Enabled because imt is enabled and found TBB is not suitable" FORCE)
@@ -1305,6 +1311,7 @@ if(builtin_tbb)
     URL_HASH SHA256=${tbb_sha256}
     INSTALL_DIR ${CMAKE_BINARY_DIR}
     CMAKE_ARGS -G ${CMAKE_GENERATOR}
+               -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                -DCMAKE_CXX_FLAGS=${ROOT_EXTERNAL_CXX_FLAGS}
@@ -1379,6 +1386,7 @@ if(vc AND NOT Vc_FOUND)
     BUILD_BYPRODUCTS ${Vc_LIBRARY}
     LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
     CMAKE_ARGS -G ${CMAKE_GENERATOR}
+               -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
@@ -1535,7 +1543,7 @@ if(vdt OR builtin_vdt)
     find_package(Vdt 0.4)
     if(NOT VDT_FOUND)
       if(fail-on-missing)
-        message(FATAL_ERROR "VDT not found. Ensure that the installation of VDT is in the CMAKE_PREFIX_PATH")
+        message(SEND_ERROR "VDT not found. Ensure that the installation of VDT is in the CMAKE_PREFIX_PATH")
       else()
         message(STATUS "VDT not found. Ensure that the installation of VDT is in the CMAKE_PREFIX_PATH")
         ROOT_CHECK_CONNECTION("vdt=OFF")
@@ -1546,18 +1554,21 @@ if(vdt OR builtin_vdt)
           set(builtin_vdt ON CACHE BOOL "Enabled because external vdt not found (${vdt_description})" FORCE)
         endif()
       endif()
-    endif()
+     else()
+       add_library(VDT ALIAS VDT::VDT)
+     endif()
   endif()
   if(builtin_vdt)
-    set(vdt_version 0.4.4)
+    set(vdt_version 0.4.6)
     set(VDT_FOUND True)
     set(VDT_LIBRARIES ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}vdt${CMAKE_SHARED_LIBRARY_SUFFIX})
     ExternalProject_Add(
-      VDT
+      BUILTIN_VDT
       URL ${lcgpackages}/vdt-${vdt_version}.tar.gz
-      URL_HASH SHA256=8b1664b45ec82042152f89d171dd962aea9bb35ac53c8eebb35df1cb9c34e498
+      URL_HASH SHA256=1820feae446780763ec8bbb60a0dbcf3ae1ee548bdd01415b1fb905fd4f90c54
       INSTALL_DIR ${CMAKE_BINARY_DIR}
       CMAKE_ARGS
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         -DSSE=OFF # breaks on ARM without this
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
@@ -1570,12 +1581,19 @@ if(vdt OR builtin_vdt)
       TIMEOUT 600
     )
     ExternalProject_Add_Step(
-       VDT copy2externals
+       BUILTIN_VDT copy2externals
        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/include/vdt ${CMAKE_BINARY_DIR}/ginclude/vdt
        DEPENDEES install
     )
     set(VDT_INCLUDE_DIR ${CMAKE_BINARY_DIR}/ginclude)
     set(VDT_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/ginclude)
+    if(NOT TARGET VDT)
+      add_library(VDT IMPORTED SHARED)
+      add_dependencies(VDT BUILTIN_VDT)
+      set_target_properties(VDT PROPERTIES IMPORTED_LOCATION "${VDT_LIBRARIES}")
+      target_include_directories(VDT INTERFACE $<BUILD_INTERFACE:${VDT_INCLUDE_DIR}> $<INSTALL_INTERFACE:include/>)
+    endif()
+
     install(FILES ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}vdt${CMAKE_SHARED_LIBRARY_SUFFIX}
             DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libraries)
     install(DIRECTORY ${CMAKE_BINARY_DIR}/include/vdt
@@ -1599,11 +1617,11 @@ if (vecgeom)
     message(WARNING "ROOT must be built against the VecCore installation that was used to build VecGeom; builtin_veccore cannot be used. Option VecGeom will be disabled.")
     set(vecgeom OFF CACHE BOOL "Disabled because non-builtin VecGeom specified but its VecCore cannot be found" FORCE)
   elseif(builtin_veccore AND fail-on-missing)
-    message(FATAL_ERROR "ROOT must be built against the VecCore installation that was used to build VecGeom; builtin_veccore cannot be used. Ensure that builtin_veccore option is OFF.")
+    message(SEND_ERROR "ROOT must be built against the VecCore installation that was used to build VecGeom; builtin_veccore cannot be used. Ensure that builtin_veccore option is OFF.")
   endif()
   if(NOT VecGeom_FOUND )
     if(fail-on-missing)
-      message(FATAL_ERROR "VecGeom not found. Ensure that the installation of VecGeom is in the CMAKE_PREFIX_PATH")
+      message(SEND_ERROR "VecGeom not found. Ensure that the installation of VecGeom is in the CMAKE_PREFIX_PATH")
     else()
       message(STATUS "VecGeom not found. Ensure that the installation of VecGeom is in the CMAKE_PREFIX_PATH")
       message(STATUS "              example: CMAKE_PREFIX_PATH=<VecGeom_install_path>/lib/cmake/VecGeom")
@@ -1618,6 +1636,17 @@ endif()
 #---Check for protobuf-------------------------------------------------------------------
 
 if(tmva-sofie)
+  if(testing)
+    message(STATUS "Looking for BLAS as an optional testing dependency of TMVA-SOFIE")
+    find_package(BLAS)
+    if(NOT BLAS_FOUND)
+      if(fail-on-missing)
+        message(FATAL_ERROR "BLAS not found, but it's required for TMVA-SOFIE testing")
+      else()
+        message(WARNING "BLAS not found: TMVA-SOFIE will not be fully tested")
+      endif()
+    endif()
+  endif()
   message(STATUS "Looking for Protobuf")
   set(protobuf_MODULE_COMPATIBLE TRUE)
   find_package(Protobuf CONFIG)
@@ -1626,7 +1655,7 @@ if(tmva-sofie)
   endif()
   if(NOT Protobuf_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "Protobuf libraries not found and they are required (tmva-sofie option enabled)")
+      message(SEND_ERROR "Protobuf libraries not found and they are required (tmva-sofie option enabled)")
     else()
       message(STATUS "Protobuf not found. Switching off tmva-sofie option")
       set(tmva-sofie OFF CACHE BOOL "Disabled because Protobuf not found" FORCE)
@@ -1634,7 +1663,7 @@ if(tmva-sofie)
   else()
     if(Protobuf_VERSION LESS 3.0)
       if(fail-on-missing)
-        message(FATAL_ERROR "Protobuf libraries found but is less than the version required (3.0) (tmva-sofie option enabled)")
+        message(SEND_ERROR "Protobuf libraries found but is less than the version required (3.0) (tmva-sofie option enabled)")
       else()
         message(STATUS "Protobuf found but its version is not high enough (>3.0). Switching off tmva-sofie option")
         set(tmva-sofie OFF CACHE BOOL "Disabled because found Protobuf version is not enough" FORCE)
@@ -1642,7 +1671,7 @@ if(tmva-sofie)
     else()
       if(NOT TARGET protobuf::protoc)
         if(fail-on-missing)
-          message(FATAL_ERROR "Protobuf compiler not found (tmva-sofie option enabled)")
+          message(SEND_ERROR "Protobuf compiler not found (tmva-sofie option enabled)")
         else()
           message(STATUS "Protobuf compiler not found. Switching off tmva-sofie option")
           set(tmva-sofie OFF CACHE BOOL "Disabled because Protobuf compiler not found" FORCE)
@@ -1656,16 +1685,34 @@ endif()
 if(tmva)
   if(tmva-cpu AND imt)
     message(STATUS "Looking for BLAS for optional parts of TMVA")
-    find_package(BLAS)
-    if(NOT BLAS_FOUND)
-      if (GSL_FOUND)
-        message(STATUS "Using GSL CBLAS for optional parts of TMVA")
+    # ROOT internal BLAS target
+    add_library(Blas INTERFACE)
+    add_library(ROOT::BLAS ALIAS Blas)
+    if(use_gsl_cblas)
+      message(STATUS "Using GSL CBLAS for optional parts of TMVA")
+      if(builtin_gsl)
+        add_dependencies(Blas GSL)
+        target_include_directories(Blas INTERFACE ${GSL_INCLUDE_DIR})
+        target_link_libraries(Blas INTERFACE ${GSL_CBLAS_LIBRARY})
       else()
+        if(GSL_FOUND)
+          target_link_libraries(Blas INTERFACE GSL::gslcblas)
+        endif()
+      endif()
+      target_compile_definitions(Blas INTERFACE -DR__USE_CBLAS)
+    else()
+      find_package(BLAS)
+      if(BLAS_FOUND)
+        target_link_libraries(Blas INTERFACE BLAS::BLAS)
+      endif()
+    endif()
+    if(NOT BLAS_FOUND AND NOT GSL_FOUND)
+      if(fail-on-missing)
+        message(SEND_ERROR "tmva-cpu can't be built because BLAS was not found!")
+      else()
+        message(STATUS "tmva-cpu disabled because BLAS was not found")
         set(tmva-cpu OFF CACHE BOOL "Disabled because BLAS was not found (${tmva-cpu_description})" FORCE)
       endif()
-      set(BLAS_LIBRARIES) # find package set this variable to a literal FALSE when not found.
-    else()
-      set(BLAS_LIBRARIES BLAS::BLAS)
     endif()
   else()
     set(tmva-cpu OFF CACHE BOOL "Disabled because 'imt' is disabled (${tmva-cpu_description})" FORCE)
@@ -1700,11 +1747,18 @@ if(tmva)
   endif()
   if(tmva-pymva)
     if(fail-on-missing AND (NOT Python3_NumPy_FOUND OR NOT Python3_Development_FOUND))
-      message(FATAL_ERROR "TMVA: numpy python package or Python development package not found and tmva-pymva component required"
+      message(SEND_ERROR "TMVA: numpy python package or Python development package not found and tmva-pymva component required"
                           " (python executable: ${Python3_EXECUTABLE})")
     elseif(NOT Python3_NumPy_FOUND OR NOT Python3_Development_FOUND)
       message(STATUS "TMVA: Numpy or Python development package not found for python ${Python3_EXECUTABLE}. Switching off tmva-pymva option")
       set(tmva-pymva OFF CACHE BOOL "Disabled because Numpy or Python development package were not found (${tmva-pymva_description})" FORCE)
+    endif()
+    if(testing)
+      message(STATUS "Looking for BLAS as an optional testing dependency of PyMVA")
+      find_package(BLAS)
+      if(NOT BLAS_FOUND)
+        message(WARNING "BLAS not found: PyMVA will not be fully tested")
+      endif()
     endif()
   endif()
   if (R_FOUND)
@@ -1729,7 +1783,7 @@ if(pyroot)
     message(STATUS "PyROOT: development package found. Building for version ${Python3_VERSION}")
   else()
     if(fail-on-missing)
-      message(FATAL_ERROR "PyROOT: Python development package not found and pyroot component required"
+      message(SEND_ERROR "PyROOT: Python development package not found and pyroot component required"
                           " (python executable: ${Python3_EXECUTABLE})")
     else()
       message(STATUS "PyROOT: Python development package not found for python ${Python3_EXECUTABLE}. Switching off pyroot option")
@@ -1744,7 +1798,7 @@ if(tpython)
 
   if(NOT Python3_Development_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "TPython: Python development package not found and tpython component required"
+      message(SEND_ERROR "TPython: Python development package not found and tpython component required"
                           " (python executable: ${Python3_EXECUTABLE})")
     else()
       message(STATUS "TPython: Python development package not found for python ${Python3_EXECUTABLE}. Switching off tpython option")
@@ -1760,7 +1814,7 @@ if (mpi)
   find_package(MPI)
   if(NOT MPI_FOUND)
     if(fail-on-missing)
-      message(FATAL_ERROR "MPI not found. Ensure that the installation of MPI is in the CMAKE_PREFIX_PATH."
+      message(SEND_ERROR "MPI not found. Ensure that the installation of MPI is in the CMAKE_PREFIX_PATH."
         " Example: CMAKE_PREFIX_PATH=<MPI_install_path> (e.g. \"/usr/local/mpich\")")
     else()
       message(STATUS "MPI not found. Ensure that the installation of MPI is in the CMAKE_PREFIX_PATH")
@@ -1842,9 +1896,9 @@ endif (roofit_multiprocess)
 if (testing OR testsupport)
   if (NOT builtin_gtest)
     if(fail-on-missing)
-      find_package(GTest REQUIRED)
+      find_package(GTest 1.10 REQUIRED)
     else()
-      find_package(GTest)
+      find_package(GTest 1.10)
       if(NOT GTEST_FOUND)
         ROOT_CHECK_CONNECTION("testing=OFF")
         if(NO_CONNECTION)
@@ -1869,7 +1923,6 @@ if (testing OR testsupport)
 endif()
 
 if (builtin_gtest)
-  # FIXME: Remove our version of gtest in roottest. We can reuse this one.
   # Add googletest
   # http://stackoverflow.com/questions/9689183/cmake-googletest
 
@@ -1984,6 +2037,15 @@ if (builtin_gtest)
 
 endif()
 
+# Starting from cmake 3.23, the GTest targets will have stable names.
+# ROOT was updated to use those, but for older CMake versions, we have to declare the aliases:
+foreach(LIBNAME gtest_main gmock_main gtest gmock)
+  if(NOT TARGET GTest::${LIBNAME} AND TARGET ${LIBNAME})
+    add_library(GTest::${LIBNAME} ALIAS ${LIBNAME})
+  endif()
+endforeach()
+
+#------------------------------------------------------------------------------------
 if(webgui AND NOT builtin_openui5)
   ROOT_CHECK_CONNECTION("builtin_openui5=ON")
   if(NO_CONNECTION)
@@ -2007,7 +2069,7 @@ if(webgui)
       ExternalProject_Add(
         OPENUI5
         URL ${CMAKE_SOURCE_DIR}/builtins/openui5/openui5.tar.gz
-        URL_HASH SHA256=d838f6201ef103f4a673b4db936b8ed1634685fa2402726b6d546e57c4e47f7a
+        URL_HASH SHA256=b9e6495d8640302d9cf2fe3c99331311335aaab0f48794565ebd69ecc7449e58
         CONFIGURE_COMMAND ""
         BUILD_COMMAND ""
         INSTALL_COMMAND ""
@@ -2017,8 +2079,8 @@ if(webgui)
     else()
       ExternalProject_Add(
         OPENUI5
-        URL https://github.com/SAP/openui5/releases/download/1.98.0/openui5-runtime-1.98.0.zip
-        URL_HASH SHA256=3d3db9ba001141019aae2cdf6eb6d34d655a3652308e03a335794f1231d21d2f
+        URL https://github.com/SAP/openui5/releases/download/1.135.0/openui5-runtime-1.135.0.zip
+        URL_HASH SHA256=13acdb88a7f3f1d4afef6d1d500b53bccc4b593e7acf442721bb4e3da4e2690b
         CONFIGURE_COMMAND ""
         BUILD_COMMAND ""
         INSTALL_COMMAND ""
@@ -2078,6 +2140,24 @@ if(NOT ROOT_HAVE_CXX_ATOMICS_WITHOUT_LIB)
   mark_as_advanced(ROOT_ATOMIC_LIB)
   if(ROOT_ATOMIC_LIB)
     set(ROOT_ATOMIC_LIBS ${ROOT_ATOMIC_LIB})
+  endif()
+endif()
+
+#------------------------------------------------------------------------------------
+# Check if we need to link -lstdc++fs to use <filesystem> (libstdc++ 8 and older).
+set(_filesystem_source "
+#include <filesystem>
+int main(void) {
+   std::filesystem::path p = \"path\";
+   return 0;
+}
+")
+check_cxx_source_compiles("${_filesystem_source}" ROOT_HAVE_NATIVE_CXX_FILESYSTEM)
+if(NOT ROOT_HAVE_NATIVE_CXX_FILESYSTEM)
+  set(CMAKE_REQUIRED_LIBRARIES stdc++fs)
+  check_cxx_source_compiles("${_filesystem_source}" ROOT_NEED_STDCXXFS)
+  if(NOT ROOT_NEED_STDCXXFS)
+    message(FATAL_ERROR "Could not determine how to use C++17 <filesystem>")
   endif()
 endif()
 

@@ -5,7 +5,7 @@
 /// Example of framework usage for writing RNTuples:
 /// 1. Creation of (bare) RNTupleModels and RFieldTokens.
 /// 2. Creation of RNTupleWriter and RNTupleParallelWriter when appending to a single TFile.
-/// 3. Creation of RNTupleFillContext and (bare) REntry per thread, and usage of BindRawPtr.
+/// 3. Creation of RNTupleFillContext and RRawPtrWriteEntry per thread, and usage of BindRawPtr.
 /// 4. Usage of FillNoFlush(), RNTupleFillStatus::ShouldFlushCluster(), FlushColumns(), and FlushCluster().
 ///
 /// Please note that this tutorial has very simplified versions of classes that could be found in a framework, such as
@@ -24,10 +24,11 @@
 /// \date September 2024
 /// \author The ROOT Team
 
-// NOTE: The RNTuple classes are experimental at this point.
+// NOTE: The RNTupleParallelWriter, RNTupleFillContext, and RRawPtrWriteEntry are experimental at this point.
 // Functionality and interface are still subject to changes.
 
-#include <ROOT/REntry.hxx>
+#include <ROOT/RRawPtrWriteEntry.hxx>
+#include <ROOT/RFieldToken.hxx>
 #include <ROOT/RNTupleFillContext.hxx>
 #include <ROOT/RNTupleFillStatus.hxx>
 #include <ROOT/RNTupleModel.hxx>
@@ -49,21 +50,18 @@
 #include <vector>
 
 // Import classes from Experimental namespace for the time being
-using ROOT::Experimental::REntry;
 using ROOT::Experimental::RNTupleFillContext;
-using ROOT::Experimental::RNTupleFillStatus;
-using ROOT::Experimental::RNTupleModel;
 using ROOT::Experimental::RNTupleParallelWriter;
-using ROOT::Experimental::RNTupleWriter;
+using ROOT::Experimental::Detail::RRawPtrWriteEntry;
 
-using ModelTokensPair = std::pair<std::unique_ptr<RNTupleModel>, std::vector<REntry::RFieldToken>>;
+using ModelTokensPair = std::pair<std::unique_ptr<ROOT::RNTupleModel>, std::vector<ROOT::RFieldToken>>;
 
 // A DataProduct associates an arbitrary address to an index in the model.
 struct DataProduct {
    std::size_t index;
-   void *address;
+   const void *address;
 
-   DataProduct(std::size_t i, void *a) : index(i), address(a) {}
+   DataProduct(std::size_t i, const void *a) : index(i), address(a) {}
 };
 
 // The FileService opens a TFile and provides synchronization.
@@ -95,11 +93,11 @@ public:
 class ParallelOutputter final : public Outputter {
    FileService &fFileService;
    std::unique_ptr<RNTupleParallelWriter> fParallelWriter;
-   std::vector<REntry::RFieldToken> fTokens;
+   std::vector<ROOT::RFieldToken> fTokens;
 
    struct SlotData {
       std::shared_ptr<RNTupleFillContext> fillContext;
-      std::unique_ptr<REntry> entry;
+      std::unique_ptr<RRawPtrWriteEntry> entry;
    };
    std::vector<SlotData> fSlots;
 
@@ -119,10 +117,9 @@ public:
       if (slot >= fSlots.size()) {
          fSlots.resize(slot + 1);
       }
-      // Create an RNTupleFillContext and REntry that are used for all fills from this slot. We recommend creating a
-      // bare entry if binding all fields.
+      // Create an RNTupleFillContext and RRawPtrWriteEntry that are used for all fills from this slot.
       fSlots[slot].fillContext = fParallelWriter->CreateFillContext();
-      fSlots[slot].entry = fSlots[slot].fillContext->GetModel().CreateBareEntry();
+      fSlots[slot].entry = fSlots[slot].fillContext->GetModel().CreateRawPtrWriteEntry();
    }
 
    void Fill(unsigned slot, const std::vector<DataProduct> &products) final
@@ -137,7 +134,7 @@ public:
       }
 
       // Fill the entry without triggering an implicit flush.
-      RNTupleFillStatus status;
+      ROOT::RNTupleFillStatus status;
       fillContext.FillNoFlush(entry, status);
       if (status.ShouldFlushCluster()) {
          // If we are asked to flush, first try to do as much work as possible outside of the critical section:
@@ -160,12 +157,12 @@ public:
 // in the critical section by executing its tasks. See also the note at the top of the file.
 class SerializingOutputter final : public Outputter {
    FileService &fFileService;
-   std::unique_ptr<RNTupleWriter> fWriter;
+   std::unique_ptr<ROOT::RNTupleWriter> fWriter;
    std::mutex fWriterMutex;
-   std::vector<REntry::RFieldToken> fTokens;
+   std::vector<ROOT::RFieldToken> fTokens;
 
    struct SlotData {
-      std::unique_ptr<REntry> entry;
+      std::unique_ptr<RRawPtrWriteEntry> entry;
    };
    std::vector<SlotData> fSlots;
 
@@ -177,7 +174,7 @@ public:
       auto &model = modelTokens.first;
 
       std::lock_guard g(fileService.GetMutex());
-      fWriter = RNTupleWriter::Append(std::move(model), ntupleName, fileService.GetFile(), options);
+      fWriter = ROOT::RNTupleWriter::Append(std::move(model), ntupleName, fileService.GetFile(), options);
    }
 
    void InitSlot(unsigned slot) final
@@ -185,9 +182,8 @@ public:
       if (slot >= fSlots.size()) {
          fSlots.resize(slot + 1);
       }
-      // Create an REntry that is used for all fills from this slot. We recommend creating a bare entry if binding all
-      // fields.
-      fSlots[slot].entry = fWriter->GetModel().CreateBareEntry();
+      // Create an RRawPtrWriteEntry that is used for all fills from this slot.
+      fSlots[slot].entry = fWriter->GetModel().CreateRawPtrWriteEntry();
    }
 
    void Fill(unsigned slot, const std::vector<DataProduct> &products) final
@@ -204,7 +200,7 @@ public:
          // Fill the entry without triggering an implicit flush. This requires synchronization with other threads using
          // the same writer, but not (yet) with the underlying TFile.
          std::lock_guard g(fWriterMutex);
-         RNTupleFillStatus status;
+         ROOT::RNTupleFillStatus status;
          fWriter->FillNoFlush(entry, status);
          if (status.ShouldFlushCluster()) {
             // If we are asked to flush, first try to do as much work as possible outside of the critical section:
@@ -248,9 +244,9 @@ struct Event {
 ModelTokensPair CreateEventModel()
 {
    // We recommend creating a bare model if the default entry is not used.
-   auto model = RNTupleModel::CreateBare();
+   auto model = ROOT::RNTupleModel::CreateBare();
    // For more efficient access, also create field tokens.
-   std::vector<REntry::RFieldToken> tokens;
+   std::vector<ROOT::RFieldToken> tokens;
 
    model->MakeField<decltype(Event::eventId)>("eventId");
    tokens.push_back(model->GetToken("eventId"));
@@ -274,7 +270,7 @@ ModelTokensPair CreateEventModel()
 std::vector<DataProduct> CreateEventDataProducts(Event &event)
 {
    std::vector<DataProduct> products;
-   // The indices have to match the order of std::vector<REntry::RFieldToken> above.
+   // The indices have to match the order of std::vector<ROOT::RFieldToken> above.
    products.emplace_back(0, &event.eventId);
    products.emplace_back(1, &event.runId);
    products.emplace_back(2, &event.electrons);
@@ -293,9 +289,9 @@ struct Run {
 ModelTokensPair CreateRunModel()
 {
    // We recommend creating a bare model if the default entry is not used.
-   auto model = RNTupleModel::CreateBare();
+   auto model = ROOT::RNTupleModel::CreateBare();
    // For more efficient access, also create field tokens.
-   std::vector<REntry::RFieldToken> tokens;
+   std::vector<ROOT::RFieldToken> tokens;
 
    model->MakeField<decltype(Run::runId)>("runId");
    tokens.push_back(model->GetToken("runId"));
@@ -310,7 +306,7 @@ ModelTokensPair CreateRunModel()
 std::vector<DataProduct> CreateRunDataProducts(Run &run)
 {
    std::vector<DataProduct> products;
-   // The indices have to match the order of std::vector<REntry::RFieldToken> above.
+   // The indices have to match the order of std::vector<ROOT::RFieldToken> above.
    products.emplace_back(0, &run.runId);
    products.emplace_back(1, &run.nEvents);
    return products;

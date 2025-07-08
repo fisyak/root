@@ -65,17 +65,7 @@ ROOT_LINKER_LIBRARY(RIO
 
 target_include_directories(RIO PRIVATE ${CMAKE_SOURCE_DIR}/core/clib/res)
 target_link_libraries(RIO PUBLIC ${ROOT_ATOMIC_LIBS})
-
-if(builtin_nlohmannjson)
-   target_include_directories(RIO PRIVATE ${CMAKE_SOURCE_DIR}/builtins)
-else()
-   target_link_libraries(RIO PRIVATE nlohmann_json::nlohmann_json)
-endif()
-
-if(root7)
-  set(RIO_EXTRA_HEADERS ROOT/RFile.hxx)
-  target_sources(RIO PRIVATE v7/src/RFile.cxx)
-endif()
+target_link_libraries(RIO PRIVATE nlohmann_json::nlohmann_json)
 
 if(uring)
   target_link_libraries(RIO PUBLIC ${LIBURING_LIBRARY})
@@ -116,7 +106,6 @@ ROOT_GENERATE_DICTIONARY(G__RIO
   TVirtualCollectionIterators.h
   TStreamerInfo.h
   TZIPFile.h
-  ${RIO_EXTRA_HEADERS}
   STAGE1
   MODULE
     RIO

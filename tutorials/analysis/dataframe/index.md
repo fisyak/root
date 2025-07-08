@@ -41,7 +41,7 @@ To get started these examples show how to create a simple RDataFrame, how to pro
 | df000_simple.C | df000_simple.py | Simple RDataFrame example in C++. |
 | df001_introduction.C | df001_introduction.py | Basic RDataFrame usage. |
 | df002_dataModel.C | df002_dataModel.py | Show how to work with non-flat data models, e.g. vectors of tracks.|
-
+| df039_RResultPtr_basics.C | | Learn the difference between lazy and immediate actions. |
 
 \anchor processingdata
 ## Processing your data
@@ -63,6 +63,7 @@ A collection of building block examples for your analysis.
 | df025_RNode.C | | Manipulate RDF objects in functions, loops and conditional branches.|
 | df036_missingBranches.C | df036_missingBranches.py | Deal with missing values due to a missing branch when switching to a new file in a chain. |
 | df037_TTreeEventMatching.C | df037_TTreeEventMatching.py | Deal with missing values due to not finding a matching event in an auxiliary dataset. |
+| df040_RResultPtr_lifetimeManagement.C | | Lifetime management of RResultPtr and the underlying objects. |
 
 
 \anchor readwrite
@@ -129,7 +130,7 @@ With RDataFrame advanced analyses can be executed on large amounts of data. Thes
 | **Tutorial** || **Description** |
 |------|--------|-----------------|
 | df017_vecOpsHEP.C | df017_vecOpsHEP.py | Use RVecs to plot the transverse momentum of selected particles. |
-| df101_h1Analysis.C | | Express ROOT's standard H1 analysis. |
+| df101_h1Analysis.C | df101_h1Analysis.py | Express ROOT's standard H1 analysis. |
 | df102_NanoAODDimuonAnalysis.C | df102_NanoAODDimuonAnalysis.py | Process  NanoAOD files. |
 | df103_NanoAODHiggsAnalysis.C | df103_NanoAODHiggsAnalysis.py | An example of complex analysis: reconstructing the Higgs boson. |
 | | df104_HiggsToTwoPhotons.py | The Higgs to two photons analysis from the ATLAS Open Data 2020 release. |

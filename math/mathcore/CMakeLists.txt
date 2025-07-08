@@ -79,7 +79,6 @@ set(HEADERS
   Math/SpecFuncMathCore.h
   Math/StdEngine.h
   Math/TDataPoint.h
-  Math/TDataPointN.h
   Math/TRandomEngine.h
   Math/Types.h
   Math/Util.h
@@ -189,6 +188,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(MathCore
     src/TRandomGen.cxx
     src/TStatistic.cxx
     src/UnBinData.cxx
+    src/Util.cxx
     src/VectorizedTMath.cxx
   LIBRARIES
     ${MATHCORE_LIBRARIES}

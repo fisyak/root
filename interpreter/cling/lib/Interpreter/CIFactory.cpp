@@ -580,7 +580,9 @@ namespace {
 
     // We can't use "assert.h" because it is defined in the resource dir, too.
 #ifdef _WIN32
+    #ifdef CLING_SUPPORT_VC
     llvm::SmallString<256> vcIncLoc(getIncludePathForHeader(HS, "vcruntime.h"));
+    #endif
     llvm::SmallString<256> servIncLoc(getIncludePathForHeader(HS, "windows.h"));
 #endif
     llvm::SmallString<128> cIncLoc(getIncludePathForHeader(HS, "time.h"));
@@ -593,7 +595,9 @@ namespace {
     llvm::SmallString<256> boostIncLoc(getIncludePathForHeader(HS, "boost/version.hpp"));
     llvm::SmallString<256> tinyxml2IncLoc(getIncludePathForHeader(HS, "tinyxml2.h"));
     llvm::SmallString<256> cudaIncLoc(getIncludePathForHeader(HS, "cuda.h"));
+    #ifdef CLING_SUPPORT_VC
     llvm::SmallString<256> vcVcIncLoc(getIncludePathForHeader(HS, "Vc/Vc"));
+    #endif
     llvm::SmallString<256> clingIncLoc(getIncludePathForHeader(HS,
                                         "cling/Interpreter/RuntimeUniverse.h"));
 
@@ -679,10 +683,12 @@ namespace {
     std::string MOverlay;
 
 #ifdef _WIN32
+    #ifdef CLING_SUPPORT_VC
     maybeAppendOverlayEntry(vcIncLoc.str(), "vcruntime.modulemap",
                             clingIncLoc.str().str(), MOverlay,
                             /*RegisterModuleMap=*/ true,
                             /*AllowModulemapOverride=*/ false);
+    #endif
     maybeAppendOverlayEntry(servIncLoc.str(), "services_msvc.modulemap",
                             clingIncLoc.str().str(), MOverlay,
                             /*RegisterModuleMap=*/ true,
@@ -698,10 +704,11 @@ namespace {
 #elif __APPLE__
     if (Triple.isMacOSX()) {
       if (CI.getTarget().getSDKVersion() < VersionTuple(14, 4)) {
-        maybeAppendOverlayEntry(stdIncLoc.str(), "std_darwin.MacOSX14.2.sdk.modulemap",
+        maybeAppendOverlayEntry(stdIncLoc.str(),
+                                "std_darwin.MacOSX14.2.sdk.modulemap",
                                 clingIncLoc.str().str(), MOverlay,
-                                /*RegisterModuleMap=*/ true,
-                                /*AllowModulemapOverride=*/ false);
+                                /*RegisterModuleMap=*/true,
+                                /*AllowModulemapOverride=*/false);
       } else {
         maybeAppendOverlayEntry(stdIncLoc.str(), "std_darwin.modulemap",
                                 clingIncLoc.str().str(), MOverlay,
@@ -730,11 +737,13 @@ namespace {
                               clingIncLoc.str().str(), MOverlay,
                               /*RegisterModuleMap=*/ true,
                               /*AllowModulemapOverride=*/ false);
+    #ifdef CLING_SUPPORT_VC
     if (!vcVcIncLoc.empty())
       maybeAppendOverlayEntry(vcVcIncLoc.str(), "vc.modulemap",
                               clingIncLoc.str().str(), MOverlay,
                               /*RegisterModuleMap=*/ true,
                               /*AllowModulemapOverride=*/ false);
+    #endif
     if (!boostIncLoc.empty()) {
       // Add the modulemap in the include/boost folder not in include.
       llvm::sys::path::append(boostIncLoc, "boost");
@@ -1373,11 +1382,6 @@ namespace {
       argvCompile.push_back("-fno-omit-frame-pointer");
 #endif
 
-#ifdef __cpp_sized_deallocation
-      // Propagate the setting of the compiler to the interpreter
-      argvCompile.push_back("-fsized-deallocation");
-#endif
-
     // Disable optimizations and keep frame pointer when debugging, overriding
     // other optimization options that might be in argv
     if (debuggingEnabled) {
@@ -1403,10 +1407,6 @@ namespace {
 #endif
 
     if (!COpts.HasOutput || !HasInput) {
-      // suppress the warning "argument unused during compilation: -c" of the
-      // device interpreter instance
-      if (!COpts.CUDADevice)
-        argvCompile.push_back("-c");
       argvCompile.push_back("-");
     }
 

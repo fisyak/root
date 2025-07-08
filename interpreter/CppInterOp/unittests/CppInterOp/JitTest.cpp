@@ -1,6 +1,6 @@
 #include "Utils.h"
 
-#include "clang/Interpreter/CppInterOp.h"
+#include "CppInterOp/CppInterOp.h"
 
 #include "gtest/gtest.h"
 
@@ -12,6 +12,9 @@ static int printf_jit(const char* format, ...) {
 }
 
 TEST(JitTest, InsertOrReplaceJitSymbol) {
+#ifdef EMSCRIPTEN
+  GTEST_SKIP() << "Test fails for Emscipten builds";
+#endif
   if (llvm::sys::RunningOnValgrind())
     GTEST_SKIP() << "XFAIL due to Valgrind report";
 #ifdef _WIN32

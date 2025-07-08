@@ -67,15 +67,27 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
 include(GNUInstallDirs)
   ## Define supported version of clang and llvm
 
-  set(CLANG_MIN_SUPPORTED 13.0)
-  set(CLANG_MAX_SUPPORTED "19.1.x")
-  set(CLANG_VERSION_UPPER_BOUND 20.0.0)
-  set(LLD_MIN_SUPPORTED 13.0)
-  set(LLD_MAX_SUPPORTED "19.1.x")
-  set(LLD_VERSION_UPPER_BOUND 20.0.0)
-  set(LLVM_MIN_SUPPORTED 13.0)
-  set(LLVM_MAX_SUPPORTED "19.1.x")
-  set(LLVM_VERSION_UPPER_BOUND 20.0.0)
+if (CPPINTEROP_USE_CLING)
+  set(CLANG_MIN_SUPPORTED 18.0)
+else()
+  set(CLANG_MIN_SUPPORTED 16.0)
+endif(CPPINTEROP_USE_CLING)
+  set(CLANG_MAX_SUPPORTED "20.1.x")
+  set(CLANG_VERSION_UPPER_BOUND 21.0.0)
+if (CPPINTEROP_USE_CLING)
+  set(LLD_MIN_SUPPORTED 18.0)
+else()
+  set(LLD_MIN_SUPPORTED 16.0)
+endif(CPPINTEROP_USE_CLING)
+  set(LLD_MAX_SUPPORTED "20.1.x")
+  set(LLD_VERSION_UPPER_BOUND 21.0.0)
+if (CPPINTEROP_USE_CLING)
+  set(LLVM_MIN_SUPPORTED 18.0)
+else()
+  set(LLVM_MIN_SUPPORTED 16.0)
+endif(CPPINTEROP_USE_CLING)
+  set(LLVM_MAX_SUPPORTED "20.1.x")
+  set(LLVM_VERSION_UPPER_BOUND 21.0.0)
 
   ## Set Cmake packages search order
 
@@ -230,25 +242,16 @@ endif()
   message(STATUS "Found supported version: Clang ${CLANG_PACKAGE_VERSION}")
   message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
-  ## Clang 13 require c++14 or later, Clang 16 require c++17 or later.
-  if (CLANG_VERSION_MAJOR GREATER_EQUAL 16)
-    if (NOT CMAKE_CXX_STANDARD)
-      set (CMAKE_CXX_STANDARD 17)
-    endif()
-    if (CMAKE_CXX_STANDARD LESS 17)
-      message(fatal "LLVM/CppInterOp requires c++17 or later")
-    endif()
-  elseif (CLANG_VERSION_MAJOR GREATER_EQUAL 13)
-    if (NOT CMAKE_CXX_STANDARD)
-      set (CMAKE_CXX_STANDARD 14)
-    endif()
-    if (CMAKE_CXX_STANDARD LESS 14)
-      message(fatal "LLVM/CppInterOp requires c++14 or later")
-    endif()
+  ## Clang 16 require c++17 or later.
+  if (NOT CMAKE_CXX_STANDARD)
+    set (CMAKE_CXX_STANDARD 17)
   endif()
-  
+  if (CMAKE_CXX_STANDARD LESS 17)
+    message(fatal "LLVM/CppInterOp requires c++17 or later")
+  endif()
+
   ## Find supported Cling
-  
+
   if (CPPINTEROP_USE_CLING)
     if (NOT Cling_FOUND AND DEFINED Cling_DIR)
       find_package(Cling REQUIRED CONFIG ${cling_extra_hints} NO_DEFAULT_PATH)
@@ -307,13 +310,6 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 
-if (CPPINTEROP_USE_CLING)
-  message(STATUS "CLING_INCLUDE_DIRS: ${CLING_INCLUDE_DIRS}")
-endif(CPPINTEROP_USE_CLING)
-message(STATUS "CLANG_INCLUDE_DIRS: ${CLANG_INCLUDE_DIRS}")
-message(STATUS "LLVM_INCLUDE_DIRS: ${LLVM_INCLUDE_DIRS}")
-message(STATUS "LLVM_DEFINITIONS_LIST: ${LLVM_DEFINITIONS_LIST}")
-
 # If the llvm sources are present add them with higher priority.
 if (LLVM_BUILD_MAIN_SRC_DIR)
   # LLVM_INCLUDE_DIRS contains the include paths to both LLVM's source and
@@ -361,7 +357,7 @@ endif()
 
 # Add appropriate flags for GCC
 if (LLVM_COMPILER_IS_GCC_COMPATIBLE)
-  if (APPLE)
+  if (APPLE OR EMSCRIPTEN)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-common -Woverloaded-virtual -Wcast-qual -fno-strict-aliasing -Wno-long-long -Wall -W -Wno-unused-parameter -Wwrite-strings")
   else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-common -Woverloaded-virtual -Wcast-qual -fno-strict-aliasing -pedantic -Wno-long-long -Wall -W -Wno-unused-parameter -Wwrite-strings")
@@ -447,14 +443,9 @@ endif()
 
 # Generate docs for CppInterOp
 option(CPPINTEROP_INCLUDE_DOCS "Generate build targets for the CppInterOp docs.")
-option(CPPINTEROP_ENABLE_DOXYGEN "Use doxygen to generate CppInterOp interal API documentation.")
-option(CPPINTEROP_ENABLE_SPHINX "Use sphinx to generage CppInterOp user documentation")
+option(CPPINTEROP_ENABLE_DOXYGEN "Use doxygen to generate CppInterOp internal API documentation.")
+option(CPPINTEROP_ENABLE_SPHINX "Use sphinx to generate CppInterOp user documentation")
 
-
-if(EMSCRIPTEN)
-    message("Build with emscripten")
-    set(CPPINTEROP_ENABLE_TESTING OFF)
-endif()
 
 if(MSVC)
 
@@ -510,7 +501,7 @@ if(MSVC)
     set(MSVC_EXPORTLIST ${MSVC_EXPORTLIST} ??3@YAXPAX0@Z ??_V@YAXPAX0@Z)
   endif()
 
-  if(MSVC_VERSION GREATER_EQUAL 1936)
+  if(MSVC_VERSION GREATER_EQUAL 1936 AND NOT (CMAKE_C_COMPILER MATCHES "aarch64|arm"))
     set(MSVC_EXPORTLIST ${MSVC_EXPORTLIST}
         __std_find_trivial_1
         __std_find_trivial_2

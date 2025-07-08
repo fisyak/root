@@ -485,9 +485,9 @@ function create3DControl(fp) {
          }
       }
 
-      const fp = obj_painter.getFramePainter();
-      if (isFunc(fp?.showContextMenu))
-         fp.showContextMenu(kind, pos, p);
+      const ofp = obj_painter.getFramePainter();
+      if (isFunc(ofp?.showContextMenu))
+         ofp.showContextMenu(kind, pos, p);
    };
 }
 
@@ -529,7 +529,7 @@ function create3DScene(render3d, x3dscale, y3dscale, orthographic) {
 
       this.mode3d = false;
 
-      if (this.draw_g)
+      if (this.getG())
          this.createFrameG();
 
       return;
@@ -718,12 +718,16 @@ function render3D(tmout) {
       getCameraPosition(this);
 
    if (this.processRender3D) {
-      this.getPadPainter()?.painters?.forEach(objp => {
+      this.forEachPainter(objp => {
          if (isFunc(objp.handleRender3D))
             objp.handleRender3D();
-      });
+      }, 'objects');
    }
 }
+
+/** @summary Returns assigned render object
+  * @private */
+function getRenderer() { return this.renderer; }
 
 /** @summary Check is 3D drawing need to be resized
   * @private */
@@ -920,8 +924,8 @@ function drawXYZ(toplevel, AxisPainter, opts) {
 
    this.x_handle = new AxisPainter(null, this.xaxis);
    if (opts.v7) {
-      this.x_handle.pad_name = this.pad_name;
-      this.x_handle.assignSnapId(this.snapid);
+      this.x_handle.setPadPainter(this.getPadPainter());
+      this.x_handle.assignSnapId(this.getSnapId());
    } else if (opts.hist_painter)
       this.x_handle.setHistPainter(opts.hist_painter, 'x');
 
@@ -932,8 +936,8 @@ function drawXYZ(toplevel, AxisPainter, opts) {
 
    this.y_handle = new AxisPainter(null, this.yaxis);
    if (opts.v7) {
-      this.y_handle.pad_name = this.pad_name;
-      this.y_handle.assignSnapId(this.snapid);
+      this.y_handle.setPadPainter(this.getPadPainter());
+      this.y_handle.assignSnapId(this.getSnapId());
    } else if (opts.hist_painter)
       this.y_handle.setHistPainter(opts.hist_painter, 'y');
    this.y_handle.configureAxis('yaxis', this.ymin, this.ymax, ymin, ymax, false, [grminy, grmaxy],
@@ -943,8 +947,8 @@ function drawXYZ(toplevel, AxisPainter, opts) {
 
    this.z_handle = new AxisPainter(null, this.zaxis);
    if (opts.v7) {
-      this.z_handle.pad_name = this.pad_name;
-      this.z_handle.assignSnapId(this.snapid);
+      this.z_handle.setPadPainter(this.getPadPainter());
+      this.z_handle.assignSnapId(this.getSnapId());
    } else if (opts.hist_painter)
       this.z_handle.setHistPainter(opts.hist_painter, 'z');
    this.z_handle.configureAxis('zaxis', this.zmin, this.zmax, zmin, zmax, false, [grminz, grmaxz],
@@ -1084,7 +1088,8 @@ function drawXYZ(toplevel, AxisPainter, opts) {
       mesh.size_3d = size_3d;
       mesh.tsz = tsz;
       mesh.use_y_for_z = use_y_for_z;
-      if (kind === 'y') mesh.rotateZ(Math.PI/2).rotateX(Math.PI);
+      if (kind === 'y')
+         mesh.rotateZ(Math.PI/2).rotateX(Math.PI);
 
       mesh.v1 = new THREE.Vector3(positions[0], positions[1], positions[2]);
       mesh.v2 = new THREE.Vector3(positions[6], positions[7], positions[8]);
@@ -1117,7 +1122,6 @@ function drawXYZ(toplevel, AxisPainter, opts) {
       mesh.showSelection = function(pnt1, pnt2) {
          // used to show selection
 
-         const kind = this.zoom;
          let tgtmesh = this.children ? this.children[0] : null, gg;
          if (!pnt1 || !pnt2) {
             if (tgtmesh) {
@@ -1127,29 +1131,31 @@ function drawXYZ(toplevel, AxisPainter, opts) {
             return tgtmesh;
          }
 
-         if (!this.geometry) return false;
+         if (!this.geometry)
+            return false;
 
          if (!tgtmesh) {
             gg = this.geometry.clone();
             const pos = gg.getAttribute('position').array;
 
             // original vertices [0, 2, 1, 0, 3, 2]
-            if (kind === 'z') pos[6] = pos[3] = pos[15] = this.tsz;
-                         else pos[4] = pos[16] = pos[13] = -this.tsz;
+            if (this.zoom === 'z')
+               pos[6] = pos[3] = pos[15] = this.tsz;
+            else
+               pos[4] = pos[16] = pos[13] = -this.tsz;
             tgtmesh = new THREE.Mesh(gg, new THREE.MeshBasicMaterial({ color: 0xFF00, side: THREE.DoubleSide, vertexColors: false }));
             this.add(tgtmesh);
          } else
             gg = tgtmesh.geometry;
 
-
          const pos = gg.getAttribute('position').array;
 
-         if (kind === 'z') {
-            pos[2] = pos[11] = pos[8] = pnt1[kind];
-            pos[5] = pos[17] = pos[14] = pnt2[kind];
+         if (this.zoom === 'z') {
+            pos[2] = pos[11] = pos[8] = pnt1[this.zoom];
+            pos[5] = pos[17] = pos[14] = pnt2[this.zoom];
          } else {
-            pos[0] = pos[9] = pos[12] = pnt1[kind];
-            pos[6] = pos[3] = pos[15] = pnt2[kind];
+            pos[0] = pos[9] = pos[12] = pnt1[this.zoom];
+            pos[6] = pos[3] = pos[15] = pnt2[this.zoom];
          }
 
          gg.getAttribute('position').needsUpdate = true;
@@ -1432,7 +1438,7 @@ function drawXYZ(toplevel, AxisPainter, opts) {
       ticks.push(0, 0, grz, this.z_handle.ticksSize*(is_major ? 1 : 0.6), 0, grz);
    }
 
-   if (zgridx && (zgridx.length > 0)) {
+   if (zgridx?.length) {
       const material = new THREE.LineDashedMaterial({ color: this.x_handle.ticksColor, dashSize: 2, gapSize: 2 }),
             lines1 = createLineSegments(zgridx, material);
 
@@ -1448,7 +1454,7 @@ function drawXYZ(toplevel, AxisPainter, opts) {
       top.add(lines2);
    }
 
-   if (zgridy && (zgridy.length > 0)) {
+   if (zgridy?.length) {
       const material = new THREE.LineDashedMaterial({ color: this.y_handle.ticksColor, dashSize: 2, gapSize: 2 }),
             lines1 = createLineSegments(zgridy, material);
 
@@ -1606,14 +1612,48 @@ function convert3DtoPadNDC(x, y, z) {
 
 /** @summary Assign 3D methods for frame painter
   * @private */
-function assignFrame3DMethods(fpainter) {
-   Object.assign(fpainter, { create3DScene, add3DMesh, remove3DMeshes, render3D, resize3D, change3DCamera, highlightBin3D, set3DOptions, drawXYZ, convert3DtoPadNDC });
+function assignFrame3DMethods(fp) {
+   Object.assign(fp, { create3DScene, add3DMesh, remove3DMeshes, getRenderer, render3D, resize3D, change3DCamera, highlightBin3D, set3DOptions, drawXYZ, convert3DtoPadNDC });
+}
+
+function _meshLegoToolTip(intersect) {
+   if ((intersect.faceIndex < 0) || (intersect.faceIndex >= this.face_to_bins_index.length))
+      return null;
+
+   const p = this.painter,
+         handle = this.handle,
+         fp = p.getFramePainter(),
+         histo = p.getHisto(),
+         tip = p.get3DToolTip(this.face_to_bins_index[intersect.faceIndex]),
+         x1 = Math.min(fp.size_x3d, Math.max(-fp.size_x3d, handle.grx[tip.ix-1] + handle.xbar1*(handle.grx[tip.ix] - handle.grx[tip.ix-1]))),
+         x2 = Math.min(fp.size_x3d, Math.max(-fp.size_x3d, handle.grx[tip.ix-1] + handle.xbar2*(handle.grx[tip.ix] - handle.grx[tip.ix-1]))),
+         y1 = Math.min(fp.size_y3d, Math.max(-fp.size_y3d, handle.gry[tip.iy-1] + handle.ybar1*(handle.gry[tip.iy] - handle.gry[tip.iy-1]))),
+         y2 = Math.min(fp.size_y3d, Math.max(-fp.size_y3d, handle.gry[tip.iy-1] + handle.ybar2*(handle.gry[tip.iy] - handle.gry[tip.iy-1])));
+
+   tip.x1 = Math.min(x1, x2);
+   tip.x2 = Math.max(x1, x2);
+   tip.y1 = Math.min(y1, y2);
+   tip.y2 = Math.max(y1, y2);
+
+   let binz1 = this.baseline, binz2 = tip.value;
+   if (histo.$baseh) binz1 = histo.$baseh.getBinContent(tip.ix, tip.iy);
+   if (binz2 < binz1) [binz1, binz2] = [binz2, binz1];
+
+   tip.z1 = fp.grz(Math.max(this.zmin, binz1));
+   tip.z2 = fp.grz(Math.min(this.zmax, binz2));
+
+   tip.color = this.tip_color;
+   tip.$painter = p;
+   tip.$projection = (p.getDimension() === 2) && isFunc(p.isProjection) && p.isProjection();
+
+   return tip;
 }
 
 /** @summary Draw histograms in 3D mode
   * @private */
 function drawBinsLego(painter, is_v7 = false) {
-   if (!painter.draw_content) return;
+   if (!painter.draw_content)
+      return;
 
    // Perform TH1/TH2 lego plot with BufferGeometry
 
@@ -1625,7 +1665,7 @@ function drawBinsLego(painter, is_v7 = false) {
          rsegments = [0, 1, 1, 2, 2, 3, 3, 0],
          // reduced vertices
          rvertices = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 1, 0), new THREE.Vector3(1, 0, 0)],
-         main = painter.getFramePainter(),
+         fp = painter.getFramePainter(),
          handle = painter.prepareDraw({ rounding: false, use3d: true, extra: 1 }),
          test_cutg = painter.options.cutg,
          i1 = handle.i1, i2 = handle.i2, j1 = handle.j1, j2 = handle.j2,
@@ -1636,9 +1676,9 @@ function drawBinsLego(painter, is_v7 = false) {
 
    if ((i1 >= i2) || (j1 >= j2)) return;
 
-   let zmin, zmax, i, j, k, vert, x1, x2, y1, y2, binz1, binz2, reduced, nobottom, notop,
-       axis_zmin = main.z_handle.getScaleMin(),
-       axis_zmax = main.z_handle.getScaleMax();
+   let zmin, zmax, i, j, k, vert, binz1, binz2, reduced, nobottom, notop,
+       axis_zmin = fp.z_handle.getScaleMin(),
+       axis_zmax = fp.z_handle.getScaleMax();
 
    const getBinContent = (ii, jj, level) => {
       // return bin content in binz1, binz2, reduced flags
@@ -1681,13 +1721,13 @@ function drawBinsLego(painter, is_v7 = false) {
       // drawing colors levels, axis can not exceed palette
 
       if (is_v7) {
-         palette = main.getHistPalette();
-         painter.createContour(main, palette, { full_z_range: true });
+         palette = fp.getHistPalette();
+         painter.createContour(fp, palette, { full_z_range: true });
          levels = palette.getContour();
          axis_zmin = levels.at(0);
          axis_zmax = levels.at(-1);
       } else {
-         const cntr = painter.createContour(histo.fContour ? histo.fContour.length : 20, main.lego_zmin, main.lego_zmax);
+         const cntr = painter.createContour(histo.fContour ? histo.fContour.length : 20, fp.lego_zmin, fp.lego_zmax);
          levels = cntr.arr;
          palette = painter.getHistPalette();
       }
@@ -1700,8 +1740,8 @@ function drawBinsLego(painter, is_v7 = false) {
       // artificially extend last level of color palette to maximal visible value
       if (palette && (nlevel === levels.length - 2) && zmax < axis_zmax) zmax = axis_zmax;
 
-      const grzmin = main.grz(zmin), grzmax = main.grz(zmax);
-      let z1 = 0, z2 = 0, numvertices = 0, num2vertices = 0;
+      const grzmin = fp.grz(zmin), grzmax = fp.grz(zmax);
+      let numvertices = 0, num2vertices = 0;
 
       // now calculate size of buffer geometry for boxes
 
@@ -1730,22 +1770,21 @@ function drawBinsLego(painter, is_v7 = false) {
             norm2 = (num2vertices === 0) ? null : new Float32Array(num2vertices*3),
             face_to_bins_indx2 = (num2vertices === 0) ? null : (use16indx ? new Uint16Array(num2vertices/3) : new Uint32Array(num2vertices/3));
 
-      let v = 0, v2 = 0, vert, k, nn;
+      let v = 0, v2 = 0, nn;
 
       for (i = i1; i < i2; ++i) {
-         x1 = handle.grx[i] + handle.xbar1*(handle.grx[i+1] - handle.grx[i]);
-         x2 = handle.grx[i] + handle.xbar2*(handle.grx[i+1] - handle.grx[i]);
+         const x1 = handle.grx[i] + handle.xbar1*(handle.grx[i+1] - handle.grx[i]),
+               x2 = handle.grx[i] + handle.xbar2*(handle.grx[i+1] - handle.grx[i]);
          for (j = j1; j < j2; ++j) {
             if (!getBinContent(i, j, nlevel)) continue;
 
             nobottom = !reduced && (nlevel > 0);
             notop = !reduced && (binz2 > zmax) && (nlevel < levels.length - 2);
 
-            y1 = handle.gry[j] + handle.ybar1*(handle.gry[j+1] - handle.gry[j]);
-            y2 = handle.gry[j] + handle.ybar2*(handle.gry[j+1] - handle.gry[j]);
-
-            z1 = (binz1 <= zmin) ? grzmin : main.grz(binz1);
-            z2 = (binz2 > zmax) ? grzmax : main.grz(binz2);
+            const y1 = handle.gry[j] + handle.ybar1*(handle.gry[j+1] - handle.gry[j]),
+                  y2 = handle.gry[j] + handle.ybar2*(handle.gry[j+1] - handle.gry[j]),
+                  z1 = (binz1 <= zmin) ? grzmin : fp.grz(binz1),
+                  z2 = (binz2 > zmax) ? grzmax : fp.grz(binz2);
 
             nn = 0; // counter over the normals, each normals correspond to 6 vertices
             k = 0; // counter over vertices
@@ -1810,7 +1849,7 @@ function drawBinsLego(painter, is_v7 = false) {
       }
 
       const material = new THREE.MeshBasicMaterial(getMaterialArgs(fcolor, { vertexColors: false })),
-          mesh = new THREE.Mesh(geometry, material);
+            mesh = new THREE.Mesh(geometry, material);
 
       mesh.face_to_bins_index = face_to_bins_index;
       mesh.painter = painter;
@@ -1819,40 +1858,9 @@ function drawBinsLego(painter, is_v7 = false) {
       mesh.baseline = (painter.options.BaseLine !== false) ? painter.options.BaseLine : (painter.options.Zero ? axis_zmin : 0);
       mesh.tip_color = (rootcolor=== 3) ? 0xFF0000 : 0x00FF00;
       mesh.handle = handle;
+      mesh.tooltip = _meshLegoToolTip;
 
-      mesh.tooltip = function(intersect) {
-         if ((intersect.faceIndex < 0) || (intersect.faceIndex >= this.face_to_bins_index.length)) return null;
-
-         const p = this.painter,
-               handle = this.handle,
-               main = p.getFramePainter(),
-               histo = p.getHisto(),
-               tip = p.get3DToolTip(this.face_to_bins_index[intersect.faceIndex]),
-               x1 = Math.min(main.size_x3d, Math.max(-main.size_x3d, handle.grx[tip.ix-1] + handle.xbar1*(handle.grx[tip.ix] - handle.grx[tip.ix-1]))),
-               x2 = Math.min(main.size_x3d, Math.max(-main.size_x3d, handle.grx[tip.ix-1] + handle.xbar2*(handle.grx[tip.ix] - handle.grx[tip.ix-1]))),
-               y1 = Math.min(main.size_y3d, Math.max(-main.size_y3d, handle.gry[tip.iy-1] + handle.ybar1*(handle.gry[tip.iy] - handle.gry[tip.iy-1]))),
-               y2 = Math.min(main.size_y3d, Math.max(-main.size_y3d, handle.gry[tip.iy-1] + handle.ybar2*(handle.gry[tip.iy] - handle.gry[tip.iy-1])));
-
-         tip.x1 = Math.min(x1, x2);
-         tip.x2 = Math.max(x1, x2);
-         tip.y1 = Math.min(y1, y2);
-         tip.y2 = Math.max(y1, y2);
-
-         let binz1 = this.baseline, binz2 = tip.value;
-         if (histo.$baseh) binz1 = histo.$baseh.getBinContent(tip.ix, tip.iy);
-         if (binz2 < binz1) [binz1, binz2] = [binz2, binz1];
-
-         tip.z1 = main.grz(Math.max(this.zmin, binz1));
-         tip.z2 = main.grz(Math.min(this.zmax, binz2));
-
-         tip.color = this.tip_color;
-         tip.$painter = p;
-         tip.$projection = p.is_projection && (p.getDimension() === 2);
-
-         return tip;
-      };
-
-      main.add3DMesh(mesh);
+      fp.add3DMesh(mesh);
 
       if (num2vertices > 0) {
          const geom2 = createLegoGeom(painter, pos2, norm2),
@@ -1862,18 +1870,19 @@ function drawBinsLego(painter, is_v7 = false) {
          mesh2.face_to_bins_index = face_to_bins_indx2;
          mesh2.painter = painter;
          mesh2.handle = mesh.handle;
-         mesh2.tooltip = mesh.tooltip;
+         mesh2.tooltip = _meshLegoToolTip;
          mesh2.zmin = mesh.zmin;
          mesh2.zmax = mesh.zmax;
          mesh2.baseline = mesh.baseline;
          mesh2.tip_color = mesh.tip_color;
 
-         main.add3DMesh(mesh2);
+         fp.add3DMesh(mesh2);
       }
    }
 
    // lego3 or lego4 do not draw border lines
-   if (painter.options.Lego > 12) return;
+   if (painter.options.Lego > 12)
+      return;
 
    // DRAW LINE BOXES
 
@@ -1896,27 +1905,26 @@ function drawBinsLego(painter, is_v7 = false) {
    // skip index usage at all. It happens for relatively large histograms (100x100 bins)
    const uselineindx = (numlinevertices <= 0xFFF0);
 
-   if (!uselineindx) numlinevertices = numsegments*3;
+   if (!uselineindx)
+      numlinevertices = numsegments * 3;
 
    const lpositions = new Float32Array(numlinevertices * 3),
          lindicies = uselineindx ? new Uint16Array(numsegments) : null,
-         grzmin = main.grz(axis_zmin),
-         grzmax = main.grz(axis_zmax);
-   let z1 = 0, z2 = 0, ll = 0, ii = 0;
+         grzmin = fp.grz(axis_zmin),
+         grzmax = fp.grz(axis_zmax);
+   let ll = 0, ii = 0;
 
    for (i = i1; i < i2; ++i) {
-      x1 = handle.grx[i] + handle.xbar1*(handle.grx[i+1] - handle.grx[i]);
-      x2 = handle.grx[i] + handle.xbar2*(handle.grx[i+1] - handle.grx[i]);
+      const x1 = handle.grx[i] + handle.xbar1*(handle.grx[i+1] - handle.grx[i]),
+            x2 = handle.grx[i] + handle.xbar2*(handle.grx[i+1] - handle.grx[i]);
       for (j = j1; j < j2; ++j) {
          if (!getBinContent(i, j, 0)) continue;
 
-         y1 = handle.gry[j] + handle.ybar1*(handle.gry[j+1] - handle.gry[j]);
-         y2 = handle.gry[j] + handle.ybar2*(handle.gry[j+1] - handle.gry[j]);
-
-         z1 = (binz1 <= axis_zmin) ? grzmin : main.grz(binz1);
-         z2 = (binz2 > axis_zmax) ? grzmax : main.grz(binz2);
-
-         const seg = reduced ? rsegments : segments,
+         const y1 = handle.gry[j] + handle.ybar1*(handle.gry[j+1] - handle.gry[j]),
+               y2 = handle.gry[j] + handle.ybar2*(handle.gry[j+1] - handle.gry[j]),
+               z1 = (binz1 <= axis_zmin) ? grzmin : fp.grz(binz1),
+               z2 = (binz2 > axis_zmax) ? grzmax : fp.grz(binz2),
+               seg = reduced ? rsegments : segments,
                vvv = reduced ? rvertices : vertices;
 
          if (uselineindx) {
@@ -1961,17 +1969,43 @@ function drawBinsLego(painter, is_v7 = false) {
    }
    */
 
-   main.add3DMesh(line);
+   fp.add3DMesh(line);
+}
+
+function _lineErrToolTip(intersect) {
+   const pos = Math.floor(intersect.index / 6);
+   if ((pos < 0) || (pos >= this.intersect_index.length))
+      return null;
+   const p = this.painter,
+         histo = p.getHisto(),
+         fp = p.getFramePainter(),
+         tip = p.get3DToolTip(this.intersect_index[pos]),
+         tx1 = Math.min(fp.size_x3d, Math.max(-fp.size_x3d, fp.grx(histo.fXaxis.GetBinLowEdge(tip.ix)))),
+         tx2 = Math.min(fp.size_x3d, Math.max(-fp.size_x3d, fp.grx(histo.fXaxis.GetBinLowEdge(tip.ix+1)))),
+         ty1 = Math.min(fp.size_y3d, Math.max(-fp.size_y3d, fp.gry(histo.fYaxis.GetBinLowEdge(tip.iy)))),
+         ty2 = Math.min(fp.size_y3d, Math.max(-fp.size_y3d, fp.gry(histo.fYaxis.GetBinLowEdge(tip.iy+1))));
+
+   tip.x1 = Math.min(tx1, tx2);
+   tip.x2 = Math.max(tx1, tx2);
+   tip.y1 = Math.min(ty1, ty2);
+   tip.y2 = Math.max(ty1, ty2);
+
+   tip.z1 = fp.grz(tip.value - tip.error < this.zmin ? this.zmin : tip.value - tip.error);
+   tip.z2 = fp.grz(tip.value + tip.error > this.zmax ? this.zmax : tip.value + tip.error);
+
+   tip.color = this.tip_color;
+
+   return tip;
 }
 
 /** @summary Draw TH2 histogram in error mode
   * @private */
 function drawBinsError3D(painter, is_v7 = false) {
-   const main = painter.getFramePainter(),
+   const fp = painter.getFramePainter(),
          histo = painter.getHisto(),
          handle = painter.prepareDraw({ rounding: false, use3d: true, extra: 1 }),
-         zmin = main.z_handle.getScaleMin(),
-         zmax = main.z_handle.getScaleMax(),
+         zmin = fp.z_handle.getScaleMin(),
+         zmax = fp.z_handle.getScaleMax(),
          test_cutg = painter.options.cutg;
    let i, j, bin, binz, errs, x1, y1, x2, y2, z1, z2,
        nsegments = 0, lpos = null, binindx = null, lindx = 0;
@@ -2005,8 +2039,8 @@ function drawBinsError3D(painter, is_v7 = false) {
             y1 = handle.gry[j];
             y2 = handle.gry[j + 1];
 
-            z1 = main.grz((binz - errs.low < zmin) ? zmin : binz - errs.low);
-            z2 = main.grz((binz + errs.up > zmax) ? zmax : binz + errs.up);
+            z1 = fp.grz((binz - errs.low < zmin) ? zmin : binz - errs.low);
+            z2 = fp.grz((binz + errs.up > zmax) ? zmax : binz + errs.up);
 
             lpos[lindx] = x1; lpos[lindx + 3] = x2;
             lpos[lindx + 1] = lpos[lindx + 4] = (y1 + y2) / 2;
@@ -2032,56 +2066,32 @@ function drawBinsError3D(painter, is_v7 = false) {
       }
    }
 
-    // create lines
-    const lcolor = is_v7 ? painter.v7EvalColor('line_color', 'lightblue') : painter.getColor(histo.fLineColor),
-          material = new THREE.LineBasicMaterial(getMaterialArgs(lcolor, { linewidth: is_v7 ? painter.v7EvalAttr('line_width', 1) : histo.fLineWidth })),
-          line = createLineSegments(lpos, material);
+   // create lines
+   const lcolor = is_v7 ? painter.v7EvalColor('line_color', 'lightblue') : painter.getColor(histo.fLineColor),
+         material = new THREE.LineBasicMaterial(getMaterialArgs(lcolor, { linewidth: is_v7 ? painter.v7EvalAttr('line_width', 1) : histo.fLineWidth })),
+         line = createLineSegments(lpos, material);
 
-    line.painter = painter;
-    line.intersect_index = binindx;
-    line.zmin = zmin;
-    line.zmax = zmax;
-    line.tip_color = (histo.fLineColor === 3) ? 0xFF0000 : 0x00FF00;
+   line.painter = painter;
+   line.intersect_index = binindx;
+   line.zmin = zmin;
+   line.zmax = zmax;
+   line.tip_color = (histo.fLineColor === 3) ? 0xFF0000 : 0x00FF00;
+   line.tooltip = _lineErrToolTip;
 
-    line.tooltip = function(intersect) {
-       const pos = Math.floor(intersect.index / 6);
-       if ((pos < 0) || (pos >= this.intersect_index.length)) return null;
-       const p = this.painter,
-           histo = p.getHisto(),
-           main = p.getFramePainter(),
-           tip = p.get3DToolTip(this.intersect_index[pos]),
-           x1 = Math.min(main.size_x3d, Math.max(-main.size_x3d, main.grx(histo.fXaxis.GetBinLowEdge(tip.ix)))),
-           x2 = Math.min(main.size_x3d, Math.max(-main.size_x3d, main.grx(histo.fXaxis.GetBinLowEdge(tip.ix+1)))),
-           y1 = Math.min(main.size_y3d, Math.max(-main.size_y3d, main.gry(histo.fYaxis.GetBinLowEdge(tip.iy)))),
-           y2 = Math.min(main.size_y3d, Math.max(-main.size_y3d, main.gry(histo.fYaxis.GetBinLowEdge(tip.iy+1))));
-
-       tip.x1 = Math.min(x1, x2);
-       tip.x2 = Math.max(x1, x2);
-       tip.y1 = Math.min(y1, y2);
-       tip.y2 = Math.max(y1, y2);
-
-       tip.z1 = main.grz(tip.value-tip.error < this.zmin ? this.zmin : tip.value-tip.error);
-       tip.z2 = main.grz(tip.value+tip.error > this.zmax ? this.zmax : tip.value+tip.error);
-
-       tip.color = this.tip_color;
-
-       return tip;
-    };
-
-    main.add3DMesh(line);
+    fp.add3DMesh(line);
 }
 
 /** @summary Draw TH2 as 3D contour plot
   * @private */
 function drawBinsContour3D(painter, realz = false, is_v7 = false) {
    // for contour plots one requires handle with full range
-   const main = painter.getFramePainter(),
+   const fp = painter.getFramePainter(),
          handle = painter.prepareDraw({ rounding: false, use3d: true, extra: 100, middle: 0 }),
          histo = painter.getHisto(), // get levels
          levels = painter.getContourLevels(), // init contour if not exists
          palette = painter.getHistPalette(),
          pnts = [];
-   let layerz = 2*main.size_z3d;
+   let layerz = 2*fp.size_z3d;
 
    buildHist2dContour(histo, handle, levels, palette,
       (colindx, xp, yp, iminus, iplus, ilevel) => {
@@ -2089,8 +2099,8 @@ function drawBinsContour3D(painter, realz = false, is_v7 = false) {
           if (iplus - iminus < 3) return;
 
           if (realz) {
-             layerz = main.grz(levels[ilevel]);
-             if ((layerz < 0) || (layerz > 2*main.size_z3d)) return;
+             layerz = fp.grz(levels[ilevel]);
+             if ((layerz < 0) || (layerz > 2*fp.size_z3d)) return;
           }
 
           for (let i=iminus; i<iplus; ++i) {
@@ -2101,17 +2111,17 @@ function drawBinsContour3D(painter, realz = false, is_v7 = false) {
    );
 
    const lines = createLineSegments(pnts, create3DLineMaterial(painter, is_v7 ? 'line_' : histo));
-   main.add3DMesh(lines);
+   fp.add3DMesh(lines);
 }
 
 /** @summary Draw TH2 histograms in surf mode
   * @private */
 function drawBinsSurf3D(painter, is_v7 = false) {
    const histo = painter.getHisto(),
-         main = painter.getFramePainter(),
-         axis_zmin = main.z_handle.getScaleMin(),
-         main_grz = !main.logz ? main.grz : value => (value < axis_zmin) ? -0.1 : main.grz(value),
-         main_grz_min = 0, main_grz_max = 2*main.size_z3d;
+         fp = painter.getFramePainter(),
+         axis_zmin = fp.z_handle.getScaleMin(),
+         main_grz = !fp.logz ? fp.grz : value => (value < axis_zmin) ? -0.1 : fp.grz(value),
+         main_grz_min = 0, main_grz_max = 2*fp.size_z3d;
 
    let handle = painter.prepareDraw({ rounding: false, use3d: true, extra: 1, middle: 0.5,
                                       cutg: isFunc(painter.options?.cutg?.IsInside) ? painter.options?.cutg : null });
@@ -2130,13 +2140,13 @@ function drawBinsSurf3D(painter, is_v7 = false) {
          case 17: need_palette = 2; handle.dolines = false; break;
          case 14: handle.dolines = false; handle.donormals = true; break;
          case 16: need_palette = 1; handle.dogrid = true; handle.dolines = false; break;
-         default: ilevels = main.z_handle.createTicks(true); handle.dogrid = true; break;
+         default: ilevels = fp.z_handle.createTicks(true); handle.dogrid = true; break;
       }
 
       if (need_palette > 0) {
-         palette = main.getHistPalette();
+         palette = fp.getHistPalette();
          if (need_palette === 2)
-            painter.createContour(main, palette, { full_z_range: true });
+            painter.createContour(fp, palette, { full_z_range: true });
          ilevels = palette.getContour();
       }
    } else {
@@ -2147,7 +2157,7 @@ function drawBinsSurf3D(painter, is_v7 = false) {
          case 17: ilevels = painter.getContourLevels(); palette = painter.getHistPalette(); handle.dolines = false; break;
          case 14: handle.dolines = false; handle.donormals = true; break;
          case 16: ilevels = painter.getContourLevels(); handle.dogrid = true; handle.dolines = false; break;
-         default: ilevels = main.z_handle.createTicks(true); handle.dogrid = true; break;
+         default: ilevels = fp.z_handle.createTicks(true); handle.dogrid = true; break;
       }
    }
 
@@ -2174,7 +2184,8 @@ function drawBinsSurf3D(painter, is_v7 = false) {
             for (let jj = handle.j1; jj < handle.j2; ++jj) {
                const bin = ((ii-handle.i1) * (handle.j2 - handle.j1) + (jj - handle.j1)) * 8;
 
-               if (normindx[bin] === -1) continue; // nothing there
+               if (normindx[bin] === -1)
+                  continue; // nothing there
 
                const beg = (normindx[bin] >= 0) ? bin : bin + 9 + normindx[bin],
                      end = bin + 8;
@@ -2188,7 +2199,9 @@ function drawBinsSurf3D(painter, is_v7 = false) {
                   sumz += normals[indx+2];
                }
 
-               sumx = sumx/(end-beg); sumy = sumy/(end-beg); sumz = sumz/(end-beg);
+               sumx /= end - beg;
+               sumy /= end - beg;
+               sumz /= end - beg;
 
                for (let kk = beg; kk < end; ++kk) {
                   const indx = normindx[kk];
@@ -2223,7 +2236,7 @@ function drawBinsSurf3D(painter, is_v7 = false) {
 
       const mesh = new THREE.Mesh(geometry, material);
 
-      main.add3DMesh(mesh);
+      fp.add3DMesh(mesh);
 
       mesh.painter = painter; // to let use it with context menu
    }, (isgrid, lpos) => {
@@ -2240,7 +2253,7 @@ function drawBinsSurf3D(painter, is_v7 = false) {
 
       const line = createLineSegments(convertLegoBuf(painter, lpos, handle.i2 - handle.i1, handle.j2 - handle.j1), material);
       line.painter = painter;
-      main.add3DMesh(line);
+      fp.add3DMesh(line);
    });
 
    if (painter.options.Surf === 17)
@@ -2250,11 +2263,11 @@ function drawBinsSurf3D(painter, is_v7 = false) {
       handle = painter.prepareDraw({ rounding: false, use3d: true, extra: 100, middle: 0 });
 
       // get levels
-      const levels = painter.getContourLevels(), // init contour
-            palette = painter.getHistPalette();
+      const levels2 = painter.getContourLevels(), // init contour
+            palette2 = painter.getHistPalette();
       let lastcolindx = -1, layerz = main_grz_max;
 
-      buildHist2dContour(histo, handle, levels, palette,
+      buildHist2dContour(histo, handle, levels2, palette2,
          (colindx, xp, yp, iminus, iplus) => {
              // no need for duplicated point
              if ((xp[iplus] === xp[iminus]) && (yp[iplus] === yp[iminus])) iplus--;
@@ -2269,11 +2282,10 @@ function drawBinsSurf3D(painter, is_v7 = false) {
                    pnts.push(new THREE.Vector2(xp[i], yp[i]));
              }
 
-             if (pnts.length < 3) return;
+             const faces = pnts.length < 3 ? null : THREE.ShapeUtils.triangulateShape(pnts, []);
 
-             const faces = THREE.ShapeUtils.triangulateShape(pnts, []);
-
-             if (!faces || (faces.length === 0)) return;
+             if (!faces?.length)
+               return;
 
              if ((lastcolindx < 0) || (lastcolindx !== colindx)) {
                 lastcolindx = colindx;
@@ -2300,10 +2312,10 @@ function drawBinsSurf3D(painter, is_v7 = false) {
              }
 
              const geometry = createLegoGeom(painter, pos, norm, handle.i2 - handle.i1, handle.j2 - handle.j1),
-                   material = new THREE.MeshBasicMaterial(getMaterialArgs(palette.getColor(colindx), { side: THREE.DoubleSide, opacity: 0.5, vertexColors: false })),
+                   material = new THREE.MeshBasicMaterial(getMaterialArgs(palette2.getColor(colindx), { side: THREE.DoubleSide, opacity: 0.5, vertexColors: false })),
                    mesh = new THREE.Mesh(geometry, material);
              mesh.painter = painter;
-             main.add3DMesh(mesh);
+             fp.add3DMesh(mesh);
          }
       );
    }

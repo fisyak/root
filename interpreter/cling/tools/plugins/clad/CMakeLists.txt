@@ -74,7 +74,7 @@ if (DEFINED CLAD_SOURCE_DIR)
   list(APPEND _clad_extra_settings SOURCE_DIR ${CLAD_SOURCE_DIR})
 else()
   list(APPEND _clad_extra_settings GIT_REPOSITORY https://github.com/vgvassilev/clad.git)
-  list(APPEND _clad_extra_settings GIT_TAG v1.9)
+  list(APPEND _clad_extra_settings GIT_TAG v1.10)
 endif()
 
 #list(APPEND _clad_patches_list "patch1.patch" "patch2.patch")
@@ -96,7 +96,7 @@ ExternalProject_Add(
              -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
              -DCMAKE_CXX_FLAGS=${CLAD_CXX_FLAGS}
              -DCMAKE_INSTALL_PREFIX=${clad_install_dir}/plugins
-             -DLLVM_DIR=${LLVM_BINARY_DIR}
+             -DLLVM_DIR=${LLVM_DIR}
              -DClang_DIR=${CLANG_CMAKE_DIR}
              ${_clad_extra_cmake_args}
   BUILD_COMMAND ${CMAKE_COMMAND} --build . ${EXTRA_BUILD_ARGS}

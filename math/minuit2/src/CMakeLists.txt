@@ -30,11 +30,9 @@ set(MINUIT2_HEADERS
     FumiliStandardMaximumLikelihoodFCN.h
     FunctionGradient.h
     FunctionMinimum.h
-    GenericFunction.h
     GradientCalculator.h
     HessianGradientCalculator.h
     InitialGradientCalculator.h
-    MPIProcess.h
     MinimumBuilder.h
     MinimumError.h
     MinimumErrorUpdator.h
@@ -65,23 +63,21 @@ set(MINUIT2_HEADERS
     MnMinos.h
     MnParabola.h
     MnParabolaFactory.h
-    MnParabolaPoint.h
     MnParameterScan.h
+    MnParameterTransformation.h
     MnPlot.h
+    MnPoint.h
     MnPosDef.h
     MnPrint.h
     MnScan.h
     MnSeedGenerator.h
     MnSimplex.h
     MnStrategy.h
-    MnTiny.h
     MnTraceObject.h
     MnUserCovariance.h
-    MnUserFcn.h
     MnUserParameterState.h
     MnUserParameters.h
     MnUserTransformation.h
-    MnVectorTransform.h
     ModularFunctionMinimizer.h
     NegativeG2LineSearch.h
     Numerical2PGradientCalculator.h
@@ -92,9 +88,6 @@ set(MINUIT2_HEADERS
     SimplexMinimizer.h
     SimplexParameters.h
     SimplexSeedGenerator.h
-    SinParameterTransformation.h
-    SqrtLowParameterTransformation.h
-    SqrtUpParameterTransformation.h
     VariableMetricBuilder.h
     VariableMetricEDMEstimator.h
     VariableMetricMinimizer.h
@@ -127,11 +120,12 @@ set(MINUIT2_SOURCES
     MnGlobalCorrelationCoeff.cxx
     MnHesse.cxx
     MnLineSearch.cxx
-    MnMatrix.cxx
     MnMachinePrecision.cxx
+    MnMatrix.cxx
     MnMinos.cxx
     MnParabolaFactory.cxx
     MnParameterScan.cxx
+    MnParameterTransformation.cxx
     MnPlot.cxx
     MnPosDef.cxx
     MnPrint.cxx
@@ -139,9 +133,7 @@ set(MINUIT2_SOURCES
     MnScan.cxx
     MnSeedGenerator.cxx
     MnStrategy.cxx
-    MnTiny.cxx
     MnTraceObject.cxx
-    MnUserFcn.cxx
     MnUserParameterState.cxx
     MnUserParameters.cxx
     MnUserTransformation.cxx
@@ -153,9 +145,6 @@ set(MINUIT2_SOURCES
     SimplexBuilder.cxx
     SimplexParameters.cxx
     SimplexSeedGenerator.cxx
-    SinParameterTransformation.cxx
-    SqrtLowParameterTransformation.cxx
-    SqrtUpParameterTransformation.cxx
     VariableMetricBuilder.cxx
     VariableMetricEDMEstimator.cxx
     mnbins.cxx

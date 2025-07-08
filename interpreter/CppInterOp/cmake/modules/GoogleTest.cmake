@@ -13,25 +13,47 @@ if(WIN32)
     -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL:PATH=${_gtest_byproduct_binary_dir}/lib/
     -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE:PATH=${_gtest_byproduct_binary_dir}/lib/
     -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO:PATH=${_gtest_byproduct_binary_dir}/lib/
-    -Dgtest_force_shared_crt=ON
-    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>)
+    -Dgtest_force_shared_crt=ON)
 elseif(APPLE)
   set(EXTRA_GTEST_OPTS -DCMAKE_OSX_SYSROOT=${CMAKE_OSX_SYSROOT})
 endif()
 
 include(ExternalProject)
+if (EMSCRIPTEN)
+  if (CMAKE_C_COMPILER MATCHES ".bat")
+    set(config_cmd emcmake.bat cmake)
+    if(CMAKE_GENERATOR STREQUAL "Ninja")
+      set(build_cmd emmake.bat ninja)
+    else()
+      set(build_cmd emmake.bat make)
+    endif()
+  else()
+    set(config_cmd emcmake cmake)
+    if(CMAKE_GENERATOR STREQUAL "Ninja")
+      set(build_cmd emmake ninja)
+    else()
+      set(build_cmd emmake make)
+    endif()
+  endif()
+else()
+  set(config_cmd ${CMAKE_COMMAND})
+  set(build_cmd ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/unittests/googletest-prefix/src/googletest-build/ --config $<CONFIG>)
+endif()
+
 ExternalProject_Add(
   googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
   GIT_SHALLOW 1
-  GIT_TAG v1.15.2
+  GIT_TAG v1.17.0
   UPDATE_COMMAND ""
   # # Force separate output paths for debug and release builds to allow easy
   # # identification of correct lib in subsequent TARGET_LINK_LIBRARIES commands
   # CMAKE_ARGS -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG:PATH=DebugLibs
   #            -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE:PATH=ReleaseLibs
   #            -Dgtest_force_shared_crt=ON
-  CMAKE_ARGS -G ${CMAKE_GENERATOR}
+  CONFIGURE_COMMAND ${config_cmd} -G ${CMAKE_GENERATOR}
+  		-S ${CMAKE_BINARY_DIR}/unittests/googletest-prefix/src/googletest/
+		-B ${CMAKE_BINARY_DIR}/unittests/googletest-prefix/src/googletest-build/
                 -DCMAKE_BUILD_TYPE=$<CONFIG>
                 -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                 -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
@@ -40,6 +62,7 @@ ExternalProject_Add(
                 -DCMAKE_AR=${CMAKE_AR}
                 -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
                 ${EXTRA_GTEST_OPTS}
+  BUILD_COMMAND ${build_cmd}
   # Disable install step
   INSTALL_COMMAND ""
   BUILD_BYPRODUCTS ${_gtest_byproducts}
@@ -66,7 +89,7 @@ else()
 endif()
 
 # Use gmock_main instead of gtest_main because it initializes gtest as well.
-# Note: The libraries are listed in reverse order of their dependancies.
+# Note: The libraries are listed in reverse order of their dependencies.
 foreach(lib gtest gtest_main gmock gmock_main)
   add_library(${lib} IMPORTED STATIC GLOBAL)
   set_target_properties(${lib} PROPERTIES

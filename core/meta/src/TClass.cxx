@@ -767,7 +767,7 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
             }
          }
          if (isPrintable) {
-            strncpy(line + kvalue, *ppointer, kline - kvalue);
+            strncpy(line + kvalue, *ppointer, kline - 1 - kvalue);
             line[kvalue+i] = 0;
          } else {
             line[kvalue] = 0;
@@ -893,6 +893,8 @@ void TBuildRealData::Inspect(TClass* cl, const char* pname, const char* mname, c
       TRealData::GetName(rdName,dm);
       rname += rdName;
       TRealData* rd = new TRealData(rname.Data(), offset, dm);
+      if (isTransientMember || IsNestedTransient())
+         rd->SetBit(TRealData::kTransient);
       fRealDataClass->GetListOfRealData()->Add(rd);
       return;
    }
@@ -902,12 +904,14 @@ void TBuildRealData::Inspect(TClass* cl, const char* pname, const char* mname, c
    if (dm->IsaPointer()) {
       // Data member is a pointer.
       TRealData* rd = new TRealData(rname, offset, dm);
-      if (isTransientMember) { rd->SetBit(TRealData::kTransient); };
+      if (isTransientMember || IsNestedTransient())
+         rd->SetBit(TRealData::kTransient);
       fRealDataClass->GetListOfRealData()->Add(rd);
    } else {
       // Data Member is a basic data type.
       TRealData* rd = new TRealData(rname, offset, dm);
-      if (isTransientMember) { rd->SetBit(TRealData::kTransient); };
+      if (isTransientMember || IsNestedTransient())
+         rd->SetBit(TRealData::kTransient);
       if (!dm->IsBasic()) {
          rd->SetIsObject(kTRUE);
 
@@ -977,7 +981,7 @@ public:
       // main constructor.
       fBrowser = b; fCount = 0;
    }
-   virtual ~TAutoInspector() {}
+   ~TAutoInspector() override {}
    using TMemberInspector::Inspect;
    void Inspect(TClass *cl, const char *parent, const char *name, const void *addr, Bool_t isTransient) override;
    Bool_t IsTreatingNonAccessibleTypes() override { return kFALSE; }
@@ -1434,6 +1438,7 @@ void TClass::ForceReload (TClass* oldcl)
 ////////////////////////////////////////////////////////////////////////////////
 /// Initialize a TClass object. This object contains the full dictionary
 /// of a class. It has list to baseclasses, datamembers and methods.
+/// The caller of this function should be holding the ROOT Write lock.
 
 void TClass::Init(const char *name, Version_t cversion,
                   const std::type_info *typeinfo, TVirtualIsAProxy *isa,
@@ -3089,7 +3094,8 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
 
    // Early return to release the lock without having to execute the
    // long-ish normalization.
-   if (cl && (cl->IsLoaded() || cl->TestBit(kUnloading))) return cl;
+   if (cl && (cl->IsLoaded() || cl->TestBit(kUnloading)))
+      return cl;
 
    R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
 
@@ -3098,7 +3104,8 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
 
    cl = (TClass*)gROOT->GetListOfClasses()->FindObject(name);
    if (cl) {
-      if (cl->IsLoaded() || cl->TestBit(kUnloading)) return cl;
+      if (cl->IsLoaded() || cl->TestBit(kUnloading))
+         return cl;
 
       // We could speed-up some of the search by adding (the equivalent of)
       //
@@ -3131,11 +3138,11 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
 
    // To avoid spurious auto parsing, let's check if the name as-is is
    // known in the TClassTable.
-   DictFuncPtr_t dict = TClassTable::GetDictNorm(name);
-   if (dict) {
+   if (DictFuncPtr_t dict = TClassTable::GetDictNorm(name)) {
       // The name is normalized, so the result of the first search is
       // authoritative.
-      if (!cl && !load) return nullptr;
+      if (!cl && !load)
+         return nullptr;
 
       TClass *loadedcl = (dict)();
       if (loadedcl) {
@@ -3147,10 +3154,26 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
       // continue as before ...
    }
 
+   // Note: this variable does not always holds the fully normalized name
+   // as there is information from a not yet loaded library or from header
+   // not yet parsed that may be needed to fully normalize the name.
    std::string normalizedName;
-   Bool_t checkTable = kFALSE;
+   Bool_t nameChanged = kFALSE;
 
    if (!cl) {
+      // First look at known types but without triggering any loads
+      {
+         THashTable *typeTable = dynamic_cast<THashTable *>(gROOT->GetListOfTypes());
+         TDataType *type = (TDataType *)typeTable->THashTable::FindObject(name);
+         if (type) {
+            if (type->GetType() > 0)
+               // This is a numerical type
+               return nullptr;
+            // This is a typedef
+            normalizedName = type->GetTypeName();
+            nameChanged = kTRUE;
+         }
+      }
       {
          TInterpreter::SuspendAutoLoadingRAII autoloadOff(gInterpreter);
          TClassEdit::GetNormalizedName(normalizedName, name);
@@ -3160,34 +3183,20 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
          cl = (TClass*)gROOT->GetListOfClasses()->FindObject(normalizedName.c_str());
 
          if (cl) {
-            if (cl->IsLoaded() || cl->TestBit(kUnloading)) return cl;
+            if (cl->IsLoaded() || cl->TestBit(kUnloading))
+               return cl;
 
             //we may pass here in case of a dummy class created by TVirtualStreamerInfo
             load = kTRUE;
          }
-         checkTable = kTRUE;
+         nameChanged = kTRUE;
      }
    } else {
       normalizedName = cl->GetName(); // Use the fact that all TClass names are normalized.
-      checkTable = load && (normalizedName != name);
    }
 
-   if (!load) return nullptr;
-
-// This assertion currently fails because of
-//   TClass *c1 = TClass::GetClass("basic_iostream<char,char_traits<char> >");
-//   TClass *c2 = TClass::GetClass("std::iostream");
-// where the TClassEdit normalized name of iostream is basic_iostream<char>
-// i.e missing the addition of the default parameter.  This is because TClingLookupHelper
-// uses only 'part' of TMetaUtils::GetNormalizedName.
-
-//   if (!cl) {
-//      TDataType* dataType = (TDataType*)gROOT->GetListOfTypes()->FindObject(name);
-//      TClass *altcl = dataType ? (TClass*)gROOT->GetListOfClasses()->FindObject(dataType->GetFullTypeName()) : 0;
-//      if (altcl && normalizedName != altcl->GetName())
-//         ::Fatal("TClass::GetClass","The existing name (%s) for %s is different from the normalized name: %s\n",
-//                 altcl->GetName(), name, normalizedName.c_str());
-//   }
+   if (!load)
+      return nullptr;
 
    // We want to avoid auto-parsing due to intentionally missing dictionary for std::pair.
    // However, we don't need this special treatement in rootcling (there is no auto-parsing)
@@ -3198,50 +3207,72 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
    const bool ispair = TClassEdit::IsStdPair(normalizedName) && !IsFromRootCling();
    const bool ispairbase = TClassEdit::IsStdPairBase(normalizedName) && !IsFromRootCling();
 
-   TClass *loadedcl = nullptr;
-   if (checkTable) {
-      loadedcl = LoadClassDefault(normalizedName.c_str(),silent);
-   } else {
-      if (gInterpreter->AutoLoad(normalizedName.c_str(),kTRUE)) {
-         // At this point more information has been loaded.  This
-         // information might be pertinent to the normalization of the name.
-         // For example it might contain or be a typedef for which we don't
-         // have a forward declaration (eg. typedef to instance of class
-         // template with default parameters).  So let's redo the normalization
-         // as the new information (eg. typedef in TROOT::GetListOfTypes) might
-         // lead to a different value.
-         {
-            TInterpreter::SuspendAutoLoadingRAII autoloadOff(gInterpreter);
-            TClassEdit::GetNormalizedName(normalizedName, name);
+   auto loadClass = [](const char *requestedname) -> TClass* {
+      DictFuncPtr_t dict = TClassTable::GetDictNorm(requestedname);
+      if (dict) {
+         TClass *loadedcl = (dict)();
+         if (loadedcl) {
+            loadedcl->PostLoadCheck();
+            return loadedcl;
          }
-         loadedcl = LoadClassDefault(normalizedName.c_str(),silent);
       }
-      auto e = TEnum::GetEnum(normalizedName.c_str(), TEnum::kNone);
-      if (e)
-         return nullptr;
-      // Maybe this was a typedef: let's try to see if this is the case
-      if (!loadedcl && !ispair && !ispairbase) {
-         if (TDataType* theDataType = gROOT->GetType(normalizedName.c_str())){
-            // We have a typedef: we get the name of the underlying type
-            auto underlyingTypeName = theDataType->GetTypeName();
-            // We see if we can bootstrap a class with it
-            auto underlyingTypeDict = TClassTable::GetDictNorm(underlyingTypeName.Data());
-            if (underlyingTypeDict){
-               loadedcl = underlyingTypeDict();
-            }
+      return nullptr;
+   };
 
-         }
+   // Check with the changed name first.
+   if (nameChanged) {
+      if(TClass *loadedcl = loadClass(normalizedName.c_str()))
+         return loadedcl;
+   }
+   if (gInterpreter->AutoLoad(normalizedName.c_str(),kTRUE)) {
+      // Check if we just loaded the necessary dictionary.
+      if (TClass *loadedcl = loadClass(normalizedName.c_str()))
+         return loadedcl;
+
+      // At this point more information has been loaded.  This
+      // information might be pertinent to the normalization of the name.
+      // For example it might contain or be a typedef for which we don't
+      // have a forward declaration (eg. typedef to instance of class
+      // template with default parameters).  So let's redo the normalization
+      // as the new information (eg. typedef in TROOT::GetListOfTypes) might
+      // lead to a different value.
+      {
+         TInterpreter::SuspendAutoLoadingRAII autoloadOff(gInterpreter);
+         std::string normalizedNameAfterAutoLoad;
+         TClassEdit::GetNormalizedName(normalizedNameAfterAutoLoad, name);
+         nameChanged = normalizedNameAfterAutoLoad != normalizedName;
+         normalizedName = normalizedNameAfterAutoLoad;
+      }
+      if (nameChanged) {
+         // Try to load with an attempt to autoload with the new name
+         if (TClass *loadedcl = LoadClassDefault(normalizedName.c_str(), silent))
+            return loadedcl;
       }
    }
-   if (loadedcl) return loadedcl;
+
+   // If name is known to be an enum, we don't need to try to load it.
+   if (TEnum::GetEnum(normalizedName.c_str(), TEnum::kNone))
+      return nullptr;
+
+   // Maybe this was a typedef: let's try to see if this is the case
+   if (!ispair && !ispairbase) {
+      if (TDataType* theDataType = gROOT->GetType(normalizedName.c_str())){
+         // We have a typedef: we get the name of the underlying type
+         auto underlyingTypeName = theDataType->GetTypeName();
+         // We see if we can bootstrap a class with it
+         if (TClass *loadedcl = LoadClassDefault(underlyingTypeName, silent))
+            return loadedcl;
+      }
+   }
 
    // See if the TClassGenerator can produce the TClass we need.
-   loadedcl = LoadClassCustom(normalizedName.c_str(),silent);
-   if (loadedcl) return loadedcl;
+   if (TClass *loadedcl = LoadClassCustom(normalizedName.c_str(), silent))
+      return loadedcl;
 
    // We have not been able to find a loaded TClass, return the Emulated
    // TClass if we have one.
-   if (cl) return cl;
+   if (cl)
+      return cl;
 
    if (ispair) {
       if (hint_pair_offset && hint_pair_size) {
@@ -3270,8 +3301,8 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
             }
          }
       }
-   } else if (TClassEdit::IsSTLCont( normalizedName.c_str() )) {
-
+   } else if (TClassEdit::IsSTLCont( normalizedName.c_str() ))
+   {
       return gInterpreter->GenerateTClass(normalizedName.c_str(), kTRUE, silent);
    }
 
@@ -5885,7 +5916,7 @@ TClass *TClass::LoadClassDefault(const char *requestedname, Bool_t /* silent */)
    DictFuncPtr_t dict = TClassTable::GetDictNorm(requestedname);
 
    if (!dict) {
-      if (gInterpreter->AutoLoad(requestedname,kTRUE)) {
+      if (gInterpreter->AutoLoad(requestedname, kTRUE)) {
          dict = TClassTable::GetDictNorm(requestedname);
       }
    }
@@ -5941,10 +5972,10 @@ void TClass::LoadClassInfo() const
 
    bool autoParse = !gInterpreter->IsAutoParsingSuspended();
 
-   if (autoParse)
+   if (autoParse && !fClassInfo)
       gInterpreter->AutoParse(GetName());
 
-   if (!fClassInfo)
+   if (!fClassInfo) // Could be indirectly set by the parsing
       gInterpreter->SetClassInfo(const_cast<TClass *>(this));
 
    if (autoParse && !fClassInfo) {
@@ -5957,10 +5988,13 @@ void TClass::LoadClassInfo() const
                                           " even though it has a TClass initialization routine.",
                  fName.Data());
       }
-      return;
    }
 
-   fCanLoadClassInfo = false;
+   // Keep trying to load the ClassInfo, since we have no ClassInfo yet,
+   // we will get an update even when there is an explicit load.  So whether
+   // or not the autoparsing is on, we will need to keep trying to load
+   // the ClassInfo.
+   fCanLoadClassInfo = !fClassInfo;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6419,6 +6453,7 @@ void TClass::SetGlobalIsA(IsAGlobalFunc_t func)
 ////////////////////////////////////////////////////////////////////////////////
 /// Call this method to indicate that the shared library containing this
 /// class's code has been removed (unloaded) from the process's memory
+/// The caller of this calss should be holding the ROOT Write lock.
 
 void TClass::SetUnloaded()
 {

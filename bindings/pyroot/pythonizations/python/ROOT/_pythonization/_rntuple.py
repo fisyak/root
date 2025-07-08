@@ -16,15 +16,48 @@ def _REntry_GetPtr(self, key):
     raise RuntimeError("GetPtr is not supported in Python, use indexing")
 
 
+def _try_getptr(entry, fieldType, key):
+    rentry_getptr_typeerrors = []
+    try:
+        return entry._GetPtr[fieldType](key)
+    except TypeError as e:
+        # The input field type name might not be found when trying to instantiate
+        # the template via the Python bindings. At the moment, there is one
+        # notable case when this happens. If the type name corresponds to a class
+        # that has alternative names registered via its dictionary, the name
+        # passed by the user may not be the fully qualified name seen by the
+        # compiler. We tap into the knowledge of TClassTable to look for all the
+        # alternative names, and try if there is a correspondence with one of those.
+        # Note: clearly a prerequisite for the following section to work is that
+        # the dictionary of the class was loaded and its alternative names were
+        # registered. This currently happens at loading time of the RNTupleModel
+        # which loads the classes found in the schema and also during the first
+        # attempt at calling _GetPtr with the user-provided class name (in
+        # particular when it tries to instantiate the function template)
+        rentry_getptr_typeerrors.append(e)
+        import ROOT
+
+        alt_field_type_names = ROOT.TClassTable.GetClassAlternativeNames(fieldType)
+        for alt_field_type_name in alt_field_type_names:
+            try:
+                # Need to convert std::string to Python string
+                return entry._GetPtr[str(alt_field_type_name)](key)
+            except TypeError as alt_e:
+                rentry_getptr_typeerrors.append(alt_e)
+
+    err_msg = f"Failed to retrieve entry value for field type name '{fieldType}'. Full stack trace follows:\n"
+    for ex in rentry_getptr_typeerrors:
+        err_msg += str(ex) + "\n"
+
+    raise TypeError(err_msg)
+
+
 def _REntry_CallGetPtr(self, key):
     # key can be either a RFieldToken already or a string. In the latter case, get a token to use it twice.
-    if (
-        not hasattr(type(key), "__cpp_name__")
-        or type(key).__cpp_name__ != "ROOT::Experimental::REntry::RFieldToken"
-    ):
+    if not hasattr(type(key), "__cpp_name__") or type(key).__cpp_name__ != "ROOT::RFieldToken":
         key = self.GetToken(key)
     fieldType = self.GetTypeName(key)
-    return self._GetPtr[fieldType](key)
+    return _try_getptr(self, fieldType, key)
 
 
 def _REntry_getitem(self, key):
@@ -44,7 +77,7 @@ def _REntry_setitem(self, key, value):
         ptr_proxy.__assign__(value)
 
 
-@pythonization("REntry", ns="ROOT::Experimental")
+@pythonization("REntry", ns="ROOT")
 def pythonize_REntry(klass):
     klass._GetPtr = klass.GetPtr
     klass.GetPtr = _REntry_GetPtr
@@ -59,7 +92,7 @@ def _RNTupleModel_CreateBare(*args):
         raise ValueError("no support for passing explicit RFieldZero")
     import ROOT
 
-    return ROOT.Experimental.RNTupleModel._CreateBare()
+    return ROOT.RNTupleModel._CreateBare()
 
 
 def _RNTupleModel_CreateEntry(self):
@@ -69,9 +102,7 @@ def _RNTupleModel_CreateEntry(self):
 
 
 def _RNTupleModel_GetDefaultEntry(self):
-    raise RuntimeError(
-        "default entries are not supported in Python, call CreateEntry on the reader or writer"
-    )
+    raise RuntimeError("default entries are not supported in Python, call CreateEntry on the reader or writer")
 
 
 class _RNTupleModel_MakeField(MethodTemplateWrapper):
@@ -81,7 +112,7 @@ class _RNTupleModel_MakeField(MethodTemplateWrapper):
         return
 
 
-@pythonization("RNTupleModel", ns="ROOT::Experimental")
+@pythonization("RNTupleModel", ns="ROOT")
 def pythonize_RNTupleModel(klass):
     # We do not support default entries in Python, so always create a bare model.
     klass.Create = _RNTupleModel_CreateBare
@@ -96,26 +127,21 @@ def pythonize_RNTupleModel(klass):
 
 
 def _RNTupleReader_Open(maybe_model, *args):
-    if (
-        hasattr(type(maybe_model), "__cpp_name__")
-        and type(maybe_model).__cpp_name__ == "ROOT::Experimental::RNTupleModel"
-    ):
+    if hasattr(type(maybe_model), "__cpp_name__") and type(maybe_model).__cpp_name__ == "ROOT::RNTupleModel":
         # In Python, the user cannot create REntries directly from a model, so we can safely clone it and avoid destructively passing the user argument.
         maybe_model = maybe_model.Clone()
     import ROOT
 
-    return ROOT.Experimental.RNTupleReader._Open(maybe_model, *args)
+    return ROOT.RNTupleReader._Open(maybe_model, *args)
 
 
 def _RNTupleReader_LoadEntry(self, *args):
     if len(args) < 2:
-        raise ValueError(
-            "default entries are not supported in Python, pass explicit entry"
-        )
+        raise ValueError("default entries are not supported in Python, pass explicit entry")
     return self._LoadEntry(*args)
 
 
-@pythonization("RNTupleReader", ns="ROOT::Experimental")
+@pythonization("RNTupleReader", ns="ROOT")
 def pythonize_RNTupleReader(klass):
     klass._Open = klass.Open
     klass.Open = _RNTupleReader_Open
@@ -129,26 +155,21 @@ def _RNTupleWriter_Append(model, *args):
     model = model.Clone()
     import ROOT
 
-    return ROOT.Experimental.RNTupleWriter._Append(model, *args)
+    return ROOT.RNTupleWriter._Append(model, *args)
 
 
 def _RNTupleWriter_Recreate(model_or_fields, *args):
-    if (
-        hasattr(type(model_or_fields), "__cpp_name__")
-        and type(model_or_fields).__cpp_name__ == "ROOT::Experimental::RNTupleModel"
-    ):
+    if hasattr(type(model_or_fields), "__cpp_name__") and type(model_or_fields).__cpp_name__ == "ROOT::RNTupleModel":
         # In Python, the user cannot create REntries directly from a model, so we can safely clone it and avoid destructively passing the user argument.
         model_or_fields = model_or_fields.Clone()
     import ROOT
 
-    return ROOT.Experimental.RNTupleWriter._Recreate(model_or_fields, *args)
+    return ROOT.RNTupleWriter._Recreate(model_or_fields, *args)
 
 
 def _RNTupleWriter_Fill(self, *args):
     if len(args) < 1:
-        raise ValueError(
-            "default entries are not supported in Python, pass explicit entry"
-        )
+        raise ValueError("default entries are not supported in Python, pass explicit entry")
     return self._Fill(*args)
 
 
@@ -157,7 +178,7 @@ def _RNTupleWriter_exit(self, *args):
     return False
 
 
-@pythonization("RNTupleWriter", ns="ROOT::Experimental")
+@pythonization("RNTupleWriter", ns="ROOT")
 def pythonize_RNTupleWriter(klass):
     klass._Append = klass.Append
     klass.Append = _RNTupleWriter_Append

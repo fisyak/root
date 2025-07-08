@@ -31,15 +31,11 @@
 
  Example code can be found in
   - tutorials/io/tree/hsimpleReader.C
-  - tutorials/io/tree/h1analysisTreeReader.C
-  - <a href="https://github.com/root-project/roottest/tree/master/root/tree/reader">This example</a>
+  - tutorials/analysis/tree/h1analysisTreeReader.C
+  - An example in roottest showing the full power <a href="https://github.com/root-project/root/tree/master/roottest/root/tree/reader">here</a>.
 
  You can generate a skeleton of `TTreeReaderValue<T>` and `TTreeReaderArray<T>` declarations
  for all of a tree's branches using `TTree::MakeSelector()`.
-
- Roottest contains an
- <a href="https://github.com/root-project/roottest/tree/master/root/tree/reader">example</a>
- showing the full power.
 
 A simpler analysis example can be found below: it histograms a function of the px and py branches.
 
@@ -376,6 +372,8 @@ bool TTreeReader::Notify()
 
 bool TTreeReader::SetProxies()
 {
+   fMissingProxies.clear();
+   fProxiesSet = false; // In the loop below, we cannot recreate proxies if this is true
 
    for (size_t i = 0; i < fValues.size(); ++i) {
       ROOT::Internal::TTreeReaderValueBase *reader = fValues[i];
@@ -399,13 +397,9 @@ bool TTreeReader::SetProxies()
       if (!reader->GetProxy()) {
          if (suppressErrorsForThisBranch ||
              (reader->GetSetupStatus() == ROOT::Internal::TTreeReaderValueBase::ESetupStatus::kSetupMissingBranch))
-            fMissingProxies.push_back(reader->fBranchName.Data());
+            fMissingProxies.insert(reader->fBranchName.Data());
          else
             return false;
-      } else {
-         // Erase the branch name from the missing proxies if it was present
-         fMissingProxies.erase(std::remove(fMissingProxies.begin(), fMissingProxies.end(), reader->fBranchName.Data()),
-                               fMissingProxies.end());
       }
    }
    // If at least one proxy was there and no error occurred, we assume the proxies to be set.

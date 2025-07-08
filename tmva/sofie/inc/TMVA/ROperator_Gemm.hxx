@@ -41,14 +41,14 @@ namespace SOFIE{
       std::vector<Dim> fShapeB;
       std::vector<size_t> fShapeC;
       std::vector<Dim> fShapeY;
-      
+
    public:
 
       ROperator_Gemm(){}
       ROperator_Gemm(float alpha, float beta, int_t transA, int_t transB, std::string nameA, std::string nameB, std::string nameY, EActivationType activation=EActivationType::UNDEFINED):
          fAttrAlpha(alpha), fAttrBeta(beta), fAttrTransA(transA), fAttrTransB(transB), fNA(UTILITY::Clean_name(nameA)),
          fNB(UTILITY::Clean_name(nameB)), fNY(UTILITY::Clean_name(nameY))
-      {  
+      {
          fActivation = activation;
          fType = "float";
          static_assert(std::is_same_v<T, float>,
@@ -64,10 +64,11 @@ namespace SOFIE{
          fActivation = activation;
          fType = "float";
 
+         fInputTensorNames = {fNA, fNB, fNC};
          fOutputTensorNames = { fNY };
       }
 
-      std::vector<ETensorType> TypeInference(std::vector<ETensorType> input){
+      std::vector<ETensorType> TypeInference(std::vector<ETensorType> input) override {
          ETensorType out = input[0];
          return {out};
       }
@@ -128,7 +129,7 @@ namespace SOFIE{
          return ret;
       }
 
-      std::vector<std::vector<size_t>> ShapeInference(std::vector<std::vector<size_t>> input){
+      std::vector<std::vector<size_t>> ShapeInference(std::vector<std::vector<size_t>> input) override {
          return DoShapeInference<size_t>(input);
       }
       std::vector<std::vector<Dim>> DynamicShapeInference(const std::vector<std::vector<Dim>> & input){
@@ -269,8 +270,7 @@ namespace SOFIE{
          model.AddNeededStdLib("algorithm");
       }
 
-      std::string GenerateInitCode()
-      {
+      std::string GenerateInitCode() override {
          std::stringstream out;
          // generate initialization code for broadcasting of bias tensor
          if (fShapeC.size() != fShapeY.size() && fNC != fNC2) {
@@ -291,7 +291,7 @@ namespace SOFIE{
          return out.str();
       }
 
-      std::string Generate(std::string opName){
+      std::string Generate(std::string opName) override {
          opName = "op_" + opName;
 
          if (fShapeA.empty() || fShapeB.empty() || fShapeY.empty() || (fNC != "" && fShapeC.empty())) {
@@ -299,8 +299,6 @@ namespace SOFIE{
          }
          std::stringstream out;
          out << "\n//--------- Gemm\n";
-         out << SP << "char " << opName << "_transA = " << (fAttrTransA ? "\'t\'" : "\'n\'") << ";\n";
-         out << SP << "char " << opName << "_transB = " << (fAttrTransB ? "\'t\'" : "\'n\'") << ";\n";
          // need to consider case A and B have dim > 2 (for MatMul)
          int64_t dimA = fShapeA.size();
          int64_t dimB = fShapeB.size();
@@ -319,14 +317,6 @@ namespace SOFIE{
          }
          auto lengthGemm = ConvertDynamicShapeToLength(sY); // size of the Gemm operation
          auto lengthExtra = ConvertDynamicShapeToLength(sA); // extra length in case input tensors are of dim>2 (MatMul)
-
-         out << SP << "int " << opName << "_m = " << m << ";\n";
-         out << SP << "int " << opName << "_n = " << n << ";\n";
-         out << SP << "int " << opName << "_k = " << k << ";\n";
-         out << SP << "float " << opName << "_alpha = " << std::setprecision(std::numeric_limits<float>::max_digits10) << fAttrAlpha << ";\n";
-         out << SP << "float " << opName << "_beta = " << std::setprecision(std::numeric_limits<float>::max_digits10) << fAttrBeta << ";\n";
-         out << SP << "int " << opName << "_lda = " << (fAttrTransA ? m : k) << ";\n";
-         out << SP << "int " << opName << "_ldb = " << (fAttrTransB ? k : n) << ";\n";
 
          // case bias is present
          if (!fNC.empty()){
@@ -358,23 +348,25 @@ namespace SOFIE{
             out << SP << "for (int i = 0; i < " << lengthExtra << "; i++){\n";
             out << SP;
          }
-         // in the case of bias
-         if (!fNC.empty()){
-            out << SP << "std::copy(" << "tensor_" << fNC2 << ", " << "tensor_" << fNC2 << " + " << lengthGemm << ", "
-               << "tensor_" << fNY;
-            if (doStackMul) out << " + " << opName << "_yoffset";
-            out << ");\n";
-         }
-
 
          if (fType == "float"){
 
-            out << SP << "BLAS::sgemm_(&" << opName << "_transB, &" << opName << "_transA, &" << opName
-             << "_n, &" << opName << "_m, &" << opName << "_k, &" << opName << "_alpha, " << "tensor_" << fNB
-             << ", &" << opName << "_ldb, " << "tensor_" << fNA << ", &" << opName << "_lda, &" << opName << "_beta, "
+            out << SP << "TMVA::Experimental::SOFIE::Gemm_Call("
              << "tensor_" << fNY;
              if (doStackMul) out << " + " << opName << "_yoffset";
-             out << ", &" << opName << "_n);\n";
+            out <<   ", "
+             << (fAttrTransB ? "true, " : "false, ")
+             << (fAttrTransA ? "true, " : "false, ")
+             << n << ", " << m << ", " << k << ", ";
+            out << std::setprecision(std::numeric_limits<float>::max_digits10) << fAttrAlpha << ",";
+            out << "tensor_" << fNB << ", " << "tensor_" << fNA << ", ";
+            out << std::setprecision(std::numeric_limits<float>::max_digits10) << fAttrBeta << ",";
+            // in the case of bias
+             if (!fNC.empty())
+               out << "tensor_" << fNC2;
+             else
+               out << "nullptr";
+             out << ");\n";
 
             if(fActivation == EActivationType::RELU){
                out << SP << "for (int id = 0; id < " << TMVA::Experimental::SOFIE::ConvertDynamicShapeToLength(fShapeY) << " ; id++){\n";
@@ -391,8 +383,8 @@ namespace SOFIE{
          return out.str();
       }
 
-      std::vector<std::string> GetBlasRoutines() { return { std::string("Gemm"), std::string("Gemv") }; }
-      
+      std::vector<std::string> GetBlasRoutines() override { return { std::string("Gemm"), std::string("Gemv") }; }
+
    };
 
 

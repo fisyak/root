@@ -779,38 +779,55 @@ void TObject::SavePrimitiveConstructor(std::ostream &out, TClass *cl, const char
    out << variable_name << " = new " << cl->GetName() << "(" << constructor_agrs << ");\n";
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
-/// Save array in the output stream "out".
+/// Save array in the output stream "out" as vector.
 /// Create unique variable name based on prefix value
+/// Returns name of vector which can be used in constructor or in other places of C++ code
 
-TString TObject::SavePrimitiveArray(std::ostream &out, const char *prefix, Int_t len, Double_t *arr, Bool_t empty_line)
+TString TObject::SavePrimitiveVector(std::ostream &out, const char *prefix, Int_t len, Double_t *arr, Bool_t empty_line)
 {
-   thread_local int arrid = 0;
+   thread_local int vectid = 0;
 
-   TString arrname = TString::Format("%s_darr%d", prefix, arrid++);
+   TString vectame = TString::Format("%s_vect%d", prefix, vectid++);
 
    if (empty_line)
       out << "   \n";
 
-   out << "   Double_t " << arrname << "[" << len << "] = { ";
+   out << "   std::vector<Double_t> " << vectame;
    if (len > 0) {
       const auto old_precision{out.precision()};
       constexpr auto max_precision{std::numeric_limits<double>::digits10 + 1};
       out << std::setprecision(max_precision);
-      for (Int_t i = 0; i < len-1; i++) {
-         out << arr[i] << ",";
-         if (i && (i % 16 == 0))
-            out << "\n   ";
-         else
-            out << " ";
+      Bool_t use_new_lines = len > 15;
+
+      out << "{";
+      for (Int_t i = 0; i < len; i++) {
+         out << (((i % 10 == 0) && use_new_lines) ? "\n      " : " ") << arr[i];
+         if (i < len - 1)
+            out << ",";
       }
-      out << arr[len - 1];
+      out << (use_new_lines ? "\n   }" : " }");
+
       out << std::setprecision(old_precision);
    }
-   out << " };" << std::endl;
-   return arrname;
+   out << ";\n";
+   return vectame;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Save invocation of primitive Draw() method
+/// Skipped if option contains "nodraw" string
+
+void TObject::SavePrimitiveDraw(std::ostream &out, const char *variable_name, Option_t *option)
+{
+   if (!option || !strstr(option, "nodraw")) {
+      out << "   " << variable_name << "->Draw(";
+      if (option && *option)
+         out << "\"" << TString(option).ReplaceSpecialCppChars() << "\"";
+      out << ");\n";
+   }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Save a primitive as a C++ statement(s) on output stream "out".
@@ -1090,8 +1107,17 @@ void TObject::Fatal(const char *location, const char *va_(fmt), ...) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Use this method to implement an "abstract" method that you don't
-/// want to leave purely abstract.
+/// Call this function within a function that you don't want to define as
+/// purely virtual, in order not to force all users deriving from that class to
+/// implement that maybe (on their side) unused function; but at the same time,
+/// emit a run-time warning if they try to call it, telling that it is not
+/// implemented in the derived class: action must thus be taken on the user side
+/// to override it. In other word, this method acts as a "runtime purely virtual"
+/// warning instead of a "compiler purely virtual" error.
+/// \warning This interface is a legacy function that is no longer recommended
+/// to be used by new development code.
+/// \note The name "AbstractMethod" does not imply that it's an abstract method
+/// in the strict C++ sense.
 
 void TObject::AbstractMethod(const char *method) const
 {
@@ -1175,7 +1201,6 @@ void TObject::operator delete[](void *ptr)
       fgDtorOnly = 0;
 }
 
-#ifdef R__SIZEDDELETE
 ////////////////////////////////////////////////////////////////////////////////
 /// Operator delete for sized deallocation.
 
@@ -1197,7 +1222,6 @@ void TObject::operator delete[](void *ptr, size_t size)
    else
       fgDtorOnly = 0;
 }
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Print value overload

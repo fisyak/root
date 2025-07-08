@@ -11,6 +11,9 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES x86_64 OR CMAKE_SYSTEM_PROCESSOR MATCHES amd64
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES i686)
   set(FP_MATH_FLAGS "-msse2 -mfpmath=sse")
   set(ROOT_ARCHITECTURE freebsdi686)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES i386) # FreeBSD port maintainer note: Treating i386 as i686 works
+  set(FP_MATH_FLAGS "-msse2 -mfpmath=sse")
+  set(ROOT_ARCHITECTURE freebsdi386)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES aarch64)
   set(ROOT_ARCHITECTURE freebsdarm64)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES arm)
@@ -62,7 +65,7 @@ if(dev)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pipe ${FP_MATH_FLAGS} -Wshadow -Wall -W -Woverloaded-virtual -fsigned-char")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pipe ${FP_MATH_FLAGS} -Wshadow -Wall -W -Woverloaded-virtual -fsigned-char -fsized-deallocation")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pipe -Wall -W")
   set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -std=legacy")
 
@@ -77,7 +80,7 @@ if(CMAKE_COMPILER_IS_GNUCXX)
   endif()
 
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pipe ${FP_MATH_FLAGS} -Wall -W -Woverloaded-virtual -fsigned-char")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pipe ${FP_MATH_FLAGS} -Wall -W -Woverloaded-virtual -fsigned-char -fsized-deallocation")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pipe -Wall -W")
   set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -std=legacy")
 

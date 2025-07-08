@@ -1,6 +1,6 @@
 import { select as d3_select } from '../d3.mjs';
 import { settings, internals, isNodeJs, isFunc, isStr, isObject, btoa_func, getDocument } from '../core.mjs';
-import { getColor } from './colors.mjs';
+import { getColor, addColor } from './colors.mjs';
 
 /** @summary Standard prefix for SVG file context as data url
  * @private */
@@ -148,7 +148,7 @@ function floatToString(value, fmt, ret_fmt) {
       let diff = sg.length - l - prec;
       if (sg.indexOf('.') > l) diff--;
 
-      if (diff !== 0) {
+      if (diff) {
          prec -= diff;
          if (prec < 0)
             prec = 0;
@@ -185,10 +185,7 @@ class DrawOptions {
    }
 
    /** @summary Returns true if remaining options are empty or contain only separators symbols. */
-   empty() {
-      if (this.opt.length === 0) return true;
-      return this.opt.replace(/[ ;_,]/g, '').length === 0;
-   }
+   empty() { return !this.opt ? true : !this.opt.replace(/[ ;_,]/g, ''); }
 
    /** @summary Returns remaining part of the draw options. */
    remain() { return this.opt; }
@@ -196,23 +193,51 @@ class DrawOptions {
    /** @summary Checks if given option exists */
    check(name, postpart) {
       const pos = this.opt.indexOf(name);
-      if (pos < 0) return false;
+      if (pos < 0)
+         return false;
       this.opt = this.opt.slice(0, pos) + this.opt.slice(pos + name.length);
       this.part = '';
-      if (!postpart) return true;
+      if (!postpart)
+         return true;
 
       let pos2 = pos;
-      while ((pos2 < this.opt.length) && (this.opt[pos2] !== ' ') && (this.opt[pos2] !== ',') && (this.opt[pos2] !== ';')) pos2++;
+      const is_array = postpart === 'array';
+      if (is_array) {
+         if (this.opt[pos2] !== '[')
+            return false;
+         while ((pos2 < this.opt.length) && (this.opt[pos2] !== ']'))
+            pos2++;
+         if (++pos2 > this.opt.length)
+            return false;
+      } else {
+         while ((pos2 < this.opt.length) && (this.opt[pos2] !== ' ') && (this.opt[pos2] !== ',') && (this.opt[pos2] !== ';'))
+            pos2++;
+      }
       if (pos2 > pos) {
          this.part = this.opt.slice(pos, pos2);
          this.opt = this.opt.slice(0, pos) + this.opt.slice(pos2);
       }
 
+      if (is_array) {
+         try {
+            this.array = JSON.parse(this.part);
+         } catch {
+            this.array = undefined;
+         }
+         return this.array?.length !== undefined;
+      }
+
       if (postpart !== 'color')
          return true;
 
+      if (((this.part.length === 6) || (this.part.length === 8)) && this.part.match(/^[a-fA-F0-9]+/)) {
+         this.color = addColor('#' + this.part);
+         return true;
+      }
+
       this.color = this.partAsInt(1) - 1;
-      if (this.color >= 0) return true;
+      if (this.color >= 0)
+         return true;
       for (let col = 0; col < 8; ++col) {
          if (getColor(col).toUpperCase() === this.part) {
             this.color = col;
@@ -225,7 +250,7 @@ class DrawOptions {
    /** @summary Returns remaining part of found option as integer. */
    partAsInt(offset, dflt) {
       let mult = 1;
-      const last = this.part ? this.part[this.part.length - 1] : '';
+      const last = this.part ? this.part.at(-1) : '';
       if (last === 'K')
          mult = 1e3;
       else if (last === 'M')
@@ -316,10 +341,10 @@ function buildSvgCurve(p, args) {
    }, conv = val => {
       if (!args.ndig || (Math.round(val) === val))
          return val.toFixed(0);
-      let s = val.toFixed(args.ndig), p = s.length - 1;
-      while (s[p] === '0') p--;
-      if (s[p] === '.') p--;
-      s = s.slice(0, p+1);
+      let s = val.toFixed(args.ndig), p1 = s.length - 1;
+      while (s[p1] === '0') p1--;
+      if (s[p1] === '.') p1--;
+      s = s.slice(0, p1+1);
       return (s === '-0') ? '0' : s;
    };
 
@@ -464,6 +489,9 @@ class BasePainter {
 
    #divid;  // either id of DOM element or element itself
    #selected_main; // d3.select for dom elements
+   #hitemname; // item name in the hpainter
+   #hdrawopt; // draw option in the hpainter
+   #hpainter; // assigned hpainter
 
    /** @summary constructor
      * @param {object|string} [dom] - dom element or id of dom element */
@@ -485,6 +513,9 @@ class BasePainter {
 
    /** @summary Returns assigned dom element */
    getDom() { return this.#divid; }
+
+   /** @summary Returns argument for draw function */
+   getDrawDom() { return this.#divid; }
 
    /** @summary Selects main HTML element assigned for drawing
      * @desc if main element was layout, returns main element inside layout
@@ -528,10 +559,11 @@ class BasePainter {
      * @private */
    #accessTopPainter(on) {
       const chld = this.selectDom().node()?.firstChild;
-      if (!chld) return null;
+      if (!chld)
+         return null;
       if (on === true)
          chld.painter = this;
-      else if (on === false)
+      else if ((on === false) && (chld.painter === this))
          delete chld.painter;
       return chld.painter;
    }
@@ -554,16 +586,17 @@ class BasePainter {
    cleanup(keep_origin) {
       this.clearTopPainter();
       const origin = this.selectDom('origin');
-      if (!origin.empty() && !keep_origin) origin.html('');
+      if (!origin.empty() && !keep_origin)
+         origin.html('');
       this.#divid = null;
       this.#selected_main = undefined;
 
-      if (isFunc(this._hpainter?.removePainter))
-         this._hpainter.removePainter(this);
+      if (isFunc(this.#hpainter?.removePainter))
+         this.#hpainter.removePainter(this);
 
-      delete this._hitemname;
-      delete this._hdrawopt;
-      delete this._hpainter;
+      this.#hitemname = undefined;
+      this.#hdrawopt = undefined;
+      this.#hpainter = undefined;
    }
 
    /** @summary Checks if draw elements were resized and drawing should be updated
@@ -679,7 +712,7 @@ class BasePainter {
             }
          }
 
-         while (main.node().childNodes.length > 0)
+         while (main.node().childNodes.length)
             enlarge.node().appendChild(main.node().firstChild);
 
          origin.property('use_enlarge', true);
@@ -687,7 +720,7 @@ class BasePainter {
          return true;
       }
       if ((action === false) && (state !== 'off')) {
-         while (enlarge.node() && enlarge.node().childNodes.length > 0)
+         while (enlarge.node()?.childNodes.length)
             main.node().appendChild(enlarge.node().firstChild);
 
          enlarge.remove();
@@ -703,24 +736,24 @@ class BasePainter {
      * @desc Used by {@link HierarchyPainter}
      * @private */
    setItemName(name, opt, hpainter) {
-      if (isStr(name))
-         this._hitemname = name;
-      else
-         delete this._hitemname;
+      this.#hitemname = isStr(name) ? name : undefined;
       // only update draw option, never delete.
       if (isStr(opt))
-         this._hdrawopt = opt;
+         this.#hdrawopt = opt;
 
-      this._hpainter = hpainter;
+      this.#hpainter = hpainter;
    }
+
+   /** @summary Returns assigned histogram painter */
+   getHPainter() { return this.#hpainter; }
 
    /** @summary Returns assigned item name
      * @desc Used with {@link HierarchyPainter} to identify drawn item name */
-   getItemName() { return this._hitemname ?? null; }
+   getItemName() { return this.#hitemname ?? null; }
 
    /** @summary Returns assigned item draw option
      * @desc Used with {@link HierarchyPainter} to identify drawn item option */
-   getItemDrawOpt() { return this._hdrawopt ?? ''; }
+   getItemDrawOpt() { return this.#hdrawopt ?? ''; }
 
 } // class BasePainter
 
@@ -742,11 +775,17 @@ async function _loadJSDOM() {
 /** @summary Return translate string for transform attribute of some svg element
   * @return string or null if x and y are zeros
   * @private */
-function makeTranslate(g, x, y) {
+function makeTranslate(g, x, y, scale = 1) {
    if (!isObject(g)) {
-      y = x; x = g; g = null;
+      scale = y; y = x; x = g; g = null;
    }
-   const res = y ? `translate(${x},${y})` : (x ? `translate(${x})` : null);
+   let res = y ? `translate(${x},${y})` : (x ? `translate(${x})` : null);
+   if (scale && scale !== 1) {
+      if (res) res += ' ';
+          else res = '';
+      res += `scale(${scale.toFixed(3)})`;
+   }
+
    return g ? g.attr('transform', res) : res;
 }
 
@@ -856,7 +895,7 @@ function convertDate(dt) {
    if (settings.TimeZone && isStr(settings.TimeZone)) {
      try {
         res = dt.toLocaleString('en-GB', { timeZone: settings.TimeZone });
-     } catch (err) {
+     } catch {
         res = '';
      }
    }

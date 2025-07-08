@@ -687,7 +687,13 @@ void ROOT::Internal::TTreeReaderValueBase::CreateProxy()
 
    fProxy = namedProxy->GetProxy();
    if (fProxy) {
-      fSetupStatus = kSetupMatch;
+      // If we have already reached the end of the tree, expose this information
+      // also through the value, in case the user is not checking via the
+      // TTreeReader but via the value instead.
+      if (fTreeReader->GetEntryStatus() == TTreeReader::EEntryStatus::kEntryBeyondEnd)
+         fSetupStatus = kSetupMatchButEntryBeyondEnd;
+      else
+         fSetupStatus = kSetupMatch;
    } else {
       fSetupStatus = kSetupMismatch;
    }
@@ -832,10 +838,11 @@ void ROOT::Internal::TTreeReaderValueBase::ErrorAboutMissingProxyIfNeeded()
 {
    // Print the error only if the branch name does not appear in the list of
    // missing proxies that the user explicitly requested not to error about
-   if (std::find(fTreeReader->fMissingProxies.cbegin(), fTreeReader->fMissingProxies.cend(), fBranchName.Data()) ==
-       fTreeReader->fMissingProxies.cend())
-      Error("TTreeReaderValue::Get()", "Value reader not properly initialized, did you call "
-                                       "TTreeReader::Set(Next)Entry() or TTreeReader::Next()?");
+   if (!fTreeReader || fTreeReader->fMissingProxies.count(fBranchName.Data()) == 0)
+      Error("TTreeReaderValue::Get()",
+            "Value reader for branch %s not properly initialized, did you call "
+            "TTreeReader::Set(Next)Entry() or TTreeReader::Next()?",
+            fBranchName.Data());
 }
 
 namespace cling {

@@ -13,8 +13,8 @@
 #include "CustomStructUtil.hxx"
 #include "ntupleutil_test.hxx"
 
+using ROOT::RNTupleReader;
 using ROOT::Experimental::RNTupleImporter;
-using ROOT::Experimental::RNTupleReader;
 
 TEST(RNTupleImporter, Empty)
 {
@@ -31,6 +31,28 @@ TEST(RNTupleImporter, Empty)
    importer->SetNTupleName("ntuple");
    importer->Import();
    auto reader = RNTupleReader::Open("ntuple", fileGuard.GetPath());
+   EXPECT_EQ(0U, reader->GetNEntries());
+   EXPECT_THROW(importer->Import(), ROOT::RException);
+}
+
+TEST(RNTupleImporter, CreateInDirectory)
+{
+   FileRaii fileGuard("test_ntuple_importer_create_in_directory.root");
+   {
+      std::unique_ptr<TFile> file(TFile::Open(fileGuard.GetPath().c_str(), "RECREATE"));
+      TDirectory *dir = file->mkdir("dir1");
+      ASSERT_NE(dir, nullptr);
+      file->cd("dir1");
+      auto tree = std::make_unique<TTree>("tree", "");
+      tree->Write();
+   }
+
+   auto importer = RNTupleImporter::Create(fileGuard.GetPath(), "dir1/tree", fileGuard.GetPath());
+   importer->SetIsQuiet(true);
+   EXPECT_THROW(importer->Import(), ROOT::RException);
+   importer->SetNTupleName("dir2/ntuple");
+   importer->Import();
+   auto reader = RNTupleReader::Open("dir2/ntuple", fileGuard.GetPath());
    EXPECT_EQ(0U, reader->GetNEntries());
    EXPECT_THROW(importer->Import(), ROOT::RException);
 }
@@ -232,7 +254,7 @@ TEST(RNTupleImporter, ConvertDotsInBranchNames)
 TEST(RNTupleImporter, FieldModifier)
 {
    using ROOT::ENTupleColumnType;
-   using ROOT::Experimental::RFieldBase;
+   using ROOT::RFieldBase;
 
    FileRaii fileGuard("test_ntuple_importer_column_modifier.root");
    {

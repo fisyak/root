@@ -12,24 +12,23 @@
       </div>
    </body>
 
-
    <script type='module'>
 
-      import { parse, browser, decodeUrl, toJSON, source_dir } from 'jsroot';
+      import { parse, browser, decodeUrl, toJSON } from 'jsroot';
 
       import { connectWebWindow } from 'jsroot/webwindow';
 
       connectWebWindow({
          ui5: true,
          // openui5src: "jsroot",    // use JSROOT provided package, default
-         // openui5src: "https://openui5.hana.ondemand.com/1.128.0/",
+         // openui5src: "https://openui5.hana.ondemand.com/1.135.0/",
          openui5libs: "sap.m, sap.ui.layout, sap.ui.unified, sap.ui.table, sap.ui.codeeditor, sap.ui.commons, sap.tnt" // customize openui5 libs later
       }).then(handle => {
          sap.ui.require(["sap/ui/core/mvc/XMLView"], XMLView => {
                XMLView.create({
                   id: "TopBrowserId",
                   viewName: "rootui5.browser.view.Browser",
-                  viewData: { conn_handle: handle, jsroot: { parse, browser, decodeUrl, toJSON, source_dir, connectWebWindow } }
+                  viewData: { conn_handle: handle, jsroot: { parse, browser, decodeUrl, toJSON, connectWebWindow } }
                }).then(oView => oView.placeAt("BrowserDiv"));
          });
       });

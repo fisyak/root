@@ -1,5 +1,5 @@
-import { settings, createHistogram, setHistogramTitle, kNoZoom,
-         clTH2F, clTGraph2DErrors, clTGraph2DAsymmErrors, clTPaletteAxis, kNoStats } from '../core.mjs';
+import { settings, createHistogram, setHistogramTitle, getPromise, kNoZoom,
+         clTH2D, clTGraph2DErrors, clTGraph2DAsymmErrors, clTPaletteAxis, kNoStats } from '../core.mjs';
 import { buildSvgCurve, DrawOptions } from '../base/BasePainter.mjs';
 import { ObjectPainter } from '../base/ObjectPainter.mjs';
 import { TH2Painter } from './TH2Painter.mjs';
@@ -278,8 +278,8 @@ class TGraphDelaunay {
                nx = sy;
                ny = -sx;
                nn = Math.sqrt(nx*nx+ny*ny);
-               nx = nx/nn;
-               ny = ny/nn;
+               nx /= nn;
+               ny /= nn;
                mx = this.fXN[p3]-xm;
                my = this.fYN[p3]-ym;
                mdotn = mx*nx+my*ny;
@@ -396,7 +396,7 @@ class TGraphDelaunay {
             dd1 = (dx2*dy1-dx1*dy2);
             dd2 = (dx1*dy2-dx2*dy1);
 
-            if (dd1*dd2 !== 0) {
+            if (dd1 * dd2) {
                u = (dx2*dy3-dx3*dy2)/dd1;
                v = (dx1*dy3-dx3*dy1)/dd2;
                if ((u < 0) || (v < 0)) {
@@ -469,6 +469,7 @@ class TGraphDelaunay {
       let thevalue,
           it, ntris_tried, p, n, m,
           i, j, k, l, z, f, d, o1, o2, a, b, t1, t2, t3,
+          /* eslint-disable-next-line no-useless-assignment */
           ndegen = 0, degen = 0, fdegen = 0, o1degen = 0, o2degen = 0,
           vxN, vyN,
           d1, d2, d3, c1, c2, dko1, dko2, dfo1,
@@ -611,7 +612,7 @@ class TGraphDelaunay {
                      a = 0;
                      b = 0;
                   }
-                  if (a !== 0) {
+                  if (a) {
                      // point z is colinear with 2 of the triangle points, if it lies
                      // between them it's in the circle otherwise it's outside
                      if (this.fXN[a] !== this.fXN[b]) {
@@ -627,15 +628,13 @@ class TGraphDelaunay {
                            // different fZ's. If they don't then this is harmless.
                            console.warn(`Interpolate Two of these three points are coincident ${a} ${b} ${z}`);
                         }
-                     } else {
-                        if (((this.fYN[z]-this.fYN[a])*(this.fYN[z]-this.fYN[b])) < 0) {
-                           skip_this_triangle = true;
-                           break;
-                           // goto L90;
-                        } else if (((this.fYN[z]-this.fYN[a])*(this.fYN[z]-this.fYN[b])) === 0) {
-                           // At least two points are sitting on top of each other - see above.
-                           console.warn(`Interpolate Two of these three points are coincident ${a} ${b} ${z}`);
-                        }
+                     } else if (((this.fYN[z]-this.fYN[a])*(this.fYN[z]-this.fYN[b])) < 0) {
+                        skip_this_triangle = true;
+                        break;
+                        // goto L90;
+                     } else if (((this.fYN[z]-this.fYN[a])*(this.fYN[z]-this.fYN[b])) === 0) {
+                        // At least two points are sitting on top of each other - see above.
+                        console.warn(`Interpolate Two of these three points are coincident ${a} ${b} ${z}`);
                      }
                      // point is outside the circle, move to next point
                      continue; // goto L50;
@@ -823,10 +822,10 @@ class TGraphDelaunay {
       if (!this.fNdt)
          return null;
 
-      let graph = null,     // current graph
+      let graph,     // current graph
           // Find all the segments making the contour
           r21, r20, r10, p0, p1, p2, x0, y0, z0, x1, y1, z1, x2, y2, z2,
-          i, it, i0, i1, i2, nbSeg = 0,
+          it, i0, i1, i2, nbSeg = 0,
           // Allocate space to store the segments. They cannot be more than the
           // number of triangles.
           xs0c, ys0c, xs1c, ys1c;
@@ -854,6 +853,7 @@ class TGraphDelaunay {
 
          // Order along Z axis the points (xi,yi,zi) where "i" belongs to {0,1,2}
          // After this z0 < z1 < z2
+         /* eslint-disable-next-line no-useless-assignment */
          i0 = i1 = i2 = 0;
          if (this.fZ[p1] <= z0) { z0 = this.fZ[p1]; x0 = this.fX[p1]; y0 = this.fY[p1]; i0 = 1; }
          if (this.fZ[p1] > z2) { z2 = this.fZ[p1]; x2 = this.fX[p1]; y2 = this.fY[p1]; i2 = 1; }
@@ -861,7 +861,7 @@ class TGraphDelaunay {
          if (this.fZ[p2] > z2) { z2 = this.fZ[p2]; x2 = this.fX[p2]; y2 = this.fY[p2]; i2 = 2; }
          if (i0 === 0 && i2 === 0) {
             console.error('GetContourList: wrong vertices ordering');
-            return nullptr;
+            return null;
          }
 
          i1 = 3 - i2 - i0;
@@ -1010,7 +1010,8 @@ class TGraphDelaunay {
    /** @summary Function handles tooltips in the mesh */
 function graph2DTooltip(intersect) {
    let indx = Math.floor(intersect.index / this.nvertex);
-   if ((indx < 0) || (indx >= this.index.length)) return null;
+   if ((indx < 0) || (indx >= this.index.length))
+      return null;
    const sqr = v => v*v;
 
    indx = this.index[indx];
@@ -1055,14 +1056,13 @@ function graph2DTooltip(intersect) {
 
 class TGraph2DPainter extends ObjectPainter {
 
+   #redraw_hist; // painter to redraw histogram
+   #delaunay; // used delaunay instance
+
    /** @summary Decode options string  */
-   decodeOptions(opt, _gr) {
-      const d = new DrawOptions(opt);
-
-      if (!this.options)
-         this.options = {};
-
-      const res = this.options, gr2d = this.getObject();
+   decodeOptions(opt) {
+      const d = new DrawOptions(opt),
+            gr2d = this.getObject();
 
       if (d.check('FILL_', 'color') && gr2d)
          gr2d.fFillColor = d.color;
@@ -1071,20 +1071,26 @@ class TGraph2DPainter extends ObjectPainter {
          gr2d.fLineColor = d.color;
 
       d.check('SAME');
+
+      let Triangles = 0, Contour = 0;
+
       if (d.check('CONT5'))
-         res.Contour = 15;
+         Contour = 15;
       else if (d.check('TRI1'))
-         res.Triangles = 11; // wire-frame and colors
+         Triangles = 11; // wire-frame and colors
       else if (d.check('TRI2'))
-         res.Triangles = 10; // only color triangles
+         Triangles = 10; // only color triangles
       else if (d.check('TRIW'))
-         res.Triangles = 1;
+         Triangles = 1;
       else if (d.check('TRI'))
-         res.Triangles = 2;
-      else
-         res.Triangles = 0;
-      res.Line = d.check('LINE');
-      res.Error = d.check('ERR') && (this.matchObjectType(clTGraph2DErrors) || this.matchObjectType(clTGraph2DAsymmErrors));
+         Triangles = 2;
+
+      const res = this.setOptions({
+         Triangles,
+         Contour,
+         Line: d.check('LINE'),
+         Error: d.check('ERR') && (this.matchObjectType(clTGraph2DErrors) || this.matchObjectType(clTGraph2DAsymmErrors))
+      });
 
       if (d.check('P0COL'))
          res.Color = res.Circles = res.Markers = true;
@@ -1094,7 +1100,8 @@ class TGraph2DPainter extends ObjectPainter {
          res.Markers = d.check('P');
       }
 
-      if (!res.Markers) res.Color = false;
+      if (!res.Markers)
+         res.Color = false;
 
       if (res.Color || res.Triangles >= 10 || res.Contour)
          res.Zscale = d.check('Z');
@@ -1117,6 +1124,7 @@ class TGraph2DPainter extends ObjectPainter {
    /** @summary Create histogram for axes drawing */
    createHistogram() {
       const gr = this.getObject(),
+            o = this.getOptions(),
             asymm = this.matchObjectType(clTGraph2DAsymmErrors);
       let xmin = gr.fX[0], xmax = xmin,
           ymin = gr.fY[0], ymax = ymin,
@@ -1125,7 +1133,7 @@ class TGraph2DPainter extends ObjectPainter {
       for (let p = 0; p < gr.fNpoints; ++p) {
          const x = gr.fX[p], y = gr.fY[p], z = gr.fZ[p];
 
-         if (this.options.Error) {
+         if (o.Error) {
             xmin = Math.min(xmin, x - (asymm ? gr.fEXlow[p] : gr.fEX[p]));
             xmax = Math.max(xmax, x + (asymm ? gr.fEXhigh[p] : gr.fEX[p]));
             ymin = Math.min(ymin, y - (asymm ? gr.fEYlow[p] : gr.fEY[p]));
@@ -1167,9 +1175,7 @@ class TGraph2DPainter extends ObjectPainter {
       if (graph.fMinimum !== kNoZoom) uzmin = graph.fMinimum;
       if (graph.fMaximum !== kNoZoom) uzmax = graph.fMaximum;
 
-      this._own_histogram = true; // when histogram created on client side
-
-      const histo = createHistogram(clTH2F, graph.fNpx, graph.fNpy);
+      const histo = createHistogram(clTH2D, graph.fNpx, graph.fNpy);
       histo.fName = graph.fName + '_h';
       setHistogramTitle(histo, graph.fTitle);
       histo.fXaxis.fXmin = uxmin;
@@ -1182,7 +1188,7 @@ class TGraph2DPainter extends ObjectPainter {
       histo.fMaximum = uzmax;
       histo.fBits |= kNoStats;
 
-      if (!this.options.isAny()) {
+      if (!o.isAny()) {
          const dulaunay = this.buildDelaunay(graph);
          if (dulaunay) {
             for (let i = 0; i < graph.fNpx; ++i) {
@@ -1200,13 +1206,13 @@ class TGraph2DPainter extends ObjectPainter {
    }
 
    buildDelaunay(graph) {
-      if (!this._delaunay) {
-         this._delaunay = new TGraphDelaunay(graph);
-         this._delaunay.FindAllTriangles();
-         if (!this._delaunay.fNdt)
-            delete this._delaunay;
+      if (!this.#delaunay) {
+         this.#delaunay = new TGraphDelaunay(graph);
+         this.#delaunay.FindAllTriangles();
+         if (!this.#delaunay.fNdt)
+            this.#delaunay = undefined;
       }
-      return this._delaunay;
+      return this.#delaunay;
    }
 
    drawTriangles(fp, graph, levels, palette) {
@@ -1214,9 +1220,10 @@ class TGraph2DPainter extends ObjectPainter {
       if (!dulaunay) return;
 
       const main_grz = !fp.logz ? fp.grz : value => (value < fp.scale_zmin) ? -0.1 : fp.grz(value),
-            plain_mode = this.options.Triangles === 2,
-            do_faces = (this.options.Triangles >= 10) || plain_mode,
-            do_lines = (this.options.Triangles % 10 === 1) || (plain_mode && (graph.fLineColor !== graph.fFillColor)),
+            o = this.getOptions(),
+            plain_mode = o.Triangles === 2,
+            do_faces = (o.Triangles >= 10) || plain_mode,
+            do_lines = (o.Triangles % 10 === 1) || (plain_mode && (graph.fLineColor !== graph.fFillColor)),
             triangles = new Triangles3DHandler(levels, main_grz, 0, 2*fp.size_z3d, do_lines);
 
       for (triangles.loop = 0; triangles.loop < 2; ++triangles.loop) {
@@ -1252,8 +1259,7 @@ class TGraph2DPainter extends ObjectPainter {
          const geometry = createLegoGeom(this.getMainPainter(), pos, null, 100, 100),
                color = plain_mode ? this.getColor(graph.fFillColor) : palette.calcColor(lvl, levels.length),
                material = new THREE.MeshBasicMaterial(getMaterialArgs(color, { side: THREE.DoubleSide, vertexColors: false })),
-
-          mesh = new THREE.Mesh(geometry, material);
+               mesh = new THREE.Mesh(geometry, material);
 
          fp.add3DMesh(mesh, this);
 
@@ -1268,22 +1274,25 @@ class TGraph2DPainter extends ObjectPainter {
 
    /** @summary Update TGraph2D object */
    updateObject(obj, opt) {
-      if (!this.matchObjectType(obj)) return false;
+      if (!this.matchObjectType(obj))
+         return false;
 
-      if (opt && (opt !== this.options.original))
+      const o = this.getOptions();
+
+      if (opt && (opt !== o.original))
          this.decodeOptions(opt, obj);
 
       Object.assign(this.getObject(), obj);
 
-      delete this._delaunay; // rebuild triangles
+      this.#delaunay = undefined; // rebuild triangles
 
-      delete this.$redraw_hist;
+      this.#redraw_hist = undefined;
 
       // if our own histogram was used as axis drawing, we need update histogram as well
       if (this.axes_draw) {
          const hist_painter = this.getMainPainter();
-         hist_painter?.updateObject(this.createHistogram(), this.options.Axis);
-         this.$redraw_hist = hist_painter;
+         hist_painter?.updateObject(this.createHistogram(), o.Axis);
+         this.#redraw_hist = hist_painter;
       }
 
       return true;
@@ -1293,12 +1302,9 @@ class TGraph2DPainter extends ObjectPainter {
      * @desc Update histogram drawing if necessary
      * @return {Promise} for drawing ready */
    async redraw() {
-      let promise = Promise.resolve(true);
+      const promise = getPromise(this.#redraw_hist?.redraw());
 
-      if (this.$redraw_hist) {
-         promise = this.$redraw_hist.redraw();
-         delete this.$redraw_hist;
-      }
+      this.#redraw_hist = undefined;
 
       return promise.then(() => this.drawGraph2D());
    }
@@ -1311,9 +1317,8 @@ class TGraph2DPainter extends ObjectPainter {
       const cntr = main.getContour(),
             palette = main.getHistPalette(),
             levels = cntr.getLevels(),
-            funcs = fp.getGrFuncs();
-
-      this.createG(true);
+            funcs = fp.getGrFuncs(),
+            g = this.createG(true);
 
       this.createAttLine({ attr: graph, nocolor: true });
 
@@ -1330,10 +1335,10 @@ class TGraph2DPainter extends ObjectPainter {
 
          this.lineatt.color = color;
 
-         this.draw_g.append('svg:path')
-             .attr('d', path)
-             .style('fill', 'none')
-             .call(this.lineatt.func);
+         g.append('svg:path')
+          .attr('d', path)
+          .style('fill', 'none')
+          .call(this.lineatt.func);
       }
 
       return this;
@@ -1344,12 +1349,13 @@ class TGraph2DPainter extends ObjectPainter {
    async drawGraph2D() {
       const fp = this.getFramePainter(),
             main = this.getMainPainter(),
-            graph = this.getObject();
+            graph = this.getObject(),
+            o = this.getOptions();
 
       if (!graph || !main || !fp)
          return this;
 
-      if (this.options.Contour)
+      if (o.Contour)
          return this.drawContour(fp, main, graph);
 
       if (!fp.mode3d)
@@ -1357,24 +1363,22 @@ class TGraph2DPainter extends ObjectPainter {
 
       fp.remove3DMeshes(this);
 
-      if (!this.options.isAny()) {
+      if (!o.isAny()) {
          // no need to draw smoothing if histogram content was drawn
          if (main.draw_content)
             return this;
          if ((graph.fMarkerSize === 1) && (graph.fMarkerStyle === 1))
-            this.options.Circles = true;
+            o.Circles = true;
          else
-            this.options.Markers = true;
+            o.Markers = true;
       }
 
       const countSelected = (zmin, zmax) => {
          let cnt = 0;
          for (let i = 0; i < graph.fNpoints; ++i) {
-            if ((graph.fX[i] < fp.scale_xmin) || (graph.fX[i] > fp.scale_xmax) ||
-                (graph.fY[i] < fp.scale_ymin) || (graph.fY[i] > fp.scale_ymax) ||
-                (graph.fZ[i] < zmin) || (graph.fZ[i] >= zmax)) continue;
-
-            ++cnt;
+            if ((graph.fX[i] >= fp.scale_xmin) && (graph.fX[i] <= fp.scale_xmax) &&
+                (graph.fY[i] >= fp.scale_ymin) && (graph.fY[i] <= fp.scale_ymax) &&
+                (graph.fZ[i] >= zmin) && (graph.fZ[i] < zmax)) ++cnt;
          }
          return cnt;
       };
@@ -1397,42 +1401,37 @@ class TGraph2DPainter extends ObjectPainter {
           levels = [fp.scale_zmin, fp.scale_zmax],
           scale = fp.size_x3d / 100 * markeratt.getFullSize();
 
-      if (this.options.Circles)
+      if (o.Circles)
          scale = 0.06 * fp.size_x3d;
 
-      if (fp.usesvg) scale *= 0.3;
+      if (fp.usesvg)
+         scale *= 0.3;
 
       scale *= 7 * Math.max(fp.size_x3d / fp.getFrameWidth(), fp.size_z3d / fp.getFrameHeight());
 
-      if (this.options.Color || (this.options.Triangles >= 10)) {
+      if (o.Color || (o.Triangles >= 10)) {
          levels = main.getContourLevels(true);
          palette = main.getHistPalette();
       }
 
-      if (this.options.Triangles)
+      if (o.Triangles)
          this.drawTriangles(fp, graph, levels, palette);
 
       for (let lvl = 0; lvl < levels.length - 1; ++lvl) {
          const lvl_zmin = Math.max(levels[lvl], fp.scale_zmin),
                lvl_zmax = Math.min(levels[lvl+1], fp.scale_zmax);
 
-         if (lvl_zmin >= lvl_zmax) continue;
+         if (lvl_zmin >= lvl_zmax)
+            continue;
 
          const size = Math.floor(countSelected(lvl_zmin, lvl_zmax) / step),
-               index = new Int32Array(size);
-         let pnts = null, select = 0, icnt = 0,
-             err = null, asymm = false, line = null, ierr = 0, iline = 0;
+               index = new Int32Array(size),
+               pnts = o.Markers || o.Circles ? new PointsCreator(size, fp.webgl, scale/3) : null,
+               err = o.Error ? new Float32Array(size*6*3) : null,
+               asymm = err && this.matchObjectType(clTGraph2DAsymmErrors),
+               line = o.Line ? new Float32Array((size-1)*6) : null;
 
-         if (this.options.Markers || this.options.Circles)
-            pnts = new PointsCreator(size, fp.webgl, scale/3);
-
-         if (this.options.Error) {
-            err = new Float32Array(size*6*3);
-            asymm = this.matchObjectType(clTGraph2DAsymmErrors);
-          }
-
-         if (this.options.Line)
-            line = new Float32Array((size-1)*6);
+         let select = 0, icnt = 0, ierr = 0, iline = 0;
 
          for (let i = 0; i < graph.fNpoints; ++i) {
             if ((graph.fX[i] < fp.scale_xmin) || (graph.fX[i] > fp.scale_xmax) ||
@@ -1441,16 +1440,14 @@ class TGraph2DPainter extends ObjectPainter {
 
             if (step > 1) {
                select = (select+1) % step;
-               if (select !== 0) continue;
+               if (select) continue;
             }
 
             index[icnt++] = i; // remember point index for tooltip
 
-            const x = fp.grx(graph.fX[i]),
-                y = fp.gry(graph.fY[i]),
-                z = fp.grz(graph.fZ[i]);
+            const x = fp.grx(graph.fX[i]), y = fp.gry(graph.fY[i]), z = fp.grz(graph.fZ[i]);
 
-            if (pnts) pnts.addPoint(x, y, z);
+            pnts?.addPoint(x, y, z);
 
             if (err) {
                err[ierr] = fp.grx(graph.fX[i] - (asymm ? graph.fEXlow[i] : graph.fEX[i]));
@@ -1477,11 +1474,11 @@ class TGraph2DPainter extends ObjectPainter {
             }
 
             if (line) {
-               if (iline>=6) {
+               if (iline >= 6) {
                   line[iline] = line[iline-3];
                   line[iline+1] = line[iline-2];
                   line[iline+2] = line[iline-1];
-                  iline+=3;
+                  iline += 3;
                }
                line[iline] = x;
                line[iline+1] = y;
@@ -1528,10 +1525,10 @@ class TGraph2DPainter extends ObjectPainter {
          if (pnts) {
             let color = 'blue';
 
-            if (!this.options.Circles || this.options.Color)
+            if (!o.Circles || o.Color)
                color = palette?.calcColor(lvl, levels.length) ?? this.getColor(graph.fMarkerColor);
 
-            const pr = pnts.createPoints({ color, fill: 'white', style: this.options.Circles ? 4 : graph.fMarkerStyle }).then(mesh => {
+            const pr = pnts.createPoints({ color, fill: o.Circles ? 'white' : undefined, style: o.Circles ? 4 : graph.fMarkerStyle }).then(mesh => {
                mesh.graph = graph;
                mesh.fp = fp;
                mesh.tip_color = (graph.fMarkerColor === 3) ? 0xFF0000 : 0x00FF00;
@@ -1548,22 +1545,22 @@ class TGraph2DPainter extends ObjectPainter {
       }
 
       return Promise.all(promises).then(() => {
-         const main = this.getMainPainter(),
-               handle_palette = this.axes_draw || (main?.draw_content === false);
+         const main2 = this.getMainPainter(),
+               handle_palette = this.axes_draw || (main2?.draw_content === false);
          if (!handle_palette)
             return;
 
-         const pal = main?.findFunction(clTPaletteAxis),
+         const pal = main2?.findFunction(clTPaletteAxis),
                pal_painter = this.getPadPainter()?.findPainterFor(pal);
          if (!pal_painter)
             return;
 
-         pal_painter.Enabled = this.options.Zscale;
+         pal_painter.Enabled = o.Zscale;
 
-         if (this.options.Zscale)
+         if (o.Zscale)
             return pal_painter.drawPave();
-         else
-            pal_painter.removeG(); // completely remove drawing without need to redraw complete pad
+
+         pal_painter.removeG(); // completely remove drawing without need to redraw complete pad
       }).then(() => {
          fp.render3D(100);
          return this;

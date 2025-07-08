@@ -9,7 +9,7 @@
 /// \date December 2022
 /// \author The ROOT Team
 
-// NOTE: The RNTuple classes are experimental at this point.
+// NOTE: The RNTupleImporter class is experimental at this point.
 // Functionality and interface are still subject to changes.
 
 #include <ROOT/RNTupleDS.hxx>
@@ -23,7 +23,6 @@
 
 // Import classes from experimental namespace for the time being.
 using RNTupleImporter = ROOT::Experimental::RNTupleImporter;
-using RNTupleReader = ROOT::Experimental::RNTupleReader;
 
 // Input and output.
 constexpr char const *kTreeFileName = "http://root.cern.ch/files/HiggsTauTauReduced/GluGluToHToTauTau.root";
@@ -52,7 +51,7 @@ void ntpl008_import()
       return;
    }
    auto ntpl = std::unique_ptr<ROOT::RNTuple>(file->Get<ROOT::RNTuple>("Events"));
-   auto reader = RNTupleReader::Open(*ntpl);
+   auto reader = ROOT::RNTupleReader::Open(*ntpl);
    reader->PrintInfo();
 
    ROOT::RDataFrame df("Events", kNTupleFileName);

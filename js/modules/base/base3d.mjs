@@ -138,11 +138,11 @@ function createSVGRenderer(as_is, precision, doc) {
            setAttribute(name, value) {
               this._wrapper.svg_attr[name] = value;
            },
-           appendChild(_node) {
+           appendChild(/* node */) {
               this._wrapper.accPath += `<path style="${this._wrapper.path_attr.style}" d="${this._wrapper.path_attr.d}"/>`;
               this._wrapper.path_attr = {};
            },
-           removeChild(_node) {
+           removeChild(/* node */) {
               this.childNodes = [];
            }
         };
@@ -166,14 +166,14 @@ function createSVGRenderer(as_is, precision, doc) {
    rndr.originalRender = rndr.render;
 
    rndr.render = function(scene, camera) {
-      const originalDocument = globalThis.document;
+      const _doc = globalThis.document;
       if (isNodeJs())
          globalThis.document = this.doc_wrapper;
 
       this.originalRender(scene, camera);
 
       if (isNodeJs())
-         globalThis.document = originalDocument;
+         globalThis.document = _doc;
    };
 
    rndr.clearHTML = function() {
@@ -221,7 +221,7 @@ function createSVGRenderer(as_is, precision, doc) {
 
 
 /** @summary Define rendering kind which will be used for rendering of 3D elements
-  * @param {value} [render3d] - preconfigured value, will be used if applicable
+  * @param {value} [render3d] - pre-configured value, will be used if applicable
   * @param {value} [is_batch] - is batch mode is configured
   * @return {value} - rendering kind, see constants.Render3D
   * @private */
@@ -245,8 +245,8 @@ const Handling3DDrawings = {
      * @return current value
      * @private */
    access3dKind(new_value) {
-      const svg = this.getPadSvg();
-      if (svg.empty())
+      const svg = this.getPadPainter()?.getPadSvg();
+      if (!svg || svg.empty())
          return -1;
 
       // returns kind of currently created 3d canvas
@@ -256,7 +256,7 @@ const Handling3DDrawings = {
       return ((kind === null) || (kind === undefined)) ? -1 : kind;
    },
 
-   /** @summary Returns size which availble for 3D drawing.
+   /** @summary Returns size which available for 3D drawing.
      * @desc One uses frame sizes for the 3D drawing - like TH2/TH3 objects
      * @private */
    getSizeFor3d(can3d /* , render3d */) {
@@ -277,10 +277,11 @@ const Handling3DDrawings = {
             can3d = constants.Embed3D.Overlay;
       }
 
-      const pad = this.getPadSvg(),
-            clname = 'draw3d_' + (this.getPadName() || 'canvas');
+      const pp = this.getPadPainter(),
+            pad = pp?.getPadSvg(),
+            clname = 'draw3d_' + (pp?.getPadName() || 'canvas');
 
-      if (pad.empty()) {
+      if (!pad || pad.empty()) {
          // this is a case when object drawn without canvas
 
          const rect = getElementRect(this.selectDom());
@@ -292,7 +293,7 @@ const Handling3DDrawings = {
          return rect;
       }
 
-      const fp = this.getFramePainter(), pp = this.getPadPainter();
+      const fp = this.getFramePainter();
       let size;
 
       if (fp?.mode3d && (can3d > 0))
@@ -304,7 +305,7 @@ const Handling3DDrawings = {
             size.width = pp.getPadWidth();
             size.height = pp.getPadHeight();
          } else if (fp && !fp.mode3d) {
-            elem = this.getFrameSvg();
+            elem = pp.getFrameSvg();
             size.x = elem.property('draw_x');
             size.y = elem.property('draw_y');
          }
@@ -325,7 +326,7 @@ const Handling3DDrawings = {
       }
 
       if (can3d === constants.Embed3D.Overlay) {
-         size = getAbsPosInCanvas(this.getPadSvg(), size);
+         size = getAbsPosInCanvas(pad, size);
          const scale = this.getCanvPainter().getPadScale();
          if (scale && scale !== 1) {
             size.x /= scale;
@@ -348,10 +349,10 @@ const Handling3DDrawings = {
          const main = this.selectDom().node();
          let chld = main?.firstChild;
 
-         if (chld && !chld.$jsroot)
+         while (chld && !chld.$jsroot)
             chld = chld.nextSibling;
 
-         if (chld?.$jsroot) {
+         if (chld?.$jsroot === '3d') {
             delete chld.painter;
             main.removeChild(chld);
          }
@@ -363,11 +364,13 @@ const Handling3DDrawings = {
          d3_select(this.getCanvSvg().node().nextSibling).remove(); // remove html5 canvas
          this.getCanvSvg().style('display', null); // show SVG canvas
       } else {
-         if (this.getPadSvg().empty()) return;
+         const pp = this.getPadPainter();
+         if (!pp || pp.getPadSvg().empty())
+            return;
 
          this.apply3dSize(size).remove();
 
-         this.getFrameSvg().style('display', null);  // clear display property
+         pp.getFrameSvg().style('display', null);  // clear display property
       }
       return can3d;
    },
@@ -384,7 +387,7 @@ const Handling3DDrawings = {
          if (main !== null) {
             main.appendChild(canv);
             canv.painter = this;
-            canv.$jsroot = true; // mark canvas as added by jsroot
+            canv.$jsroot = '3d'; // mark canvas as added by jsroot
          }
 
          return;
@@ -400,10 +403,12 @@ const Handling3DDrawings = {
 
          this.getCanvSvg().node().parentNode.appendChild(canv); // add directly
       } else {
-         if (this.getPadSvg().empty()) return;
+         const pp = this.getPadPainter();
+         if (!pp || pp.getPadSvg().empty())
+            return;
 
          // first hide normal frame
-         this.getFrameSvg().style('display', 'none');
+         pp.getFrameSvg().style('display', 'none');
 
          const elem = this.apply3dSize(size);
          elem.attr('title', '').node().appendChild(canv);
@@ -419,11 +424,13 @@ const Handling3DDrawings = {
       let elem;
 
       if (size.can3d > 1) {
-         elem = this.getLayerSvg(size.clname);
+         const pp = this.getPadPainter();
+
+         elem = pp.getLayerSvg(size.clname);
          if (onlyget)
             return elem;
 
-         const svg = this.getPadSvg();
+         const svg = pp.getPadSvg();
 
          if (size.can3d === constants.Embed3D.EmbedSVG) {
             // this is SVG mode or image mode - just create group to hold element
@@ -465,10 +472,13 @@ const Handling3DDrawings = {
          const pos0 = prnt.getBoundingClientRect(), doc = getDocument();
 
          while (prnt) {
-            if (prnt === doc) { prnt = null; break; }
+            if (prnt === doc) {
+               prnt = null;
+               break;
+            }
             try {
                if (getComputedStyle(prnt).position !== 'static') break;
-            } catch (err) {
+            } catch {
                break;
             }
             prnt = prnt.parentNode;
@@ -568,13 +578,13 @@ async function createRender3D(width, height, render3d, args) {
       renderer.originalSetSize = renderer.setSize;
 
       // apply size to dom element
-      renderer.setSize = function(width, height, updateStyle) {
+      renderer.setSize = function(w, h, updateStyle) {
          if (this.jsroot_custom_dom) {
-            this.jsroot_dom.setAttribute('width', width);
-            this.jsroot_dom.setAttribute('height', height);
+            this.jsroot_dom.setAttribute('width', w);
+            this.jsroot_dom.setAttribute('height', h);
          }
 
-         this.originalSetSize(width, height, updateStyle);
+         this.originalSetSize(w, h, updateStyle);
       };
 
       renderer.setSize(width, height);
@@ -821,8 +831,8 @@ function createOrbitControl(painter, camera, scene, renderer, lookat) {
       }
 
       // only left-button is considered
-      if ((evnt.button!==undefined) && (evnt.button !== 0)) return;
-      if ((evnt.buttons!==undefined) && (evnt.buttons !== 1)) return;
+      if ((evnt.button !== undefined) && (evnt.button !== 0)) return;
+      if ((evnt.buttons !== undefined) && (evnt.buttons !== 1)) return;
 
       if (control.enable_zoom) {
          control.mouse_zoom_mesh = control.detectZoomMesh(evnt);
@@ -876,9 +886,11 @@ function createOrbitControl(painter, camera, scene, renderer, lookat) {
       }
    }
 
-   function render3DFired(painter) {
-      if (!painter || painter.renderer === undefined) return false;
-      return painter.render_tmout !== undefined; // when timeout configured, object is prepared for rendering
+   function render3DFired(_painter) {
+      if (_painter?.renderer === undefined)
+         return false;
+      // when timeout configured, object is prepared for rendering
+      return _painter.render_tmout !== undefined;
    }
 
    function control_mousewheel(evnt) {
@@ -1043,18 +1055,19 @@ function createOrbitControl(painter, camera, scene, renderer, lookat) {
 
    control.getInfoAtMousePosition = function(mouse_pos) {
       const intersects = this.getMouseIntersects(mouse_pos);
-      let tip = null, painter = null;
+      let tip = null, _painter = null;
 
       for (let i = 0; i < intersects.length; ++i) {
          if (intersects[i].object.tooltip) {
             tip = intersects[i].object.tooltip(intersects[i]);
-            painter = intersects[i].object.painter;
+            _painter = intersects[i].object.painter;
             break;
          }
       }
 
-      if (tip && painter) {
-         return { obj: painter.getObject(), name: painter.getObject().fName,
+      if (tip && _painter) {
+         return { obj: _painter.getObject(),
+                  name: _painter.getObject().fName,
                   bin: tip.bin, cont: tip.value,
                   binx: tip.ix, biny: tip.iy, binz: tip.iz,
                   grx: (tip.x1+tip.x2)/2, gry: (tip.y1+tip.y2)/2, grz: (tip.z1+tip.z2)/2 };
@@ -1070,11 +1083,12 @@ function createOrbitControl(painter, camera, scene, renderer, lookat) {
       }
 
       // then check if double-click handler assigned
-      const fp = this.painter?.getFramePainter();
-      if (isFunc(fp?._dblclick_handler)) {
+      const handler = this.painter?.getFramePainter()?.getDblclickHandler();
+
+      if (isFunc(handler)) {
          const info = this.getInfoAtMousePosition(this.getMousePos(evnt, {}));
          if (info) {
-            fp._dblclick_handler(info);
+            handler(info);
             return;
          }
       }
@@ -1260,11 +1274,11 @@ function createOrbitControl(painter, camera, scene, renderer, lookat) {
       delete this.single_click_tm;
 
       if (kind === 1) {
-         const fp = this.painter?.getFramePainter();
-         if (isFunc(fp?._click_handler)) {
+         const handler = this.painter?.getFramePainter()?.getClickHandler();
+         if (isFunc(handler)) {
             const info = this.getInfoAtMousePosition(mouse_pos);
             if (info) {
-               fp._click_handler(info);
+               handler(info);
                return;
             }
          }
@@ -1303,7 +1317,7 @@ function createOrbitControl(painter, camera, scene, renderer, lookat) {
       }
 
       let kind = 0;
-      if (isFunc(this.painter?.getFramePainter()?._click_handler))
+      if (this.painter?.getFramePainter()?.getClickHandler())
          kind = 1;  // user click handler
       else if (this.processSingleClick && this.painter?.options?.mouse_click)
          kind = 2;  // eve7 click handler
@@ -1371,8 +1385,6 @@ function disposeThreejsObject(obj, only_childs) {
    delete obj.tooltip;
    delete obj.stack; // used in geom painter
    delete obj.drawn_highlight; // special highlight object
-
-   obj = undefined;
 }
 
 
@@ -1388,7 +1400,7 @@ function createLineSegments(arr, material, index = undefined, only_geometry = fa
    if (material.isLineDashedMaterial) {
       const v1 = new THREE.Vector3(),
             v2 = new THREE.Vector3();
-      let d = 0, distances = null;
+      let d = 0, distances;
 
       if (index) {
          distances = new Float32Array(index.length);
@@ -1427,6 +1439,7 @@ const Box3D = {
               7, 6, 2, 6, 3, 2, 5, 7, 0, 7, 2, 0, 1, 3, 4, 3, 6, 4],
     Normals: [1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1],
     Segments: [0, 2, 2, 7, 7, 5, 5, 0, 1, 3, 3, 6, 6, 4, 4, 1, 1, 0, 3, 2, 6, 7, 4, 5],  // segments addresses Vertices
+    Crosses: [0, 7, 2, 5, 0, 3, 1, 2, 7, 3, 2, 6, 5, 6, 4, 7, 5, 1, 0, 4, 3, 4, 1, 6], // addresses Vertices
     MeshSegments: undefined
 };
 
@@ -1636,7 +1649,7 @@ class PointsCreator {
       } else {
          promise = new Promise((resolveFunc, rejectFunc) => {
             const loader = new THREE.TextureLoader();
-            loader.load(dataUrl, res => resolveFunc(res), undefined, () => rejectFunc());
+            loader.load(dataUrl, res => resolveFunc(res), undefined, () => rejectFunc(Error(`Fail to load ${dataUrl}`)));
          });
       }
 

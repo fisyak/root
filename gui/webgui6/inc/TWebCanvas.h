@@ -89,6 +89,7 @@ protected:
 
    Bool_t fReadOnly{kFALSE};       ///<! in read-only mode canvas cannot be changed from client side
    Long64_t fCanvVersion{1};       ///<! actual canvas version, changed with every new Modified() call
+   Long64_t fLastDrawVersion{0};   ///<! last draw version
    UInt_t fClientBits{0};          ///<! latest status bits from client like editor visible or not
    std::vector<TPad *> fAllPads;   ///<! list of all pads recognized during streaming
    std::map<TObject *,bool> fUsedObjs; ///<! map of used objects during streaming
@@ -187,6 +188,8 @@ public:
    TWebCanvas(TCanvas *c, const char *name, Int_t x, Int_t y, UInt_t width, UInt_t height, Bool_t readonly = kTRUE);
    ~TWebCanvas() override;
 
+   void CreateWebWindow();
+
    void ShowWebWindow(const ROOT::RWebDisplayArgs &user_args = "");
 
    const std::shared_ptr<ROOT::RWebWindow> &GetWebWindow() const { return fWindow; }
@@ -274,6 +277,8 @@ public:
    static void BatchImageMode(UInt_t n = 100);
 
    static TCanvasImp *NewCanvas(TCanvas *c, const char *name, Int_t x, Int_t y, UInt_t width, UInt_t height);
+
+   static TCanvas *CreateWebCanvas(const char *name, const char *title, UInt_t width = 1200, UInt_t height = 800);
 
    ClassDefOverride(TWebCanvas, 0) // Web-based implementation for TCanvasImp
 };

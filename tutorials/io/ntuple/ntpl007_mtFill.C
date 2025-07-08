@@ -9,9 +9,6 @@
 /// \date July 2021
 /// \author The ROOT Team
 
-// NOTE: The RNTuple classes are experimental at this point.
-// Functionality and interface are still subject to changes.
-
 #include <ROOT/REntry.hxx>
 #include <ROOT/RNTupleModel.hxx>
 #include <ROOT/RNTupleReader.hxx>
@@ -32,12 +29,6 @@
 #include <vector>
 #include <utility>
 
-// Import classes from experimental namespace for the time being
-using ROOT::Experimental::REntry;
-using ROOT::Experimental::RNTupleModel;
-using ROOT::Experimental::RNTupleReader;
-using ROOT::Experimental::RNTupleWriter;
-
 // Where to store the ntuple of this example
 constexpr char const *kNTupleFileName = "ntpl007_mtFill.root";
 
@@ -48,8 +39,9 @@ constexpr int kNWriterThreads = 4;
 constexpr int kNEventsPerThread = 25000;
 
 // Thread function to generate and write events
-void FillData(std::unique_ptr<REntry> entry, RNTupleWriter *writer) {
-   // Protect the ntuple->Fill() call
+void FillData(std::unique_ptr<ROOT::REntry> entry, ROOT::RNTupleWriter *writer)
+{
+   // Protect the writer->Fill() call
    static std::mutex gLock;
 
    static std::atomic<std::uint32_t> gThreadId;
@@ -90,16 +82,16 @@ void FillData(std::unique_ptr<REntry> entry, RNTupleWriter *writer) {
 void Write()
 {
    // Create the data model
-   auto model = RNTupleModel::Create();
+   auto model = ROOT::RNTupleModel::Create();
    model->MakeField<std::uint32_t>("id");
    model->MakeField<std::vector<float>>("vpx");
    model->MakeField<std::vector<float>>("vpy");
    model->MakeField<std::vector<float>>("vpz");
 
    // We hand-over the data model to a newly created ntuple of name "NTuple", stored in kNTupleFileName
-   auto writer = RNTupleWriter::Recreate(std::move(model), "NTuple", kNTupleFileName);
+   auto writer = ROOT::RNTupleWriter::Recreate(std::move(model), "NTuple", kNTupleFileName);
 
-   std::vector<std::unique_ptr<REntry>> entries;
+   std::vector<std::unique_ptr<ROOT::REntry>> entries;
    std::vector<std::thread> threads;
    for (int i = 0; i < kNWriterThreads; ++i)
       entries.emplace_back(writer->CreateEntry());
@@ -116,7 +108,7 @@ void Write()
 // For all of the events, histogram only one of the written vectors
 void Read()
 {
-   auto reader = RNTupleReader::Open("NTuple", kNTupleFileName);
+   auto reader = ROOT::RNTupleReader::Open("NTuple", kNTupleFileName);
    auto viewVpx = reader->GetView<float>("vpx._0");
 
    gStyle->SetOptStat(0);

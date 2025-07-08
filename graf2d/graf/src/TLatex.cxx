@@ -2235,6 +2235,7 @@ Int_t TLatex::PaintLatex1(Double_t x, Double_t y, Double_t angle, Double_t size,
       TMathText tm;
       tm.SetTextAlign(GetTextAlign());
       tm.SetTextFont(GetTextFont());
+      tm.SetTextColor(GetTextColor());
       tm.PaintMathText(x, y, angle, size, text1);
       // If PDF, paint using TLatex
       if (gVirtualPS) {
@@ -2710,7 +2711,7 @@ void TLatex::Savefs(TLatex::TLatexFormSize *fs)
 ////////////////////////////////////////////////////////////////////////////////
 /// Save primitive as a C++ statement(s) on output stream out
 
-void TLatex::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
+void TLatex::SavePrimitive(std::ostream &out, Option_t *option)
 {
    SavePrimitiveConstructor(
       out, Class(), "tex",
@@ -2720,9 +2721,9 @@ void TLatex::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
    SaveLineAttributes(out, "tex", 1, 1, 1);
 
    if (TestBit(kTextNDC))
-      out << "   tex->SetNDC();" << std::endl;
+      out << "   tex->SetNDC();\n";
 
-   out << "   tex->Draw();" << std::endl;
+   SavePrimitiveDraw(out, "tex", option);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

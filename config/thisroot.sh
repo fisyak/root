@@ -169,7 +169,7 @@ getTrueShellExeName() { # mklement0 https://stackoverflow.com/a/23011530/7471760
    local trueExe nextTarget 2>/dev/null # ignore error in shells without `local`
    # Determine the shell executable filename.
    if [ -r "/proc/$$/cmdline" ]; then
-      trueExe=$(cut -d '' -f1 /proc/$$/cmdline) || return 1
+      trueExe=$(cut -d '' -f1 /proc/$$/cmdline 2>/dev/null) || trueExe=$(xargs -0 -n 1 < /proc/$$/cmdline | head -n 1) || return 1
       # Qemu emulation has cmdline start with the emulator
       if [ "${trueExe##*qemu*}" != "${trueExe}" ]; then
          # but qemu sets comm to the emulated command
@@ -251,9 +251,6 @@ fi
 clean_environment
 set_environment
 
-
-# Prevent Cppyy from checking the PCH (and avoid warning)
-export CLING_STANDARD_PCH=none
 
 if (root-config --arch | grep -v win32gcc | grep -q -i win32); then
    ROOTSYS="$(cygpath -w "$ROOTSYS")"

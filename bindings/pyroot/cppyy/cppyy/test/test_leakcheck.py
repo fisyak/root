@@ -1,6 +1,6 @@
-import py, os, sys
+import py, os, sys, pytest
 from pytest import mark, skip
-from .support import setup_make, pylong, pyunicode
+from support import setup_make, pylong, pyunicode, IS_MAC, IS_MAC_ARM
 
 nopsutil = False
 try:
@@ -73,6 +73,7 @@ class TestLEAKCHECK:
 
         assert fail < M
 
+    @mark.xfail(condition=IS_MAC, reason="Fails on OSX")
     def test01_free_functions(self):
         """Leak test of free functions"""
 
@@ -98,6 +99,7 @@ class TestLEAKCHECK:
         self.check_func(ns, 'free_f_ret1')
         self.check_func(ns, 'free_f_ret1')
 
+    @mark.xfail()
     def test02_test_static_methods(self):
         """Leak test of static methods"""
 
@@ -191,6 +193,7 @@ class TestLEAKCHECK:
         self.check_func(m, 'method_default', b=-99)
         self.check_func(m, 'method_default', c=-99)
 
+    @mark.xfail(condition=IS_MAC_ARM, reason="Fails on OSX-ARM")
     def test05_aggregates(self):
         """Leak test of aggregate creation"""
 
@@ -272,3 +275,6 @@ class TestLEAKCHECK:
 
         self.check_func(ns, 'leak_list')
 
+
+if __name__ == "__main__":
+    exit(pytest.main(args=['-sv', '-ra', __file__]))

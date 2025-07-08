@@ -27,9 +27,9 @@
 #
 # \author Kyle Cranmer (C++ version), and P. P. (Python translation)
 
-import numpy as np
-import ROOT
+import array
 
+import ROOT
 
 # use this order for safety on library loading
 
@@ -68,9 +68,9 @@ def rs_numberCountingCombination_expected():
     #          alternatively you can use cppyy:
     #          cppyy.cppdef("double s[2]";")
     #          s_c = cppyy.gbl.s
-    s = np.array([20.0, 10.0])  # expected signal
-    b = np.array([100.0, 100.0])  # expected background
-    db = np.array([0.0100, 0.0100])  # fractional background uncertainty
+    s = array.array("d", [20.0, 10.0])  # expected signal
+    b = array.array("d", [100.0, 100.0])  # expected background
+    db = array.array("d", [0.0100, 0.0100])  # fractional background uncertainty
 
     # Step 2, use a RooStats factory to build a PDF for a
     # number counting combination and add it to the workspace.
@@ -119,10 +119,10 @@ def rs_numberCountingCombination_expected():
     # Step 6, Use the Calculator to get a HypoTestResult
     htr = plc.GetHypoTest()
     assert htr != 0
-    print(f"-------------------------------------------------")
-    print(f"The p-value for the null is ", htr.NullPValue())
-    print(f"Corresponding to a significance of ", htr.Significance())
-    print(f"-------------------------------------------------\n\n")
+    print("-------------------------------------------------")
+    print("The p-value for the null is ", htr.NullPValue())
+    print("Corresponding to a significance of ", htr.Significance())
+    print("-------------------------------------------------\n\n")
 
     # expected case should return:
     # -------------------------------------------------
@@ -164,25 +164,25 @@ def rs_numberCountingCombination_expected():
     # Since the significance of the Hypothesis test was > 2-sigma it should not be:
     # eg. we exclude masterSignal=0 at 95% confidence.
     paramsOfInterest.setRealValue("masterSignal", 0.0)
-    print(f"-------------------------------------------------")
-    print(f"Consider this parameter point:")
+    print("-------------------------------------------------")
+    print("Consider this parameter point:")
     paramsOfInterest.first().Print()
     if lrint.IsInInterval(paramsOfInterest):
-        print(f"It IS in the interval.")
+        print("It IS in the interval.")
     else:
-        print(f"It is NOT in the interval.")
-        print(f"-------------------------------------------------\n\n")
+        print("It is NOT in the interval.")
+        print("-------------------------------------------------\n\n")
 
     # Step 10c, We also ask about the parameter point masterSignal=2, which is inside the interval.
     paramsOfInterest.setRealValue("masterSignal", 2.0)
-    print(f"-------------------------------------------------")
-    print(f"Consider this parameter point:")
+    print("-------------------------------------------------")
+    print("Consider this parameter point:")
     paramsOfInterest.first().Print()
     if lrint.IsInInterval(paramsOfInterest):
-        print(f"It IS in the interval.")
+        print("It IS in the interval.")
     else:
-        print(f"It is NOT in the interval.")
-        print(f"-------------------------------------------------\n\n")
+        print("It is NOT in the interval.")
+        print("-------------------------------------------------\n\n")
 
     del lrint
     del htr
@@ -227,6 +227,7 @@ def rs_numberCountingCombination_expected():
 
 
 def rs_numberCountingCombination_observed():
+    import ctypes
 
     ##############
     # The same example with observed data in a main
@@ -249,8 +250,8 @@ def rs_numberCountingCombination_observed():
     # to the signal contribution in the individual channels.
     # The model neglects correlations in background uncertainty,
     # but they could be added without much change to the example.
-    f = NumberCountingPdfFactory()
-    wspace = RooWorkspace()
+    f = ROOT.RooStats.NumberCountingPdfFactory()
+    wspace = ROOT.RooWorkspace()
     f.AddModel(s_c, 2, wspace, "TopLevelPdf", "masterSignal")
 
     # Step 3, use a RooStats factory to add datasets to the workspace.
@@ -272,15 +273,15 @@ def rs_numberCountingCombination_observed():
     # Step 4, Define the null hypothesis for the calculator
     # Here you need to know the name of the variables corresponding to hypothesis.
     mu = wspace.var("masterSignal")
-    poi = RooArgSet(mu)
-    nullParams = RooArgSet("nullParams")
+    poi = ROOT.RooArgSet(mu)
+    nullParams = ROOT.RooArgSet("nullParams")
     nullParams.addClone(mu)
     # here we explicitly set the value of the parameters for the null
     nullParams.setRealValue("masterSignal", 0)
 
     # Step 5, Create a calculator for doing the hypothesis test.
     # because this is a
-    plc = ProfileLikelihoodCalculator(
+    plc = ROOT.RooStats.ProfileLikelihoodCalculator(
         wspace.data("ObservedNumberCountingData"), wspace.pdf("TopLevelPdf"), poi, 0.05, nullParams
     )
 
@@ -289,10 +290,10 @@ def rs_numberCountingCombination_observed():
 
     # Step 7, Use the Calculator to get a HypoTestResult
     htr = plc.GetHypoTest()
-    print(f"-------------------------------------------------")
-    print(f"The p-value for the null is ", htr.NullPValue())
-    print(f"Corresponding to a significance of ", htr.Significance())
-    print(f"-------------------------------------------------\n\n")
+    print("-------------------------------------------------")
+    print("The p-value for the null is ", htr.NullPValue())
+    print("Corresponding to a significance of ", htr.Significance())
+    print("-------------------------------------------------\n\n")
 
     """
    # observed case should return:
@@ -324,6 +325,7 @@ def rs_numberCountingCombination_observed():
 
 
 def rs_numberCountingCombination_observedWithTau():
+    import ctypes
 
     ##############
     # The same example with observed data in a main
@@ -346,8 +348,8 @@ def rs_numberCountingCombination_observedWithTau():
     # to the signal contribution in the individual channels.
     # The model neglects correlations in background uncertainty,
     # but they could be added without much change to the example.
-    f = NumberCountingPdfFactory()
-    wspace = RooWorkspace()
+    f = ROOT.RooStats.NumberCountingPdfFactory()
+    wspace = ROOT.RooWorkspace()
     f.AddModel(s_c, 2, wspace, "TopLevelPdf", "masterSignal")
 
     # Step 3, use a RooStats factory to add datasets to the workspace.
@@ -369,24 +371,24 @@ def rs_numberCountingCombination_observedWithTau():
     # Step 4, Define the null hypothesis for the calculator
     # Here you need to know the name of the variables corresponding to hypothesis.
     mu = wspace.var("masterSignal")
-    poi = RooArgSet(mu)
-    nullParams = RooArgSet("nullParams")
+    poi = ROOT.RooArgSet(mu)
+    nullParams = ROOT.RooArgSet("nullParams")
     nullParams.addClone(mu)
     # here we explicitly set the value of the parameters for the null
     nullParams.setRealValue("masterSignal", 0)
 
     # Step 5, Create a calculator for doing the hypothesis test.
     # because this is a
-    plc = ProfileLikelihoodCalculator(
+    plc = ROOT.RooStats.ProfileLikelihoodCalculator(
         wspace.data("ObservedNumberCountingDataWithSideband"), wspace.pdf("TopLevelPdf"), poi, 0.05, nullParams
     )
 
     # Step 7, Use the Calculator to get a HypoTestResult
     htr = plc.GetHypoTest()
-    print(f"-------------------------------------------------")
-    print(f"The p-value for the null is ", htr.NullPValue())
-    print(f"Corresponding to a significance of ", htr.Significance())
-    print(f"-------------------------------------------------\n\n")
+    print("-------------------------------------------------")
+    print("The p-value for the null is ", htr.NullPValue())
+    print("Corresponding to a significance of ", htr.Significance())
+    print("-------------------------------------------------\n\n")
 
     """
    # observed case should return:

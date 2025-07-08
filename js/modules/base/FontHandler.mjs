@@ -36,7 +36,7 @@ async function loadFontFile(fname) {
 
    if (entry?.promises !== undefined) {
       return new Promise(resolveFunc => {
-         cfg.promises.push(resolveFunc);
+         entry.promises.push(resolveFunc);
       });
    }
 
@@ -64,7 +64,7 @@ async function loadFontFile(fname) {
    }
 
    async function tryNext() {
-      if (locations.length === 0) {
+      if (!locations.length) {
          completeReading(null);
          throw new Error(`Fail to load ${fname} font`);
       }
@@ -104,7 +104,7 @@ class FontHandler {
 
       this.func = this.setFont.bind(this);
 
-      let cfg = null;
+      let cfg;
 
       if (fontIndex && isObject(fontIndex))
          cfg = fontIndex;
@@ -133,7 +133,7 @@ class FontHandler {
       return loadFontFile(this.cfg.file).then(base64 => {
          this.cfg.base64 = this.base64 = base64;
          this.format = 'ttf';
-         return !!base64;
+         return Boolean(base64);
       });
    }
 

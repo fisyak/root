@@ -9,10 +9,10 @@
  *************************************************************************/
 
 #include <ROOT/RDataSource.hxx>
+#include <ROOT/RTTreeDS.hxx>
 #include <ROOT/RDF/InterfaceUtils.hxx>
 #include <ROOT/RDF/RColumnRegister.hxx>
 #include <ROOT/RDF/RDisplay.hxx>
-#include <ROOT/RDF/RInterface.hxx>
 #include <ROOT/RDF/RJittedDefine.hxx>
 #include <ROOT/RDF/RJittedFilter.hxx>
 #include <ROOT/RDF/RJittedVariation.hxx>
@@ -55,26 +55,15 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <type_traits> // for remove_reference<>::type
 #include <typeinfo>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility> // for pair
 #include <vector>
 
-namespace ROOT {
-namespace Detail {
-namespace RDF {
+namespace ROOT::Detail::RDF {
 class RDefineBase;
-} // namespace RDF
-namespace Internal {
-namespace RDF {
-class RJittedAction;
 }
-} // namespace Internal
-} // namespace Detail
-
-} // namespace ROOT
 
 namespace {
 using ROOT::Internal::RDF::IsStrInVec;
@@ -997,9 +986,12 @@ void CheckForDuplicateSnapshotColumns(const ColumnNames_t &cols)
 /// Return copies of colsWithoutAliases and colsWithAliases with size branches for variable-sized array branches added
 /// in the right positions (i.e. before the array branches that need them).
 std::pair<std::vector<std::string>, std::vector<std::string>>
-AddSizeBranches(const std::vector<std::string> &branches, TTree *tree, std::vector<std::string> &&colsWithoutAliases,
-                std::vector<std::string> &&colsWithAliases)
+AddSizeBranches(const std::vector<std::string> &branches, ROOT::RDF::RDataSource *ds,
+                std::vector<std::string> &&colsWithoutAliases, std::vector<std::string> &&colsWithAliases)
 {
+   TTree *tree{};
+   if (auto treeDS = dynamic_cast<ROOT::Internal::RDF::RTTreeDS *>(ds))
+      tree = treeDS->GetTree();
    if (!tree) // nothing to do
       return {std::move(colsWithoutAliases), std::move(colsWithAliases)};
 
@@ -1015,6 +1007,12 @@ AddSizeBranches(const std::vector<std::string> &branches, TTree *tree, std::vect
       auto *b = tree->GetBranch(colName.c_str());
       if (!b) // try harder
          b = tree->FindBranch(colName.c_str());
+
+      if (!b && (tree->GetLeaf(colName.c_str()) || tree->FindLeaf(colName.c_str()))) {
+         // The column name corresponds to a leaf of a branch, nothing to do
+         continue;
+      }
+
       assert(b != nullptr);
       auto *leaves = b->GetListOfLeaves();
       if (b->IsA() != TBranch::Class() || leaves->GetEntries() != 1)
@@ -1043,7 +1041,6 @@ void RemoveDuplicates(ColumnNames_t &columnNames)
       columnNames.end());
 }
 
-#ifdef R__HAS_ROOT7
 void RemoveRNTupleSubFields(ColumnNames_t &columnNames)
 {
    ColumnNames_t parentFields;
@@ -1061,7 +1058,45 @@ void RemoveRNTupleSubFields(ColumnNames_t &columnNames)
                                     }),
                      columnNames.end());
 }
-#endif
 } // namespace RDF
 } // namespace Internal
 } // namespace ROOT
+
+namespace {
+void AddDataSourceColumn(const std::string &colName, const std::type_info &typeID, ROOT::Detail::RDF::RLoopManager &lm,
+                         ROOT::RDF::RDataSource &ds, ROOT::Internal::RDF::RColumnRegister &colRegister)
+{
+
+   if (colRegister.IsDefineOrAlias(colName))
+      return;
+
+   if (lm.HasDataSourceColumnReaders(colName, typeID))
+      return;
+
+   if (!ds.HasColumn(colName) &&
+       lm.GetSuppressErrorsForMissingBranches().find(colName) == lm.GetSuppressErrorsForMissingBranches().end())
+      return;
+
+   const auto nSlots = lm.GetNSlots();
+   std::vector<std::unique_ptr<ROOT::Detail::RDF::RColumnReaderBase>> colReaders;
+   colReaders.reserve(nSlots);
+   // TODO consider changing the interface so we return all of these for all slots in one go
+   for (auto slot = 0u; slot < nSlots; ++slot)
+      colReaders.emplace_back(
+         ROOT::Internal::RDF::CreateColumnReader(ds, slot, colName, typeID, /*treeReader*/ nullptr));
+
+   lm.AddDataSourceColumnReaders(colName, std::move(colReaders), typeID);
+}
+} // namespace
+
+void ROOT::Internal::RDF::AddDSColumns(const std::vector<std::string> &colNames, ROOT::Detail::RDF::RLoopManager &lm,
+                                       ROOT::RDF::RDataSource &ds,
+                                       const std::vector<const std::type_info *> &colTypeIDs,
+                                       ROOT::Internal::RDF::RColumnRegister &colRegister)
+{
+   auto nCols = colNames.size();
+   assert(nCols == colTypeIDs.size() && "Must provide exactly one column type for each column to create");
+   for (decltype(nCols) i{}; i < nCols; i++) {
+      AddDataSourceColumn(colNames[i], *colTypeIDs[i], lm, ds, colRegister);
+   }
+}

@@ -778,7 +778,7 @@ bool RWebWindow::ProcessWS(THttpCallArg &arg)
       std::lock_guard<std::mutex> grd(fConnMutex);
 
       if (is_longpoll && !is_remote  && ntry == "1"s) {
-         // special workaround for local displays like qt5/qt6
+         // special workaround for local displays like qt6/cef
          // they are not disconnected regularly when page reload is invoked
          // therefore try to detect if new key is applied
          for (unsigned indx = 0; indx < fConn.size(); indx++) {
@@ -820,7 +820,7 @@ bool RWebWindow::ProcessWS(THttpCallArg &arg)
 
       for (auto &conn : fPendingConn)
          if (_CanTrustIn(conn, key, ntry, is_remote, true /* test_first_time */))
-             return true;
+            return true;
 
       return false;
    }
@@ -860,6 +860,9 @@ bool RWebWindow::ProcessWS(THttpCallArg &arg)
          // preserve key for longpoll or when with session key used for HMAC hash of messages
          // conn->fKey.clear();
          conn->ResetStamps();
+         // remove files which are required for startup
+         if (conn->fDisplayHandle)
+            conn->fDisplayHandle->RemoveStartupFiles();
          if (conn->fWasFirst)
             fConn.emplace(fConn.begin(), conn);
          else
@@ -1472,6 +1475,14 @@ std::vector<unsigned> RWebWindow::GetConnections(unsigned excludeid) const
 
 bool RWebWindow::HasConnection(unsigned connid, bool only_active) const
 {
+   if (fMaster) {
+      auto lst = GetMasterConnections(connid);
+      for (auto & entry : lst)
+         if (fMaster->HasConnection(entry.connid, only_active))
+            return true;
+      return false;
+   }
+
    std::lock_guard<std::mutex> grd(fConnMutex);
 
    for (auto &conn : fConn) {
@@ -1543,19 +1554,27 @@ RWebWindow::ConnectionsList_t RWebWindow::GetWindowConnections(unsigned connid, 
 
 bool RWebWindow::CanSend(unsigned connid, bool direct) const
 {
-   auto arr = GetWindowConnections(connid, direct); // for direct sending connection has to be active
+   if (fMaster) {
+      auto lst = GetMasterConnections(connid);
+      for (auto &entry : lst) {
+         if (!fMaster->CanSend(entry.connid, direct))
+            return false;
+      }
+   } else {
+      auto arr = GetWindowConnections(connid, direct); // for direct sending connection has to be active
 
-   auto maxqlen = GetMaxQueueLength();
+      auto maxqlen = GetMaxQueueLength();
 
-   for (auto &conn : arr) {
+      for (auto &conn : arr) {
 
-      std::lock_guard<std::mutex> grd(conn->fMutex);
+         std::lock_guard<std::mutex> grd(conn->fMutex);
 
-      if (direct && (!conn->fQueue.empty() || (conn->fSendCredits == 0) || conn->fDoingSend))
-         return false;
+         if (direct && (!conn->fQueue.empty() || (conn->fSendCredits == 0) || conn->fDoingSend))
+            return false;
 
-      if (conn->fQueue.size() >= maxqlen)
-         return false;
+         if (conn->fQueue.size() >= maxqlen)
+            return false;
+      }
    }
 
    return true;
@@ -1570,10 +1589,21 @@ int RWebWindow::GetSendQueueLength(unsigned connid) const
 {
    int maxq = -1;
 
-   for (auto &conn : GetWindowConnections(connid)) {
-      std::lock_guard<std::mutex> grd(conn->fMutex);
-      int len = conn->fQueue.size();
-      if (len > maxq) maxq = len;
+   if (fMaster) {
+      auto lst = GetMasterConnections(connid);
+      for (auto &entry : lst) {
+         int len = fMaster->GetSendQueueLength(entry.connid);
+         if (len > maxq)
+            maxq = len;
+      }
+   } else {
+      auto lst = GetWindowConnections(connid);
+      for (auto &conn : lst) {
+         std::lock_guard<std::mutex> grd(conn->fMutex);
+         int len = conn->fQueue.size();
+         if (len > maxq)
+            maxq = len;
+      }
    }
 
    return maxq;
@@ -1654,7 +1684,7 @@ void RWebWindow::SubmitData(unsigned connid, bool txt, std::string &&data, int c
          else
             conn->fQueue.emplace(chid, txt, std::move(data));  // move content
       } else {
-         R__LOG_ERROR(WebGUILog()) << "Maximum queue length achieved";
+         R__LOG_ERROR(WebGUILog()) << "Maximum queue length " << maxqlen << " achieved, can be changed with SetMaxQueueLength(v) method";
       }
    }
 

@@ -20,20 +20,8 @@ ROOT_ADD_PYUNITTEST(pyroot_pyz_decorator pythonization_decorator.py)
 # General pythonizations
 ROOT_ADD_PYUNITTEST(pyroot_pyz_pretty_printing pretty_printing.py)
 ROOT_ADD_PYUNITTEST(pyroot_pyz_array_interface array_interface.py PYTHON_DEPS numpy)
-# TODO: Introduce ROOT_ADD_PYTHON_TEST
-if(MSVC)
-set(ROOT_ENV ROOTSYS=${ROOTSYS}
-    PYTHONPATH=${ROOTSYS}/bin;$ENV{PYTHONPATH})
-else()
-set(ROOT_ENV ROOTSYS=${ROOTSYS}
-    PATH=${ROOTSYS}/bin:$ENV{PATH}
-    LD_LIBRARY_PATH=${ROOTSYS}/lib:$ENV{LD_LIBRARY_PATH}
-    PYTHONPATH=${ROOTSYS}/lib:$ENV{PYTHONPATH})
-endif()
-ROOT_ADD_TEST(pyunittests-bindings-pyroot-pythonizations-pyroot-uhi-plotting
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/uhi_plotting.py
-    ENVIRONMENT ${ROOT_ENV}
-    PYTHON_DEPS uhi numpy)
+ROOT_ADD_PYUNITTEST(uhi_plotting uhi_plotting.py GENERIC PYTHON_DEPS uhi numpy)
+ROOT_ADD_PYUNITTEST(uhi_indexing uhi_indexing.py GENERIC PYTHON_DEPS uhi numpy)
 
 # STL containers pythonizations
 ROOT_ADD_PYUNITTEST(pyroot_pyz_stl_vector stl_vector.py)
@@ -130,7 +118,7 @@ endif()
 if (dataframe)
     ROOT_ADD_PYUNITTEST(pyroot_rdfdescription rdfdescription.py)
 
-    ROOT_ADD_PYUNITTEST(pyroot_pyz_rdataframe_misc rdataframe_misc.py)
+    ROOT_ADD_PYUNITTEST(pyroot_pyz_rdataframe_misc rdataframe_misc.py PYTHON_DEPS numpy)
 endif()
 
 # SOFIE-GNN pythonizations
@@ -152,7 +140,7 @@ if (tmva AND dataframe)
 endif()
 
 # Passing Python callables to ROOT.TF
-ROOT_ADD_PYUNITTEST(pyroot_pyz_tf_pycallables tf_pycallables.py)
+ROOT_ADD_PYUNITTEST(pyroot_pyz_tf_pycallables tf_pycallables.py PYTHON_DEPS numpy)
 
 if(roofit)
 
@@ -185,13 +173,13 @@ if(roofit)
 endif()
 
 if (dataframe)
-    # std::string_view in CPyCppyy
-    ROOT_ADD_PYUNITTEST(pyroot_string_view string_view.py)
     if(NOT MSVC OR win_broken_tests)
         # Test wrapping Python callables for use in C++ using numba
         ROOT_ADD_PYUNITTEST(pyroot_numbadeclare numbadeclare.py PYTHON_DEPS numba)
         ROOT_ADD_PYUNITTEST(pyroot_rdf_filter_pyz rdf_filter_pyz.py PYTHON_DEPS numba)
         ROOT_ADD_PYUNITTEST(pyroot_rdf_define_pyz rdf_define_pyz.py PYTHON_DEPS numba)
+        # std::string_view in CPyCppyy
+        ROOT_ADD_PYUNITTEST(pyroot_string_view string_view.py)
     endif()
 endif()
 
@@ -204,6 +192,15 @@ ROOT_ADD_PYUNITTEST(pyroot_memory memory.py)
 # rbatchgenerator tests
 # TODO: We currently do not support TensorFlow for Python >= 3.12 (see requirements.txt)
 # Update here once that is fixed.
-if (NOT MSVC AND Python3_VERSION VERSION_LESS 3.12)
+if (NOT MSVC AND tmva)
   ROOT_ADD_PYUNITTEST(batchgen rbatchgenerator_completeness.py PYTHON_DEPS numpy tensorflow torch)
+endif()
+
+ROOT_ADD_PYUNITTEST(regression_18441 regression_18441.py)
+
+if(NOT MSVC OR CMAKE_SIZEOF_VOID_P EQUAL 8 OR win_broken_tests)
+    # Test the conversion and low level views of interpreter-defined C++ arrays to NumPy
+    # We do not run this test on Windows x86 due to an interpreter issue with arrays:
+    # https://github.com/root-project/root/issues/9809
+    ROOT_ADD_PYUNITTEST(pyroot_array_numpy_views array_conversions.py PYTHON_DEPS numpy)
 endif()

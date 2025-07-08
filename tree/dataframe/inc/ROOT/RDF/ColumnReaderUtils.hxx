@@ -19,6 +19,7 @@
 #include "RLoopManager.hxx"
 #include "RVariationBase.hxx"
 #include "RVariationReader.hxx"
+#include <ROOT/RDF/Utils.hxx>
 
 #include <ROOT/RDataSource.hxx>
 #include <ROOT/TypeTraits.hxx>
@@ -30,6 +31,8 @@
 #include <string>
 #include <typeinfo> // for typeid
 #include <vector>
+
+class TTreeReader;
 
 namespace ROOT {
 namespace Internal {
@@ -56,7 +59,7 @@ struct RColumnReadersInfo {
 /// Create a group of column readers, one per type in the parameter pack.
 template <typename... ColTypes>
 std::array<RDFDetail::RColumnReaderBase *, sizeof...(ColTypes)>
-GetColumnReaders(unsigned int slot, TTreeReader *r, TypeList<ColTypes...>, const RColumnReadersInfo &colInfo,
+GetColumnReaders(unsigned int slot, TTreeReader *treeReader, TypeList<ColTypes...>, const RColumnReadersInfo &colInfo,
                  const std::string &variationName = "nominal")
 {
    // see RColumnReadersInfo for why we pass these arguments like this rather than directly as function arguments
@@ -65,9 +68,10 @@ GetColumnReaders(unsigned int slot, TTreeReader *r, TypeList<ColTypes...>, const
    auto &colRegister = colInfo.fColRegister;
 
    int i = -1;
+
    std::array<RDFDetail::RColumnReaderBase *, sizeof...(ColTypes)> ret{
-      (++i, GetColumnReader(slot, colRegister.GetReader(slot, colNames[i], variationName, typeid(ColTypes)), lm, r,
-                            colNames[i], typeid(ColTypes)))...};
+      (++i, GetColumnReader(slot, colRegister.GetReader(slot, colNames[i], variationName, typeid(ColTypes)), lm,
+                            treeReader, colNames[i], typeid(ColTypes)))...};
    return ret;
 }
 
@@ -77,6 +81,12 @@ GetColumnReaders(unsigned int, TTreeReader *, TypeList<>, const RColumnReadersIn
 {
    return {};
 }
+
+std::vector<RDFDetail::RColumnReaderBase *>
+GetUntypedColumnReaders(unsigned int slot, TTreeReader *treeReader, ROOT::Internal::RDF::RColumnRegister &colRegister,
+                        ROOT::Detail::RDF::RLoopManager &lm, const std::vector<std::string> &colNames,
+                        const std::vector<const std::type_info *> &colTypeIDs,
+                        const std::string &variationName = "nominal");
 
 } // namespace RDF
 } // namespace Internal

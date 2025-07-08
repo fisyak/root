@@ -18,6 +18,7 @@
 /graf3d/ @couet
 /gui/ @bellenot
 /hist/ @lmoneta
+/hist/histv7/ @hahnjo
 /html/ @dpiparo
 /icons/ @bellenot
 /interpreter/ @dpiparo
@@ -40,7 +41,7 @@ interpreter/cling/tools/packaging @vgvassilev
 /tutorials/ @couet
 /tree/dataframe/ @martamaja10 @vepadulano
 /tree/readspeed/ @martamaja10
-/tree/ntuple/v7/ @jblomer
+/tree/ntuple/ @jblomer
 /tree/ntupleutil/v7/ @jblomer
 /tutorials/sql/ @linev
 
@@ -61,7 +62,6 @@ interpreter/cling/tools/packaging @vgvassilev
 /js/ @linev
 /gui/webdisplay/ @linev
 /gui/cefdisplay/ @linev
-/gui/qt5webdisplay/ @linev
 /gui/qt6webdisplay/ @linev
 /gui/webgui6/ @linev
 /gui/fitpanelv7/ @linev

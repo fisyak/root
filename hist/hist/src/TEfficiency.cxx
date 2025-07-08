@@ -217,9 +217,10 @@ passed events.
 In Bayesian statistics a likelihood-function (how probable is it to get the
 observed data assuming a true efficiency) and a prior probability (what is the
 probability that a certain true efficiency is actually realised) are used to
-determine a posterior probability by using Bayes theorem. At the moment, only
-beta distributions (have 2 free parameters) are supported as prior
-probabilities.
+determine a posterior probability by using Bayes theorem. At the moment,
+only beta distributions (with 2 free parameters) are supported as prior
+probabilities, as explained in D. Casadei, Estimating the selection efficiency,
+2012 JINST 7 P08021, https://doi.org/10.1088/1748-0221/7/08/P08021 (https://arxiv.org/abs/0908.0130).
 
 \f{eqnarray*}{
  P(\epsilon | k ; N) &=& \frac{1}{norm} \times P(k | \epsilon ; N) \times Prior(\epsilon) \\
@@ -1271,7 +1272,10 @@ Double_t TEfficiency::MidPInterval(Double_t total,Double_t passed,Double_t level
 
 ////////////////////////////////////////////////////////////////////////////////
 /**
-Calculates the boundaries for a Bayesian confidence interval (shortest or central interval depending on the option)
+Calculates the boundaries for a Bayesian confidence interval (shortest or central
+interval depending on the option)  as explained in D. Casadei, Estimating the selection efficiency,
+2012 JINST 7 P08021, https://doi.org/10.1088/1748-0221/7/08/P08021 (https://arxiv.org/abs/0908.0130).
+
 
 \param[in] total number of total events
 \param[in] passed 0 <= number of passed events <= total
@@ -3190,31 +3194,31 @@ void TEfficiency::SavePrimitive(std::ostream& out,Option_t* option)
    // Check if the histogram has equidistant X bins or not.  If not, we
    // create an array holding the bins.
    if (fTotalHistogram->GetXaxis()->GetXbins()->fN && fTotalHistogram->GetXaxis()->GetXbins()->fArray)
-      sxaxis = SavePrimitiveArray(out, name + "_x", fTotalHistogram->GetXaxis()->GetXbins()->fN, fTotalHistogram->GetXaxis()->GetXbins()->fArray);
+      sxaxis = SavePrimitiveVector(out, name + "_x", fTotalHistogram->GetXaxis()->GetXbins()->fN, fTotalHistogram->GetXaxis()->GetXbins()->fArray);
    // If the histogram is 2 or 3 dimensional, check if the histogram
    // has equidistant Y bins or not.  If not, we create an array
    // holding the bins.
    if (GetDimension() > 1 && fTotalHistogram->GetYaxis()->GetXbins()->fN && fTotalHistogram->GetYaxis()->GetXbins()->fArray)
-      syaxis = SavePrimitiveArray(out, name + "_y", fTotalHistogram->GetYaxis()->GetXbins()->fN, fTotalHistogram->GetYaxis()->GetXbins()->fArray);
+      syaxis = SavePrimitiveVector(out, name + "_y", fTotalHistogram->GetYaxis()->GetXbins()->fN, fTotalHistogram->GetYaxis()->GetXbins()->fArray);
    // IF the histogram is 3 dimensional, check if the histogram
    // has equidistant Z bins or not.  If not, we create an array
    // holding the bins.
    if (GetDimension() > 2 && fTotalHistogram->GetZaxis()->GetXbins()->fN && fTotalHistogram->GetZaxis()->GetXbins()->fArray)
-      szaxis = SavePrimitiveArray(out, name + "_z", fTotalHistogram->GetZaxis()->GetXbins()->fN, fTotalHistogram->GetZaxis()->GetXbins()->fArray);
+      szaxis = SavePrimitiveVector(out, name + "_z", fTotalHistogram->GetZaxis()->GetXbins()->fN, fTotalHistogram->GetZaxis()->GetXbins()->fArray);
 
    out << "   " << ClassName() << " *" << name << " = new " << ClassName() << "(\"" << GetName() << "\", \""
        << TString(GetTitle()).ReplaceSpecialCppChars() << "\"";
    // X dimentsion args
    out << ", " << fTotalHistogram->GetXaxis()->GetNbins() << ", ";
    if (!sxaxis.IsNull())
-      out << sxaxis;
+      out << sxaxis << ".data()";
    else
       out << fTotalHistogram->GetXaxis()->GetXmin() << "," << fTotalHistogram->GetXaxis()->GetXmax();
 
    if (GetDimension() > 1) {
       out << ", " << fTotalHistogram->GetYaxis()->GetNbins() << ", ";
       if (!syaxis.IsNull())
-         out << syaxis;
+         out << syaxis << ".data()";
       else
          out << fTotalHistogram->GetYaxis()->GetXmin() << ", " << fTotalHistogram->GetYaxis()->GetXmax();
    }
@@ -3222,7 +3226,7 @@ void TEfficiency::SavePrimitive(std::ostream& out,Option_t* option)
    if (GetDimension() > 2) {
       out << ", " << fTotalHistogram->GetZaxis()->GetNbins() << ", ";
       if (!szaxis.IsNull())
-         out << szaxis;
+         out << szaxis << ".data()";
       else
          out << fTotalHistogram->GetZaxis()->GetXmin() << ", " << fTotalHistogram->GetZaxis()->GetXmax();
    }
@@ -3267,9 +3271,7 @@ void TEfficiency::SavePrimitive(std::ostream& out,Option_t* option)
    SaveLineAttributes(out, name);
    SaveMarkerAttributes(out, name);
 
-   //draw TEfficiency object
-   if (!option || !strstr(option, "nodraw"))
-      out << "   " << name << "->Draw(\"" << TString(option).ReplaceSpecialCppChars() << "\");\n";
+   SavePrimitiveDraw(out, name, option);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3519,14 +3521,14 @@ void TEfficiency::SetName(const char* name)
 ///
 /// Note: - requires: 0 <= events <= fTotalHistogram->GetBinContent(bin)
 
-Bool_t TEfficiency::SetPassedEvents(Int_t bin,Int_t events)
+Bool_t TEfficiency::SetPassedEvents(Int_t bin, Double_t events)
 {
    if(events <= fTotalHistogram->GetBinContent(bin)) {
       fPassedHistogram->SetBinContent(bin,events);
       return true;
    }
    else {
-      Error("SetPassedEvents(Int_t,Int_t)","total number of events (%.1lf) in bin %i is less than given number of passed events %i",fTotalHistogram->GetBinContent(bin),bin,events);
+      Error("SetPassedEvents(Int_t,Double_t)","total number of events (%.1lf) in bin %i is less than given number of passed events %.1lf",fTotalHistogram->GetBinContent(bin),bin,events);
       return false;
    }
 }

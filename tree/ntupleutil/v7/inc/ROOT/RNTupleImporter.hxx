@@ -56,6 +56,7 @@ importer->Import();
 ~~~
 
 The output file is created if it does not exist, otherwise the ntuple is added to the existing file.
+Directories in the output file are created as necessary, allowing ntuples to be stored in a nested structure (e.g. DirName/TreeName).
 Note that input file and output file can be identical if the ntuple is stored under a different name than the tree
 (use `SetNTupleName()`).
 
@@ -103,7 +104,7 @@ Current limitations of the importer:
 class RNTupleImporter {
 public:
    /// Used to make adjustments to the fields of the output model.
-   using FieldModifier_t = std::function<void(RFieldBase &)>;
+   using FieldModifier_t = std::function<void(ROOT::RFieldBase &)>;
 
    /// Used to report every ~100 MB (compressed), and at the end about the status of the import.
    class RProgressCallback {
@@ -137,8 +138,8 @@ private:
       RImportField &operator=(RImportField &&other) = default;
 
       /// The field is kept during schema preparation and transferred to the fModel before the writing starts
-      RFieldBase *fField = nullptr;
-      std::unique_ptr<RFieldBase::RValue> fValue; ///< Set if a value is generated, only for transformed fields
+      ROOT::RFieldBase *fField = nullptr;
+      std::unique_ptr<ROOT::RFieldBase::RValue> fValue; ///< Set if a value is generated, only for transformed fields
       void *fFieldBuffer = nullptr; ///< Usually points to the corresponding RImportBranch::fBranchBuffer but not always
    };
 
@@ -186,9 +187,10 @@ private:
       /// The leafs of the array as we encounter them traversing the TTree schema.
       /// Eventually, the fields are moved as leaves to an untyped collection of untyped records that in turn
       /// is attached to the RNTuple model.
-      std::vector<std::unique_ptr<RFieldBase>> fLeafFields;
+      std::vector<std::unique_ptr<ROOT::RFieldBase>> fLeafFields;
       std::vector<size_t> fLeafBranchIndexes; ///< Points to the correspondings leaf branches in fImportBranches
-      RRecordField *fRecordField = nullptr; ///< Points to the item field of the untyped collection field in the model.
+      ROOT::RRecordField *fRecordField =
+         nullptr; ///< Points to the item field of the untyped collection field in the model.
       std::vector<unsigned char> fFieldBuffer; ///< The collection field memory representation. Bound to the entry.
    };
 
@@ -221,8 +223,8 @@ private:
    std::unique_ptr<RProgressCallback> fProgressCallback;
    FieldModifier_t fFieldModifier;
 
-   std::unique_ptr<RNTupleModel> fModel;
-   std::unique_ptr<REntry> fEntry;
+   std::unique_ptr<ROOT::RNTupleModel> fModel;
+   std::unique_ptr<ROOT::REntry> fEntry;
    std::vector<RImportBranch> fImportBranches;
    std::vector<RImportField> fImportFields;
    /// Maps the count leaf to the information about the corresponding untyped collection

@@ -3,7 +3,7 @@ import { TH2Painter } from '../hist/TH2Painter.mjs';
 import { proivdeEvalPar } from '../base/func.mjs';
 import { produceTAxisLogScale, scanTF1Options } from '../hist/TF1Painter.mjs';
 import { DrawOptions } from '../base/BasePainter.mjs';
-import { ObjectPainter, getElementMainPainter } from '../base/ObjectPainter.mjs';
+import { getElementPadPainter } from '../base/ObjectPainter.mjs';
 import { THistPainter } from '../hist2d/THistPainter.mjs';
 
 
@@ -30,18 +30,23 @@ function findZValue(arrz, arrv, cross = 0) {
 class TF3Painter extends TH2Painter {
 
    #use_saved_points; // use saved points for drawing
+   #func; // func object
+   #fail_eval; // fail evaluation of function
+
+   /** @summary Assign function  */
+   setFunc(f) { this.#func = f; }
 
    /** @summary Returns drawn object name */
-   getObjectName() { return this.$func?.fName ?? 'func'; }
+   getObjectName() { return this.#func?.fName ?? 'func'; }
 
    /** @summary Returns drawn object class name */
-   getClassName() { return this.$func?._typename ?? clTF3; }
+   getClassName() { return this.#func?._typename ?? clTF3; }
 
    /** @summary Returns true while function is drawn */
    isTF1() { return true; }
 
    /** @summary Returns primary function which was then drawn as histogram */
-   getPrimaryObject() { return this.$func; }
+   getPrimaryObject() { return this.#func; }
 
    /** @summary Update histogram */
    updateObject(obj /* , opt */) {
@@ -49,12 +54,12 @@ class TF3Painter extends TH2Painter {
       delete obj.evalPar;
       const histo = this.getHisto();
 
-      if (this.webcanv_hist) {
+      if (this._webcanv_hist) {
          const h0 = this.getPadPainter()?.findInPrimitives('Func', clTH2F);
          if (h0) this.updateAxes(histo, h0, this.getFramePainter());
       }
 
-      this.$func = obj;
+      this.setFunc(obj);
       this.createTF3Histogram(obj, histo);
       this.scanContent();
       return true;
@@ -64,7 +69,7 @@ class TF3Painter extends TH2Painter {
      * @private */
    redraw(reason) {
       if (!this.#use_saved_points && (reason === 'logx' || reason === 'logy' || reason === 'logy' || reason === 'zoom')) {
-         this.createTF3Histogram(this.$func, this.getHisto());
+         this.createTF3Histogram(this.#func, this.getHisto());
          this.scanContent();
       }
 
@@ -76,7 +81,7 @@ class TF3Painter extends TH2Painter {
    createTF3Histogram(func, hist) {
       const nsave = func.fSave.length - 9;
 
-      this.#use_saved_points = (nsave > 0) && (settings.PreferSavedPoints || (this.use_saved > 1));
+      this.#use_saved_points = (nsave > 0) && (settings.PreferSavedPoints || (this._use_saved > 1));
 
       const fp = this.getFramePainter(),
             pad = this.getPadPainter()?.getRootPad(true),
@@ -131,7 +136,7 @@ class TF3Painter extends TH2Painter {
          hist.fMaximum = zmax;
       };
 
-      delete this._fail_eval;
+      this.#fail_eval = undefined;
 
       if (!this.#use_saved_points) {
          let iserror = false;
@@ -171,7 +176,7 @@ class TF3Painter extends TH2Painter {
          }
 
          if (iserror)
-            this._fail_eval = true;
+            this.#fail_eval = true;
 
          if (iserror && (nsave > 0))
             this.#use_saved_points = true;
@@ -227,7 +232,7 @@ class TF3Painter extends TH2Painter {
    extractAxesProperties(ndim) {
       super.extractAxesProperties(ndim);
 
-      const func = this.$func, nsave = func?.fSave.length ?? 0;
+      const func = this.#func, nsave = func?.fSave.length ?? 0;
 
       if (nsave > 9 && this.#use_saved_points) {
          this.xmin = Math.min(this.xmin, func.fSave[nsave-9]);
@@ -251,7 +256,7 @@ class TF3Painter extends TH2Painter {
      * @desc Used to inform web canvas when evaluation failed
      * @private */
    fillWebObjectOptions(opt) {
-      opt.fcust = this._fail_eval && !this.use_saved ? 'func_fail' : '';
+      opt.fcust = this.#fail_eval && !this._use_saved ? 'func_fail' : '';
    }
 
    /** @summary draw TF3 object */
@@ -268,10 +273,8 @@ class TF3Painter extends TH2Painter {
 
       let hist;
 
-      if (web.webcanv_hist) {
-         const dummy = new ObjectPainter(dom);
-         hist = dummy.getPadPainter()?.findInPrimitives('Func', clTH2F);
-      }
+      if (web._webcanv_hist)
+         hist = getElementPadPainter(dom)?.findInPrimitives('Func', clTH2F);
 
       if (!hist) {
          hist = createHistogram(clTH2F, 20, 20);
@@ -280,7 +283,7 @@ class TF3Painter extends TH2Painter {
 
       const painter = new TF3Painter(dom, hist);
 
-      painter.$func = tf3;
+      painter.setFunc(tf3, clTF3);
       Object.assign(painter, web);
       painter.createTF3Histogram(tf3, hist);
       return THistPainter._drawHist(painter, opt);

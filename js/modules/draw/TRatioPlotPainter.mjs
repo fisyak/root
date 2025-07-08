@@ -4,15 +4,18 @@ import { ensureTCanvas } from '../gpad/TCanvasPainter.mjs';
 import { TLinePainter } from './TLinePainter.mjs';
 
 
+const k_upper_pad = 'upper_pad', k_lower_pad = 'lower_pad', k_top_pad = 'top_pad';
+
+
 /**
  * @summary Painter class for TRatioPlot
  *
  * @private
  */
 
-const k_upper_pad = 'upper_pad', k_lower_pad = 'lower_pad', k_top_pad = 'top_pad';
-
 class TRatioPlotPainter extends ObjectPainter {
+
+   #oldratio; // old ratio plot
 
    /** @summary Set grids range */
    setGridsRange(xmin, xmax, ymin, ymax, low_p) {
@@ -100,8 +103,8 @@ class TRatioPlotPainter extends ObjectPainter {
             xmin = up_fp.xmin;
             xmax = up_fp.xmax;
          } else {
-            if (xmin < up_fp.xmin) xmin = up_fp.xmin;
-            if (xmax > up_fp.xmax) xmax = up_fp.xmax;
+            xmin = Math.min(xmin, up_fp.xmin);
+            xmax = Math.max(xmax, up_fp.xmax);
          }
          this._ratio_painter.setGridsRange(xmin, xmax, ymin, ymax);
          return this._ratio_up_fp.o_zoom(xmin, xmax).then(() => this.o_zoom(xmin, xmax, ymin, ymax, zmin, zmax));
@@ -170,7 +173,7 @@ class TRatioPlotPainter extends ObjectPainter {
          const arr = [];
 
          // add missing lines in old ratio painter
-         if ((ratio.fGridlinePositions.length > 0) && (ratio.fGridlines.length < ratio.fGridlinePositions.length)) {
+         if (ratio.fGridlinePositions.length && (ratio.fGridlines.length < ratio.fGridlinePositions.length)) {
             ratio.fGridlinePositions.forEach(gridy => {
                let found = false;
                ratio.fGridlines.forEach(line => {
@@ -200,13 +203,13 @@ class TRatioPlotPainter extends ObjectPainter {
       const ratio = this.getObject(),
             pp = this.getPadPainter();
 
-      if (this.$oldratio === undefined)
-         this.$oldratio = !!pp.findPainterFor(ratio.fTopPad, k_top_pad, clTPad);
+      if (this.#oldratio === undefined)
+         this.#oldratio = Boolean(pp.findPainterFor(ratio.fTopPad, k_top_pad, clTPad));
 
       // configure ratio interactive at the end
       pp.$userInteractive = () => this.configureInteractive();
 
-      if (this.$oldratio)
+      if (this.#oldratio)
          return this.redrawOld();
 
       const pad = pp.getRootPad(),

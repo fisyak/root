@@ -1,6 +1,5 @@
 // Authors: Bertrand Bellenot <bertrand.bellenot@cern.ch> Sergey Linev <S.Linev@gsi.de>
 // Date: 2019-02-28
-// Warning: This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback is welcome!
 
 /*************************************************************************
  * Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.               *
@@ -57,6 +56,7 @@ protected:
 
    std::string ProcessBrowserRequest(const std::string &msg);
    std::string ProcessDblClick(unsigned connid, std::vector<std::string> &args);
+   std::string ProcessDrop(unsigned connid, std::vector<std::string> &args);
    std::string NewWidgetMsg(std::shared_ptr<RBrowserWidget> &widget);
    void ProcessRunMacro(const std::string &file_path);
    void ProcessSaveFile(const std::string &fname, const std::string &content);

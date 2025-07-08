@@ -9,6 +9,7 @@ const kNormal = 1, /* kLessTraffic = 2, */ kOffline = 3;
 class RObjectPainter extends ObjectPainter {
 
    #pending_request;
+   #auto_colors; // handle for auto colors
 
    constructor(dom, obj, opt, csstype) {
       super(dom, obj, opt);
@@ -18,8 +19,8 @@ class RObjectPainter extends ObjectPainter {
    /** @summary Add painter to pad list of painters
     * @desc For RCanvas also handles common style
     * @protected */
-   addToPadPrimitives() {
-      const pp = super.addToPadPrimitives();
+   addToPadPrimitives(pad_painter) {
+      const pp = super.addToPadPrimitives(pad_painter);
 
       if (pp && !this.rstyle && pp.next_rstyle)
          this.rstyle = pp.next_rstyle;
@@ -38,8 +39,9 @@ class RObjectPainter extends ObjectPainter {
          const typ1 = typeof dflt, typ2 = typeof res;
          if (typ1 === typ2) return res;
          if (typ1 === 'boolean') {
-            if (typ2 === 'string') return (res !== '') && (res !== '0') && (res !== 'no') && (res !== 'off');
-            return !!res;
+            if (typ2 === 'string')
+               return (res !== '') && (res !== '0') && (res !== 'no') && (res !== 'off');
+            return Boolean(res);
          }
          if ((typ1 === 'number') && (typ2 === 'string'))
             return parseFloat(res);
@@ -105,7 +107,7 @@ class RObjectPainter extends ObjectPainter {
 
          if ((val[pos] === '-') || (val[pos] === '+')) {
             if (operand) {
-               console.log('Fail to parse RPadLength ' + value);
+               console.log(`Fail to parse RPadLength ${value}`);
                return dflt;
             }
             operand = (val[pos] === '-') ? -1 : 1;
@@ -148,16 +150,13 @@ class RObjectPainter extends ObjectPainter {
 
       if (val === 'auto') {
          const pp = this.getPadPainter();
-         if (pp?._auto_color_cnt !== undefined) {
-            const pal = pp.getHistPalette(),
-                  cnt = pp._auto_color_cnt++;
-            let num = pp._num_primitives - 1;
-            if (num < 2) num = 2;
-            val = pal ? pal.getColorOrdinal((cnt % num) / num) : 'blue';
-            if (!this._auto_colors) this._auto_colors = {};
-            this._auto_colors[name] = val;
-         } else if (this._auto_colors && this._auto_colors[name])
-            val = this._auto_colors[name];
+         if (pp) {
+            val = pp.getAutoColor();
+            if (!this.#auto_colors)
+               this.#auto_colors = {};
+            this.#auto_colors[name] = val;
+         } else if (this.#auto_colors && this.#auto_colors[name])
+            val = this.#auto_colors[name];
          else {
             console.error(`Autocolor ${name} not defined yet - please check code`);
             val = '';
@@ -256,7 +255,7 @@ class RObjectPainter extends ObjectPainter {
    /** @summary Create RChangeAttr, which can be applied on the server side
      * @private */
    v7AttrChange(req, name, value, kind) {
-      if (!this.snapid)
+      if (!this.getSnapId())
          return false;
 
       if (!req._typename) {
@@ -268,9 +267,8 @@ class RObjectPainter extends ObjectPainter {
       }
 
       if (this.cssprefix) name = this.cssprefix + name;
-      req.ids.push(this.snapid);
+      req.ids.push(this.getSnapId());
       req.names.push(name);
-      let obj = null;
 
       if ((value === null) || (value === undefined)) {
         if (!kind) kind = 'none';
@@ -284,10 +282,10 @@ class RObjectPainter extends ObjectPainter {
          }
       }
 
-      obj = { _typename: `${nsREX}RAttrMap::` };
+      const obj = { _typename: `${nsREX}RAttrMap::` };
       switch (kind) {
          case 'none': obj._typename += 'NoValue_t'; break;
-         case 'boolean': obj._typename += 'BoolValue_t'; obj.v = !!value; break;
+         case 'boolean': obj._typename += 'BoolValue_t'; obj.v = Boolean(value); break;
          case 'int': obj._typename += 'IntValue_t'; obj.v = parseInt(value); break;
          case 'double': obj._typename += 'DoubleValue_t'; obj.v = parseFloat(value); break;
          default: obj._typename += 'StringValue_t'; obj.v = isStr(value) ? value : JSON.stringify(value); break;
@@ -302,7 +300,7 @@ class RObjectPainter extends ObjectPainter {
       const canp = this.getCanvPainter();
       if (canp && req?._typename) {
          if (do_update !== undefined)
-            req.update = !!do_update;
+            req.update = Boolean(do_update);
          canp.v7SubmitRequest('', req);
       }
    }
@@ -313,11 +311,12 @@ class RObjectPainter extends ObjectPainter {
     * @param method is method of painter object which will be called when getting reply */
    v7SubmitRequest(kind, req, method) {
       const canp = this.getCanvPainter();
-      if (!isFunc(canp?.submitDrawableRequest)) return null;
+      if (!isFunc(canp?.submitDrawableRequest))
+         return null;
 
       // special situation when snapid not yet assigned - just keep ref until snapid is there
       // maybe keep full list - for now not clear if really needed
-      if (!this.snapid) {
+      if (!this.getSnapId()) {
          this.#pending_request = { kind, req, method };
          return req;
       }
@@ -328,8 +327,8 @@ class RObjectPainter extends ObjectPainter {
    /** @summary Assign snapid to the painter
      * @desc Overwrite default method */
    assignSnapId(id) {
-      this.snapid = id;
-      if (this.snapid && this.#pending_request) {
+      super.assignSnapId(id);
+      if (this.getSnapId() && this.#pending_request) {
          const p = this.#pending_request;
          this.#pending_request = undefined;
          this.v7SubmitRequest(p.kind, p.req, p.method);
@@ -343,7 +342,7 @@ class RObjectPainter extends ObjectPainter {
      * kNormal is standard functionality with RCanvas on server side */
    v7CommMode() {
       const canp = this.getCanvPainter();
-      if (!canp || !canp.submitDrawableRequest || !canp._websocket)
+      if (!canp || !canp.submitDrawableRequest || !canp.getWebsocket())
          return kOffline;
 
       return kNormal;

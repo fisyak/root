@@ -9,7 +9,7 @@
 /// \date November 2024
 /// \author The ROOT Team
 
-// NOTE: The RNTuple classes are experimental at this point.
+// NOTE: The RNTupleProcessor and related classes are experimental at this point.
 // Functionality and interface are still subject to changes.
 
 #include <ROOT/RNTupleModel.hxx>
@@ -21,10 +21,8 @@
 #include <TRandom.h>
 
 // Import classes from the `Experimental` namespace for the time being.
-using ROOT::Experimental::RNTupleModel;
 using ROOT::Experimental::RNTupleOpenSpec;
 using ROOT::Experimental::RNTupleProcessor;
-using ROOT::Experimental::RNTupleWriter;
 
 const std::string kMainNTupleName = "mainNTuple";
 const std::string kMainNTuplePath = "main_ntuple.root";
@@ -36,41 +34,41 @@ constexpr int kNEvents = 10000;
 
 void WriteMain(std::string_view ntupleName, std::string_view ntupleFileName)
 {
-   auto model = RNTupleModel::Create();
+   auto model = ROOT::RNTupleModel::Create();
 
    auto fldI = model->MakeField<std::uint32_t>("i");
    auto fldVpx = model->MakeField<float>("vpx");
 
-   auto ntuple = RNTupleWriter::Recreate(std::move(model), ntupleName, ntupleFileName);
+   auto writer = ROOT::RNTupleWriter::Recreate(std::move(model), ntupleName, ntupleFileName);
 
    // The main ntuple only contains a subset of the entries present in the auxiliary ntuple.
    for (int i = 0; i < kNEvents; i += 5) {
       *fldI = i;
       *fldVpx = gRandom->Gaus();
 
-      ntuple->Fill();
+      writer->Fill();
    }
 
-   std::cout << "Wrote " << ntuple->GetNEntries() << " to the main RNTuple" << std::endl;
+   std::cout << "Wrote " << writer->GetNEntries() << " to the main RNTuple" << std::endl;
 }
 
 void WriteAux(std::string_view ntupleName, std::string_view ntupleFileName)
 {
-   auto model = RNTupleModel::Create();
+   auto model = ROOT::RNTupleModel::Create();
 
    auto fldI = model->MakeField<std::uint32_t>("i");
    auto fldVpy = model->MakeField<float>("vpy");
 
-   auto ntuple = RNTupleWriter::Recreate(std::move(model), ntupleName, ntupleFileName);
+   auto writer = ROOT::RNTupleWriter::Recreate(std::move(model), ntupleName, ntupleFileName);
 
    for (int i = 0; i < kNEvents; ++i) {
       *fldI = i;
       *fldVpy = gRandom->Gaus();
 
-      ntuple->Fill();
+      writer->Fill();
    }
 
-   std::cout << "Wrote " << ntuple->GetNEntries() << " to the auxiliary RNTuple" << std::endl;
+   std::cout << "Wrote " << writer->GetNEntries() << " to the auxiliary RNTuple" << std::endl;
 }
 
 void Read()
@@ -86,7 +84,7 @@ void Read()
    // field values is used. It is possible to specify up to 4 join fields. Providing an empty list of join fields
    // signals to the processor that all entries are aligned.
    auto processor =
-      RNTupleProcessor::CreateJoin({kMainNTupleName, kMainNTuplePath}, {{kAuxNTupleName, kAuxNTuplePath}}, {"i"});
+      RNTupleProcessor::CreateJoin({kMainNTupleName, kMainNTuplePath}, {kAuxNTupleName, kAuxNTuplePath}, {"i"});
 
    float px, py;
    for (const auto &entry : *processor) {

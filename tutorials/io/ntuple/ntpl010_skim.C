@@ -9,9 +9,6 @@
 /// \date February 2024
 /// \author The ROOT Team
 
-// NOTE: The RNTuple classes are experimental at this point.
-// Functionality and interface are still subject to changes.
-
 #include <ROOT/RNTupleModel.hxx>
 #include <ROOT/RNTupleReader.hxx>
 #include <ROOT/RNTupleWriter.hxx>
@@ -22,11 +19,6 @@
 
 #include <cstdint>
 
-// Import classes from experimental namespace for the time being.
-using ROOT::Experimental::RNTupleModel;
-using ROOT::Experimental::RNTupleReader;
-using ROOT::Experimental::RNTupleWriter;
-
 // Input and output.
 constexpr char const *kNTupleInputName = "ntpl";
 constexpr char const *kNTupleInputFileName = "ntpl010_input.root";
@@ -36,14 +28,14 @@ constexpr int kNEvents = 25000;
 
 static void Write()
 {
-   auto model = RNTupleModel::Create();
+   auto model = ROOT::RNTupleModel::Create();
 
    auto fldVpx = model->MakeField<std::vector<float>>("vpx");
    auto fldVpy = model->MakeField<std::vector<float>>("vpy");
    auto fldVpz = model->MakeField<std::vector<float>>("vpz");
    auto fldN = model->MakeField<float>("n");
 
-   auto writer = RNTupleWriter::Recreate(std::move(model), kNTupleInputName, kNTupleInputFileName);
+   auto writer = ROOT::RNTupleWriter::Recreate(std::move(model), kNTupleInputName, kNTupleInputFileName);
 
    gRandom->SetSeed();
    for (int i = 0; i < kNEvents; i++) {
@@ -71,9 +63,9 @@ void ntpl010_skim()
 {
    Write();
 
-   auto reader = RNTupleReader::Open(kNTupleInputName, kNTupleInputFileName);
+   auto reader = ROOT::RNTupleReader::Open(kNTupleInputName, kNTupleInputFileName);
 
-   auto skimModel = RNTupleModel::Create();
+   auto skimModel = ROOT::RNTupleModel::Create();
    // Loop through the top-level fields of the input RNTuple
    for (const auto &value : reader->GetModel().GetDefaultEntry()) {
       // Drop "n" field from skimmed dataset
@@ -90,7 +82,7 @@ void ntpl010_skim()
    // Add an additional field to the skimmed dataset
    auto ptrSkip = skimModel->MakeField<std::uint16_t>("skip");
 
-   auto writer = RNTupleWriter::Recreate(std::move(skimModel), kNTupleOutputName, kNTupleOutputFileName);
+   auto writer = ROOT::RNTupleWriter::Recreate(std::move(skimModel), kNTupleOutputName, kNTupleOutputFileName);
 
    auto hSkip = new TH1F("h", "distribution of skipped entries", 10, 0, 10);
    auto ptrN = reader->GetModel().GetDefaultEntry().GetPtr<float>("n");

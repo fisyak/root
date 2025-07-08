@@ -937,40 +937,37 @@ void THttpServer::ReplaceJSROOTLinks(std::shared_ptr<THttpCallArg> &arg, const s
          {"jsroot", "main.mjs"}, {"jsroot/core", "core.mjs"},
          {"jsroot/io", "io.mjs"}, {"jsroot/tree", "tree.mjs"},
          {"jsroot/draw", "draw.mjs"}, {"jsroot/gui", "gui.mjs"},
-         {"jsroot/three", "three.mjs"}, {"jsroot/geom", "geom/TGeoPainter.mjs"},
+         {"jsroot/d3", "d3.mjs"}, {"jsroot/three", "three.mjs"}, {"jsroot/three_addons", "three_addons.mjs"},
+         {"jsroot/geom", "geom/TGeoPainter.mjs"}, {"jsroot/hpainter", "gui/HierarchyPainter.mjs"},
          {"jsroot/webwindow", "webwindow.mjs"}
       };
 
-      if (std::string("qt5") == arg->GetWSPlatform()) {
-         // Chromium in QWebEngine in Qt5.15 does not support importmap functionality and need to be workaround for some widgets
+      TString space_prefix;
+      auto pspace = p;
+      while ((--pspace > 0) && (arg->fContent[pspace] == ' ') && (space_prefix.Length() < 20))
+         space_prefix.Append(" ");
 
-         arg->ReplaceAllinContent("from 'jsrootsys/modules/", "from '" + jsroot_prefix + "modules/");
-
-         for (auto &entry : modules) {
-            std::string search = "from '" + entry.first + "';";
-            std::string replace = "from '" + jsroot_prefix + "modules/" + entry.second + "';";
-            arg->ReplaceAllinContent(search, replace);
-         }
-
-      } else {
-
-         bool first = true;
-         TString importmap = "<script type=\"importmap\">\n{\n   \"imports\": ";
-         for (auto &entry : modules) {
-            importmap.Append(TString::Format("%s\n      \"%s\": \"%smodules/%s\"", first ? "{" : ",", entry.first.c_str(), jsroot_prefix.c_str(), entry.second.c_str()));
-            first = false;
-         }
-         importmap.Append(TString::Format(",\n      \"jsrootsys/\": \"%s\"", jsroot_prefix.c_str()));
-
-         for (auto &entry : fLocations)
-            if (entry.first != "jsrootsys/")
-               importmap.Append(TString::Format(",\n      \"%s\": \"%s%s\"", entry.first.c_str(), path_prefix.c_str(), entry.first.c_str()));
-         importmap.Append("\n   }\n}\n</script>\n");
-
-         arg->fContent.erase(p, place_holder.length());
-
-         arg->fContent.insert(p, importmap.Data());
+      bool first = true;
+      TString importmap = "<script type=\"importmap\">\n";
+      importmap += space_prefix + "{\n";
+      importmap += space_prefix + "  \"imports\": ";
+      for (auto &entry : modules) {
+         importmap.Append(TString::Format("%s\n%s    \"%s\": \"%smodules/%s\"", first ? "{" : ",", space_prefix.Data(), entry.first.c_str(), jsroot_prefix.c_str(), entry.second.c_str()));
+         first = false;
       }
+      importmap.Append(TString::Format(",\n%s    \"jsrootsys/\": \"%s\"", space_prefix.Data(), jsroot_prefix.c_str()));
+
+      for (auto &entry : fLocations)
+         if (entry.first != "jsrootsys/")
+            importmap.Append(TString::Format(",\n%s    \"%s\": \"%s%s\"", space_prefix.Data(), entry.first.c_str(), path_prefix.c_str(), entry.first.c_str()));
+      importmap.Append("\n");
+      importmap.Append(space_prefix + "  }\n");
+      importmap.Append(space_prefix + "}\n");
+      importmap.Append(space_prefix + "</script>\n");
+
+      arg->fContent.erase(p, place_holder.length());
+
+      arg->fContent.insert(p, importmap.Data());
    }
 }
 
@@ -1236,8 +1233,11 @@ void THttpServer::ProcessRequest(std::shared_ptr<THttpCallArg> arg)
    // potentially add cors headers
    if (IsCors())
       arg->AddHeader("Access-Control-Allow-Origin", GetCors());
-   if (IsCorsCredentials())
+   if (IsCorsCredentials()) {
       arg->AddHeader("Access-Control-Allow-Credentials", GetCorsCredentials());
+      arg->AddHeader("Access-Control-Expose-Headers", "Content-Range, Content-Length, Date");
+      arg->AddHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

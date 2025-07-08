@@ -35,20 +35,20 @@ using namespace ROOT::Browsable;
 
 class RFieldElement : public RElement {
 protected:
-   std::shared_ptr<ROOT::Experimental::RNTupleReader> fNtplReader;
+   std::shared_ptr<ROOT::RNTupleReader> fNtplReader;
 
    std::string fParentName;
 
    ROOT::DescriptorId_t fFieldId;
 
 public:
-   RFieldElement(std::shared_ptr<ROOT::Experimental::RNTupleReader> ntplReader, const std::string &parent_name,
+   RFieldElement(std::shared_ptr<ROOT::RNTupleReader> ntplReader, const std::string &parent_name,
                  const ROOT::DescriptorId_t id)
       : RElement(), fNtplReader(ntplReader), fParentName(parent_name), fFieldId(id)
    {
    }
 
-   virtual ~RFieldElement() = default;
+   ~RFieldElement() override = default;
 
    /** Name of RField */
    std::string GetName() const override
@@ -102,15 +102,15 @@ public:
 
 class RNTupleElement : public RElement {
 protected:
-   std::shared_ptr<ROOT::Experimental::RNTupleReader> fNtplReader;
+   std::shared_ptr<ROOT::RNTupleReader> fNtplReader;
 
 public:
    RNTupleElement(const std::string &ntplName, const std::string &filename)
    {
-      fNtplReader = ROOT::Experimental::RNTupleReader::Open(ntplName, filename);
+      fNtplReader = ROOT::RNTupleReader::Open(ntplName, filename);
    }
 
-   virtual ~RNTupleElement() = default;
+   ~RNTupleElement() override = default;
 
    /** Returns true if no ntuple found */
    bool IsNull() const { return !fNtplReader; }
@@ -152,19 +152,19 @@ public:
 
 class RFieldsIterator : public RLevelIter {
 
-   std::shared_ptr<ROOT::Experimental::RNTupleReader> fNtplReader;
+   std::shared_ptr<ROOT::RNTupleReader> fNtplReader;
    std::vector<ROOT::DescriptorId_t> fFieldIds;
    std::string fParentName;
    int fCounter{-1};
 
 public:
-   RFieldsIterator(std::shared_ptr<ROOT::Experimental::RNTupleReader> ntplReader,
-                   std::vector<ROOT::DescriptorId_t> &&ids, const std::string &parent_name = ""s)
+   RFieldsIterator(std::shared_ptr<ROOT::RNTupleReader> ntplReader, std::vector<ROOT::DescriptorId_t> &&ids,
+                   const std::string &parent_name = "")
       : fNtplReader(ntplReader), fFieldIds(ids), fParentName(parent_name)
    {
    }
 
-   virtual ~RFieldsIterator() = default;
+   ~RFieldsIterator() override = default;
 
    bool Next() override
    {
@@ -261,10 +261,7 @@ public:
       });
    }
 
-   virtual ~RNTupleBrowseProvider()
-   {
-      RegisterNTupleFunc(nullptr);
-   }
+   ~RNTupleBrowseProvider() override { RegisterNTupleFunc(nullptr); }
 
 } newRNTupleBrowseProvider;
 

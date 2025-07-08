@@ -34,11 +34,11 @@
 namespace ROOT {
 class RNTuple;
 
-namespace Experimental {
-
 namespace Internal {
 class RPageSource;
 } // namespace Internal
+
+namespace Experimental {
 
 enum class ENTupleInspectorPrintFormat { kTable, kCSV };
 enum class ENTupleInspectorHist { kCount, kNElems, kCompressedSize, kUncompressedSize };
@@ -60,11 +60,10 @@ Example usage:
 
 #include <iostream>
 
-using ROOT::Experimental::RNTuple;
 using ROOT::Experimental::RNTupleInspector;
 
 auto file = TFile::Open("data.rntuple");
-auto rntuple = std::unique_ptr<RNTuple>(file->Get<RNTuple>("NTupleName"));
+auto rntuple = std::unique_ptr<ROOT::RNTuple>(file->Get<RNTuple>("NTupleName"));
 auto inspector = RNTupleInspector::Create(*rntuple);
 
 std::cout << "The compression factor is " << inspector->GetCompressionFactor()
@@ -83,21 +82,21 @@ public:
    /// RColumnInspector that belongs to this field.
    class RColumnInspector {
    private:
-      const RColumnDescriptor &fColumnDescriptor;
+      const ROOT::RColumnDescriptor &fColumnDescriptor;
       const std::vector<std::uint64_t> fCompressedPageSizes = {};
       std::uint32_t fElementSize = 0;
       std::uint64_t fNElements = 0;
 
    public:
-      RColumnInspector(const RColumnDescriptor &colDesc, const std::vector<std::uint64_t> &compressedPageSizes,
+      RColumnInspector(const ROOT::RColumnDescriptor &colDesc, const std::vector<std::uint64_t> &compressedPageSizes,
                        std::uint32_t elemSize, std::uint64_t nElems)
          : fColumnDescriptor(colDesc),
            fCompressedPageSizes(compressedPageSizes),
            fElementSize(elemSize),
-           fNElements(nElems){};
+           fNElements(nElems) {};
       ~RColumnInspector() = default;
 
-      const RColumnDescriptor &GetDescriptor() const { return fColumnDescriptor; }
+      const ROOT::RColumnDescriptor &GetDescriptor() const { return fColumnDescriptor; }
       const std::vector<std::uint64_t> &GetCompressedPageSizes() const { return fCompressedPageSizes; }
       std::uint64_t GetNPages() const { return fCompressedPageSizes.size(); }
       std::uint64_t GetCompressedSize() const
@@ -118,23 +117,23 @@ public:
    /// the RFieldDescriptor that belongs to this field.
    class RFieldTreeInspector {
    private:
-      const RFieldDescriptor &fRootFieldDescriptor;
+      const ROOT::RFieldDescriptor &fRootFieldDescriptor;
       std::uint64_t fCompressedSize = 0;
       std::uint64_t fUncompressedSize = 0;
 
    public:
-      RFieldTreeInspector(const RFieldDescriptor &fieldDesc, std::uint64_t onDiskSize, std::uint64_t inMemSize)
-         : fRootFieldDescriptor(fieldDesc), fCompressedSize(onDiskSize), fUncompressedSize(inMemSize){};
+      RFieldTreeInspector(const ROOT::RFieldDescriptor &fieldDesc, std::uint64_t onDiskSize, std::uint64_t inMemSize)
+         : fRootFieldDescriptor(fieldDesc), fCompressedSize(onDiskSize), fUncompressedSize(inMemSize) {};
       ~RFieldTreeInspector() = default;
 
-      const RFieldDescriptor &GetDescriptor() const { return fRootFieldDescriptor; }
+      const ROOT::RFieldDescriptor &GetDescriptor() const { return fRootFieldDescriptor; }
       std::uint64_t GetCompressedSize() const { return fCompressedSize; }
       std::uint64_t GetUncompressedSize() const { return fUncompressedSize; }
    };
 
 private:
-   std::unique_ptr<Internal::RPageSource> fPageSource;
-   RNTupleDescriptor fDescriptor;
+   std::unique_ptr<ROOT::Internal::RPageSource> fPageSource;
+   ROOT::RNTupleDescriptor fDescriptor;
    std::optional<std::uint32_t> fCompressionSettings; ///< The compression settings are unknown for an empty ntuple
    std::uint64_t fCompressedSize = 0;
    std::uint64_t fUncompressedSize = 0;
@@ -142,7 +141,7 @@ private:
    std::unordered_map<int, RColumnInspector> fColumnInfo;
    std::unordered_map<int, RFieldTreeInspector> fFieldTreeInfo;
 
-   RNTupleInspector(std::unique_ptr<Internal::RPageSource> pageSource);
+   RNTupleInspector(std::unique_ptr<ROOT::Internal::RPageSource> pageSource);
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Gather column-level and RNTuple-level information.
@@ -202,8 +201,8 @@ public:
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the descriptor for the RNTuple being inspected.
    ///
-   /// \return A static copy of the RNTupleDescriptor belonging to the inspected RNTuple.
-   const RNTupleDescriptor &GetDescriptor() const { return fDescriptor; }
+   /// \return A static copy of the ROOT::RNTupleDescriptor belonging to the inspected RNTuple.
+   const ROOT::RNTupleDescriptor &GetDescriptor() const { return fDescriptor; }
 
    /////////////////////////////////////////////////////////////////////////////
    /// \brief Get the compression settings of the RNTuple being inspected.

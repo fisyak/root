@@ -4,7 +4,7 @@ const version_id = 'dev',
 
 /** @summary version date
   * @desc Release date in format day/month/year like '14/04/2022' */
-version_date = '24/02/2025',
+version_date = '4/07/2025',
 
 /** @summary version id and date
   * @desc Produced by concatenation of {@link version_id} and {@link version_date}
@@ -13,7 +13,7 @@ version = version_id + ' ' + version_date,
 
 /** @summary Is node.js flag
   * @private */
-nodejs = !!((typeof process === 'object') && isObject(process.versions) && process.versions.node && process.versions.v8),
+nodejs = Boolean((typeof process === 'object') && process.versions?.node && process.versions.v8),
 
 /** @summary internal data
   * @private */
@@ -25,6 +25,38 @@ internals = {
 _src = import.meta?.url,
 
 _src_dir = '$jsrootsys';
+
+
+/** @summary Check if argument is a not-null Object
+  * @private */
+function isObject(arg) { return arg && typeof arg === 'object'; }
+
+/** @summary Check if argument is a Function
+  * @private */
+function isFunc(arg) { return typeof arg === 'function'; }
+
+/** @summary Check if argument is a String
+  * @private */
+function isStr(arg) { return typeof arg === 'string'; }
+
+/** @summary Check if object is a Promise
+  * @private */
+function isPromise(obj) { return isObject(obj) && isFunc(obj.then); }
+
+/** @summary Postpone func execution and return result in promise
+  * @private */
+function postponePromise(func, timeout) {
+   return new Promise(resolveFunc => {
+      setTimeout(() => {
+         const res = isFunc(func) ? func() : func;
+         resolveFunc(res);
+      }, timeout);
+   });
+}
+
+/** @summary Provide promise in any case
+  * @private */
+function getPromise(obj) { return isPromise(obj) ? obj : Promise.resolve(obj); }
 
 
 /** @summary Location of JSROOT modules
@@ -62,7 +94,7 @@ function isBatchMode() { return batch_mode; }
 
 /** @summary Set batch mode
   * @private */
-function setBatchMode(on) { batch_mode = !!on; }
+function setBatchMode(on) { batch_mode = Boolean(on); }
 
 /** @summary Indicates if running inside Node.js */
 function isNodeJs() { return nodejs; }
@@ -96,9 +128,9 @@ if ((typeof document !== 'undefined') && (typeof window !== 'undefined') && (typ
    } else {
       browser.isFirefox = navigator.userAgent.indexOf('Firefox') >= 0;
       browser.isSafari = Object.prototype.toString.call(window.HTMLElement).indexOf('Constructor') > 0;
-      browser.isChrome = !!window.chrome;
+      browser.isChrome = Boolean(window.chrome);
       browser.isChromeHeadless = navigator.userAgent.indexOf('HeadlessChrome') >= 0;
-      browser.chromeVersion = (browser.isChrome || browser.isChromeHeadless) ? parseInt(navigator.userAgent.match(/Chrom(?:e|ium)\/([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/)[1]) : 0;
+      browser.chromeVersion = (browser.isChrome || browser.isChromeHeadless) ? (navigator.userAgent.indexOf('Chrom') > 0 ? parseInt(navigator.userAgent.match(/Chrom(?:e|ium)\/([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/)[1]) : 134) : 0;
       browser.isWin = navigator.userAgent.indexOf('Windows') >= 0;
    }
    browser.android = /android/i.test(navigator.userAgent);
@@ -110,9 +142,10 @@ if ((typeof document !== 'undefined') && (typeof window !== 'undefined') && (typ
   * @return {Number} 0 - not array, 1 - regular array, 2 - typed array
   * @private */
 function isArrayProto(proto) {
-    if ((proto.length < 14) || (proto.indexOf('[object ') !== 0)) return 0;
+    if ((proto.length < 14) || proto.indexOf('[object ')) return 0;
     const p = proto.indexOf('Array]');
-    if ((p < 0) || (p !== proto.length - 6)) return 0;
+    if ((p < 0) || (p !== proto.length - 6))
+      return 0;
     // plain array has only '[object Array]', typed array type name inside
     return proto.length === 14 ? 1 : 2;
 }
@@ -234,6 +267,8 @@ settings = {
    DragAndDrop: !nodejs,
    /** @summary Interactive dragging of TGraph points */
    DragGraphs: true,
+   /** @summary Value of user-select style in interactive drawings */
+   UserSelect: 'none',
    /** @summary Show progress box, can be false, true or 'modal' */
    ProgressBox: !nodejs,
    /** @summary Show additional tool buttons on the canvas, false - disabled, true - enabled, 'popup' - only toggle button */
@@ -288,7 +323,7 @@ settings = {
    HandleWrongHttpResponse: false,
    /** @summary Tweak browser caching with stamp URL parameter
      * @desc When specified, extra URL parameter like ```?stamp=unique_value``` append to each files loaded
-     * In such case browser will be forced to load file content disregards of server cache settings
+     * In such case browser will be forced to load file content disregards of browser or server cache settings
      * Can be disabled by providing &usestamp=false in URL or via Settings/Files sub-menu
      * Disabled by default on node.js, enabled in the web browsers */
    UseStamp: !nodejs,
@@ -296,7 +331,19 @@ settings = {
      * @desc Some http server has limitations for number of bytes ranges therefore let change maximal number via setting
      * @default 200 */
    MaxRanges: 200,
-  /** @summary Configure xhr.withCredentials = true when submitting http requests from JSROOT */
+   /** @summary Number of bytes requested once by TTree::Draw processing
+     * @desc TTree can be very large and data from baskets read by portion specified by this variable
+     * @default 1e6 */
+   TreeReadBunchSize: 1e6,
+   /** @summary File read timeout in ms
+     * @desc Configures timeout for each http operation for reading ROOT files
+     * @default 0 */
+   FilesTimeout: 0,
+   /** @summary Default remap object for files loading
+     * @desc Allows to retry files reading if original URL fails
+     * @private */
+   FilesRemap: { 'https://root.cern/': 'https://root-eos.web.cern.ch/' },
+   /** @summary Configure xhr.withCredentials = true when submitting http requests from JSROOT */
    WithCredentials: false,
    /** @summary Skip streamer infos from the GUI */
    SkipStreamerInfos: false,
@@ -321,12 +368,14 @@ settings = {
    /** @summary Extra parameters which will be append to the url when item shown in new tab */
    NewTabUrlPars: '',
    /** @summary Export different settings in output URL */
-   NewTabUrlExportSettings: false
+   NewTabUrlExportSettings: false,
+   /** @summary Enable more debug output, also via 'WebGui.Debug: yes' on ROOT side */
+   Debug: false
 },
 
 /** @namespace
-  * @summary Insiance of TStyle object like in ROOT
-  * @desc Includes default draw styles, can be changed after loading of JSRoot.core.js
+  * @summary Instance of TStyle object like in ROOT
+  * @desc Includes default draw styles, can be changed after loading of core.mjs
   * or can be load from the file providing style=itemname in the URL
   * See [TStyle docu]{@link https://root.cern/doc/master/classTStyle.html} 'Private attributes' section for more detailed info about each value */
 gStyle = {
@@ -337,9 +386,13 @@ gStyle = {
    fOptLogy: 0,
    /** @summary Default log z scale */
    fOptLogz: 0,
+   /** @summary Show date on canvas */
    fOptDate: 0,
+   /** @summary Show file name on canvas */
    fOptFile: 0,
+   /** @summary X position of date on canvas */
    fDateX: 0.01,
+   /** @summary Y position of date on canvas */
    fDateY: 0.01,
    /** @summary Draw histogram title */
    fOptTitle: 1,
@@ -347,19 +400,29 @@ gStyle = {
    fCanvasColor: 0,
    /** @summary Pad fill color */
    fPadColor: 0,
+   /** @summary Pad bottom margin */
    fPadBottomMargin: 0.1,
+   /** @summary Pad top margin */
    fPadTopMargin: 0.1,
+   /** @summary Pad left margin */
    fPadLeftMargin: 0.1,
+   /** @summary Pad right margin */
    fPadRightMargin: 0.1,
    /** @summary TPad.fGridx default value */
    fPadGridX: false,
    /** @summary TPad.fGridy default value */
    fPadGridY: false,
+   /** @summary TPad.fTickx default value */
    fPadTickX: 0,
+   /** @summary TPad.fTicky default value */
    fPadTickY: 0,
+   /** @summary Pad border size */
    fPadBorderSize: 2,
+   /** @summary Pad border mode */
    fPadBorderMode: 0,
+   /** @summary Canvas border size */
    fCanvasBorderSize: 2,
+   /** @summary Canvas border mode */
    fCanvasBorderMode: 0,
    /** @summary fill color for stat box */
    fStatColor: 0,
@@ -375,16 +438,27 @@ gStyle = {
    fStatBorderSize: 1,
    /** @summary Printing format for stats */
    fStatFormat: '6.4g',
+   /** @summary Stat box X position - top right corner */
    fStatX: 0.98,
+   /** @summary Stat box Y position - top right corner */
    fStatY: 0.935,
+   /** @summary Stat box width */
    fStatW: 0.2,
+   /** @summary Stat box height */
    fStatH: 0.16,
+   /** @summary Title text align */
    fTitleAlign: 23,
+   /** @summary Title fill color */
    fTitleColor: 0,
+   /** @summary Title text color */
    fTitleTextColor: 1,
+   /** @summary Title border size */
    fTitleBorderSize: 0,
+   /** @summary Title text font */
    fTitleFont: 42,
+   /** @summary Title font size */
    fTitleFontSize: 0.05,
+   /** @summary Title fill style */
    fTitleStyle: 0,
    /** @summary X position of top left corner of title box */
    fTitleX: 0.5,
@@ -396,18 +470,31 @@ gStyle = {
    fTitleH: 0,
    /** @summary Printing format for fit parameters */
    fFitFormat: '5.4g',
+   /** @summary Default optstat value */
    fOptStat: 1111,
+   /** @summary Default optfit value */
    fOptFit: 0,
+   /** @summary Default number of colors in contour */
    fNumberContours: 20,
+   /** @summary Grids color */
    fGridColor: 0,
+   /** @summary Grids line style */
    fGridStyle: 3,
+   /** @summary Grids line width */
    fGridWidth: 1,
+   /** @summary Frame fill color */
    fFrameFillColor: 0,
+   /** @summary Frame fill style */
    fFrameFillStyle: 1001,
+   /** @summary Frame line color */
    fFrameLineColor: 1,
+   /** @summary Frame line width */
    fFrameLineWidth: 1,
+   /** @summary Frame line style */
    fFrameLineStyle: 1,
+   /** @summary Frame border size */
    fFrameBorderSize: 1,
+   /** @summary Frame border mode */
    fFrameBorderMode: 0,
    /** @summary size in pixels of end error for E1 draw options */
    fEndErrorSize: 2,
@@ -417,20 +504,31 @@ gStyle = {
    fHistMinimumZero: false,
    /** @summary Margin between histogram's top and pad's top */
    fHistTopMargin: 0.05,
+   /** @summary Histogram fill color */
    fHistFillColor: 0,
+   /** @summary Histogram fill style */
    fHistFillStyle: 1001,
+   /** @summary Histogram line color */
    fHistLineColor: 602,
+   /** @summary Histogram line style */
    fHistLineStyle: 1,
+   /** @summary Histogram line width */
    fHistLineWidth: 1,
    /** @summary format for bin content */
    fPaintTextFormat: 'g',
    /** @summary default time offset, UTC time at 01/01/95   */
    fTimeOffset: 788918400,
+   /** @summary Legend border size */
    fLegendBorderSize: 1,
+   /** @summary Legend text font */
    fLegendFont: 42,
+   /** @summary Legend font size */
    fLegendTextSize: 0,
+   /** @summary Legend fill color */
    fLegendFillColor: 0,
+   /** @summary Legend fill style */
    fLegendFillStyle: 1001,
+   /** @summary Hatches line width in fill styles  */
    fHatchesLineWidth: 1,
    fHatchesSpacing: 1,
    fCandleWhiskerRange: 1.0,
@@ -446,7 +544,10 @@ gStyle = {
    fYAxisExpYOffset: 0,
    fAxisMaxDigits: 5,
    fStripDecimals: true,
-   fBarWidth: 1
+   /** @summary Width of bar for graphs */
+   fBarWidth: 1,
+   /** @summary Offset of bar for graphs */
+   fBarOffset: 0
 };
 
 /** @summary Method returns current document in use
@@ -461,143 +562,10 @@ function getDocument() {
    return undefined;
 }
 
-/** @summary Inject javascript code
-  * @desc Replacement for eval
-  * @return {Promise} when code is injected
+/** @summary Ensure global JSROOT and v6 support methods
   * @private */
-async function injectCode(code) {
-   if (nodejs) {
-      let name, fs;
-      return import('tmp').then(tmp => {
-         name = tmp.tmpNameSync() + '.js';
-         return import('fs');
-      }).then(_fs => {
-         fs = _fs;
-         fs.writeFileSync(name, code);
-         return import(/* webpackIgnore: true */ 'file://' + name);
-      }).finally(() => fs.unlinkSync(name));
-   }
+let _ensureJSROOT = null;
 
-   if (typeof document !== 'undefined') {
-      // check if code already loaded - to avoid duplication
-      const scripts = document.getElementsByTagName('script');
-      for (let n = 0; n < scripts.length; ++n) {
-         if (scripts[n].innerHTML === code)
-            return true;
-      }
-
-      // try to detect if code includes import and must be treated as module
-      const is_v6 = code.indexOf('JSROOT.require') >= 0,
-            is_mjs = !is_v6 && (code.indexOf('import {') > 0) && (code.indexOf('} from \'') > 0),
-            is_batch = !is_v6 && !is_mjs && (code.indexOf('JSROOT.ObjectPainter') >= 0),
-            promise = (is_v6 ? _ensureJSROOT() : Promise.resolve(true));
-
-      if (is_batch && !globalThis.JSROOT)
-         globalThis.JSROOT = internals.jsroot;
-
-      return promise.then(() => {
-         const element = document.createElement('script');
-         element.setAttribute('type', is_mjs ? 'module' : 'text/javascript');
-         element.innerHTML = code;
-         document.head.appendChild(element);
-         // while onload event not fired, just postpone resolve
-         return isBatchMode() ? true : postponePromise(true, 10);
-      });
-   }
-
-   return false;
-}
-
-/** @summary Load ES6 modules
-  * @param {String} arg - single URL or array of URLs
-  * @return {Promise} */
-async function loadModules(arg) {
-   if (isStr(arg))
-      arg = arg.split(';');
-   if (arg.length === 0)
-      return true;
-   return import(/* webpackIgnore: true */ arg.shift()).then(() => loadModules(arg));
-}
-
-/** @summary Load script or CSS file into the browser
-  * @param {String} url - script or css file URL (or array, in this case they all loaded sequentially)
-  * @return {Promise} */
-async function loadScript(url) {
-   if (!url)
-      return true;
-
-   if (isStr(url) && (url.indexOf(';') >= 0))
-      url = url.split(';');
-
-   if (!isStr(url)) {
-      const scripts = url, loadNext = () => {
-         if (!scripts.length) return true;
-         return loadScript(scripts.shift()).then(loadNext, loadNext);
-      };
-      return loadNext();
-   }
-
-   if (url.indexOf('$$$') === 0) {
-      url = url.slice(3);
-      if ((url.indexOf('style/') === 0) && (url.indexOf('.css') < 0))
-         url += '.css';
-      url = source_dir + url;
-   }
-
-   const isstyle = url.indexOf('.css') > 0;
-
-   if (nodejs) {
-      if (isstyle)
-         return null;
-      if ((url.indexOf('http:') === 0) || (url.indexOf('https:') === 0))
-         return httpRequest(url, 'text').then(code => injectCode(code));
-
-      // local files, read and use it
-      if (url.indexOf('./') === 0)
-         return import('fs').then(fs => injectCode(fs.readFileSync(url)));
-
-      return import(/* webpackIgnore: true */ url);
-   }
-
-   const match_url = src => {
-      if (src === url) return true;
-      const indx = src.indexOf(url);
-      return (indx > 0) && (indx + url.length === src.length) && (src[indx-1] === '/');
-   };
-
-   if (isstyle) {
-      const styles = document.getElementsByTagName('link');
-      for (let n = 0; n < styles.length; ++n) {
-         if (!styles[n].href || (styles[n].type !== 'text/css') || (styles[n].rel !== 'stylesheet')) continue;
-         if (match_url(styles[n].href))
-            return true;
-      }
-   } else {
-      const scripts = document.getElementsByTagName('script');
-      for (let n = 0; n < scripts.length; ++n) {
-         if (match_url(scripts[n].src))
-            return true;
-      }
-   }
-
-   let element;
-   if (isstyle) {
-      element = document.createElement('link');
-      element.setAttribute('rel', 'stylesheet');
-      element.setAttribute('type', 'text/css');
-      element.setAttribute('href', url);
-   } else {
-      element = document.createElement('script');
-      element.setAttribute('type', 'text/javascript');
-      element.setAttribute('src', url);
-   }
-
-   return new Promise((resolveFunc, rejectFunc) => {
-      element.onload = () => resolveFunc(true);
-      element.onerror = () => { element.remove(); rejectFunc(Error(`Fail to load ${url}`)); };
-      document.head.appendChild(element);
-   });
-}
 
 /** @summary Generate mask for given bit
   * @param {number} n bit number
@@ -660,12 +628,11 @@ const extend = Object.assign;
 
 /** @summary Adds specific methods to the object.
   * @desc JSROOT implements some basic methods for different ROOT classes.
+  * @function
   * @param {object} obj - object where methods are assigned
   * @param {string} [typename] - optional typename, if not specified, obj._typename will be used
   * @private */
-function addMethods(obj, typename) {
-   extend(obj, getMethods(typename || obj._typename, obj));
-}
+let addMethods = null;
 
 /** @summary Should be used to parse JSON string produced with TBufferJSON class
   * @desc Replace all references inside object like { "$ref": "1" }
@@ -681,14 +648,17 @@ function parse(json) {
       if ((value === null) || (value === undefined)) return;
 
       if (isStr(value)) {
-         if (newfmt || (value.length < 6) || (value.indexOf('$ref:') !== 0)) return;
+         if (newfmt || (value.length < 6) || value.indexOf('$ref:'))
+            return;
          const ref = parseInt(value.slice(5));
-         if (!Number.isInteger(ref) || (ref < 0) || (ref >= map.length)) return;
+         if (!Number.isInteger(ref) || (ref < 0) || (ref >= map.length))
+            return;
          newfmt = false;
          return map[ref];
       }
 
-      if (typeof value !== 'object') return;
+      if (typeof value !== 'object')
+         return;
 
       const proto = Object.prototype.toString.apply(value);
 
@@ -734,8 +704,8 @@ function parse(json) {
             const buf = atob_func(value.b);
             if (arr.buffer) {
                const dv = new DataView(arr.buffer, value.o || 0),
-                     len = Math.min(buf.length, dv.byteLength);
-               for (let k = 0; k < len; ++k)
+                     blen = Math.min(buf.length, dv.byteLength);
+               for (let k = 0; k < blen; ++k)
                   dv.setUint8(k, buf.charCodeAt(k));
             } else
                throw new Error('base64 coding supported only for native arrays with binary data');
@@ -896,7 +866,7 @@ function decodeUrl(url) {
    while (url) {
       // try to correctly handle quotes in the URL
       let pos = 0, nq = 0, eq = -1, firstq = -1;
-      while ((pos < url.length) && ((nq !== 0) || ((url[pos] !== '&') && (url[pos] !== '#')))) {
+      while ((pos < url.length) && (nq || ((url[pos] !== '&') && (url[pos] !== '#')))) {
          switch (url[pos]) {
             case '\'': if (nq >= 0) nq = (nq+1) % 2; if (firstq < 0) firstq = pos; break;
             case '"': if (nq <= 0) nq = (nq-1) % 2; if (firstq < 0) firstq = pos; break;
@@ -977,7 +947,7 @@ function createHttpRequest(url, kind, user_accept_callback, user_reject_callback
          if ((this.readyState === 2) && this.expected_size) {
             const len = parseInt(this.getResponseHeader('Content-Length'));
             if (Number.isInteger(len) && (len > this.expected_size) && !settings.HandleWrongHttpResponse) {
-               this.did_abort = true;
+               this.did_abort = 'large';
                this.abort();
                return this.error_callback(Error(`Server response size ${len} larger than expected ${this.expected_size}. Abort I/O operation`), 599);
             }
@@ -985,7 +955,7 @@ function createHttpRequest(url, kind, user_accept_callback, user_reject_callback
 
          if (this.readyState !== 4) return;
 
-         if ((this.status !== 200) && (this.status !== 206) && !browser.qt5 &&
+         if ((this.status !== 200) && (this.status !== 206) && !browser.qt6 &&
              // in these special cases browsers not always set status
              !((this.status === 0) && ((url.indexOf('file://') === 0) || (url.indexOf('blob:') === 0))))
                return this.error_callback(Error(`Fail to load url ${url}`), this.status);
@@ -1072,6 +1042,154 @@ async function httpRequest(url, kind, post_data) {
    });
 }
 
+/** @summary Inject javascript code
+  * @desc Replacement for eval
+  * @return {Promise} when code is injected
+  * @private */
+async function injectCode(code) {
+   if (nodejs) {
+      let name, fs;
+      return import('tmp').then(tmp => {
+         name = tmp.tmpNameSync() + '.js';
+         return import('fs');
+      }).then(_fs => {
+         fs = _fs;
+         fs.writeFileSync(name, code);
+         return import(/* webpackIgnore: true */ 'file://' + name);
+      }).finally(() => fs.unlinkSync(name));
+   }
+
+   if (typeof document !== 'undefined') {
+      // check if code already loaded - to avoid duplication
+      const scripts = document.getElementsByTagName('script');
+      for (let n = 0; n < scripts.length; ++n) {
+         if (scripts[n].innerHTML === code)
+            return true;
+      }
+
+      // try to detect if code includes import and must be treated as module
+      const is_v6 = code.indexOf('JSROOT.require') >= 0,
+            is_mjs = !is_v6 && (code.indexOf('import {') > 0) && (code.indexOf('} from \'') > 0),
+            is_batch = !is_v6 && !is_mjs && (code.indexOf('JSROOT.ObjectPainter') >= 0),
+            promise = (is_v6 ? _ensureJSROOT() : Promise.resolve(true));
+
+      if (is_batch && !globalThis.JSROOT)
+         globalThis.JSROOT = internals.jsroot;
+
+      return promise.then(() => {
+         const element = document.createElement('script');
+         element.setAttribute('type', is_mjs ? 'module' : 'text/javascript');
+         element.innerHTML = code;
+         document.head.appendChild(element);
+         // while onload event not fired, just postpone resolve
+         return isBatchMode() ? true : postponePromise(true, 10);
+      });
+   }
+
+   return false;
+}
+
+/** @summary Load ES6 modules
+  * @param {String} arg - single URL or array of URLs
+  * @return {Promise} */
+async function loadModules(arg) {
+   if (isStr(arg))
+      arg = arg.split(';');
+   if (!arg.length)
+      return true;
+   return import(/* webpackIgnore: true */ arg.shift()).then(() => loadModules(arg));
+}
+
+/** @summary Load script or CSS file into the browser
+  * @param {String} url - script or css file URL (or array, in this case they all loaded sequentially)
+  * @return {Promise} */
+async function loadScript(url) {
+   if (!url)
+      return true;
+
+   if (isStr(url) && (url.indexOf(';') >= 0))
+      url = url.split(';');
+
+   if (!isStr(url)) {
+      const scripts = url, loadNext = () => {
+         if (!scripts.length) return true;
+         return loadScript(scripts.shift()).then(loadNext, loadNext);
+      };
+      return loadNext();
+   }
+
+   if (url.indexOf('$$$') === 0) {
+      url = url.slice(3);
+      if ((url.indexOf('style/') === 0) && (url.indexOf('.css') < 0))
+         url += '.css';
+      url = source_dir + url;
+   }
+
+   const isstyle = url.indexOf('.css') > 0;
+
+   if (nodejs) {
+      if (isstyle)
+         return null;
+      if ((url.indexOf('http:') === 0) || (url.indexOf('https:') === 0))
+         return httpRequest(url, 'text').then(code => injectCode(code));
+
+      // local files, read and use it
+      if (url.indexOf('./') === 0)
+         return import('fs').then(fs => injectCode(fs.readFileSync(url)));
+
+      return import(/* webpackIgnore: true */ url);
+   }
+
+   const match_url = src => {
+      if (src === url) return true;
+      const indx = src.indexOf(url);
+      return (indx > 0) && (indx + url.length === src.length) && (src[indx-1] === '/');
+   };
+
+   if (isstyle) {
+      const styles = document.getElementsByTagName('link');
+      for (let n = 0; n < styles.length; ++n) {
+         if (!styles[n].href || (styles[n].type !== 'text/css') || (styles[n].rel !== 'stylesheet')) continue;
+         if (match_url(styles[n].href))
+            return true;
+      }
+   } else {
+      const scripts = document.getElementsByTagName('script');
+      for (let n = 0; n < scripts.length; ++n) {
+         if (match_url(scripts[n].src))
+            return true;
+      }
+   }
+
+   let element;
+   if (isstyle) {
+      element = document.createElement('link');
+      element.setAttribute('rel', 'stylesheet');
+      element.setAttribute('type', 'text/css');
+      element.setAttribute('href', url);
+   } else {
+      element = document.createElement('script');
+      element.setAttribute('type', 'text/javascript');
+      element.setAttribute('src', url);
+   }
+
+   return new Promise((resolveFunc, rejectFunc) => {
+      element.onload = () => resolveFunc(true);
+      element.onerror = () => { element.remove(); rejectFunc(Error(`Fail to load ${url}`)); };
+      document.head.appendChild(element);
+   });
+}
+
+_ensureJSROOT = async function() {
+   const pr = globalThis.JSROOT ? Promise.resolve(true) : loadScript(source_dir + 'scripts/JSRoot.core.js');
+
+   return pr.then(() => {
+      if (globalThis.JSROOT?._complete_loading)
+         return globalThis.JSROOT._complete_loading();
+   }).then(() => globalThis.JSROOT);
+};
+
+
 const prROOT = 'ROOT.', clTObject = 'TObject', clTNamed = 'TNamed', clTString = 'TString', clTObjString = 'TObjString',
       clTKey = 'TKey', clTFile = 'TFile',
       clTList = 'TList', clTHashList = 'THashList', clTMap = 'TMap', clTObjArray = 'TObjArray', clTClonesArray = 'TClonesArray',
@@ -1084,14 +1202,14 @@ const prROOT = 'ROOT.', clTObject = 'TObject', clTNamed = 'TNamed', clTString = 
       clTLegend = 'TLegend', clTLegendEntry = 'TLegendEntry',
       clTPaletteAxis = 'TPaletteAxis', clTImagePalette = 'TImagePalette',
       clTText = 'TText', clTLink = 'TLink', clTLatex = 'TLatex', clTMathText = 'TMathText', clTAnnotation = 'TAnnotation',
-      clTColor = 'TColor', clTLine = 'TLine', clTBox = 'TBox', clTPolyLine = 'TPolyLine',
+      clTColor = 'TColor', clTLine = 'TLine', clTMarker = 'TMarker', clTBox = 'TBox', clTPolyLine = 'TPolyLine',
       clTPolyLine3D = 'TPolyLine3D', clTPolyMarker3D = 'TPolyMarker3D',
       clTAttPad = 'TAttPad', clTPad = 'TPad', clTCanvas = 'TCanvas', clTFrame = 'TFrame', clTAttCanvas = 'TAttCanvas',
       clTGaxis = 'TGaxis', clTAttAxis = 'TAttAxis', clTAxis = 'TAxis', clTStyle = 'TStyle',
-      clTH1 = 'TH1', clTH1I = 'TH1I', clTH1D = 'TH1D', clTH2 = 'TH2', clTH2I = 'TH2I', clTH2F = 'TH2F', clTH3 = 'TH3',
+      clTH1 = 'TH1', clTH1I = 'TH1I', clTH1F = 'TH1F', clTH1D = 'TH1D', clTH2 = 'TH2', clTH2I = 'TH2I', clTH2F = 'TH2F', clTH2D = 'TH2D', clTH3 = 'TH3',
       clTF1 = 'TF1', clTF12 = 'TF12', clTF2 = 'TF2', clTF3 = 'TF3', clTProfile = 'TProfile', clTProfile2D = 'TProfile2D', clTProfile3D = 'TProfile3D',
       clTGeoVolume = 'TGeoVolume', clTGeoNode = 'TGeoNode', clTGeoNodeMatrix = 'TGeoNodeMatrix',
-      nsREX = 'ROOT::Experimental::', nsSVG = 'http://www.w3.org/2000/svg',
+      nsROOT = 'ROOT::', nsREX = nsROOT + 'Experimental::', nsSVG = 'http://www.w3.org/2000/svg',
       kNoZoom = -1111, kNoStats = BIT(9), kInspect = 'inspect', kTitle = 'title',
       urlClassPrefix = 'https://root.cern/doc/master/class';
 
@@ -1145,6 +1263,11 @@ function create(typename, target) {
          create(clTObject, obj);
          create(clTAttLine, obj);
          extend(obj, { fX1: 0, fX2: 1, fY1: 0, fY2: 1 });
+         break;
+      case clTMarker:
+         create(clTObject, obj);
+         create(clTAttMarker, obj);
+         extend(obj, { fX: 0, fY: 0 });
          break;
       case clTBox:
          create(clTObject, obj);
@@ -1498,10 +1621,10 @@ function createTGraph(npoints, xpts, ypts) {
   * let h2 = createHistogram('TH1F', nbinsx);
   * let h3 = createHistogram('TH1F', nbinsx);
   * let stack = createTHStack(h1, h2, h3); */
-function createTHStack() {
+function createTHStack(...args) {
    const stack = create(clTHStack);
-   for (let i = 0; i < arguments.length; ++i)
-      stack.fHists.Add(arguments[i], '');
+   for (let i = 0; i < args.length; ++i)
+      stack.fHists.Add(args[i], '');
    return stack;
 }
 
@@ -1513,10 +1636,10 @@ function createTHStack() {
   * let gr2 = createTGraph(100);
   * let gr3 = createTGraph(100);
   * let mgr = createTMultiGraph(gr1, gr2, gr3); */
-function createTMultiGraph() {
+function createTMultiGraph(...args) {
    const mgraph = create(clTMultiGraph);
-   for (let i = 0; i < arguments.length; ++i)
-       mgraph.fGraphs.Add(arguments[i], '');
+   for (let i = 0; i < args.length; ++i)
+      mgraph.fGraphs.Add(args[i], '');
    return mgraph;
 }
 
@@ -1535,8 +1658,8 @@ function getMethods(typename, obj) {
    // Therefore when methods requested for given object, check also that basic methods are there
    if ((typename === clTObject) || (typename === clTNamed) || (obj?.fBits !== undefined)) {
       if (typeof m.TestBit === 'undefined') {
-         m.TestBit = function(f) { return (this.fBits & f) !== 0; };
-         m.InvertBit = function(f) { this.fBits = this.fBits ^ (f & 0xffffff); };
+         m.TestBit = function(f) { return Boolean(this.fBits & f); };
+         m.InvertBit = function(f) { this.fBits ^= f & 0xffffff; };
          m.SetBit = function(f, on = true) { this.fBits = on ? this.fBits | f : this.fBits & ~f; };
       }
    }
@@ -1548,12 +1671,12 @@ function getMethods(typename, obj) {
          this.arr = [];
          this.opt = [];
       };
-      m.Add = function(obj, opt) {
-         this.arr.push(obj);
+      m.Add = function(elem, opt) {
+         this.arr.push(elem);
          this.opt.push(isStr(opt) ? opt : '');
       };
-      m.AddFirst = function(obj, opt) {
-         this.arr.unshift(obj);
+      m.AddFirst = function(elem, opt) {
+         this.arr.unshift(elem);
          this.opt.unshift(isStr(opt) ? opt : '');
       };
       m.RemoveAt = function(indx) {
@@ -1577,12 +1700,12 @@ function getMethods(typename, obj) {
       };
    }
 
-   if ((typename.indexOf(clTF1) === 0) || (typename === clTF12) || (typename === clTF2)) {
-      m.addFormula = function(obj) {
-         if (!obj) return;
+   if ((typename.indexOf(clTF1) === 0) || (typename === clTF12) || (typename === clTF2) || (typename === clTF3)) {
+      m.addFormula = function(formula) {
+         if (!formula) return;
          if (this.formulas === undefined)
             this.formulas = [];
-         this.formulas.push(obj);
+         this.formulas.push(formula);
       };
       m.GetParName = function(n) {
          if (this.fParams?.fParNames)
@@ -1685,7 +1808,7 @@ function getMethods(typename, obj) {
    }
 
    if (typename === clTPad || typename === clTCanvas) {
-      m.Divide = function(nx, ny, xmargin = 0.01, ymargin = 0.01) {
+      m.Divide = function(nx, ny, xmargin = 0.01, ymargin = 0.01, color = 0) {
          if (!ny) {
             const ndiv = nx;
             if (ndiv < 2) return this;
@@ -1714,13 +1837,15 @@ function getMethods(typename, obj) {
                   pad.fAbsWNDC = (x2-x1) * this.fAbsWNDC;
                   pad.fAbsHNDC = (y2-y1) * this.fAbsHNDC;
                   pad.fAbsXlowNDC = this.fAbsXlowNDC + x1 * this.fAbsWNDC;
-                  pad.fAbsYlowNDC = this.fAbsYlowNDC + y1 * this.fAbsWNDC;
+                  pad.fAbsYlowNDC = this.fAbsYlowNDC + y1 * this.fAbsHNDC;
                } else {
                   pad.fAbsWNDC = x2 - x1;
                   pad.fAbsHNDC = y2 - y1;
                   pad.fAbsXlowNDC = x1;
                   pad.fAbsYlowNDC = y1;
                }
+
+               pad.fFillColor = color || this.fFillColor;
 
                this.fPrimitives.Add(pad);
             }
@@ -1788,10 +1913,10 @@ function getMethods(typename, obj) {
          // compute variance in y (eprim2) and standard deviation in y (eprim)
          const contsum = cont/sum, eprim = Math.sqrt(Math.abs(err2/sum - contsum**2));
          if (this.fErrorMode === EErrorType.kERRORSPREADI) {
-            if (eprim !== 0) return eprim/Math.sqrt(neff);
+            if (eprim) return eprim / Math.sqrt(neff);
             // in case content y is an integer (so each my has an error +/- 1/sqrt(12)
             // when the std(y) is zero
-            return 1.0/Math.sqrt(12*neff);
+            return 1.0 / Math.sqrt(12*neff);
          }
          // if approximate compute the sums (of w, wy and wy2) using all the bins
          //  when the variance in y is zero
@@ -1834,7 +1959,7 @@ function getMethods(typename, obj) {
       };
    }
 
-   if (typename.indexOf('ROOT::Math::LorentzVector') === 0) {
+   if (typename.indexOf(nsROOT + 'Math::LorentzVector') === 0) {
       m.Px = m.X = function() { return this.fCoordinates.Px(); };
       m.Py = m.Y = function() { return this.fCoordinates.Py(); };
       m.Pz = m.Z = function() { return this.fCoordinates.Pz(); };
@@ -1848,7 +1973,7 @@ function getMethods(typename, obj) {
       m.Eta = m.eta = function() { return Math.atanh(this.Pz()/this.P()); };
    }
 
-   if (typename.indexOf('ROOT::Math::PxPyPzE4D') === 0) {
+   if (typename.indexOf(nsROOT + 'Math::PxPyPzE4D') === 0) {
       m.Px = m.X = function() { return this.fX; };
       m.Py = m.Y = function() { return this.fY; };
       m.Pz = m.Z = function() { return this.fZ; };
@@ -1866,6 +1991,10 @@ function getMethods(typename, obj) {
    methodsCache[typename] = m;
    return m;
 }
+
+addMethods = function(obj, typename) {
+   extend(obj, getMethods(typename || obj._typename, obj));
+};
 
 gStyle.fXaxis = create(clTAttAxis);
 gStyle.fYaxis = create(clTAttAxis);
@@ -1892,46 +2021,24 @@ function isRootCollection(lst, typename) {
           (typename === clTObjArray) || (typename === clTClonesArray);
 }
 
-/** @summary Check if argument is a not-null Object
+/** @summary Return kind string for type
+  * @desc Used when internal objects without clear ROOT type are used
+  * For such objects abstract 'kind' is defined. Used in hpainter and draw handles
   * @private */
-function isObject(arg) { return arg && typeof arg === 'object'; }
-
-/** @summary Check if argument is a Function
-  * @private */
-function isFunc(arg) { return typeof arg === 'function'; }
-
-/** @summary Check if argument is a String
-  * @private */
-function isStr(arg) { return typeof arg === 'string'; }
-
-/** @summary Check if object is a Promise
-  * @private */
-function isPromise(obj) { return isObject(obj) && isFunc(obj.then); }
-
-/** @summary Postpone func execution and return result in promise
-  * @private */
-function postponePromise(func, timeout) {
-   return new Promise(resolveFunc => {
-      setTimeout(() => {
-         const res = isFunc(func) ? func() : func;
-         resolveFunc(res);
-      }, timeout);
-   });
+function getKindForType(typ) {
+   return (!isStr(typ) || (typ.indexOf(nsROOT) !== 0)) ? prROOT + typ : typ;
 }
 
-/** @summary Provide promise in any case
+/** @summary Return type name from kind string
   * @private */
-function getPromise(obj) { return isPromise(obj) ? obj : Promise.resolve(obj); }
-
-/** @summary Ensure global JSROOT and v6 support methods
-  * @private */
-async function _ensureJSROOT() {
-   const pr = globalThis.JSROOT ? Promise.resolve(true) : loadScript(source_dir + 'scripts/JSRoot.core.js');
-
-   return pr.then(() => {
-      if (globalThis.JSROOT?._complete_loading)
-         return globalThis.JSROOT._complete_loading();
-   }).then(() => globalThis.JSROOT);
+function getTypeForKind(kind) {
+   if (!isStr(kind))
+      return null;
+   if (kind.indexOf(prROOT) === 0)
+      return kind.slice(prROOT.length);
+   if (kind.indexOf(nsROOT) === 0)
+      return kind;
+   return null;
 }
 
 /** @summary Internal collection of functions potentially used by batch scripts
@@ -1946,14 +2053,15 @@ export { version_id, version_date, version, source_dir, isNodeJs, isBatchMode, s
          clTAttLine, clTAttFill, clTAttMarker, clTAttText,
          clTPave, clTPaveText, clTPavesText, clTPaveStats, clTPaveLabel, clTPaveClass, clTDiamond,
          clTLegend, clTLegendEntry, clTPaletteAxis, clTImagePalette, clTText, clTLink, clTLatex, clTMathText, clTAnnotation, clTMultiGraph,
-         clTColor, clTLine, clTBox, clTPolyLine, clTPad, clTCanvas, clTFrame, clTAttCanvas, clTGaxis,
-         clTAxis, clTStyle, clTH1, clTH1I, clTH1D, clTH2, clTH2I, clTH2F, clTH3, clTF1, clTF12, clTF2, clTF3,
+         clTColor, clTLine, clTMarker, clTBox, clTPolyLine, clTPad, clTCanvas, clTFrame, clTAttCanvas, clTGaxis,
+         clTAxis, clTStyle, clTH1, clTH1I, clTH1F, clTH1D, clTH2, clTH2I, clTH2F, clTH2D, clTH3, clTF1, clTF12, clTF2, clTF3,
          clTProfile, clTProfile2D, clTProfile3D, clTHStack,
          clTGraph, clTGraph2DErrors, clTGraph2DAsymmErrors,
          clTGraphPolar, clTGraphPolargram, clTGraphTime, clTCutG,
          clTPolyLine3D, clTPolyMarker3D, clTGeoVolume, clTGeoNode, clTGeoNodeMatrix,
-         nsREX, nsSVG, kNoZoom, kNoStats, kInspect, kTitle, urlClassPrefix,
+         nsROOT, nsREX, nsSVG, kNoZoom, kNoStats, kInspect, kTitle, urlClassPrefix,
          isArrayProto, getDocument, BIT, clone, addMethods, parse, parseMulti, toJSON,
          decodeUrl, findFunction, createHttpRequest, httpRequest, loadModules, loadScript, injectCode,
          create, createHistogram, setHistogramTitle, createTPolyLine, createTGraph, createTHStack, createTMultiGraph,
-         getMethods, registerMethods, isRootCollection, isObject, isFunc, isStr, isPromise, getPromise, postponePromise, _ensureJSROOT };
+         getMethods, registerMethods, isRootCollection, isObject, isFunc, isStr, isPromise, getPromise, postponePromise,
+         getKindForType, getTypeForKind, _ensureJSROOT };

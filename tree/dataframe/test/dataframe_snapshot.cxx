@@ -15,6 +15,9 @@
 #include <TTreeReader.h>
 #include <TTreeReaderArray.h>
 
+#include "DummyHeader.hxx"
+#include "DataFrameSnapshotUtils.hxx"
+
 using namespace ROOT;              // RDataFrame
 using namespace ROOT::RDF;         // RInterface
 using namespace ROOT::VecOps;      // RVec
@@ -137,11 +140,9 @@ void TestCustomBasketSize()
    ROOT::RDF::RSnapshotOptions options;
    options.fBasketSize = 2048;
 
-   df_with_new_columns.Snapshot<float, float>("tree", raii.GetOutputFileCustom(), {"branch_x", "branch_x_new"},
-                                              options);
+   df_with_new_columns.Snapshot("tree", raii.GetOutputFileCustom(), {"branch_x", "branch_x_new"}, options);
 
-   df_with_new_columns.Snapshot<std::vector<float>, std::vector<float>>("tree", raii.GetOutputFileCollection(),
-                                                                        {"branch_vec", "branch_vec_new"}, options);
+   df_with_new_columns.Snapshot("tree", raii.GetOutputFileCollection(), {"branch_vec", "branch_vec_new"}, options);
 
    TFile output_file_custom(raii.GetOutputFileCustom().c_str());
    auto output_tree_custom = output_file_custom.Get<TTree>("tree");
@@ -196,13 +197,13 @@ void TestBasketSizePreservation()
       ROOT::RDataFrame df("tree", helper.GetInputFile());
       ROOT::RDF::RSnapshotOptions options;
       options.fBasketSize = 64000; // 64KB
-      df.Snapshot<float, std::vector<float>>("tree", helper.GetOutputFileCustom(), columns, options);
+      df.Snapshot("tree", helper.GetOutputFileCustom(), columns, options);
    }
 
    // Now read that tree and create new snapshot without specifying basket size
    {
       ROOT::RDataFrame df("tree", helper.GetOutputFileCustom());
-      df.Snapshot<float, std::vector<float>>("tree", helper.GetOutputFileCollection(), columns);
+      df.Snapshot("tree", helper.GetOutputFileCollection(), columns);
    }
 
    // Open both files and compare basket sizes
@@ -327,7 +328,7 @@ TEST_F(RDFSnapshot, Snapshot_aliases)
    auto tdfa = tdf.Alias(alias0, "ans");
    auto tdfb = tdfa.Define("vec", [] { return RVec<int>{1, 2, 3}; }).Alias(alias1, "vec");
    testing::internal::CaptureStderr();
-   auto snap = tdfb.Snapshot<int, RVec<int>>("mytree", "Snapshot_aliases.root", {alias0, alias1});
+   auto snap = tdfb.Snapshot("mytree", "Snapshot_aliases.root", {alias0, alias1});
    std::string err = testing::internal::GetCapturedStderr();
    EXPECT_TRUE(err.empty()) << err;
    auto names = snap->GetColumnNames();
@@ -355,7 +356,7 @@ void TestSnapshotUpdate(RInterface<RLoopManager> &tdf, const std::string &outfil
 {
    // test snapshotting two trees to the same file opened in "UPDATE" mode
    auto df = tdf.Define("x", [] { return 10; });
-   auto s1 = df.Snapshot<int>(tree1, outfile, {"x"});
+   auto s1 = df.Snapshot(tree1, outfile, {"x"});
 
    auto c1 = s1->Count();
    auto mean1 = s1->Mean<int>("x");
@@ -365,7 +366,7 @@ void TestSnapshotUpdate(RInterface<RLoopManager> &tdf, const std::string &outfil
    RSnapshotOptions opts;
    opts.fMode = "UPDATE";
    opts.fOverwriteIfExists = overwriteIfExists;
-   auto s2 = ROOT::RDataFrame(50ull).Define("x", [] { return 10; }).Snapshot<int>(tree2, outfile, {"x"}, opts);
+   auto s2 = ROOT::RDataFrame(50ull).Define("x", [] { return 10; }).Snapshot(tree2, outfile, {"x"}, opts);
 
    auto c2 = s2->Count();
    auto mean2 = s2->Mean<int>("x");
@@ -421,7 +422,7 @@ void test_snapshot_options(RInterface<RLoopManager> &tdf)
    for (auto algorithm : {RCAlgo::kZLIB, RCAlgo::kLZMA, RCAlgo::kLZ4, RCAlgo::kZSTD}) {
       opts.fCompressionAlgorithm = algorithm;
 
-      auto s = tdf.Snapshot<int>("t", outfile, {"ans"}, opts);
+      auto s = tdf.Snapshot("t", outfile, {"ans"}, opts);
 
       auto c = s->Count();
       auto min = s->Min<int>("ans");
@@ -475,18 +476,12 @@ void checkSnapshotArrayFile(RResultPtr<RInterface<RLoopManager>> &df, unsigned i
       const auto &bv = varSizeBoolArr->at(i);
       EXPECT_EQ(thisSize, dv.size());
       EXPECT_EQ(thisSize, bv.size());
-      std::cout << "bv: ";
-      for (auto j = 0u; j < thisSize; ++j)
-         std::cout << bv[j] << ' ';
-      std::cout << "\nexpected: ";
       for (auto j = 0u; j < thisSize; ++j) {
          EXPECT_DOUBLE_EQ(dv[j], i * j);
          const bool value = bv[j];
          const bool expected = j % 2 == 0;
-         std::cout << expected << ' ';
          EXPECT_EQ(value, expected);
       }
-      std::cout << '\n';
    }
 }
 
@@ -495,9 +490,8 @@ TEST_F(RDFSnapshotArrays, SingleThread)
    RDataFrame tdf("arrayTree", kFileNames);
    // template Snapshot
    // "size" _must_ be listed before "varSizeArr"!
-   auto dt = tdf.Snapshot<RVec<float>, unsigned int, RVec<double>, RVec<bool>, RVec<bool>>(
-      "outTree", "test_snapshotRVecoutST.root",
-      {"fixedSizeArr", "size", "varSizeArr", "varSizeBoolArr", "fixedSizeBoolArr"});
+   auto dt = tdf.Snapshot("outTree", "test_snapshotRVecoutST.root",
+                          {"fixedSizeArr", "size", "varSizeArr", "varSizeBoolArr", "fixedSizeBoolArr"});
 
    checkSnapshotArrayFile(dt, kNEvents);
 }
@@ -516,11 +510,8 @@ TEST_F(RDFSnapshotArrays, SingleThreadJitted)
 TEST_F(RDFSnapshotArrays, RedefineArray)
 {
    RDataFrame df("arrayTree", kFileNames);
-   auto df2 = df.Redefine("fixedSizeArr",
-                          [] {
-                             return ROOT::RVecF{42.f, 42.f};
-                          })
-                 .Snapshot<ROOT::RVec<float>>("t", "test_snapshotRVecRedefineArray.root", {"fixedSizeArr"});
+   auto df2 = df.Redefine("fixedSizeArr", [] { return ROOT::RVecF{42.f, 42.f}; })
+                 .Snapshot("t", "test_snapshotRVecRedefineArray.root", {"fixedSizeArr"});
    df2->Foreach(
       [](const ROOT::RVecF &v) {
          EXPECT_EQ(v.size(), 2u); // not 4 as it was in the original input
@@ -595,8 +586,7 @@ TEST(RDFSnapshotMore, ColsWithCustomTitles)
    // read and write test tree with RDF
    RDataFrame d(tname, fname);
    const std::string prefix = "snapshotted_";
-   auto res_tdf =
-      d.Snapshot<int, float, RVec<int>, RVec<int>>(tname, prefix + fname, {"i", "float", "arrint", "vararrint"});
+   auto res_tdf = d.Snapshot(tname, prefix + fname, {"i", "float", "arrint", "vararrint"});
 
    // check correct results have been written out
    res_tdf->Foreach(CheckColsWithCustomTitles, {"tdfentry_", "i", "arrint", "vararrint", "float"});
@@ -650,7 +640,7 @@ TEST(RDFSnapshotMore, ReadWriteStdVec)
    // read and write using RDataFrame
 
    const auto outfname1 = "out_readwritestdvec1.root";
-   RDataFrame(treename, fname).Snapshot<std::vector<int>, std::vector<bool>>(treename, outfname1, {"v", "vb"});
+   RDataFrame(treename, fname).Snapshot(treename, outfname1, {"v", "vb"});
    outputChecker(outfname1);
 
    const auto outfname2 = "out_readwritestdvec2.root";
@@ -658,7 +648,7 @@ TEST(RDFSnapshotMore, ReadWriteStdVec)
    outputChecker(outfname2);
 
    const auto outfname3 = "out_readwritestdvec3.root";
-   RDataFrame(treename, fname).Snapshot<RVec<int>, RVec<bool>>(treename, outfname3, {"v", "vb"});
+   RDataFrame(treename, fname).Snapshot(treename, outfname3, {"v", "vb"});
    outputChecker(outfname3);
 
    gSystem->Unlink(fname);
@@ -782,8 +772,7 @@ void ReadWriteCarray(const char *outFileNameBase)
    outputChecker(outfname1.c_str());
 
    const auto outfname2 = outFileNameBaseStr + "_out2.root";
-   RDataFrame(treename, fname)
-      .Snapshot<int, RVec<int>, RVec<bool>, RVec<long int>>(treename, outfname2, {"size", "v", "vb", "vl"});
+   RDataFrame(treename, fname).Snapshot(treename, outfname2, {"size", "v", "vb", "vl"});
    outputChecker(outfname2.c_str());
 
    gSystem->Unlink(fname.c_str());
@@ -827,7 +816,7 @@ TEST(RDFSnapshotMore, ReadWriteNestedLeaves)
       ROOT::TestSupport::CheckDiagsRAII diagRAII;
       diagRAII.requiredDiag(kInfo, "Snapshot", "Column v.a will be saved as v_a");
       diagRAII.requiredDiag(kInfo, "Snapshot", "Column v.b will be saved as v_b");
-      d2 = *d.Snapshot<int, int>(treename, outfname, {"v.a", "v.b"});
+      d2 = *d.Snapshot(treename, outfname, {"v.a", "v.b"});
    }
    EXPECT_EQ(d2.GetColumnNames(), std::vector<std::string>({"v_a", "v_b"}));
    auto check_a_b = [](int a, int b) {
@@ -839,7 +828,7 @@ TEST(RDFSnapshotMore, ReadWriteNestedLeaves)
    gSystem->Unlink(outfname);
 
    try {
-      d.Define("v_a", [] { return 0; }).Snapshot<int, int>(treename, outfname, {"v.a", "v_a"});
+      d.Define("v_a", [] { return 0; }).Snapshot(treename, outfname, {"v.a", "v_a"});
    } catch (std::runtime_error &e) {
       const auto error_msg = "Column v.a would be written as v_a but this column already exists. Please use Alias to "
                              "select a new name for v.a";
@@ -861,10 +850,10 @@ TEST(RDFSnapshotMore, Lazy)
       return 42;
    };
    RSnapshotOptions opts = {"RECREATE", ROOT::RCompressionSetting::EAlgorithm::kZLIB, 0, 0, 99, true};
-   auto ds = d.Define("c0", genf).Snapshot<int>(treename, fname0, {"c0"}, opts);
+   auto ds = d.Define("c0", genf).Snapshot(treename, fname0, {"c0"}, opts);
    EXPECT_EQ(v, 0U);
    EXPECT_TRUE(gSystem->AccessPathName(fname0)); // This returns FALSE if the file IS there
-   auto ds2 = ds->Define("c1", genf).Snapshot<int>(treename, fname1, {"c1"}, opts);
+   auto ds2 = ds->Define("c1", genf).Snapshot(treename, fname1, {"c1"}, opts);
    EXPECT_EQ(v, 1U);
    EXPECT_FALSE(gSystem->AccessPathName(fname0));
    EXPECT_TRUE(gSystem->AccessPathName(fname1));
@@ -895,7 +884,7 @@ void BookLazySnapshot()
    auto d = ROOT::RDataFrame(1);
    ROOT::RDF::RSnapshotOptions opts;
    opts.fLazy = true;
-   d.Snapshot<ULong64_t>("t", "lazysnapshotnottriggered_shouldnotbecreated.root", {"rdfentry_"}, opts);
+   d.Snapshot("t", "lazysnapshotnottriggered_shouldnotbecreated.root", {"rdfentry_"}, opts);
 }
 
 TEST(RDFSnapshotMore, LazyNotTriggered)
@@ -912,7 +901,7 @@ RResultPtr<RInterface<RLoopManager, void>> ReturnLazySnapshot(const char *fname)
    auto d = ROOT::RDataFrame(1);
    ROOT::RDF::RSnapshotOptions opts;
    opts.fLazy = true;
-   auto res = d.Snapshot<ULong64_t>("t", fname, {"rdfentry_"}, opts);
+   auto res = d.Snapshot("t", fname, {"rdfentry_"}, opts);
    RResultPtr<RInterface<RLoopManager, void>> res2 = res;
    return res;
 }
@@ -952,8 +941,8 @@ void ReadWriteTClonesArray()
 
    {
       // write as TClonesArray
-      auto out_df = ROOT::RDataFrame("t", "df_readwritetclonesarray.root")
-                       .Snapshot<TClonesArray>("t", "df_readwriteclonesarray1.root", {"arr"});
+      auto out_df =
+         ROOT::RDataFrame("t", "df_readwritetclonesarray.root").Snapshot("t", "df_readwriteclonesarray1.root", {"arr"});
       RVec<TH1D> hvec;
 
 #ifndef NDEBUG
@@ -972,7 +961,7 @@ void ReadWriteTClonesArray()
    //                                    "vector;TH1D.h;ROOT/RVec.hxx");
    //   // write as RVecs
    //   auto out_df = ROOT::RDataFrame("t", "df_readwritetclonesarray.root")
-   //                    .Snapshot<RVec<TH1D>>("t", "df_readwriteclonesarray2.root", {"arr"});
+   //                    .Snapshot("t", "df_readwriteclonesarray2.root", {"arr"});
    //   const auto hvec = out_df->Take<RVec<TH1D>>("arr")->at(0);
    //   CheckTClonesArrayOutput(hvec);
    //}
@@ -1003,17 +992,17 @@ TEST(RDFSnapshotMore, TClonesArray)
    ReadWriteTClonesArray();
 }
 
-// ROOT-10702
+// https://its.cern.ch/jira/browse/ROOT-10702
 TEST(RDFSnapshotMore, CompositeTypeWithNameClash)
 {
-   const auto fname = "snap_compositetypewithnameclash.root";
-   gInterpreter->Declare("struct Int { int x; };");
-   ROOT::RDataFrame df(3);
-   auto snap_df = df.Define("i", "Int{-1};").Define("x", [] { return 1; }).Snapshot("t", fname);
+   constexpr auto fName{"snap_compositetypewithnameclash.root"};
+   struct FileGuard {
+      ~FileGuard() { std::remove(fName); }
+   } _;
+   ROOT::RDataFrame df{3};
+   auto snap_df = df.Define("i", [] { return Int{-1}; }).Define("x", [] { return 1; }).Snapshot("t", fName);
    EXPECT_EQ(snap_df->Sum<int>("x").GetValue(), 3); // prints -3 if the wrong "x" is written out
    EXPECT_EQ(snap_df->Sum<int>("i.x").GetValue(), -3);
-
-   gSystem->Unlink(fname);
 }
 
 // Test that we error out gracefully in case the output file specified for a Snapshot cannot be opened
@@ -1024,7 +1013,7 @@ TEST(RDFSnapshotMore, ForbiddenOutputFilename)
 
    // Compiled
    try {
-      ROOT_EXPECT_SYSERROR(df.Snapshot<unsigned int>("t", out_fname, {"rdfslot_"}), "TFile::TFile",
+      ROOT_EXPECT_SYSERROR(df.Snapshot("t", out_fname, {"rdfslot_"}), "TFile::TFile",
                            "file /definitely/not/a/valid/path/f.root can not be opened No such file or directory")
    } catch (const std::runtime_error &e) {
       EXPECT_STREQ(e.what(), "Snapshot: could not create output file /definitely/not/a/valid/path/f.root");
@@ -1044,7 +1033,7 @@ TEST(RDFSnapshotMore, ForbiddenOutputFilename)
 TEST(RDFSnapshotMore, ZeroOutputEntries)
 {
    const auto fname = "snapshot_zerooutputentries.root";
-   ROOT::RDataFrame(10).Alias("c", "rdfentry_").Filter([] { return false; }).Snapshot<ULong64_t>("t", fname, {"c"});
+   ROOT::RDataFrame(10).Alias("c", "rdfentry_").Filter([] { return false; }).Snapshot("t", fname, {"c"});
    EXPECT_EQ(gSystem->AccessPathName(fname), 0); // This returns 0 if the file IS there
 
    TFile f(fname);
@@ -1088,10 +1077,6 @@ TEST(RDFSnapshotMore, MissingSizeBranch)
 
    ROOT::RDataFrame df("t", inFile);
 
-   // fully typed Snapshot call throws
-   EXPECT_THROW(df.Snapshot<ROOT::RVecF>("t", outFile, {"vec"}), std::runtime_error);
-
-   // jitted Snapshot works anyway
    auto out = df.Snapshot("t", outFile, {"vec"});
 
    auto sizes = out->Take<int>("sz");
@@ -1140,7 +1125,7 @@ TEST(RDFSnapshotMore, OutOfOrderSizeBranch)
 
    {
       // fully typed Snapshot
-      auto out = ROOT::RDataFrame("t", inFile).Snapshot<ROOT::RVecF, int>("t", outFile, {"vec", "sz"});
+      auto out = ROOT::RDataFrame("t", inFile).Snapshot("t", outFile, {"vec", "sz"});
       auto sizes = out->Take<int>("sz");
       auto vecs = out->Take<ROOT::RVecF>("vec");
 
@@ -1316,12 +1301,12 @@ TEST(RDFSnapshotMore, ManyTasksPerThread)
    ROOT::RDataFrame d(1);
    auto dd = d.Define("x", []() { return 42; });
    for (auto i = 0u; i < nInputFiles; ++i)
-      dd.Snapshot<int>("t", inputFilePrefix + std::to_string(i) + ".root", {"x"});
+      dd.Snapshot("t", inputFilePrefix + std::to_string(i) + ".root", {"x"});
 
    // test multi-thread Snapshotting from many tasks per worker thread
    const auto outputFile = "snapshot_manytasks_out.root";
    ROOT::RDataFrame tdf("t", inputFilePrefix + "*.root");
-   tdf.Snapshot<int>("t", outputFile, {"x"});
+   tdf.Snapshot("t", outputFile, {"x"});
 
    // check output contents
    ROOT::RDataFrame checkTdf("t", outputFile);
@@ -1357,9 +1342,8 @@ TEST_F(RDFSnapshotArrays, MultiThread)
    ROOT::EnableImplicitMT(4);
 
    RDataFrame tdf("arrayTree", kFileNames);
-   auto dt = tdf.Snapshot<RVec<float>, unsigned int, RVec<double>, RVec<bool>, RVec<bool>>(
-      "outTree", "test_snapshotRVecoutMT.root",
-      {"fixedSizeArr", "size", "varSizeArr", "varSizeBoolArr", "fixedSizeBoolArr"});
+   auto dt = tdf.Snapshot("outTree", "test_snapshotRVecoutMT.root",
+                          {"fixedSizeArr", "size", "varSizeArr", "varSizeBoolArr", "fixedSizeBoolArr"});
 
    checkSnapshotArrayFileMT(dt, kNEvents);
 
@@ -1384,11 +1368,11 @@ TEST_F(RDFSnapshotArrays, WriteRVecFromFile)
 {
    {
       auto df = ROOT::RDataFrame(3).Define("x", [](ULong64_t e) { return ROOT::RVecD(e, double(e)); }, {"rdfentry_"});
-      df.Snapshot<ROOT::RVecD>("t", "test_snapshotRVecWriteRVecFromFile.root", {"x"});
+      df.Snapshot("t", "test_snapshotRVecWriteRVecFromFile.root", {"x"});
    }
 
    ROOT::RDataFrame df("t", "test_snapshotRVecWriteRVecFromFile.root");
-   auto outdf = df.Snapshot<ROOT::RVecD>("t", "test_snapshotRVecWriteRVecFromFile2.root", {"x"});
+   auto outdf = df.Snapshot("t", "test_snapshotRVecWriteRVecFromFile2.root", {"x"});
 
    const auto res = outdf->Take<ROOT::RVecD>("x").GetValue();
 
@@ -1413,8 +1397,7 @@ TEST(RDFSnapshotMore, ColsWithCustomTitlesMT)
    ROOT::EnableImplicitMT(4);
    RDataFrame d(tname, fname);
    const std::string prefix = "snapshotted_";
-   auto res_tdf =
-      d.Snapshot<int, float, RVec<int>, RVec<int>>(tname, prefix + fname, {"i", "float", "arrint", "vararrint"});
+   auto res_tdf = d.Snapshot(tname, prefix + fname, {"i", "float", "arrint", "vararrint"});
 
    // check correct results have been written out
    res_tdf->Foreach(CheckColsWithCustomTitles, {"tdfentry_", "i", "arrint", "vararrint", "float"});
@@ -1430,8 +1413,8 @@ TEST(RDFSnapshotMore, TreeWithFriendsMT)
 {
    const auto fname1 = "treewithfriendsmt1.root";
    const auto fname2 = "treewithfriendsmt2.root";
-   RDataFrame(10).Define("x", []() { return 42; }).Snapshot<int>("t", fname1, {"x"});
-   RDataFrame(10).Define("x", []() { return 0; }).Snapshot<int>("t", fname2, {"x"});
+   RDataFrame(10).Define("x", []() { return 42; }).Snapshot("t", fname1, {"x"});
+   RDataFrame(10).Define("x", []() { return 0; }).Snapshot("t", fname2, {"x"});
 
    ROOT::EnableImplicitMT();
 
@@ -1443,7 +1426,7 @@ TEST(RDFSnapshotMore, TreeWithFriendsMT)
 
    const auto outfname = "out_treewithfriendsmt.root";
    RDataFrame df(*tree);
-   auto df_out = df.Snapshot<int>("t", outfname, {"x"});
+   auto df_out = df.Snapshot("t", outfname, {"x"});
    EXPECT_EQ(df_out->Max<int>("x").GetValue(), 42);
    EXPECT_EQ(df_out->GetColumnNames(), std::vector<std::string>{"x"});
 
@@ -1493,16 +1476,22 @@ TEST(RDFSnapshotMore, LazyTriggeredMT)
 
 TEST(RDFSnapshotMore, EmptyBuffersMT)
 {
+   // Test that a tree gets created when only one worker yields events
    const auto fname = "emptybuffersmt.root";
    const auto treename = "t";
    const unsigned int nslots = std::min(4U, std::thread::hardware_concurrency());
    ROOT::EnableImplicitMT(nslots);
    ROOT::RDataFrame d(10);
-   auto dd = d.DefineSlot("x", [&](unsigned int s) {
-                 return s == nslots - 1 ? 0 : 1;
+   std::atomic_bool firstWorker{true};
+   auto dd = d.DefineSlot("x", [&](unsigned int) {
+                 bool expected = true;
+                 if (firstWorker.compare_exchange_strong(expected, false)) {
+                    return 0;
+                 }
+                 return 1;
               }).Filter([](int x) { return x == 0; }, {"x"}, "f");
    auto r = dd.Report();
-   dd.Snapshot<int>(treename, fname, {"x"});
+   dd.Snapshot(treename, fname, {"x"});
 
    // check test sanity
    const auto passed = r->At("f").GetPass();
@@ -1541,7 +1530,7 @@ TEST(RDFSnapshotMore, ForbiddenOutputFilenameMT)
    // Compiled
    try {
       const auto expected = "file /definitely/not/a/valid/path/f.root can not be opened No such file or directory";
-      ROOT_EXPECT_SYSERROR(df.Snapshot<unsigned int>("t", out_fname, {"rdfslot_"}), "TFile::TFile", expected);
+      ROOT_EXPECT_SYSERROR(df.Snapshot("t", out_fname, {"rdfslot_"}), "TFile::TFile", expected);
    } catch (const std::runtime_error &e) {
       EXPECT_STREQ(e.what(), "Snapshot: could not create output file /definitely/not/a/valid/path/f.root");
    }
@@ -1586,7 +1575,7 @@ TEST(RDFSnapshotMore, SetMaxTreeSizeMT)
       }
 
       ROOT::RDataFrame df{t};
-      df.Snapshot<Int_t>("T", "rdfsnapshot_ttree_sequential_setmaxtreesize.root", {"x"});
+      df.Snapshot("T", "rdfsnapshot_ttree_sequential_setmaxtreesize.root", {"x"});
    }
 
    // Create an RDF from the previously snapshotted file, then Snapshot again
@@ -1595,7 +1584,7 @@ TEST(RDFSnapshotMore, SetMaxTreeSizeMT)
       ROOT::EnableImplicitMT();
 
       ROOT::RDataFrame df{"T", "rdfsnapshot_ttree_sequential_setmaxtreesize.root"};
-      df.Snapshot<Int_t>("T", "rdfsnapshot_imt_setmaxtreesize.root", {"x"});
+      df.Snapshot("T", "rdfsnapshot_imt_setmaxtreesize.root", {"x"});
 
       ROOT::DisableImplicitMT();
    }
@@ -1630,7 +1619,7 @@ TEST(RDFSnapshotMore, SetMaxTreeSizeMT)
 TEST(RDFSnapshotMore, ZeroOutputEntriesMT)
 {
    const auto fname = "snapshot_zerooutputentriesmt.root";
-   ROOT::RDataFrame(10).Alias("c", "rdfentry_").Filter([] { return false; }).Snapshot<ULong64_t>("t", fname, {"c"});
+   ROOT::RDataFrame(10).Alias("c", "rdfentry_").Filter([] { return false; }).Snapshot("t", fname, {"c"});
    EXPECT_EQ(gSystem->AccessPathName(fname), 0); // This returns 0 if the file IS there
 
    TFile f(fname);

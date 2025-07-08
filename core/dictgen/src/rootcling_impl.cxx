@@ -3488,7 +3488,7 @@ public:
       InterpreterCallbacks(interp),
       fFilesIncludedByLinkdef(filesIncludedByLinkdef){};
 
-   ~TRootClingCallbacks(){};
+   ~TRootClingCallbacks() override{};
 
    void InclusionDirective(clang::SourceLocation /*HashLoc*/, const clang::Token & /*IncludeTok*/,
                            llvm::StringRef FileName, bool IsAngled, clang::CharSourceRange /*FilenameRange*/,
@@ -3577,13 +3577,13 @@ public:
    {
    }
 
-   ~CheckModuleBuildClient()
+   ~CheckModuleBuildClient() override
    {
       if (fOwnsChild)
          delete fChild;
    }
 
-   virtual void HandleDiagnostic(clang::DiagnosticsEngine::Level DiagLevel, const clang::Diagnostic &Info) override
+   void HandleDiagnostic(clang::DiagnosticsEngine::Level DiagLevel, const clang::Diagnostic &Info) override
    {
       using namespace clang::diag;
 
@@ -3645,31 +3645,31 @@ public:
    }
 
    // All methods below just forward to the child and the default method.
-   virtual void clear() override
+   void clear() override
    {
       fChild->clear();
       DiagnosticConsumer::clear();
    }
 
-   virtual void BeginSourceFile(const clang::LangOptions &LangOpts, const clang::Preprocessor *PP) override
+   void BeginSourceFile(const clang::LangOptions &LangOpts, const clang::Preprocessor *PP) override
    {
       fChild->BeginSourceFile(LangOpts, PP);
       DiagnosticConsumer::BeginSourceFile(LangOpts, PP);
    }
 
-   virtual void EndSourceFile() override
+   void EndSourceFile() override
    {
       fChild->EndSourceFile();
       DiagnosticConsumer::EndSourceFile();
    }
 
-   virtual void finish() override
+   void finish() override
    {
       fChild->finish();
       DiagnosticConsumer::finish();
    }
 
-   virtual bool IncludeInDiagnosticCounts() const override { return fChild->IncludeInDiagnosticCounts(); }
+   bool IncludeInDiagnosticCounts() const override { return fChild->IncludeInDiagnosticCounts(); }
 };
 
 static void MaybeSuppressWin32CrashDialogs() {
@@ -3907,12 +3907,12 @@ static bool ModuleContainsHeaders(TModuleGenerator &modGen, clang::HeaderSearch 
       if (auto FE = headerSearch.LookupFile(
                header, clang::SourceLocation(),
                /*isAngled*/ false,
-               /*FromDir*/ 0, CurDir,
+               /*FromDir*/ nullptr, CurDir,
                clang::ArrayRef<std::pair<clang::OptionalFileEntryRef, clang::DirectoryEntryRef>>(),
-               /*SearchPath*/ 0,
-               /*RelativePath*/ 0,
-               /*RequestingModule*/ 0, &SuggestedModule,
-               /*IsMapped*/ 0,
+               /*SearchPath*/ nullptr,
+               /*RelativePath*/ nullptr,
+               /*RequestingModule*/ nullptr, &SuggestedModule,
+               /*IsMapped*/ nullptr,
                /*IsFrameworkFound*/ nullptr,
                /*SkipCache*/ false,
                /*BuildSystemModule*/ false,
@@ -4073,13 +4073,17 @@ int RootClingMain(int argc,
 
    llvm::cl::ParseCommandLineOptions(argc, argv, "rootcling");
 
-   std::string llvmResourceDir = std::string(gDriverConfig->fTROOT__GetEtcDir()) + "/cling";
+   const char *etcDir = gDriverConfig->fTROOT__GetEtcDir();
+   std::string llvmResourceDir = etcDir ? std::string(etcDir) + "/cling" : "";
+   
    if (gBareClingSubcommand) {
       std::vector<const char *> clingArgsC;
       clingArgsC.push_back(executableFileName);
       // Help cling finds its runtime (RuntimeUniverse.h and such).
-      clingArgsC.push_back("-I");
-      clingArgsC.push_back(gDriverConfig->fTROOT__GetEtcDir());
+      if (etcDir) {
+         clingArgsC.push_back("-I");
+         clingArgsC.push_back(etcDir);
+      }
 
       //clingArgsC.push_back("-resource-dir");
       //clingArgsC.push_back(llvmResourceDir.c_str());
@@ -4218,8 +4222,10 @@ int RootClingMain(int argc,
       clingArgs.push_back(FullWDiag);
    }
 
-   std::string includeDir = llvm::sys::path::convert_to_slash(gDriverConfig->fTROOT__GetIncludeDir());
-   clingArgs.push_back(std::string("-I") + includeDir);
+   const char *includeDir = gDriverConfig->fTROOT__GetIncludeDir();
+   if (includeDir) {
+       clingArgs.push_back(std::string("-I") + llvm::sys::path::convert_to_slash(includeDir));
+   }
 
    std::vector<std::string> pcmArgs;
    for (size_t parg = 0, n = clingArgs.size(); parg < n; ++parg) {
@@ -4243,7 +4249,9 @@ int RootClingMain(int argc,
    }
 
    // cling-only arguments
-   clingArgs.push_back(std::string("-I") + llvm::sys::path::convert_to_slash(gDriverConfig->fTROOT__GetEtcDir()));
+   if (etcDir)
+      clingArgs.push_back(std::string("-I") + llvm::sys::path::convert_to_slash(etcDir));
+   
    // We do not want __ROOTCLING__ in the pch!
    if (!gOptGeneratePCH) {
       clingArgs.push_back("-D__ROOTCLING__");
@@ -4300,9 +4308,9 @@ int RootClingMain(int argc,
       for (const std::string &modulemap : gOptModuleMapFiles)
          clingArgsInterpreter.push_back("-fmodule-map-file=" + modulemap);
 
-      clingArgsInterpreter.push_back("-fmodule-map-file=" +
-                                     std::string(gDriverConfig->fTROOT__GetIncludeDir()) +
-                                     "/ROOT.modulemap");
+      if (includeDir) {
+         clingArgsInterpreter.push_back("-fmodule-map-file=" + std::string(includeDir) + "/ROOT.modulemap");
+      }
       std::string ModuleMapCWD = ROOT::FoundationUtils::GetCurrentDir() + "/module.modulemap";
       if (llvm::sys::fs::exists(ModuleMapCWD))
          clingArgsInterpreter.push_back("-fmodule-map-file=" + ModuleMapCWD);
@@ -4490,7 +4498,7 @@ int RootClingMain(int argc,
 
    // We are now ready (enough is loaded) to init the list of opaque typedefs.
    ROOT::TMetaUtils::TNormalizedCtxt normCtxt(interp.getLookupHelper());
-   ROOT::TMetaUtils::TClingLookupHelper helper(interp, normCtxt, nullptr, nullptr, nullptr);
+   ROOT::TMetaUtils::TClingLookupHelper helper(interp, normCtxt, nullptr, nullptr, nullptr, nullptr);
    TClassEdit::Init(&helper);
 
    // flags used only for the pragma parser:

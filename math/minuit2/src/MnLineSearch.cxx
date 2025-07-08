@@ -12,7 +12,6 @@
 #include "Minuit2/MinimumParameters.h"
 #include "Minuit2/MnMachinePrecision.h"
 #include "Minuit2/MnParabola.h"
-#include "Minuit2/MnParabolaPoint.h"
 #include "Minuit2/MnParabolaFactory.h"
 #include "Minuit2/MnPrint.h"
 
@@ -42,8 +41,8 @@ namespace Minuit2 {
     - add a flag to control the debug
 */
 
-MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParameters &st, const MnAlgebraicVector &step,
-                                         double gdel, const MnMachinePrecision &prec) const
+MnPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParameters &st, const MnAlgebraicVector &step,
+                                 double gdel, const MnMachinePrecision &prec) const
 {
 
    //*-*-*-*-*-*-*-*-*-*Perform a line search from position st along step   *-*-*-*-*-*-*-*
@@ -57,7 +56,7 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
 
    MnPrint print("MnLineSearch");
 
-   print.Debug("gdel", gdel, "step", step);
+   print.Debug("doing line search along given step and gdel = s^t*g = ", gdel);
 
    double overall = 1000.;
    double undral = -100.;
@@ -68,6 +67,8 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
    int maxiter = 12;
    // start as in Fortran from 1 and count all the time we evaluate the function
    int niter = 1;
+
+   MnFcnCaller fcnCaller{fcn};
 
    for (unsigned int i = 0; i < step.size(); i++) {
       if (step(i) == 0)
@@ -83,7 +84,7 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
    slamin *= prec.Eps2();
 
    double f0 = st.Fval();
-   double f1 = fcn(st.Vec() + step);
+   double f1 = fcnCaller(st.Vec() + step);
    niter++;
    double fvmin = st.Fval();
    double xvmin = 0.;
@@ -98,8 +99,8 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
    double slam = 1.;
 
    bool iterate = false;
-   MnParabolaPoint p0(0., f0);
-   MnParabolaPoint p1(slam, flast);
+   MnPoint p0(0., f0);
+   MnPoint p1(slam, flast);
    double f2 = 0.;
    // quadratic interpolation using the two points p0,p1 and the slope at p0
    do {
@@ -107,7 +108,7 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
       iterate = false;
       // MnParabola pb = MnParabolaFactory()(p0, gdel, p1);
 
-      print.Debug("flast", flast, "f0", f0, "flast-f0", flast - f0, "slam", slam);
+      print.Trace("flast", flast, "f0", f0, "flast-f0", flast - f0, "slam", slam);
       //     double df = flast-f0;
       //     if(std::fabs(df) < prec.Eps2()) {
       //       if(flast-f0 < 0.) df = -prec.Eps2();
@@ -117,14 +118,14 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
       //     double denom = 2.*(df-gdel*slam)/(slam*slam);
       double denom = 2. * (flast - f0 - gdel * slam) / (slam * slam);
 
-      print.Debug("denom", denom);
+      print.Trace("denom", denom);
       if (denom != 0) {
          slam = -gdel / denom;
       } else {
          denom = -0.1 * gdel;
          slam = 1.;
       }
-      print.Debug("new slam", slam);
+      print.Trace("new slam", slam);
 
 #ifdef TRY_OPPOSIT_DIR
       // if is less than zero indicates maximum position. Use then slamax or x = x0 - 2slam + 1
@@ -133,37 +134,35 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
 #endif
 
       if (slam < 0.) {
-         print.Debug("slam is negative - set to", slamax);
+         print.Trace("slam is negative - set to", slamax);
 #ifdef TRY_OPPOSITE_DIR
          slamNeg = 2 * slam - 1;
          slamIsNeg = true;
-         print.Debug("slam is negative - compare values between", slamNeg, "and", slamax);
+         print.Trace("slam is negative - compare values between", slamNeg, "and", slamax);
 #endif
          slam = slamax;
       }
-      //     std::cout<<"slam= "<<slam<<std::endl;
       if (slam > slamax) {
          slam = slamax;
-         print.Debug("slam larger than mac value - set to", slamax);
+         print.Trace("slam larger than max value - set to", slamax);
       }
 
       if (slam < toler8) {
-         print.Debug("slam too small - set to", toler8);
+         print.Trace("slam too small - set to", toler8);
          slam = toler8;
       }
-      //     std::cout<<"slam= "<<slam<<std::endl;
       if (slam < slamin) {
-         print.Debug("slam smaller than", slamin, "return");
+         print.Trace("slam smaller than", slamin, "return");
          //       std::cout<<"f1, f2= "<<p0.Y()<<", "<<p1.Y()<<std::endl;
          //       std::cout<<"x1, x2= "<<p0.X()<<", "<<p1.X()<<std::endl;
          //       std::cout<<"x, f= "<<xvmin<<", "<<fvmin<<std::endl;
-         return MnParabolaPoint(xvmin, fvmin);
+         return {xvmin, fvmin};
       }
       if (std::fabs(slam - 1.) < toler8 && p1.Y() < p0.Y()) {
          //       std::cout<<"f1, f2= "<<p0.Y()<<", "<<p1.Y()<<std::endl;
          //       std::cout<<"x1, x2= "<<p0.X()<<", "<<p1.X()<<std::endl;
          //       std::cout<<"x, f= "<<xvmin<<", "<<fvmin<<std::endl;
-         return MnParabolaPoint(xvmin, fvmin);
+         return {xvmin, fvmin};
       }
       if (std::fabs(slam - 1.) < toler8)
          slam = 1. + toler8;
@@ -173,7 +172,7 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
       //     MnAlgebraicVector tmp = step;
       //     tmp *= slam;
       //     f2 = fcn(st.Vec()+tmp);
-      f2 = fcn(st.Vec() + slam * step);
+      f2 = fcnCaller(st.Vec() + slam * step);
 
       niter++; // do as in Minuit (count all func evalu)
 
@@ -200,25 +199,25 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
          toler8 = toler * slam;
          overall = slam - toler8;
          slamax = overall;
-         p1 = MnParabolaPoint(slam, flast);
+         p1 = MnPoint(slam, flast);
          // niter++;
       }
    } while (iterate && niter < maxiter);
    if (niter >= maxiter) {
       // exhausted max number of iterations
-      return MnParabolaPoint(xvmin, fvmin);
+      return {xvmin, fvmin};
    }
 
-   print.Debug("after initial 2-point iter:", '\n', " x0, x1, x2:", p0.X(), p1.X(), slam, '\n', " f0, f1, f2:", p0.Y(),
+   print.Trace("after initial 2-point iter:", '\n', " x0, x1, x2:", p0.X(), p1.X(), slam, '\n', " f0, f1, f2:", p0.Y(),
                p1.Y(), f2);
 
-   MnParabolaPoint p2(slam, f2);
+   MnPoint p2(slam, f2);
 
    // do now the quadratic interpolation with 3 points
    do {
       slamax = std::max(slamax, alpha * std::fabs(xvmin));
       MnParabola pb = MnParabolaFactory()(p0, p1, p2);
-      print.Debug("Iteration", niter, '\n', " x0, x1, x2:", p0.X(), p1.X(), p2.X(), '\n', " f0, f1, f2:", p0.Y(),
+      print.Trace("Iteration", niter, '\n', " x0, x1, x2:", p0.X(), p1.X(), p2.X(), '\n', " f0, f1, f2:", p0.Y(),
                   p1.Y(), p2.Y(), '\n', " slamax    :", slamax, '\n', " p2-p0,p1  :", p2.Y() - p0.Y(), p2.Y() - p1.Y(),
                   '\n', " a, b, c   :", pb.A(), pb.B(), pb.C());
       if (pb.A() < prec.Eps2()) {
@@ -227,7 +226,7 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
             slam = xvmin + slamax;
          else
             slam = xvmin - slamax;
-         print.Debug("xvmin", xvmin, "slopem", slopem, "slam", slam);
+         print.Trace("xvmin", xvmin, "slopem", slopem, "slam", slam);
       } else {
          slam = pb.Min();
          //      std::cout<<"pb.Min() slam= "<<slam<<std::endl;
@@ -249,7 +248,7 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
       double f3 = 0.;
       do {
 
-         print.Debug("iterate on f3- slam", niter, "slam", slam, "xvmin", xvmin);
+         print.Trace("iterate on f3- slam", niter, "slam", slam, "xvmin", xvmin);
 
          iterate = false;
          double toler9 = std::max(toler8, std::fabs(toler8 * slam));
@@ -259,41 +258,42 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
             //   std::cout<<"f1, f2, f3= "<<p0.Y()<<", "<<p1.Y()<<", "<<p2.Y()<<std::endl;
             //   std::cout<<"x1, x2, x3= "<<p0.X()<<", "<<p1.X()<<", "<<p2.X()<<std::endl;
             //   std::cout<<"x, f= "<<xvmin<<", "<<fvmin<<std::endl;
-            return MnParabolaPoint(xvmin, fvmin);
+            return {xvmin, fvmin};
          }
 
          // take the step
          //       MnAlgebraicVector tmp = step;
          //       tmp *= slam;
-         f3 = fcn(st.Vec() + slam * step);
-         print.Debug("f3", f3, "f3-p(2-0).Y()", f3 - p2.Y(), f3 - p1.Y(), f3 - p0.Y());
+         f3 = fcnCaller(st.Vec() + slam * step);
+         print.Trace("f3", f3, "f3-p(2-0).Y()", f3 - p2.Y(), f3 - p1.Y(), f3 - p0.Y());
          // if latest point worse than all three previous, cut step
          if (f3 > p0.Y() && f3 > p1.Y() && f3 > p2.Y()) {
-            print.Debug("f3 worse than all three previous");
+            print.Trace("f3 worse than all three previous");
             if (slam > xvmin)
                overall = std::min(overall, slam - toler8);
             if (slam < xvmin)
                undral = std::max(undral, slam + toler8);
             slam = 0.5 * (slam + xvmin);
-            print.Debug("new slam", slam);
+            print.Trace("new slam", slam);
             iterate = true;
             niter++;
          }
       } while (iterate && niter < maxiter);
       if (niter >= maxiter) {
          // exhausted max number of iterations
-         return MnParabolaPoint(xvmin, fvmin);
+         print.Debug("Exhausted max number of iterations ",maxiter," return");
+         return {xvmin, fvmin};
       }
 
       // find worst previous point out of three and replace
-      MnParabolaPoint p3(slam, f3);
+      MnPoint p3(slam, f3);
       if (p0.Y() > p1.Y() && p0.Y() > p2.Y())
          p0 = p3;
       else if (p1.Y() > p0.Y() && p1.Y() > p2.Y())
          p1 = p3;
       else
          p2 = p3;
-      print.Debug("f3", f3, "fvmin", fvmin, "xvmin", xvmin);
+      print.Trace("f3", f3, "fvmin", fvmin, "xvmin", xvmin);
       if (f3 < fvmin) {
          fvmin = f3;
          xvmin = slam;
@@ -308,7 +308,7 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
    } while (niter < maxiter);
 
    print.Debug("f1, f2 =", p0.Y(), p1.Y(), '\n', "x1, x2 =", p0.X(), p1.X(), '\n', "x, f =", xvmin, fvmin);
-   return MnParabolaPoint(xvmin, fvmin);
+   return {xvmin, fvmin};
 }
 
 #ifdef USE_OTHER_LS
@@ -317,12 +317,12 @@ MnParabolaPoint MnLineSearch::operator()(const MnFcn &fcn, const MinimumParamete
      This is used at the beginning when the second derivative is known to be negative
 */
 
-MnParabolaPoint MnLineSearch::CubicSearch(const MnFcn &fcn, const MinimumParameters &st, const MnAlgebraicVector &step,
-                                          double gdel, double g2del, const MnMachinePrecision &prec) const
+MnPoint MnLineSearch::CubicSearch(const MnFcn &fcn, const MinimumParameters &st, const MnAlgebraicVector &step,
+                                  double gdel, double g2del, const MnMachinePrecision &prec) const
 {
    MnPrint print("MnLineSearch::CubicSearch");
 
-   print.Debug("gdel", gdel, "g2del", g2del, "step", step);
+   print.Trace("gdel", gdel, "g2del", g2del, "step", step);
 
    // change of large values
    double overall = 100.;
@@ -360,8 +360,8 @@ MnParabolaPoint MnLineSearch::CubicSearch(const MnFcn &fcn, const MinimumParamet
    double flast = f1;
    double slam = 1.;
 
-   //    MnParabolaPoint p0(0., f0);
-   //    MnParabolaPoint p1(slam, flast);
+   //    MnPoint p0(0., f0);
+   //    MnPoint p1(slam, flast);
 
    ROOT::Math::SMatrix<double, 3> cubicMatrix;
    ROOT::Math::SVector<double, 3> cubicCoeff; // cubic coefficients to be found
@@ -392,7 +392,7 @@ MnParabolaPoint MnLineSearch::CubicSearch(const MnFcn &fcn, const MinimumParamet
    // find the minimum need to invert the matrix
    if (!cubicMatrix.Invert()) {
       print.Warn("Inversion failed - return");
-      return MnParabolaPoint(xvmin, fvmin);
+      return {xvmin, fvmin};
    }
 
    cubicCoeff = cubicMatrix * bVec;
@@ -497,23 +497,23 @@ MnParabolaPoint MnLineSearch::CubicSearch(const MnFcn &fcn, const MinimumParamet
       } else if (std::fabs(df2) <= 0) { // gradient is significative different than zero then redo a cubic interpolation
                                         // from new point
 
-         return MnParabolaPoint(slam, fp); // should redo a cubic interpol.  ??
-                                           //          niter ++;
-                                           //          if (niter > maxiter) break;
+         return {slam, fp}; // should redo a cubic interpol.  ??
+                            //          niter ++;
+                            //          if (niter > maxiter) break;
 
          //          MinimumParameters pa = MinimumParameters(st.Vec() + stepNew, fp);
          //          gdel = stepNew(i)
-         //          MnParabolaPoint pp = CubicSearch(fcn, st, stepNew, df, df2
+         //          MnPoint pp = CubicSearch(fcn, st, stepNew, df, df2
 
       }
 
       else
-         return MnParabolaPoint(slam, fp);
+         return {slam, fp};
 
       niter++;
    } while (niter < maxiter);
 
-   return MnParabolaPoint(xvmin, fvmin);
+   return {xvmin, fvmin};
 }
 
 // class describing Fcn function in one dimension
@@ -535,8 +535,8 @@ private:
    const MnAlgebraicVector &fStep;
 };
 
-MnParabolaPoint MnLineSearch::BrentSearch(const MnFcn &fcn, const MinimumParameters &st, const MnAlgebraicVector &step,
-                                          double gdel, double g2del, const MnMachinePrecision &prec) const
+MnPoint MnLineSearch::BrentSearch(const MnFcn &fcn, const MinimumParameters &st, const MnAlgebraicVector &step,
+                                  double gdel, double g2del, const MnMachinePrecision &prec) const
 {
    MnPrint print("MnLineSearch::BrentSearch");
 
@@ -578,8 +578,8 @@ MnParabolaPoint MnLineSearch::BrentSearch(const MnFcn &fcn, const MinimumParamet
 
    double x0 = 0;
 
-//    MnParabolaPoint p0(0., f0);
-//    MnParabolaPoint p1(slam, flast);
+//    MnPoint p0(0., f0);
+//    MnPoint p1(slam, flast);
 #ifdef USE_CUBIC
 
    ROOT::Math::SMatrix<double, 3> cubicMatrix;
@@ -610,7 +610,7 @@ MnParabolaPoint MnLineSearch::BrentSearch(const MnFcn &fcn, const MinimumParamet
    // find the minimum need to invert the matrix
    if (!cubicMatrix.Invert()) {
       print.Warn("Inversion failed - return");
-      return MnParabolaPoint(xvmin, fvmin);
+      return {xvmin, fvmin};
    }
 
    cubicCoeff = cubicMatrix * bVec;
@@ -799,7 +799,7 @@ MnParabolaPoint MnLineSearch::BrentSearch(const MnFcn &fcn, const MinimumParamet
    if (f0 > fa || f0 > fb)
       // skip minim 1d try Minuit LS
       // return (*this) (fcn, st, step, gdel, prec, debug);
-      return MnParabolaPoint(xvmin, fvmin);
+      return {xvmin, fvmin};
 
    print.Info("1D minimization using", minType);
 
@@ -811,7 +811,7 @@ MnParabolaPoint MnLineSearch::BrentSearch(const MnFcn &fcn, const MinimumParamet
    MnPrint::info("result of GSL 1D minimization:", ret, "niter", min.Iterations(), "xmin", min.XMinimum(), "fmin",
                  min.FValMinimum());
 
-   return MnParabolaPoint(min.XMinimum(), min.FValMinimum());
+   return {min.XMinimum(), min.FValMinimum()};
 }
 
 #endif

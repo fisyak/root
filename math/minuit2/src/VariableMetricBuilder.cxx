@@ -18,10 +18,11 @@
 #include "Minuit2/MnFcn.h"
 #include "Minuit2/MnMachinePrecision.h"
 #include "Minuit2/MnPosDef.h"
-#include "Minuit2/MnParabolaPoint.h"
 #include "Minuit2/MnStrategy.h"
 #include "Minuit2/MnHesse.h"
 #include "Minuit2/MnPrint.h"
+
+#include "Math/Util.h"
 
 #include <cmath>
 #include <cassert>
@@ -88,13 +89,13 @@ FunctionMinimum VariableMetricBuilder::Minimum(const MnFcn &fcn, const GradientC
    }
 
    std::vector<MinimumState> result;
-   if (StorageLevel() > 0)
-      result.reserve(10);
-   else
-      result.reserve(2);
+   result.reserve(StorageLevel() > 0 ? 10 : 2);
 
    // do actual iterations
    print.Info("Start iterating until Edm is <", edmval, "with call limit =", maxfcn);
+
+   // print time after returning
+   ROOT::Math::Util::TimingScope timingScope([&print](std::string const &s) { print.Info(s); }, "Stop iterating after");
 
    AddResult(result, seed.State());
 
@@ -271,7 +272,7 @@ FunctionMinimum VariableMetricBuilder::Minimum(const MnFcn &fcn, const GradientC
          }
       }
 
-      MnParabolaPoint pp = lsearch(fcn, s0.Parameters(), step, gdel, prec);
+      auto pp = lsearch(fcn, s0.Parameters(), step, gdel, prec);
 
       // <= needed for case 0 <= 0
       if (std::fabs(pp.Y() - s0.Fval()) <= std::fabs(s0.Fval()) * prec.Eps()) {

@@ -19,7 +19,6 @@ import sys
 from time import sleep
 from itertools import zip_longest
 
-
 def fileno(file_or_fd):
     """
     Look for 'fileno' attribute.
@@ -196,8 +195,13 @@ def isDirectoryKey(key):
     """
     Return True if the object, corresponding to the key, inherits from TDirectory
     """
+    import cppyy
+
     classname = key.GetClassName()
     cl = ROOT.gROOT.GetClass(classname)
+    if cl == cppyy.nullptr:
+        logging.warning("Unknown class to ROOT: " + classname)
+        return False
     return cl.InheritsFrom(ROOT.TDirectory.Class())
 
 
@@ -205,8 +209,13 @@ def isTreeKey(key):
     """
     Return True if the object, corresponding to the key, inherits from TTree
     """
+    import cppyy
+
     classname = key.GetClassName()
     cl = ROOT.gROOT.GetClass(classname)
+    if cl == cppyy.nullptr:
+        logging.warning("Unknown class to ROOT: " + classname)
+        return False
     return cl.InheritsFrom(ROOT.TTree.Class())
 
 
@@ -214,8 +223,13 @@ def isTHnSparseKey(key):
     """
     Return True if the object, corresponding to the key, inherits from THnSparse
     """
+    import cppyy
+
     classname = key.GetClassName()
     cl = ROOT.gROOT.GetClass(classname)
+    if cl == cppyy.nullptr:
+        logging.warning("Unknown class to ROOT: " + classname)
+        return False
     return cl.InheritsFrom(ROOT.THnSparse.Class())
 
 
@@ -644,8 +658,7 @@ def copyRootObjectRecursive(sourceFile, sourcePathSplit, destFile, destPathSplit
     to an other file or directory (destFile,destPathSplit)
     - Has the will to be unix-like
     - that's a recursive function
-    - Python adaptation of a root input/output tutorial :
-      $ROOTSYS/tutorials/io/copyFiles.C
+    - Python adaptation of a root input/output tutorial : copyFiles.C
     """
     retcode = 0
     replaceOption = replace
@@ -689,16 +702,10 @@ def copyRootObjectRecursive(sourceFile, sourcePathSplit, destFile, destPathSplit
             if replaceOption and isExisting(destFile, destPathSplit + [setName]):
                 changeDirectory(destFile, destPathSplit)
                 otherObj = getFromDirectory(setName)
-                if not otherObj == obj:
-                    retcodeTemp = deleteObject(destFile, destPathSplit + [setName])
-                    if retcodeTemp:
-                        retcode += retcodeTemp
-                        continue
-                    else:
-                        if isinstance(obj, ROOT.TNamed):
-                            obj.SetName(setName)
-                        changeDirectory(destFile, destPathSplit)
-                        obj.Write()
+                retcodeTemp = deleteObject(destFile, destPathSplit + [setName])
+                if retcodeTemp:
+                    retcode += retcodeTemp
+                    continue
                 else:
                     if isinstance(obj, ROOT.TNamed):
                         obj.SetName(setName)

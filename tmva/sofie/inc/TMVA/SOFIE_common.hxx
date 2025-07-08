@@ -21,14 +21,12 @@
 #include <cassert>
 #include <limits>
 
-namespace TMVA{
-namespace Experimental{
-namespace SOFIE{
-
-//typedef RTensor tensor_t;
+namespace TMVA {
+namespace Experimental {
+namespace SOFIE {
 
 enum class ETensorType{
-   UNDEFINED = 0, FLOAT = 1, UNINT8 = 2, INT8 = 3, UINT16 = 4, INT16 = 5, INT32 = 6, INT64 = 7, STRING = 8, BOOL = 9, //order sensitive
+   UNDEFINED = 0, FLOAT = 1, UINT8 = 2, INT8 = 3, UINT16 = 4, INT16 = 5, INT32 = 6, INT64 = 7, STRING = 8, BOOL = 9, //order sensitive
     FLOAT16 = 10, DOUBLE = 11, UINT32 = 12, UINT64 = 13, COMPLEX64 = 14, COMPLEX28 = 15, BFLOAT16 = 16
 };
 
@@ -40,7 +38,7 @@ constexpr size_t GetTypeSize(ETensorType type) {
     switch (type) {
         case ETensorType::FLOAT:     return sizeof(float);
         case ETensorType::DOUBLE:    return sizeof(double);
-        case ETensorType::UNINT8:     return sizeof(uint8_t);
+        case ETensorType::UINT8:     return sizeof(uint8_t);
         case ETensorType::INT8:      return sizeof(int8_t);
         case ETensorType::UINT16:    return sizeof(uint16_t);
         case ETensorType::INT16:     return sizeof(int16_t);
@@ -272,7 +270,7 @@ private:
 template <typename T>
 ETensorType GetTemplatedType(T /*obj*/ ){
    if (std::is_same<T, float>::value) return ETensorType::FLOAT;
-   if (std::is_same<T, uint8_t>::value) return ETensorType::UNINT8;
+   if (std::is_same<T, uint8_t>::value) return ETensorType::UINT8;
    if (std::is_same<T, int8_t>::value) return ETensorType::INT8;
    if (std::is_same<T, uint16_t>::value) return ETensorType::UINT16;
    if (std::is_same<T, int16_t>::value) return ETensorType::INT16;
@@ -450,8 +448,6 @@ void UnidirectionalBroadcast(const T* data, const std::vector<size_t>& shape, co
    }
    BroadcastTensor<T, std::span<T>>(inData, shape, targetShape, broadcastedData);
 }
-// specialization for vector of boolean
-void UnidirectionalBroadcast(const std::vector<bool> & data, const std::vector<size_t>& shape, const std::vector<size_t>& targetShape, std::vector<bool> & broadcastedData);
 
 /// compute stride of a tensor given its shape (assume layout is row-major)
 std::vector<size_t> ComputeStrideFromShape(const std::vector<size_t> & shape);
@@ -620,7 +616,15 @@ void col2im(const Dtype* data_col, const int channels,
   //std::cout << "finishing col2imp" << std::endl;
 }
 
-
+// Used at the end of infer() to fill the return object.
+template <class T>
+void FillOutput(T const *arr, std::vector<T> &out, std::size_t n)
+{
+   out.resize(n);
+   for (std::size_t i = 0; i < n; ++i) {
+      out[i] = arr[i];
+   }
+}
 
 }  // end namespace UTILITY
 
@@ -705,8 +709,47 @@ inline GNN_Data Copy(const GNN_Data & data) {
    return out;
 }
 
-}//SOFIE
-}//Experimental
-}//TMVA
+inline void Gemm_Call(float *output, bool transa, bool transb, int m, int n, int k, float alpha, const float *A,
+                      const float *B, float beta, const float *C)
+{
+   char ct = 't';
+   char cn = 'n';
+   const int *lda = transa ? &k : &m;
+   const int *ldb = transb ? &n : &k;
+   const int *ldc = &m;
+   if (C != nullptr) {
+      std::copy(C, C + m * n, output);
+   }
+   TMVA::Experimental::SOFIE::BLAS::sgemm_(transa ? &ct : &cn, transb ? &ct : &cn, &m, &n, &k, &alpha, A, lda, B, ldb,
+                                           &beta, output, ldc);
+}
+
+template <class T>
+void ReadTensorFromStream(std::istream &is, T &target, std::string const &expectedName, std::size_t expectedLength)
+{
+   std::string name;
+   std::size_t length;
+   is >> name >> length;
+   if (name != expectedName) {
+      std::string err_msg =
+         "TMVA-SOFIE failed to read the correct tensor name; expected name is " + expectedName + " , read " + name;
+      throw std::runtime_error(err_msg);
+   }
+   if (length != expectedLength) {
+      std::string err_msg = "TMVA-SOFIE failed to read the correct tensor size; expected size is " +
+                            std::to_string(expectedLength) + " , read " + std::to_string(length);
+      throw std::runtime_error(err_msg);
+   }
+   for (size_t i = 0; i < length; ++i) {
+      is >> target[i];
+   }
+   if (is.fail()) {
+      throw std::runtime_error("TMVA-SOFIE failed to read the values for tensor " + expectedName);
+   }
+}
+
+} // namespace SOFIE
+} // namespace Experimental
+} // namespace TMVA
 
 #endif //TMVA_SOFIE_RMODEL

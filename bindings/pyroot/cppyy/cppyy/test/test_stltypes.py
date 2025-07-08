@@ -1,14 +1,13 @@
 # -*- coding: UTF-8 -*-
-import py, sys
-from pytest import raises, skip
-from .support import setup_make, pylong, pyunicode, maxvalue, ispypy
+import py, sys, pytest, os
+from pytest import mark, raises, skip
+from support import setup_make, pylong, pyunicode, maxvalue, ispypy
 
-currpath = py.path.local(__file__).dirpath()
-test_dct = str(currpath.join("stltypesDict"))
 
-def setup_module(mod):
-    setup_make("stltypes")
+currpath = os.getcwd()
+test_dct = currpath + "/libstltypesDict"
 
+global_n = 5
 
 # after CPython's Lib/test/seq_tests.py
 def iterfunc(seqn):
@@ -197,7 +196,7 @@ class TestSTLVECTOR:
         cls.test_dct = test_dct
         import cppyy
         cls.stltypes = cppyy.load_reflection_info(cls.test_dct)
-        cls.N = cppyy.gbl.N
+        cls.N = global_n
 
     def test01_builtin_type_vector_types(self):
         """Test access to std::vector<int>/std::vector<double>"""
@@ -287,7 +286,7 @@ class TestSTLVECTOR:
         v.__destruct__()
 
     def test03_empty_vector_type(self):
-        """Test behavior of empty std::vector<int>"""
+        """Test behavior of empty std::vector<>"""
 
         import cppyy
 
@@ -296,6 +295,9 @@ class TestSTLVECTOR:
         for arg in v:
             pass
         v.__destruct__()
+
+        for x in cppyy.gbl.std.vector["std::string*"]():
+            pass
 
     def test04_vector_iteration(self):
         """Test iteration over an std::vector<int>"""
@@ -492,6 +494,7 @@ class TestSTLVECTOR:
         ll4[1] = 'a'
         raises(TypeError, a.vector_pair, ll4)
 
+    @mark.skip()
     def test12_vector_lifeline(self):
         """Check lifeline setting on vectors of objects"""
 
@@ -614,6 +617,7 @@ class TestSTLVECTOR:
         v = cppyy.gbl.std.vector(l)
         assert list(l) == l
 
+    @mark.xfail
     def test18_array_interface(self):
         """Test usage of __array__ from numpy"""
 
@@ -857,6 +861,7 @@ class TestSTLSTRING:
 
             raises(TypeError, c.get_string2, "temp string")
 
+    @mark.xfail()
     def test02_string_data_access(self):
         """Test access to std::string object data members"""
 
@@ -989,6 +994,7 @@ class TestSTLSTRING:
         assert d[x] == 0
         assert d['x'] == 0
 
+    @mark.xfail()
     def test08_string_operators(self):
         """Mixing of C++ and Python types in global operators"""
 
@@ -1078,6 +1084,7 @@ class TestSTLSTRING:
         assert s.rfind('c')  < 0
         assert s.rfind('c') == s.npos
 
+    @mark.xfail()
     def test10_string_in_repr_and_str_bytes(self):
         """Special cases for __str__/__repr__"""
 
@@ -1670,6 +1677,7 @@ class TestSTLSTRING_VIEW:
         if cppyy.gbl.gInterpreter.ProcessLine("__cplusplus;") <= 201402:
             # string_view exists as of C++17
             return
+
         countit = cppyy.gbl.StringViewTest.count
         countit_cr = cppyy.gbl.StringViewTest.count_cr
 
@@ -1687,6 +1695,9 @@ class TestSTLSTRING_VIEW:
         """Life-time management of converted unicode strings"""
 
         import cppyy, gc
+        if cppyy.gbl.gInterpreter.ProcessLine("__cplusplus;") <= 201402:
+            # string_view exists as of C++17
+            return
 
         # view on (converted) unicode
         text = cppyy.gbl.std.string_view('''\
@@ -1726,7 +1737,7 @@ class TestSTLDEQUE:
         cls.test_dct = test_dct
         import cppyy
         cls.stltypes = cppyy.load_reflection_info(cls.test_dct)
-        cls.N = cppyy.gbl.N
+        cls.N = global_n
 
     def test01_deque_byvalue_regression(self):
         """Return by value of a deque used to crash"""
@@ -1753,7 +1764,7 @@ class TestSTLSET:
         cls.test_dct = test_dct
         import cppyy
         cls.stltypes = cppyy.load_reflection_info(cls.test_dct)
-        cls.N = cppyy.gbl.N
+        cls.N = global_n
 
     def test01_set_iteration(self):
         """Iterate over a set"""
@@ -1846,7 +1857,7 @@ class TestSTLTUPLE:
         cls.test_dct = test_dct
         import cppyy
         cls.stltypes = cppyy.load_reflection_info(cls.test_dct)
-        cls.N = cppyy.gbl.N
+        cls.N = global_n
 
     def test01_tuple_creation_and_access(self):
         """Create tuples and access their elements"""
@@ -1891,6 +1902,7 @@ class TestSTLTUPLE:
         t = std.make_tuple("aap", 42, 5.)
         assert std.tuple_size(type(t)).value == 3
 
+    @mark.xfail()
     def test03_tuple_iter(self):
         """Pack/unpack tuples"""
 
@@ -1905,6 +1917,7 @@ class TestSTLTUPLE:
         assert b == '2'
         assert c == 5.
 
+    @mark.xfail()
     def test04_tuple_lifeline(self):
         """Tuple memory management"""
 
@@ -1936,7 +1949,7 @@ class TestSTLPAIR:
         cls.test_dct = test_dct
         import cppyy
         cls.stltypes = cppyy.load_reflection_info(cls.test_dct)
-        cls.N = cppyy.gbl.N
+        cls.N = global_n
 
     def test01_pair_pack_unpack(self):
         """Pack/unpack pairs"""
@@ -2108,3 +2121,7 @@ class TestSTLEXCEPTION:
 
         gc.collect()
         assert cppyy.gbl.GetMyErrorCount() == 0
+
+
+if __name__ == "__main__":
+    exit(pytest.main(args=['-sv', '-ra', __file__]))

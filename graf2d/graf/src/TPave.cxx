@@ -612,26 +612,51 @@ void TPave::Print(Option_t *option) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Returns arguments which should be used when saving primitive constructor
+/// Check if coordinates are initialized, add extra arguments and options
+
+TString TPave::GetSavePaveArgs(const char *extra_arg, Bool_t save_option)
+{
+   Double_t x1 = fX1, y1 = fY1, x2 = fX2, y2 = fY2;
+   if (fOption.Contains("NDC")) {
+      // in some cases coordinates may not be initialized but were already set via direct call
+      // then one should store such modified coordinates
+      if (fInit || fX1NDC != 0.)
+         x1 = fX1NDC;
+      if (fInit || fY1NDC != 0.)
+         y1 = fY1NDC;
+      if (fInit || fX2NDC != 0.)
+         x2 = fX2NDC;
+      if (fInit || fY2NDC != 0.)
+         y2 = fY2NDC;
+   }
+
+   TString args = TString::Format("%g, %g, %g, %g", x1, y1, x2, y2);
+   if (extra_arg && *extra_arg) {
+      args.Append(", ");
+      args.Append(extra_arg);
+   }
+   if (save_option) {
+      args.Append(", \"");
+      args.Append(TString(fOption).ReplaceSpecialCppChars());
+      args.Append("\"");
+   }
+   return args;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Save primitive as a C++ statement(s) on output stream out
 
-void TPave::SavePrimitive(std::ostream &out, Option_t * /*= ""*/)
+void TPave::SavePrimitive(std::ostream &out, Option_t *option)
 {
-   TString args;
-   if (fOption.Contains("NDC"))
-      args.Form("%g, %g, %g, %g, %d, \"%s\"", fX1NDC, fY1NDC, fX2NDC, fY2NDC, fBorderSize,
-                TString(fOption).ReplaceSpecialCppChars().Data());
-   else
-      args.Form("%g, %g, %g, %g, %d, \"%s\"", fX1, fY1, fX2, fY2, fBorderSize,
-                TString(fOption).ReplaceSpecialCppChars().Data());
-
-   SavePrimitiveConstructor(out, Class(), "pave", args);
+   SavePrimitiveConstructor(out, Class(), "pave", GetSavePaveArgs(TString::Format("%d", fBorderSize)));
    SaveFillAttributes(out, "pave", 19, 1001);
    SaveLineAttributes(out, "pave", 1, 1, 1);
    if (strcmp(GetName(), "TPave"))
-      out << "   pave->SetName(\"" << GetName() << "\");" << std::endl;
+      out << "   pave->SetName(\"" << GetName() << "\");\n";
    if (fCornerRadius)
-      out << "   pave->SetCornerRadius(" << fCornerRadius << ");" << std::endl;
-   out << "   pave->Draw();" << std::endl;
+      out << "   pave->SetCornerRadius(" << fCornerRadius << ");\n";
+   SavePrimitiveDraw(out, "pave", option);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -31,7 +31,6 @@
 #include <iomanip>
 
 #include "TBuffer.h"
-#include "TMinuit.h"
 #include "TMath.h"
 #include "TMarker.h"
 #include "TLine.h"
@@ -217,7 +216,7 @@ const char* RooFitResult::statusLabelHistory(UInt_t icycle) const
 /// of the following (not case sensitive):
 ///
 /// *  M - a marker at the best fit result
-/// *  E - an error ellipse calculated at 1-sigma using the error matrix at the minimum
+/// *  E - an error ellipse calculated at 39%CL using the error matrix at the minimum
 /// *  1 - the 1-sigma error bar for parameter 1
 /// *  2 - the 1-sigma error bar for parameter 2
 /// *  B - the bounding box for the error ellipse
@@ -260,9 +259,9 @@ RooPlot *RooFitResult::plotOn(RooPlot *frame, const char *parName1, const char *
   double s2= par2->getError();
   double rho= correlation(parName1, parName2);
 
-  // add a 1-sigma error ellipse, if requested
+  // add a 39%CL error ellipse, if requested
   if(opt.Contains("E")) {
-    RooEllipse *contour= new RooEllipse("contour",x1,x2,s1,s2,rho);
+    RooEllipse *contour= new RooEllipse("contour",x1,x2,s1,s2,rho,100,1);
     contour->SetLineWidth(2) ;
     frame->addPlotable(contour);
   }
@@ -659,6 +658,8 @@ void RooFitResult::fillLegacyCorrMatrix() const
     }
   }
 
+  if (!_GC) return ;
+
   for (unsigned int i = 0; i < static_cast<unsigned int>(_corrMatrix.GetSize()) ; ++i) {
 
     // Find the next global correlation slot to fill, skipping fixed parameters
@@ -676,74 +677,6 @@ void RooFitResult::fillLegacyCorrMatrix() const
   }
 }
 
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Internal utility method to extract the correlation matrix and the
-/// global correlation coefficients from the MINUIT memory buffer and
-/// fill the internal arrays.
-
-void RooFitResult::fillCorrMatrix()
-{
-  // Sanity check
-  if (gMinuit->fNpar < 1) {
-    coutI(Minimization) << "RooFitResult::fillCorrMatrix: number of floating parameters is zero, correlation matrix not filled" << std::endl ;
-    return ;
-  }
-
-  if (!_initPars) {
-    coutE(Minimization) << "RooFitResult::fillCorrMatrix: ERROR: list of initial parameters must be filled first" << std::endl ;
-    return ;
-  }
-
-  // Delete eventual previous correlation data holders
-  if (_CM) delete _CM ;
-  if (_VM) delete _VM ;
-  if (_GC) delete _GC ;
-
-  // Build holding arrays for correlation coefficients
-  _CM = new TMatrixDSym(_initPars->size()) ;
-  _VM = new TMatrixDSym(_initPars->size()) ;
-  _GC = new TVectorD(_initPars->size()) ;
-
-  // Extract correlation information for MINUIT (code taken from TMinuit::mnmatu() )
-
-  // WVE: This code directly manipulates minuit internal workspace,
-  //      if TMinuit code changes this may need updating
-  Int_t ndex;
-  Int_t i;
-  Int_t j;
-  Int_t m;
-  Int_t n;
-  Int_t it /* nparm,id,ix */;
-  Int_t ndi;
-  Int_t ndj /*, iso, isw2, isw5*/;
-  for (i = 1; i <= gMinuit->fNpar; ++i) {
-    ndi = i*(i + 1) / 2;
-    for (j = 1; j <= gMinuit->fNpar; ++j) {
-      m    = std::max(i,j);
-      n    = std::min(i,j);
-      ndex = m*(m-1) / 2 + n;
-      ndj  = j*(j + 1) / 2;
-      gMinuit->fMATUvline[j-1] = gMinuit->fVhmat[ndex-1] / std::sqrt(std::abs(gMinuit->fVhmat[ndi-1]*gMinuit->fVhmat[ndj-1]));
-    }
-
-    (*_GC)(i-1) = gMinuit->fGlobcc[i-1] ;
-
-    // Fill a row of the correlation matrix
-    for (it = 1; it <= gMinuit->fNpar ; ++it) {
-      (*_CM)(i-1,it-1) = gMinuit->fMATUvline[it-1] ;
-    }
-  }
-
-  for (std::size_t ii=0 ; ii<_finalPars->size() ; ii++) {
-    for (std::size_t jj=0 ; jj<_finalPars->size() ; jj++) {
-      (*_VM)(ii,jj) = (*_CM)(ii,jj) * static_cast<RooRealVar*>(_finalPars->at(ii))->getError() * static_cast<RooRealVar*>(_finalPars->at(jj))->getError() ;
-    }
-  }
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -906,101 +839,6 @@ bool RooFitResult::isIdentical(const RooFitResult& other, double tol, double tol
 
   return ret ;
 }
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Import the results of the last fit performed by gMinuit, interpreting
-/// the fit parameters as the given varList of parameters.
-
-RooFitResult* RooFitResult::lastMinuitFit(const RooArgList& varList)
-{
-  // Verify length of supplied varList
-  if (!varList.empty() && int(varList.size())!=gMinuit->fNu) {
-    oocoutE(nullptr,InputArguments) << "RooFitResult::lastMinuitFit: ERROR: supplied variable list must be either empty " << std::endl
-               << "                             or match the number of variables of the last fit (" << gMinuit->fNu << ")" << std::endl ;
-    return nullptr;
-  }
-
-  // Verify that all members of varList are of type RooRealVar
-  for(RooAbsArg* arg : varList) {
-    if (!dynamic_cast<RooRealVar*>(arg)) {
-      oocoutE(nullptr,InputArguments) << "RooFitResult::lastMinuitFit: ERROR: variable '" << arg->GetName() << "' is not of type RooRealVar" << std::endl ;
-      return nullptr;
-    }
-  }
-
-  RooFitResult* r = new RooFitResult("lastMinuitFit","Last MINUIT fit") ;
-
-  // Extract names of fit parameters from MINUIT
-  // and construct corresponding RooRealVars
-  RooArgList constPars("constPars") ;
-  RooArgList floatPars("floatPars") ;
-
-  Int_t i ;
-  for (i = 1; i <= gMinuit->fNu; ++i) {
-    if (gMinuit->fNvarl[i-1] < 0) continue;
-    Int_t l = gMinuit->fNiofex[i-1];
-    TString varName(gMinuit->fCpnam[i-1]) ;
-    bool isConst(l==0) ;
-
-    double xlo = gMinuit->fAlim[i-1];
-    double xhi = gMinuit->fBlim[i-1];
-    double xerr = gMinuit->fWerr[l-1];
-    double xval = gMinuit->fU[i-1] ;
-
-    std::unique_ptr<RooRealVar> var;
-    if (varList.empty()) {
-
-      if ((xlo<xhi) && !isConst) {
-        var = std::make_unique<RooRealVar>(varName,varName,xval,xlo,xhi) ;
-      } else {
-        var = std::make_unique<RooRealVar>(varName,varName,xval) ;
-      }
-      var->setConstant(isConst) ;
-    } else {
-
-      var = std::unique_ptr<RooRealVar>{static_cast<RooRealVar*>(varList.at(i-1)->Clone())};
-      var->setConstant(isConst) ;
-      var->setVal(xval) ;
-      if (xlo<xhi) {
-   var->setRange(xlo,xhi) ;
-      }
-      if (varName.CompareTo(var->GetName())) {
-   oocoutI(nullptr,Eval) << "RooFitResult::lastMinuitFit: fit parameter '" << varName
-              << "' stored in variable '" << var->GetName() << "'" << std::endl ;
-      }
-
-    }
-
-    if (isConst) {
-      constPars.addOwned(std::move(var));
-    } else {
-      var->setError(xerr) ;
-      floatPars.addOwned(std::move(var));
-    }
-  }
-
-  Int_t icode;
-  Int_t npari;
-  Int_t nparx;
-  double fmin;
-  double edm;
-  double errdef;
-  gMinuit->mnstat(fmin,edm,errdef,npari,nparx,icode) ;
-
-  r->setConstParList(constPars) ;
-  r->setInitParList(floatPars) ;
-  r->setFinalParList(floatPars) ;
-  r->setMinNLL(fmin) ;
-  r->setEDM(edm) ;
-  r->setCovQual(icode) ;
-  r->setStatus(gMinuit->fStatus) ;
-  r->fillCorrMatrix() ;
-
-  return r ;
-}
-
 
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -181,6 +181,11 @@ if(builtin_llvm)
     endif()
   endif()
 
+  # Regardless of LLVM_BUILD_TYPE and LLVM_ENABLE_ASSERTIONS, we never want to
+  # "optimize llvm_unreachable() as undefined behavior" but trap if we hit this
+  # in production builds.
+  set(LLVM_UNREACHABLE_OPTIMIZE FALSE)
+
   # Multi-configuration generators ignore CMAKE_BUILD_TYPE, so
   # in that case we set the flags for all configurations to the
   # flags of the build type assigned to LLVM_BUILD_TYPE.
@@ -209,6 +214,11 @@ if(builtin_llvm)
 
   set(LLVM_ENABLE_PROJECTS "clang" CACHE STRING "")
 
+  # Always build LLVM with C++17. It is not necessary to compile with the same
+  # C++ standard as the rest of ROOT and sometimes it doesn't even work.
+  set(_cxx_standard ${CMAKE_CXX_STANDARD})
+  set(CMAKE_CXX_STANDARD 17)
+
   #---Reduce log level to suppress STATUS messages from LLVM
   if(NOT DEFINED CMAKE_MESSAGE_LOG_LEVEL)
     set(CMAKE_MESSAGE_LOG_LEVEL "NOTICE")
@@ -225,6 +235,8 @@ if(builtin_llvm)
   if(DEFINED _unset_log_level)
     unset(CMAKE_MESSAGE_LOG_LEVEL)
   endif()
+
+  set(CMAKE_CXX_STANDARD ${_cxx_standard})
 
   set(LLVM_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/llvm-project/llvm/include
     ${CMAKE_CURRENT_BINARY_DIR}/llvm-project/llvm/include
@@ -259,6 +271,7 @@ else()
   # Make some LLVM variables globally available.
   set(LLVM_INCLUDE_DIRS ${LLVM_INCLUDE_DIRS} CACHE PATH "Path to llvm/include")
   set(LLVM_LIBRARY_DIR ${LLVM_LIBRARY_DIR} CACHE PATH "Path to llvm/lib")
+  set(LLVM_LIBDIR_SUFFIX ${LLVM_LIBDIR_SUFFIX} CACHE STRING "Suffix of library directory name")
 
   find_program(LLVM_TABLEGEN_EXE "llvm-tblgen" ${LLVM_TOOLS_BINARY_DIR}
     NO_DEFAULT_PATH)
@@ -372,7 +385,14 @@ else()
     # Disable linking against shared LLVM
     set(LLVM_LINK_LLVM_DYLIB OFF)
 
+    # Always build LLVM with C++17. It is not necessary to compile with the same
+    # C++ standard as the rest of ROOT and sometimes it doesn't even work.
+    set(_cxx_standard ${CMAKE_CXX_STANDARD})
+    set(CMAKE_CXX_STANDARD 17)
+
     add_subdirectory(llvm-project/clang EXCLUDE_FROM_ALL)
+
+    set(CMAKE_CXX_STANDARD ${_cxx_standard})
   endif(builtin_clang)
 
   set( CLANG_BUILT_STANDALONE 1 )
@@ -389,10 +409,13 @@ if (builtin_clang)
     ${CMAKE_CURRENT_SOURCE_DIR}/llvm-project/clang/include
     ${CLANG_BINARY_DIR}/include
     CACHE STRING "Clang include directories.")
-  set(CLANG_CMAKE_DIR "${CMAKE_BINARY_DIR}/lib/cmake/clang/")
+  set(CLANG_CMAKE_DIR "${CMAKE_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX}/cmake/clang/")
 else()
   find_package(Clang REQUIRED CONFIG)
   message(STATUS "Found Clang ${CLANG_PACKAGE_VERSION} in ${CLANG_CMAKE_DIR}")
+
+  # Forward CLANG_INSTALL_PREFIX so it can be used by core/clingutils/CMakeLists.txt
+  set(CLANG_INSTALL_PREFIX ${CLANG_INSTALL_PREFIX} PARENT_SCOPE)
 endif()
 
 # Reset the compiler flags after compiling LLVM and Clang
@@ -534,6 +557,6 @@ else()
 endif()
 
 add_subdirectory(CppInterOp)
-if(testing)
+if(TARGET CppInterOpUnitTests)
   set_target_properties(CppInterOpUnitTests PROPERTIES EXCLUDE_FROM_ALL OFF)
 endif()

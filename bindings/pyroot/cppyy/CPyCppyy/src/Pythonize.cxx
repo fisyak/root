@@ -237,8 +237,8 @@ struct CountedItemGetter : public ItemGetter {
 
 struct TupleItemGetter : public CountedItemGetter {
     using CountedItemGetter::CountedItemGetter;
-    virtual Py_ssize_t size() { return PyTuple_GET_SIZE(fPyObject); }
-    virtual PyObject* get() {
+    Py_ssize_t size() override { return PyTuple_GET_SIZE(fPyObject); }
+    PyObject* get() override {
         if (fCur < PyTuple_GET_SIZE(fPyObject)) {
             PyObject* item = PyTuple_GET_ITEM(fPyObject, fCur++);
             Py_INCREF(item);
@@ -251,8 +251,8 @@ struct TupleItemGetter : public CountedItemGetter {
 
 struct ListItemGetter : public CountedItemGetter {
     using CountedItemGetter::CountedItemGetter;
-    virtual Py_ssize_t size() { return PyList_GET_SIZE(fPyObject); }
-    virtual PyObject* get() {
+    Py_ssize_t size() override { return PyList_GET_SIZE(fPyObject); }
+    PyObject* get() override {
         if (fCur < PyList_GET_SIZE(fPyObject)) {
             PyObject* item = PyList_GET_ITEM(fPyObject, fCur++);
             Py_INCREF(item);
@@ -265,7 +265,7 @@ struct ListItemGetter : public CountedItemGetter {
 
 struct SequenceItemGetter : public CountedItemGetter {
     using CountedItemGetter::CountedItemGetter;
-    virtual Py_ssize_t size() {
+    Py_ssize_t size() override {
         Py_ssize_t sz = PySequence_Size(fPyObject);
         if (sz < 0) {
             PyErr_Clear();
@@ -273,13 +273,13 @@ struct SequenceItemGetter : public CountedItemGetter {
         }
         return sz;
     }
-    virtual PyObject* get() { return PySequence_GetItem(fPyObject, fCur++); }
+    PyObject* get() override { return PySequence_GetItem(fPyObject, fCur++); }
 };
 
 struct IterItemGetter : public ItemGetter {
     using ItemGetter::ItemGetter;
-    virtual Py_ssize_t size() { return PyObject_LengthHint(fPyObject, 8); }
-    virtual PyObject* get() { return (*(Py_TYPE(fPyObject)->tp_iternext))(fPyObject); }
+    Py_ssize_t size() override { return PyObject_LengthHint(fPyObject, 8); }
+    PyObject* get() override { return (*(Py_TYPE(fPyObject)->tp_iternext))(fPyObject); }
 };
 
 static ItemGetter* GetGetter(PyObject* args)
@@ -448,9 +448,20 @@ PyObject* VectorIAdd(PyObject* self, PyObject* args, PyObject* /* kwds */)
         if (PyObject_CheckBuffer(fi) && !(CPyCppyy_PyText_Check(fi) || PyBytes_Check(fi))) {
             PyObject* vend = PyObject_CallMethodNoArgs(self, PyStrings::gEnd);
             if (vend) {
-                PyObject* result = PyObject_CallMethodObjArgs(self, PyStrings::gInsert, vend, fi, nullptr);
+            // when __iadd__ is overriden, the operation does not end with
+            // calling the __iadd__ method, but also assigns the result to the
+            // lhs of the iadd. For example, performing vec += arr, Python
+            // first calls our override, and then does vec = vec.iadd(arr).
+                PyObject *it = PyObject_CallMethodObjArgs(self, PyStrings::gInsert, vend, fi, nullptr);
                 Py_DECREF(vend);
-                return result;
+
+                if (!it)
+                    return nullptr;
+
+                Py_DECREF(it);
+            // Assign the result of the __iadd__ override to the std::vector
+                Py_INCREF(self);
+                return self;
             }
         }
     }
@@ -527,6 +538,13 @@ PyObject* VectorData(PyObject* self, PyObject*)
 }
 
 
+// This function implements __array__, added to std::vector python proxies and causes
+// a bug (see explanation at Utility::AddToClass(pyclass, "__array__"...) in CPyCppyy::Pythonize)
+// The recursive nature of this function, passes each subarray (pydata) to the next call and only
+// the final buffer is cast to a lowlevel view and resized (in VectorData), resulting in only the
+// first 1D array to be returned. See https://github.com/root-project/root/issues/17729
+// It is temporarily removed to prevent errors due to -Wunused-function, since it is no longer added.
+#if 0
 //---------------------------------------------------------------------------
 PyObject* VectorArray(PyObject* self, PyObject* args, PyObject* kwargs)
 {
@@ -537,20 +555,25 @@ PyObject* VectorArray(PyObject* self, PyObject* args, PyObject* kwargs)
     Py_DECREF(pydata);
     return newarr;
 }
-
+#endif
 
 //-----------------------------------------------------------------------------
 static PyObject* vector_iter(PyObject* v) {
     vectoriterobject* vi = PyObject_GC_New(vectoriterobject, &VectorIter_Type);
     if (!vi) return nullptr;
 
-    Py_INCREF(v);
     vi->ii_container = v;
 
 // tell the iterator code to set a life line if this container is a temporary
     vi->vi_flags = vectoriterobject::kDefault;
-    if (v->ob_refcnt <= 2 || (((CPPInstance*)v)->fFlags & CPPInstance::kIsValue))
+#if PY_VERSION_HEX >= 0x030e0000
+    if (PyUnstable_Object_IsUniqueReferencedTemporary(v) || (((CPPInstance*)v)->fFlags & CPPInstance::kIsValue))
+#else
+    if (Py_REFCNT(v) <= 1 || (((CPPInstance*)v)->fFlags & CPPInstance::kIsValue))
+#endif
         vi->vi_flags = vectoriterobject::kNeedLifeLine;
+
+    Py_INCREF(v);
 
     PyObject* pyvalue_type = PyObject_GetAttr((PyObject*)Py_TYPE(v), PyStrings::gValueType);
     if (pyvalue_type) {
@@ -1808,10 +1831,18 @@ bool CPyCppyy::Pythonize(PyObject* pyclass, const std::string& name)
 
         // data with size
             Utility::AddToClass(pyclass, "__real_data", "data");
+            PyErr_Clear(); // AddToClass might have failed for data
             Utility::AddToClass(pyclass, "data", (PyCFunction)VectorData);
 
+        // The addition of the __array__ utility to std::vector Python proxies causes a
+        // bug where the resulting array is a single dimension, causing loss of data when
+        // converting to numpy arrays, for >1dim vectors. Since this C++ pythonization
+        // was added with the upgrade in 6.32, and is only defined and used recursively,
+        // the safe option is to disable this function and no longer add it.
+#if 0
         // numpy array conversion
             Utility::AddToClass(pyclass, "__array__", (PyCFunction)VectorArray, METH_VARARGS | METH_KEYWORDS /* unused */);
+#endif
 
         // checked getitem
             if (HasAttrDirect(pyclass, PyStrings::gLen)) {

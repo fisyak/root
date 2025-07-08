@@ -35,16 +35,6 @@ public:
          fOutputTensorNames = { fNY };
    }
 
-   std::vector<ETensorType> TypeInference(std::vector<ETensorType> input){
-      return input;
-   }
-
-   std::vector<std::vector<size_t>> ShapeInference(std::vector<std::vector<size_t>> input){
-      std::vector<std::vector<size_t>>  ret;
-      ret[0].push_back(input[0].size());
-      return ret;
-   }
-
    void Initialize(RModel& model) override {
       if (model.CheckIfTensorAlreadyExist(fNX) == false){   //input must be a graph input, or already initialized intermediate tensor
          throw std::runtime_error("TMVA SOFIE Shape Op Input Tensor " + fNX + " is not found in model");
@@ -81,7 +71,7 @@ public:
 
    }
 
-   std::string Generate(std::string OpName){
+   std::string Generate(std::string OpName) override {
       // no need to generate code if the output is constant
       if (fIsOutputConstant) return "";
 

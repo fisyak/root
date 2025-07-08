@@ -260,6 +260,11 @@ public:
    /// Return an iterator beyond the last TTree entry.
    Iterator_t end() { return Iterator_t(*this, -1); }
 
+   void SetSuppressErrorsForMissingBranches(const std::set<std::string> &suppressErrorsForMissingBranches)
+   {
+      fSuppressErrorsForMissingBranches = suppressErrorsForMissingBranches;
+   }
+
 protected:
    using NamedProxies_t = std::unordered_map<std::string, std::unique_ptr<ROOT::Internal::TNamedBranchProxy>>;
    void Initialize();
@@ -340,7 +345,7 @@ private:
    // List of branches for which we want to suppress the printed error about
    // missing branch when switching to a new tree
    std::set<std::string> fSuppressErrorsForMissingBranches{};
-   std::vector<std::string> fMissingProxies{};
+   std::set<std::string> fMissingProxies{};
 
    friend class ROOT::Internal::TTreeReaderValueBase;
    friend class ROOT::Internal::TTreeReaderArrayBase;

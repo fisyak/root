@@ -657,10 +657,18 @@ Bool_t TFileMerger::MergeOne(TDirectory *target, TList *sourcelist, Int_t type, 
                   if (key2) {
                      hobj = key2->ReadObj();
                      if (!hobj) {
-                        Info("MergeRecursive", "could not read object for key {%s, %s}; skipping file %s",
-                           keyname, keytitle, nextsource->GetName());
-                              nextsource = (TFile*)sourcelist->After(nextsource);
-                              return kTRUE;
+                        switch (fErrBehavior) {
+                        case EErrorBehavior::kFailOnError:
+                           Error("MergeRecursive", "could not read object for key {%s, %s}; in file %s", keyname,
+                                 keytitle, nextsource->GetName());
+                           nextsource = (TFile *)sourcelist->After(nextsource);
+                           return kFALSE;
+                        case EErrorBehavior::kSkipOnError:
+                           Warning("MergeRecursive", "could not read object for key {%s, %s}; skipping file %s",
+                                   keyname, keytitle, nextsource->GetName());
+                           nextsource = (TFile *)sourcelist->After(nextsource);
+                           return kTRUE;
+                        }
                      }
                      todelete.Add(hobj);
                   }
@@ -735,10 +743,18 @@ Bool_t TFileMerger::MergeOne(TDirectory *target, TList *sourcelist, Int_t type, 
                   if (key2) {
                      TObject *hobj = key2->ReadObj();
                      if (!hobj) {
-                        Info("MergeRecursive", "could not read object for key {%s, %s}; skipping file %s",
-                              keyname, keytitle, nextsource->GetName());
-                        nextsource = (TFile*)sourcelist->After(nextsource);
-                        return kTRUE;
+                        switch (fErrBehavior) {
+                        case EErrorBehavior::kFailOnError:
+                           Error("MergeRecursive", "could not read object for key {%s, %s}; in file %s", keyname,
+                                 keytitle, nextsource->GetName());
+                           nextsource = (TFile *)sourcelist->After(nextsource);
+                           return kFALSE;
+                        case EErrorBehavior::kSkipOnError:
+                           Warning("MergeRecursive", "could not read object for key {%s, %s}; skipping file %s",
+                                   keyname, keytitle, nextsource->GetName());
+                           nextsource = (TFile *)sourcelist->After(nextsource);
+                           return kTRUE;
+                        }
                      }
                      // Set ownership for collections
                      if (hobj->InheritsFrom(TCollection::Class())) {
@@ -978,6 +994,7 @@ Bool_t TFileMerger::PartialMerge(Int_t in_type)
    }
 
    fOutputFile->SetBit(kMustCleanup);
+   fOutputFile->SetBit(TFile::kCancelTTreeChangeRequest);
 
    TDirectory::TContext ctxt;
 
@@ -1039,13 +1056,14 @@ Bool_t TFileMerger::PartialMerge(Int_t in_type)
       Clear();
    } else {
       fOutputFile->ResetBit(kMustCleanup);
+      fOutputFile->ResetBit(TFile::kCancelTTreeChangeRequest);
       SafeDelete(fOutputFile);
    }
    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Open up to fMaxOpenedFiles of the excess files.
+/// Open up to (fMaxOpenedFiles-1) of the excess files.
 
 Bool_t TFileMerger::OpenExcessFiles()
 {
@@ -1105,8 +1123,9 @@ void TFileMerger::RecursiveRemove(TObject *obj)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set a limit to the number of files that TFileMerger will open simultaneously.
 ///
-/// If the request is higher than the system limit, we reset it to the system limit.
-/// If the request is less than two, we reset it to 2 (one for the output file and one for the input file).
+/// This number includes both the read input files and the output file.
+/// \param newmax if higher than the system limit, we reset it to the system limit;
+/// if less than two, we reset it to 2 (one for the output file and one for the input file).
 
 void TFileMerger::SetMaxOpenedFiles(Int_t newmax)
 {

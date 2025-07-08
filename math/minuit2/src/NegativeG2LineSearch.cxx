@@ -13,9 +13,10 @@
 #include "Minuit2/GradientCalculator.h"
 #include "Minuit2/MnMachinePrecision.h"
 #include "Minuit2/MnLineSearch.h"
-#include "Minuit2/MnParabolaPoint.h"
 #include "Minuit2/VariableMetricEDMEstimator.h"
 #include "Minuit2/MnPrint.h"
+
+#include "Math/Util.h"
 
 #include <cmath>
 
@@ -33,6 +34,9 @@ MinimumState NegativeG2LineSearch::operator()(const MnFcn &fcn, const MinimumSta
    //   continue iteration in case the second derivatives are still negative
    //
    MnPrint print("NegativeG2LineSearch");
+
+   // Print the runtime on returning from the function
+   ROOT::Math::Util::TimingScope timingScope([&print](std::string const& s){ print.Info(s); }, "Done after");
 
    bool negG2 = HasNegativeG2(st.Gradient(), prec);
    if (!negG2)
@@ -85,7 +89,7 @@ MinimumState NegativeG2LineSearch::operator()(const MnFcn &fcn, const MinimumSta
             print.Debug("Iter", iter, "param", i, pa.Vec()(i), "grad2", dgrad.G2()(i), "grad",
                         dgrad.Vec()(i), "grad step", step(i), " gdel ", gdel);
 
-            MnParabolaPoint pp = lsearch(fcn, pa, step, gdel, prec);
+            auto pp = lsearch(fcn, pa, step, gdel, prec);
 
             print.Debug("Line search result", pp.X(), "f(0)", pa.Fval(), "f(1)", pp.Y());
 

@@ -9,7 +9,7 @@
 /// \date Feburary 2024
 /// \author The ROOT Team
 
-// NOTE: The RNTuple classes are experimental at this point.
+// NOTE: The RNTupleParallelWriter class is experimental at this point.
 // Functionality and interface are still subject to changes.
 
 #include <ROOT/RNTupleFillContext.hxx>
@@ -33,9 +33,7 @@
 #include <utility>
 
 // Import classes from experimental namespace for the time being
-using ROOT::Experimental::RNTupleModel;
 using ROOT::Experimental::RNTupleParallelWriter;
-using ROOT::Experimental::RNTupleReader;
 
 // Where to store the ntuple of this example
 constexpr char const *kNTupleFileName = "ntpl009_parallelWriter.root";
@@ -89,7 +87,7 @@ void FillData(RNTupleParallelWriter *writer)
 void Write()
 {
    // Create the data model
-   auto model = RNTupleModel::CreateBare();
+   auto model = ROOT::RNTupleModel::CreateBare();
    model->MakeField<std::uint32_t>("id");
    model->MakeField<std::vector<float>>("vpx");
    model->MakeField<std::vector<float>>("vpy");
@@ -116,7 +114,7 @@ void Write()
 // For all of the events, histogram only one of the written vectors
 void Read()
 {
-   auto reader = RNTupleReader::Open("NTuple", kNTupleFileName);
+   auto reader = ROOT::RNTupleReader::Open("NTuple", kNTupleFileName);
    auto viewVpx = reader->GetView<float>("vpx._0");
 
    gStyle->SetOptStat(0);

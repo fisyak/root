@@ -258,6 +258,7 @@ static PyObject* pt_new(PyTypeObject* subtype, PyObject* args, PyObject* kwds)
                 // so make it accessible (the __cpp_cross__ data member also signals that
                 // this is a cross-inheritance class)
                     PyObject* bname = CPyCppyy_PyText_FromString(Cppyy::GetBaseName(result->fCppType, 0).c_str());
+                    PyErr_Clear();
                     if (PyObject_SetAttrString((PyObject*)result, "__cpp_cross__", bname) == -1)
                         PyErr_Clear();
                     Py_DECREF(bname);
@@ -504,7 +505,6 @@ static PyObject* meta_getattro(PyObject* pyclass, PyObject* pyname)
     }
 
     if (attr) {
-        std::for_each(errors.begin(), errors.end(), Utility::PyError_t::Clear);
         PyErr_Clear();
     } else {
     // not found: prepare a full error report
@@ -518,7 +518,7 @@ static PyObject* meta_getattro(PyObject* pyclass, PyObject* pyname)
             topmsg = CPyCppyy_PyText_FromFormat("no such attribute \'%s\'. Full details:",
                 CPyCppyy_PyText_AsString(pyname));
         }
-        SetDetailedException(errors, topmsg /* steals */, PyExc_AttributeError /* default error */);
+        SetDetailedException(std::move(errors), topmsg /* steals */, PyExc_AttributeError /* default error */);
     }
 
     return attr;
@@ -541,7 +541,7 @@ static int meta_setattro(PyObject* pyclass, PyObject* pyname, PyObject* pyval)
                 meta_getattro(pyclass, pyname);       // triggers creation
         }
     }
-
+    PyErr_Clear(); // creation might have failed
     return PyType_Type.tp_setattro(pyclass, pyname, pyval);
 }
 

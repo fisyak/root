@@ -1923,6 +1923,9 @@ int TUnixSystem::Utime(const char *file, Long_t modtime, Long_t actime)
 /// The search path is specified as a : separated list of directories.
 /// Return value is pointing to wfile for compatibility with
 /// Which(const char*,const char*,EAccessMode) version.
+/// \note This function does not support finding files in directories containing
+/// colons in their name. For that specific use case and if you know the filename,
+/// deploy instead TSystem::AccessPathName(dirName+fileName, kReadPermission)
 
 const char *TUnixSystem::FindFile(const char *search, TString& wfil, EAccessMode mode)
 {
@@ -4644,7 +4647,7 @@ static const char *DynamicPath(const char *newpath = nullptr, Bool_t reset = kFA
    if (reset || !initialized) {
 
       dynpath_envpart = gSystem->Getenv("ROOT_LIBRARY_PATH");
-      TString rdynpath = gEnv->GetValue("Root.DynamicPath", (char*)0);
+      TString rdynpath = gEnv->GetValue("Root.DynamicPath", nullptr);
       rdynpath.ReplaceAll(": ", ":");  // in case DynamicPath was extended
       if (rdynpath.IsNull()) {
          rdynpath = ".:"; rdynpath += TROOT::GetLibDir();
@@ -4688,7 +4691,7 @@ static const char *DynamicPath(const char *newpath = nullptr, Bool_t reset = kFA
       std::string result = "";
       char buffer[128];
       while (!feof(pf)) {
-         if (fgets(buffer, 128, pf) != NULL)
+         if (fgets(buffer, 128, pf) != nullptr)
             result += buffer;
       }
       pclose(pf);

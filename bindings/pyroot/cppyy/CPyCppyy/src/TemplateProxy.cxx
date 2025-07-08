@@ -16,39 +16,6 @@
 
 namespace CPyCppyy {
 
-//- helper for ctypes conversions --------------------------------------------
-static PyObject* TC2CppName(PyObject* pytc, const char* cpd, bool allow_voidp)
-{
-    const char* name = nullptr;
-    if (CPyCppyy_PyText_Check(pytc)) {
-        char tc = ((char*)CPyCppyy_PyText_AsString(pytc))[0];
-        switch (tc) {
-            case '?': name = "bool";               break;
-            case 'c': name = "char";               break;
-            case 'b': name = "char";               break;
-            case 'B': name = "unsigned char";      break;
-            case 'h': name = "short";              break;
-            case 'H': name = "unsigned short";     break;
-            case 'i': name = "int";                break;
-            case 'I': name = "unsigned int";       break;
-            case 'l': name = "long";               break;
-            case 'L': name = "unsigned long";      break;
-            case 'q': name = "long long";          break;
-            case 'Q': name = "unsigned long long"; break;
-            case 'f': name = "float";              break;
-            case 'd': name = "double";             break;
-            case 'g': name = "long double";        break;
-            case 'z':   // special case for C strings, ignore cpd
-                return CPyCppyy_PyText_FromString(std::string{"const char*"}.c_str());
-            default:  name = (allow_voidp ? "void*" : nullptr); break;
-        }
-    }
-
-    if (name)
-        return CPyCppyy_PyText_FromString((std::string{name}+cpd).c_str());
-    return nullptr;
-}
-
 //----------------------------------------------------------------------------
 TemplateInfo::TemplateInfo() : fPyClass(nullptr), fNonTemplated(nullptr),
     fTemplated(nullptr), fLowPriority(nullptr), fDoc(nullptr)
@@ -109,8 +76,11 @@ PyObject* TemplateProxy::Instantiate(const std::string& fname,
     std::string proto = "";
 
 #if PY_VERSION_HEX >= 0x03080000
+// adjust arguments for self if this is a rebound (global) function
     bool isNS = (((CPPScope*)fTI->fPyClass)->fFlags & CPPScope::kIsNamespace);
-    if (!isNS && !fSelf && CPyCppyy_PyArgs_GET_SIZE(args, nargsf)) {
+    if (!isNS && CPyCppyy_PyArgs_GET_SIZE(args, nargsf) && \
+            (!fSelf ||
+            (fSelf == Py_None && !Cppyy::IsStaticTemplate(((CPPScope*)fTI->fPyClass)->fCppType, fname)))) {
         args   += 1;
         nargsf -= 1;
     }
@@ -127,7 +97,18 @@ PyObject* TemplateProxy::Instantiate(const std::string& fname,
         // special case for arrays
             PyObject* pytc = PyObject_GetAttr(itemi, PyStrings::gTypeCode);
             if (pytc) {
-                PyObject* pyptrname = TC2CppName(pytc, "*", true);
+                Py_buffer bufinfo;
+                memset(&bufinfo, 0, sizeof(Py_buffer));
+                std::string ptrdef;
+                if (PyObject_GetBuffer(itemi, &bufinfo, PyBUF_FORMAT) == 0) {
+                    for (int j = 0; j < bufinfo.ndim; ++j) ptrdef += "*";
+                    CPyCppyy_PyBuffer_Release(itemi, &bufinfo);
+                } else {
+                    ptrdef += "*";
+                    PyErr_Clear();
+                }
+
+                PyObject* pyptrname = Utility::CT2CppName(pytc, ptrdef.c_str(), true);
                 if (pyptrname) {
                     PyTuple_SET_ITEM(tpArgs, i, pyptrname);
                     bArgSet = true;
@@ -141,14 +122,14 @@ PyObject* TemplateProxy::Instantiate(const std::string& fname,
             if (!bArgSet) pytc = PyObject_GetAttr(itemi, PyStrings::gCTypesType);
 
             if (!bArgSet && pytc) {
-                PyObject* pyactname = TC2CppName(pytc, "&", false);
+                PyObject* pyactname = Utility::CT2CppName(pytc, "&", false);
                 if (!pyactname) {
                 // _type_ of a pointer to c_type is that type, which will have a type
                     PyObject* newpytc = PyObject_GetAttr(pytc, PyStrings::gCTypesType);
                     Py_DECREF(pytc);
                     pytc = newpytc;
                     if (pytc) {
-                        pyactname = TC2CppName(pytc, "*", false);
+                        pyactname = Utility::CT2CppName(pytc, "*", false);
                     } else
                         PyErr_Clear();
                 }
@@ -437,8 +418,7 @@ static int tpp_doc_set(TemplateProxy* pytmpl, PyObject *val, void *)
 //= CPyCppyy template proxy callable behavior ================================
 
 #define TPPCALL_RETURN                                                       \
-{ if (!errors.empty())                                                       \
-      std::for_each(errors.begin(), errors.end(), Utility::PyError_t::Clear);\
+{ errors.clear();                                                            \
   return result; }
 
 static inline std::string targs2str(TemplateProxy* pytmpl)
@@ -645,7 +625,7 @@ static PyObject* tpp_call(TemplateProxy* pytmpl, PyObject* args, PyObject* kwds)
         PyObject* topmsg = CPyCppyy_PyText_FromFormat(
             "Could not find \"%s\" (set cppyy.set_debug() for C++ errors):", CPyCppyy_PyText_AsString(pyfullname));
         Py_DECREF(pyfullname);
-        Utility::SetDetailedException(errors, topmsg /* steals */, PyExc_TypeError /* default error */);
+        Utility::SetDetailedException(std::move(errors), topmsg /* steals */, PyExc_TypeError /* default error */);
 
         return nullptr;
     }
@@ -686,7 +666,7 @@ static PyObject* tpp_call(TemplateProxy* pytmpl, PyObject* args, PyObject* kwds)
 // error reporting is fraud, given the numerous steps taken, but more details seems better
     if (!errors.empty()) {
         PyObject* topmsg = CPyCppyy_PyText_FromString("Template method resolution failed:");
-        Utility::SetDetailedException(errors, topmsg /* steals */, PyExc_TypeError /* default error */);
+        Utility::SetDetailedException(std::move(errors), topmsg /* steals */, PyExc_TypeError /* default error */);
     } else {
         PyErr_Format(PyExc_TypeError, "cannot resolve method template call for \'%s\'",
             pytmpl->fTI->fCppName.c_str());
@@ -853,17 +833,11 @@ static PyObject* tpp_overload(TemplateProxy* pytmpl, PyObject* args)
     }
 
 // else attempt instantiation
-    PyObject* pytype = 0, *pyvalue = 0, *pytrace = 0;
-    PyErr_Fetch(&pytype, &pyvalue, &pytrace);
-
     if (!cppmeth) {
-        PyErr_Restore(pytype, pyvalue, pytrace);
         return nullptr;
     }
 
-    Py_XDECREF(pytype);
-    Py_XDECREF(pyvalue);
-    Py_XDECREF(pytrace);
+    PyErr_Clear();
 
     // TODO: the next step should be consolidated with Instantiate()
     PyCallable* meth = nullptr;

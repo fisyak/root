@@ -949,16 +949,20 @@ Int_t TPad::ClippingCode(Double_t x, Double_t y, Double_t xcl1, Double_t ycl1, D
 
 Int_t TPad::ClipPolygon(Int_t n, Double_t *x, Double_t *y, Int_t nn, Double_t *xc, Double_t *yc, Double_t xclipl, Double_t yclipb, Double_t xclipr, Double_t yclipt)
 {
+   if (n <= 0)
+      return 0;
+
    Int_t nc, nc2;
    Double_t x1, y1, x2, y2, slope; // Segment to be clipped
 
    std::vector<Double_t> xc2(nn), yc2(nn);
 
    // Clip against the left boundary
-   x1 = x[n-1]; y1 = y[n-1];
+   x1 = x[n - 1];
+   y1 = y[n - 1];
    nc2 = 0;
    Int_t i;
-   for (i=0; i<n; i++) {
+   for (i = 0; i < n; i++) {
       x2 = x[i]; y2 = y[i];
       if (x1 == x2) {
          slope = 0;
@@ -981,9 +985,12 @@ Int_t TPad::ClipPolygon(Int_t n, Double_t *x, Double_t *y, Int_t nn, Double_t *x
    }
 
    // Clip against the top boundary
-   x1 = xc2[nc2-1]; y1 = yc2[nc2-1];
+   if (nc2 > 0) {
+      x1 = xc2[nc2 - 1];
+      y1 = yc2[nc2 - 1];
+   }
    nc = 0;
-   for (i=0; i<nc2; i++) {
+   for (i = 0; i < nc2; i++) {
       x2 = xc2[i]; y2 = yc2[i];
       if (y1 == y2) {
          slope = 0;
@@ -1005,12 +1012,12 @@ Int_t TPad::ClipPolygon(Int_t n, Double_t *x, Double_t *y, Int_t nn, Double_t *x
       x1 = x2; y1 = y2;
    }
 
-   if (nc>0) {
-
-      // Clip against the right boundary
-      x1 = xc[nc-1]; y1 = yc[nc-1];
+   // Clip against the right boundary
+   if (nc > 0) {
+      x1 = xc[nc - 1];
+      y1 = yc[nc - 1];
       nc2 = 0;
-      for (i=0; i<nc; i++) {
+      for (i = 0; i < nc; i++) {
          x2 = xc[i]; y2 = yc[i];
          if (x1 == x2) {
             slope = 0;
@@ -1033,9 +1040,12 @@ Int_t TPad::ClipPolygon(Int_t n, Double_t *x, Double_t *y, Int_t nn, Double_t *x
       }
 
       // Clip against the bottom boundary
-      x1 = xc2[nc2-1]; y1 = yc2[nc2-1];
+      if (nc2 > 0) {
+         x1 = xc2[nc2 - 1];
+         y1 = yc2[nc2 - 1];
+      }
       nc = 0;
-      for (i=0; i<nc2; i++) {
+      for (i = 0; i < nc2; i++) {
          x2 = xc2[i]; y2 = yc2[i];
          if (y1 == y2) {
             slope = 0;
@@ -1058,7 +1068,8 @@ Int_t TPad::ClipPolygon(Int_t n, Double_t *x, Double_t *y, Int_t nn, Double_t *x
       }
    }
 
-   if (nc < 3) nc =0;
+   if (nc < 3)
+      nc = 0;
    return nc;
 }
 
@@ -1332,6 +1343,108 @@ void TPad::Divide(Int_t nx, Int_t ny, Float_t xmargin, Float_t ymargin, Int_t co
       }
    }
    Modified();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Divide the canvas according to ratios.
+///
+/// The current canvas is divided in nx by ny according to the width and height ratios.
+/// If the ratios are not specified they are assumed to be equal.
+///
+/// Pads are automatically named `canvasname_n` where `n` is the division number
+/// starting from top left pad.
+///
+/// Top and left margins can be defined.
+
+void TPad::DivideRatios(Int_t nx, Int_t ny,
+                        const std::vector<double>& widthRatios,
+                        const std::vector<double>& heightRatios,
+                        const double canvasTopMargin,
+                        const double canvasLeftMargin
+                        )
+{
+   cd();
+
+   int wrs = widthRatios.size();
+   int hrs = heightRatios.size();
+   int nxl = TMath::Min(nx,wrs), nyl = TMath::Min(ny,hrs);
+
+   if (wrs==0) nxl = nx;
+   if (hrs==0) nyl = ny;
+
+   int    pn = 1;
+   double xr = 0.;
+   double yr = 0.;
+   double x  = 0.;
+   double y  = 1.;
+   double x1, y1, x2, y2;
+
+   // Check the validity of the margins
+   if (canvasTopMargin <0 || canvasTopMargin >1 ) {
+      Error("DivideRatios", "The canvas top margin must be >= 0 and <= 1");
+      return;
+   } else {
+      y = 1.- canvasTopMargin;
+   }
+   if (canvasLeftMargin <0 || canvasLeftMargin >1 ) {
+      Error("DivideRatios", "The canvas left margin must be >= 0 and <= 1");
+      return;
+   }
+
+   // Check the validity of the ratios
+   double sumOfHeightRatios = canvasTopMargin;
+   if (hrs) {
+      for (int i=0; i<nyl; i++) {
+         yr = heightRatios[i];
+         sumOfHeightRatios = sumOfHeightRatios + yr;
+         if (yr <0 || yr >1 ) {
+            Error("DivideRatios", "Y ratios plus the top margin must be >= 0 and <= 1");
+            return;
+         }
+      }
+   }
+   if (sumOfHeightRatios > 1.) {
+      Error("DivideRatios", "The sum of Y ratios plus the top margin must be <= 1 %g",sumOfHeightRatios);
+      return;
+   }
+   double sumOfWidthRatios = canvasLeftMargin;
+   if (wrs) {
+      for (int j=0; j<nxl; j++) {
+         xr = widthRatios[j];
+         sumOfWidthRatios = sumOfWidthRatios +xr;
+         if (xr <0 || xr >1 ) {
+            Error("DivideRatios", "X ratios must be >= 0 and <= 1");
+            return;
+         }
+      }
+   }
+   if (sumOfWidthRatios > 1.) {
+      Error("DivideRatios", "The sum of X ratios must be <= 1 %g ",sumOfWidthRatios);
+      return;
+   }
+
+   // Create the pads according to the ratios
+   for (int i=0; i<nyl; i++) {
+      x = canvasLeftMargin;
+      if (hrs) yr = heightRatios[i];
+      else     yr = 1./nyl;
+      for (int j=0; j<nxl; j++) {
+         if (wrs) xr = widthRatios[j];
+         else     xr = 1./nxl;
+         x1 = TMath::Max(0., x);
+         y1 = TMath::Max(0., y - yr);
+         x2 = TMath::Min(1., x + xr);
+         y2 = TMath::Min(1., y);
+         auto pad = new TPad(TString::Format("%s_%d", GetName(), pn),
+                             TString::Format("%s_%d", GetName(), pn),
+                             x1, y1, x2 ,y2);
+         pad->SetNumber(pn);
+         pad->Draw();
+         x = x + xr;
+         pn++;
+      }
+      y = y - yr;
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2371,6 +2484,7 @@ void TPad::ExecuteEventAxis(Int_t event, Int_t px, Int_t py, TAxis *axis)
    Int_t nbd, inc, bin1, bin2, first, last;
    Double_t temp, xmin,xmax;
    Bool_t opaque  = gPad->OpaqueMoving();
+   bool resetAxisRange = false;
    static std::unique_ptr<TBox> zoombox;
    Double_t zbx1=0,zbx2=0,zby1=0,zby2=0;
 
@@ -2524,8 +2638,12 @@ void TPad::ExecuteEventAxis(Int_t event, Int_t px, Int_t py, TAxis *axis)
       bin2 = axis->GetLast()+inc;
       bin1 = TMath::Max(bin1, 1);
       bin2 = TMath::Min(bin2, axis->GetNbins());
+      resetAxisRange = (bin1 == 1 && axis->GetFirst() == 1 && bin2 == axis->GetNbins() && axis->GetLast() == axis->GetNbins());
       if (bin2>bin1) {
          axis->SetRange(bin1,bin2);
+      }
+      if (resetAxisRange) axis->ResetBit(TAxis::kAxisRange);
+      if (bin2>bin1) {
          gPad->Modified();
          gPad->Update();
       }
@@ -4203,9 +4321,11 @@ void TPad::PaintHatches(Double_t dy, Double_t angle,
       if (yrot > ymax) ymax = yrot;
       if (yrot < ymin) ymin = yrot;
    }
-   ymax = (Double_t)((Int_t)(ymax/dy))*dy;
 
-   for (ycur=ymax; ycur>=ymin; ycur=ycur-dy) {
+   Int_t yindx = (Int_t) (ymax/dy);
+
+   while (dy * yindx >= ymin) {
+      ycur = dy * yindx--;
       nbi = 0;
       for (i=2; i<=nn+1; i++) {
          i2 = i;
@@ -5848,13 +5968,12 @@ void TPad::SavePrimitive(std::ostream &out, Option_t * option /*= ""*/)
 {
    TContext ctxt(this, kFALSE); // not interactive
 
-   char quote = '"';
-
    TString padName = GetName();
 
    // check for space in the pad name
    auto p = padName.Index(" ");
-   if (p != kNPOS) padName.Resize(p);
+   if (p != kNPOS)
+      padName.Resize(p);
 
    TString opt = option;
    if (!opt.Contains("toplevel")) {
@@ -5876,137 +5995,103 @@ void TPad::SavePrimitive(std::ostream &out, Option_t * option /*= ""*/)
 
    //   Write pad parameters
    if (this != gPad->GetCanvas()) {
-      out <<"  "<<std::endl;
-      out <<"// ------------>Primitives in pad: "<<GetName()<<std::endl;
-
-      out<<"   TPad *"<<cname<<" = new TPad("<<quote<<GetName()<<quote<<", "<<quote<<GetTitle()<<quote
-      <<","<<fXlowNDC
-      <<","<<fYlowNDC
-      <<","<<fXlowNDC+fWNDC
-      <<","<<fYlowNDC+fHNDC
-      <<");"<<std::endl;
-      out<<"   "<<cname<<"->Draw();"<<std::endl;
-      out<<"   "<<cname<<"->cd();"<<std::endl;
+      out << "   \n";
+      out << "// ------------>Primitives in pad: " << GetName() << "\n";
+      out << "   TPad *" << cname << " = new TPad(\"" << GetName() << "\", \""
+          << TString(GetTitle()).ReplaceSpecialCppChars() << "\", " << fXlowNDC << ", " << fYlowNDC << ", "
+          << fXlowNDC + fWNDC << ", " << fYlowNDC + fHNDC << ");\n";
+      out << "   " << cname << "->Draw();\n";
+      out << "   " << cname << "->cd();\n";
    }
-   out<<"   "<<cname<<"->Range("<<fX1<<","<<fY1<<","<<fX2<<","<<fY2<<");"<<std::endl;
+   out << "   " << cname << "->Range(" << fX1 << "," << fY1 << "," << fX2 << "," << fY2 << ");\n";
    TView *view = GetView();
    if (view) {
       Double_t rmin[3], rmax[3];
       view->GetRange(rmin, rmax);
-      static Int_t viewNumber = 0;
-      out<<"   TView *view"<<++viewNumber<<" = TView::CreateView(1);"<<std::endl;
-      out<<"   view"<<viewNumber<<"->SetRange("<<rmin[0]<<","<<rmin[1]<<","<<rmin[2]<<","
-                               <<rmax[0]<<","<<rmax[1]<<","<<rmax[2]<<");"<<std::endl;
+      out << "   TView::CreateView(1)->SetRange(" << rmin[0] << ", " << rmin[1] << ", " << rmin[2] << ", " << rmax[0]
+          << ", " << rmax[1] << ", " << rmax[2] << ");\n";
    }
 
    SaveFillAttributes(out, cname, 19, 1001);
 
-   if (GetBorderMode() != 1) {
-      out<<"   "<<cname<<"->SetBorderMode("<<GetBorderMode()<<");"<<std::endl;
-   }
-   if (GetBorderSize() != 4) {
-      out<<"   "<<cname<<"->SetBorderSize("<<GetBorderSize()<<");"<<std::endl;
-   }
-   if (GetLogx()) {
-      out<<"   "<<cname<<"->SetLogx();"<<std::endl;
-   }
-   if (GetLogy()) {
-      out<<"   "<<cname<<"->SetLogy();"<<std::endl;
-   }
-   if (GetLogz()) {
-      out<<"   "<<cname<<"->SetLogz();"<<std::endl;
-   }
-   if (GetGridx()) {
-      out<<"   "<<cname<<"->SetGridx();"<<std::endl;
-   }
-   if (GetGridy()) {
-      out<<"   "<<cname<<"->SetGridy();"<<std::endl;
-   }
-   if (GetTickx()) {
-      out<<"   "<<cname<<"->SetTickx("<<GetTickx()<<");"<<std::endl;
-   }
-   if (GetTicky()) {
-      out<<"   "<<cname<<"->SetTicky("<<GetTicky()<<");"<<std::endl;
-   }
-   if (GetTheta() != 30) {
-      out<<"   "<<cname<<"->SetTheta("<<GetTheta()<<");"<<std::endl;
-   }
-   if (GetPhi() != 30) {
-      out<<"   "<<cname<<"->SetPhi("<<GetPhi()<<");"<<std::endl;
-   }
-   if (TMath::Abs(fLeftMargin-0.1) > 0.01) {
-      out<<"   "<<cname<<"->SetLeftMargin("<<GetLeftMargin()<<");"<<std::endl;
-   }
-   if (TMath::Abs(fRightMargin-0.1) > 0.01) {
-      out<<"   "<<cname<<"->SetRightMargin("<<GetRightMargin()<<");"<<std::endl;
-   }
-   if (TMath::Abs(fTopMargin-0.1) > 0.01) {
-      out<<"   "<<cname<<"->SetTopMargin("<<GetTopMargin()<<");"<<std::endl;
-   }
-   if (TMath::Abs(fBottomMargin-0.1) > 0.01) {
-      out<<"   "<<cname<<"->SetBottomMargin("<<GetBottomMargin()<<");"<<std::endl;
-   }
+   if (GetBorderMode() != 1)
+      out << "   " << cname << "->SetBorderMode(" << GetBorderMode() << ");\n";
+   if (GetBorderSize() != 4)
+      out << "   " << cname << "->SetBorderSize(" << GetBorderSize() << ");\n";
+   if (GetLogx())
+      out << "   " << cname << "->SetLogx();\n";
+   if (GetLogy())
+      out << "   " << cname << "->SetLogy();\n";
+   if (GetLogz())
+      out << "   " << cname << "->SetLogz();\n";
+   if (GetGridx())
+      out << "   " << cname << "->SetGridx();\n";
+   if (GetGridy())
+      out << "   " << cname << "->SetGridy();\n";
+   if (GetTickx())
+      out << "   " << cname << "->SetTickx(" << GetTickx() << ");\n";
+   if (GetTicky())
+      out << "   " << cname << "->SetTicky(" << GetTicky() << ");\n";
+   if (GetTheta() != 30)
+      out << "   " << cname << "->SetTheta(" << GetTheta() << ");\n";
+   if (GetPhi() != 30)
+      out << "   " << cname << "->SetPhi(" << GetPhi() << ");\n";
+   if (TMath::Abs(fLeftMargin - 0.1) > 0.01)
+      out << "   " << cname << "->SetLeftMargin(" << GetLeftMargin() << ");\n";
+   if (TMath::Abs(fRightMargin - 0.1) > 0.01)
+      out << "   " << cname << "->SetRightMargin(" << GetRightMargin() << ");\n";
+   if (TMath::Abs(fTopMargin - 0.1) > 0.01)
+      out << "   " << cname << "->SetTopMargin(" << GetTopMargin() << ");\n";
+   if (TMath::Abs(fBottomMargin - 0.1) > 0.01)
+      out << "   " << cname << "->SetBottomMargin(" << GetBottomMargin() << ");\n";
 
    if (GetFrameFillColor() != GetFillColor())
       out << "   " << cname << "->SetFrameFillColor(" << TColor::SavePrimitiveColor(GetFrameFillColor()) << ");\n";
-   if (GetFrameFillStyle() != 1001) {
-      out<<"   "<<cname<<"->SetFrameFillStyle("<<GetFrameFillStyle()<<");"<<std::endl;
-   }
-   if (GetFrameLineStyle() != 1) {
-      out<<"   "<<cname<<"->SetFrameLineStyle("<<GetFrameLineStyle()<<");"<<std::endl;
-   }
+   if (GetFrameFillStyle() != 1001)
+      out << "   " << cname << "->SetFrameFillStyle(" << GetFrameFillStyle() << ");\n";
+   if (GetFrameLineStyle() != 1)
+      out << "   " << cname << "->SetFrameLineStyle(" << GetFrameLineStyle() << ");\n";
    if (GetFrameLineColor() != 1)
       out << "   " << cname << "->SetFrameLineColor(" << TColor::SavePrimitiveColor(GetFrameLineColor()) << ");\n";
-   if (GetFrameLineWidth() != 1) {
-      out<<"   "<<cname<<"->SetFrameLineWidth("<<GetFrameLineWidth()<<");"<<std::endl;
-   }
-   if (GetFrameBorderMode() != 1) {
-      out<<"   "<<cname<<"->SetFrameBorderMode("<<GetFrameBorderMode()<<");"<<std::endl;
-   }
-   if (GetFrameBorderSize() != 1) {
-         out<<"   "<<cname<<"->SetFrameBorderSize("<<GetFrameBorderSize()<<");"<<std::endl;
-   }
+   if (GetFrameLineWidth() != 1)
+      out << "   " << cname << "->SetFrameLineWidth(" << GetFrameLineWidth() << ");\n";
+   if (GetFrameBorderMode() != 1)
+      out << "   " << cname << "->SetFrameBorderMode(" << GetFrameBorderMode() << ");\n";
+   if (GetFrameBorderSize() != 1)
+      out << "   " << cname << "->SetFrameBorderSize(" << GetFrameBorderSize() << ");\n";
 
    TFrame *frame = fFrame;
-   if (!frame) frame = (TFrame*)GetPrimitive("TFrame");
+   if (!frame)
+      frame = (TFrame *)GetPrimitive("TFrame");
    if (frame) {
       if (frame->GetFillColor() != GetFillColor())
          out << "   " << cname << "->SetFrameFillColor(" << TColor::SavePrimitiveColor(frame->GetFillColor()) << ");\n";
-      if (frame->GetFillStyle() != 1001) {
-         out<<"   "<<cname<<"->SetFrameFillStyle("<<frame->GetFillStyle()<<");"<<std::endl;
-      }
-      if (frame->GetLineStyle() != 1) {
-         out<<"   "<<cname<<"->SetFrameLineStyle("<<frame->GetLineStyle()<<");"<<std::endl;
-      }
+      if (frame->GetFillStyle() != 1001)
+         out << "   " << cname << "->SetFrameFillStyle(" << frame->GetFillStyle() << ");\n";
+      if (frame->GetLineStyle() != 1)
+         out << "   " << cname << "->SetFrameLineStyle(" << frame->GetLineStyle() << ");\n";
       if (frame->GetLineColor() != 1)
          out << "   " << cname << "->SetFrameLineColor(" << TColor::SavePrimitiveColor(frame->GetLineColor()) << ");\n";
-      if (frame->GetLineWidth() != 1) {
-         out<<"   "<<cname<<"->SetFrameLineWidth("<<frame->GetLineWidth()<<");"<<std::endl;
-      }
-      if (frame->GetBorderMode() != 1) {
-         out<<"   "<<cname<<"->SetFrameBorderMode("<<frame->GetBorderMode()<<");"<<std::endl;
-      }
-      if (frame->GetBorderSize() != 1) {
-         out<<"   "<<cname<<"->SetFrameBorderSize("<<frame->GetBorderSize()<<");"<<std::endl;
-      }
+      if (frame->GetLineWidth() != 1)
+         out << "   " << cname << "->SetFrameLineWidth(" << frame->GetLineWidth() << ");\n";
+      if (frame->GetBorderMode() != 1)
+         out << "   " << cname << "->SetFrameBorderMode(" << frame->GetBorderMode() << ");\n";
+      if (frame->GetBorderSize() != 1)
+         out << "   " << cname << "->SetFrameBorderSize(" << frame->GetBorderSize() << ");\n";
    }
 
    TIter next(GetListOfPrimitives());
-   Int_t grnum = 0;
 
    while (auto obj = next()) {
-      if (obj->InheritsFrom(TGraph::Class()))
-         if (!strcmp(obj->GetName(),"Graph"))
-            ((TGraph*)obj)->SetName(TString::Format("Graph%d",grnum++).Data());
       obj->SavePrimitive(out, (Option_t *)next.GetOption());
       if (obj->InheritsFrom(TPad::Class())) {
          if (opt.Contains("toplevel"))
-            out<<"   "<<pname<<"->cd();"<<std::endl;
+            out << "   " << pname << "->cd();\n";
          else
-            out<<"   "<<cname<<"->cd();"<<std::endl;
+            out << "   " << cname << "->cd();\n";
       }
    }
-   out<<"   "<<cname<<"->Modified();"<<std::endl;
+   out << "   " << cname << "->Modified();\n";
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7042,7 +7127,7 @@ TObject *TPad::WaitPrimitive(const char *pname, const char *emode)
    TObject *obj = nullptr;
    Bool_t testlast = kFALSE;
    Bool_t hasname = pname && (strlen(pname) > 0);
-   if (!pname[0] && !emode[0]) testlast = kTRUE;
+   if ((!pname || !pname[0]) && (!emode || !emode[0])) testlast = kTRUE;
    if (testlast) gROOT->SetEditorMode();
    while (!gSystem->ProcessEvents() && gROOT->GetSelectedPad() && gPad) {
       if (gROOT->GetEditorMode() == 0) {

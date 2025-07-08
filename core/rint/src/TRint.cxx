@@ -181,7 +181,7 @@ TRint::TRint(const char *appClassName, Int_t *argc, char **argv, void *options, 
          std::cerr << "root: unrecognized option '" << argv[n] << "'\n";
       }
       std::cerr << "Try 'root --help' for more information.\n";
-      TApplication::Terminate(0);
+      TApplication::Terminate(2);
    }
 
    fNcmd          = 0;
@@ -195,11 +195,16 @@ TRint::TRint(const char *appClassName, Int_t *argc, char **argv, void *options, 
       PrintLogo(lite);
    }
 
-   // Explicitly load libMathCore it cannot be auto-loaded it when using one
-   // of its freestanding functions. Once functions can trigger autoloading we
-   // can get rid of this.
+#ifndef R__USE_CXXMODULES
+   // When modules are not used, and therefore rootmaps, freestanding functions 
+   // cannot trigger autoloading. Therefore, given the widespread usage of the 
+   // freestanding functions in MathCore, we  load the library explicitly.
+   // When modules are used to condense the reflection information, this manual
+   // loading is not needed, and it can be skipped in order to save time and 
+   // memory when starting the ROOT prompt.
    if (!gClassTable->GetDict("TRandom"))
       gSystem->Load("libMathCore");
+#endif
 
    if (!gInterpreter->HasPCMForLibrary("std")) {
       // Load some frequently used includes
@@ -518,7 +523,7 @@ void TRint::PrintLogo(Bool_t lite)
       // Here, %%s results in %s after TString::Format():
       lines.emplace_back(TString::Format("Welcome to ROOT %s%%shttps://root.cern",
                                          gROOT->GetVersion()));
-      lines.emplace_back(TString::Format("(c) 1995-2024, The ROOT Team; conception: R. Brun, F. Rademakers%%s"));
+      lines.emplace_back(TString::Format("(c) 1995-2025, The ROOT Team; conception: R. Brun, F. Rademakers%%s"));
       lines.emplace_back(TString::Format("Built for %s on %s%%s", gSystem->GetBuildArch(), gROOT->GetGitDate()));
       if (!strcmp(gROOT->GetGitBranch(), gROOT->GetGitCommit())) {
          static const char *months[] = {"January","February","March","April","May",

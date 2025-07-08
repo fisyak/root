@@ -676,14 +676,22 @@ int TSystem::ClosePipe(FILE*)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Execute command and return output in TString.
+/// @param command the command to be executed
+/// @param ret pointer to the memory where to store the returned value of the
+/// command, i.e. the result of ClosePipe (p-close stream, the status of its child).
+/// If ret is nullptr, the returned value is not stored anywhere.
+/// @param redirectStderr if true, stderr will be redirected to stdout
+/// @return the stdout of the command as TString (from the p-opened FILE stream)
 
-TString TSystem::GetFromPipe(const char *command)
+TString TSystem::GetFromPipe(const char *command, Int_t *ret, Bool_t redirectStderr)
 {
    TString out;
-
-   FILE *pipe = OpenPipe(command, "r");
+   TString scommand = command;
+   if (redirectStderr)
+      scommand += " 2>&1";
+   FILE *pipe = OpenPipe(scommand.Data(), "r");
    if (!pipe) {
-      SysError("GetFromPipe", "cannot run command \"%s\"", command);
+      SysError("GetFromPipe", "cannot run command \"%s\"", scommand.Data());
       return out;
    }
 
@@ -696,7 +704,10 @@ TString TSystem::GetFromPipe(const char *command)
 
    Int_t r = ClosePipe(pipe);
    if (r) {
-      Error("GetFromPipe", "command \"%s\" returned %d", command, r);
+      Error("GetFromPipe", "command \"%s\" returned %d", scommand.Data(), r);
+   }
+   if (ret) {
+      *ret = r;
    }
    return out;
 }
@@ -832,6 +843,7 @@ int TSystem::MakeDirectory(const char *)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Open a directory. Returns 0 if directory does not exist.
+/// \note Remember to call `TSystem::FreeDirectory(returned_pointer)` later, to prevent a memory leak
 
 void *TSystem::OpenDirectory(const char *)
 {
@@ -1067,6 +1079,7 @@ const char *TSystem::UnixPathName(const char *name)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Concatenate a directory and a file name. User must delete returned string.
+/// \deprecated Consider replacing with TSystem::PrependPathName
 
 char *TSystem::ConcatFileName(const char *dir, const char *name)
 {

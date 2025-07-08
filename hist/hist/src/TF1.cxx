@@ -31,6 +31,8 @@
 #include "TF1Helper.h"
 #include "TF1NormSum.h"
 #include "TF1Convolution.h"
+#include "TVectorD.h"
+#include "TMatrixDSym.h"
 #include "TVirtualMutex.h"
 #include "Math/WrappedFunction.h"
 #include "Math/WrappedTF1.h"
@@ -1528,6 +1530,26 @@ Double_t TF1::EvalPar(const Double_t *x, const Double_t *params)
    return result;
 }
 
+/// Evaluate the uncertainty of the function at location x due to the parameter
+/// uncertainties. If covMatrix is nullptr, assumes uncorrelated uncertainties,
+/// otherwise the input covariance matrix (e.g. from a fit performed with
+/// option "S") is used. Implemented for 1-d only.
+/// @note to obtain confidence intervals of a fit result for drawing purposes,
+/// see instead ROOT::Fit::FitResult::GetConfidenceInterval()
+Double_t TF1::EvalUncertainty(Double_t x, const TMatrixDSym *covMatrix) const
+{
+   TVectorD grad(GetNpar());
+   GradientPar(&x, grad.GetMatrixArray());
+   if (!covMatrix) {
+      Double_t variance = 0;
+      for(Int_t iPar = 0; iPar < GetNpar(); iPar++) {
+         variance += grad(iPar)*grad(iPar)*GetParError(iPar)*GetParError(iPar);
+      }
+      return std::sqrt(variance);
+   }
+   return std::sqrt(covMatrix->Similarity(grad));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Execute action corresponding to one event.
 ///
@@ -1958,13 +1980,12 @@ Double_t TF1::GetProb() const
    return TMath::Prob(fChisquare, fNDF);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 /// Compute Quantiles for density distribution of this function
 ///
 /// Quantile x_p of a probability distribution Function F is defined as
 /// \f[
-///     F(x_{p}) = \int_{xmin}^{x_{p}} f dx = p with 0 <= p <= 1.
+///     F(x_{p}) = \int_{xmin}^{x_{p}} f dx = p \text{with} 0 <= p <= 1.
 /// \f]
 /// For instance the median \f$ x_{\frac{1}{2}} \f$ of a distribution is defined as that value
 /// of the random variable for which the distribution function equals 0.5:
@@ -1989,7 +2010,6 @@ Double_t TF1::GetProb() const
 /// \author Eddy Offermann
 /// \warning Function leads to undefined behavior if xp or p are null or
 /// their size does not match with n
-
 
 Int_t TF1::GetQuantiles(Int_t n, Double_t *xp, const Double_t *p)
 {
@@ -2442,7 +2462,7 @@ TAxis *TF1::GetZaxis() const
 ///
 /// If a parameter is fixed, the gradient on this parameter = 0
 
-Double_t TF1::GradientPar(Int_t ipar, const Double_t *x, Double_t eps)
+Double_t TF1::GradientPar(Int_t ipar, const Double_t *x, Double_t eps) const
 {
    return GradientParTempl<Double_t>(ipar, x, eps);
 }
@@ -2465,7 +2485,7 @@ Double_t TF1::GradientPar(Int_t ipar, const Double_t *x, Double_t eps)
 ///
 /// If a parameter is fixed, the gradient on this parameter = 0
 
-void TF1::GradientPar(const Double_t *x, Double_t *grad, Double_t eps)
+void TF1::GradientPar(const Double_t *x, Double_t *grad, Double_t eps) const
 {
    if (fFormula && fFormula->HasGeneratedGradient()) {
       // need to zero the gradient buffer
@@ -3304,9 +3324,9 @@ void TF1::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
          Save(fXmin, fXmax, 0, 0, 0, 0);
       }
       if (!fSave.empty()) {
-         TString arrs = SavePrimitiveArray(out, f1Name, fSave.size(), fSave.data());
+         TString vect = SavePrimitiveVector(out, f1Name, fSave.size(), fSave.data());
          out << "   for (int n = 0; n < " << fSave.size() << "; n++)\n";
-         out << "      " << f1Name << "->SetSavedPoint(n, "  << arrs << "[n]);\n";
+         out << "      " << f1Name << "->SetSavedPoint(n, "  << vect << "[n]);\n";
       }
 
       if (saved)
@@ -3338,8 +3358,7 @@ void TF1::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
       GetYaxis()->SaveAttributes(out, f1Name, "->GetYaxis()");
    }
 
-   if (!option || !strstr(option, "nodraw"))
-      out << "   " << f1Name << "->Draw(\"" << TString(option).ReplaceSpecialCppChars() << "\");\n";
+   SavePrimitiveDraw(out, f1Name, option);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

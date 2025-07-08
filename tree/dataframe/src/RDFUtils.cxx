@@ -12,6 +12,8 @@
 #include "ROOT/RDataSource.hxx"
 #include "ROOT/RDF/RDefineBase.hxx"
 #include "ROOT/RDF/RLoopManager.hxx"
+#include "ROOT/RDF/RSample.hxx"
+#include "ROOT/RDF/RSampleInfo.hxx"
 #include "ROOT/RDF/Utils.hxx"
 #include "ROOT/RLogger.hxx"
 #include "RtypesCore.h"
@@ -26,10 +28,13 @@
 #include "TROOT.h" // IsImplicitMTEnabled, GetThreadPoolSize
 #include "TTree.h"
 
+#include <fstream>
+#include <nlohmann/json.hpp> // nlohmann::json::parse
 #include <stdexcept>
 #include <string>
 #include <cstring>
 #include <typeinfo>
+#include <cstdint>
 
 using namespace ROOT::Detail::RDF;
 using namespace ROOT::RDF;
@@ -55,47 +60,101 @@ namespace ROOT {
 namespace Internal {
 namespace RDF {
 
+unsigned int &NThreadPerTH3()
+{
+   static unsigned int nThread = 1;
+   return nThread;
+}
+
 /// Return the type_info associated to a name. If the association fails, an
 /// exception is thrown.
 /// References and pointers are not supported since those cannot be stored in
 /// columns.
 const std::type_info &TypeName2TypeID(const std::string &name)
 {
-
+   // This map includes all relevant C++ fundamental types found at
+   // https://en.cppreference.com/w/cpp/language/types.html and the associated
+   // ROOT portable types when available.
    const static std::unordered_map<std::string, TypeInfoRef> typeName2TypeIDMap{
+      // Integral types
+      // Standard integer types
+      {"short", typeid(short)},
+      {"short int", typeid(short int)},
+      {"signed short", typeid(signed short)},
+      {"signed short int", typeid(signed short int)},
+      {"unsigned short", typeid(unsigned short)},
+      {"unsigned short int", typeid(unsigned short int)},
+      {"int", typeid(int)},
+      {"signed", typeid(signed)},
+      {"signed int", typeid(signed int)},
+      {"unsigned", typeid(unsigned)},
+      {"unsigned int", typeid(unsigned int)},
+      {"long", typeid(long)},
+      {"long int", typeid(long int)},
+      {"signed long", typeid(signed long)},
+      {"signed long int", typeid(signed long int)},
+      {"unsigned long", typeid(unsigned long)},
+      {"unsigned long int", typeid(unsigned long int)},
+      {"long long", typeid(long long)},
+      {"long long int", typeid(long long int)},
+      {"signed long long", typeid(signed long long)},
+      {"signed long long int", typeid(signed long long int)},
+      {"unsigned long long", typeid(unsigned long long)},
+      {"unsigned long long int", typeid(unsigned long long int)},
+      {"std::size_t", typeid(std::size_t)},
+   // Extended standard integer types
+#ifdef INT8_MAX
+      {"std::int8_t", typeid(std::int8_t)},
+#endif
+#ifdef INT16_MAX
+      {"std::int16_t", typeid(std::int16_t)},
+#endif
+#ifdef INT32_MAX
+      {"std::int32_t", typeid(std::int32_t)},
+#endif
+#ifdef INT64_MAX
+      {"std::int64_t", typeid(std::int64_t)},
+#endif
+#ifdef UINT8_MAX
+      {"std::uint8_t", typeid(std::uint8_t)},
+#endif
+#ifdef UINT16_MAX
+      {"std::uint16_t", typeid(std::uint16_t)},
+#endif
+#ifdef UINT32_MAX
+      {"std::uint32_t", typeid(std::uint32_t)},
+#endif
+#ifdef UINT64_MAX
+      {"std::uint64_t", typeid(std::uint64_t)},
+#endif
+      // ROOT integer types
+      {"Int_t", typeid(Int_t)},
+      {"UInt_t", typeid(UInt_t)},
+      {"Short_t", typeid(Short_t)},
+      {"UShort_t", typeid(UShort_t)},
+      {"Long_t", typeid(Long_t)},
+      {"ULong_t", typeid(ULong_t)},
+      {"Long64_t", typeid(Long64_t)},
+      {"ULong64_t", typeid(ULong64_t)},
+      // Boolean type
+      {"bool", typeid(bool)},
+      {"Bool_t", typeid(bool)},
+      // Character types
       {"char", typeid(char)},
       {"Char_t", typeid(char)},
+      {"signed char", typeid(signed char)},
       {"unsigned char", typeid(unsigned char)},
       {"UChar_t", typeid(unsigned char)},
-      {"int", typeid(int)},
-      {"Int_t", typeid(int)},
-      {"unsigned", typeid(unsigned int)},
-      {"unsigned int", typeid(unsigned int)},
-      {"UInt_t", typeid(unsigned int)},
-      {"short", typeid(short)},
-      {"short int", typeid(short)},
-      {"Short_t", typeid(short)},
-      {"unsigned short", typeid(unsigned short)},
-      {"unsigned short int", typeid(unsigned short)},
-      {"UShort_t", typeid(unsigned short)},
-      {"long", typeid(long)},
-      {"long int", typeid(long)},
-      {"Long_t", typeid(long)},
-      {"unsigned long", typeid(unsigned long)},
-      {"unsigned long int", typeid(unsigned long)},
-      {"ULong_t", typeid(unsigned long)},
-      {"double", typeid(double)},
-      {"Double_t", typeid(double)},
+      {"char16_t", typeid(char16_t)},
+      {"char32_t", typeid(char32_t)},
+      // Floating-point types
+      // Standard floating-point types
       {"float", typeid(float)},
+      {"double", typeid(double)},
+      {"long double", typeid(long double)},
+      // ROOT floating-point types
       {"Float_t", typeid(float)},
-      {"long long", typeid(long long)},
-      {"long long int", typeid(long long)},
-      {"Long64_t", typeid(long long)},
-      {"unsigned long long", typeid(unsigned long long)},
-      {"unsigned long long int", typeid(unsigned long long)},
-      {"ULong64_t", typeid(unsigned long long)},
-      {"bool", typeid(bool)},
-      {"Bool_t", typeid(bool)}};
+      {"Double_t", typeid(double)}};
 
    if (auto it = typeName2TypeIDMap.find(name); it != typeName2TypeIDMap.end())
       return it->second.get();
@@ -135,6 +194,23 @@ std::string TypeID2TypeName(const std::type_info &id)
    }
 
    return "";
+}
+
+char TypeID2ROOTTypeName(const std::type_info &tid)
+{
+   const static std::unordered_map<TypeInfoRef, char, TypeInfoRefHash, TypeInfoRefEqualComp> typeID2ROOTTypeNameMap{
+      {typeid(char), 'B'},      {typeid(Char_t), 'B'},   {typeid(unsigned char), 'b'},      {typeid(UChar_t), 'b'},
+      {typeid(int), 'I'},       {typeid(Int_t), 'I'},    {typeid(unsigned int), 'i'},       {typeid(UInt_t), 'i'},
+      {typeid(short), 'S'},     {typeid(Short_t), 'S'},  {typeid(unsigned short), 's'},     {typeid(UShort_t), 's'},
+      {typeid(long), 'G'},      {typeid(Long_t), 'G'},   {typeid(unsigned long), 'g'},      {typeid(ULong_t), 'g'},
+      {typeid(long long), 'L'}, {typeid(Long64_t), 'L'}, {typeid(unsigned long long), 'l'}, {typeid(ULong64_t), 'l'},
+      {typeid(float), 'F'},     {typeid(Float_t), 'F'},  {typeid(Double_t), 'D'},           {typeid(double), 'D'},
+      {typeid(bool), 'O'},      {typeid(Bool_t), 'O'}};
+
+   if (auto it = typeID2ROOTTypeNameMap.find(tid); it != typeID2ROOTTypeNameMap.end())
+      return it->second;
+
+   return ' ';
 }
 
 std::string ComposeRVecTypeName(const std::string &valueType)
@@ -235,7 +311,7 @@ std::string ColumnName2ColumnTypeName(const std::string &colName, TTree *tree, R
    if (define) {
       colType = define->GetTypeName();
    } else if (ds && ds->HasColumn(colName)) {
-      colType = ds->GetTypeName(colName);
+      colType = ROOT::Internal::RDF::GetTypeNameWithOpts(*ds, colName, vector2RVec);
    } else if (tree) {
       colType = GetBranchOrLeafTypeName(*tree, colName);
       if (vector2RVec && TClassEdit::IsSTLCont(colType) == ROOT::ESTLType::kSTLvector) {
@@ -458,6 +534,140 @@ auto RStringCache::Insert(const std::string &string) -> decltype(fStrings)::cons
 
    return fStrings.insert(string).first;
 }
+
+ROOT::RDF::Experimental::RDatasetSpec RetrieveSpecFromJson(const std::string &jsonFile)
+{
+      const nlohmann::ordered_json fullData = nlohmann::ordered_json::parse(std::ifstream(jsonFile));
+   if (!fullData.contains("samples") || fullData["samples"].empty()) {
+      throw std::runtime_error(
+         R"(The input specification does not contain any samples. Please provide the samples in the specification like:
+{
+   "samples": {
+      "sampleA": {
+         "trees": ["tree1", "tree2"],
+         "files": ["file1.root", "file2.root"],
+         "metadata": {"lumi": 1.0, }
+      },
+      "sampleB": {
+         "trees": ["tree3", "tree4"],
+         "files": ["file3.root", "file4.root"],
+         "metadata": {"lumi": 0.5, }
+      },
+      ...
+   },
+})");
+   }
+
+   ROOT::RDF::Experimental::RDatasetSpec spec;
+   for (const auto &keyValue : fullData["samples"].items()) {
+      const std::string &sampleName = keyValue.key();
+      const auto &sample = keyValue.value();
+      // TODO: if requested in https://github.com/root-project/root/issues/11624
+      // allow union-like types for trees and files, see: https://github.com/nlohmann/json/discussions/3815
+      if (!sample.contains("trees")) {
+         throw std::runtime_error("A list of tree names must be provided for sample " + sampleName + ".");
+      }
+      std::vector<std::string> trees = sample["trees"];
+      if (!sample.contains("files")) {
+         throw std::runtime_error("A list of files must be provided for sample " + sampleName + ".");
+      }
+      std::vector<std::string> files = sample["files"];
+      if (!sample.contains("metadata")) {
+         spec.AddSample( ROOT::RDF::Experimental::RSample{sampleName, trees, files});
+      } else {
+         ROOT::RDF::Experimental::RMetaData m;
+         for (const auto &metadata : sample["metadata"].items()) {
+            const auto &val = metadata.value();
+            if (val.is_string())
+               m.Add(metadata.key(), val.get<std::string>());
+            else if (val.is_number_integer())
+               m.Add(metadata.key(), val.get<int>());
+            else if (val.is_number_float())
+               m.Add(metadata.key(), val.get<double>());
+            else
+               throw std::logic_error("The metadata keys can only be of type [string|int|double].");
+         }
+         spec.AddSample( ROOT::RDF::Experimental::RSample{sampleName, trees, files, m});
+      }
+   }
+   if (fullData.contains("friends")) {
+      for (const auto &friends : fullData["friends"].items()) {
+         std::string alias = friends.key();
+         std::vector<std::string> trees = friends.value()["trees"];
+         std::vector<std::string> files = friends.value()["files"];
+         if (files.size() != trees.size() && trees.size() > 1)
+            throw std::runtime_error("Mismatch between trees and files in a friend.");
+         spec.WithGlobalFriends(trees, files, alias);
+      }
+   }
+
+   if (fullData.contains("range")) {
+      std::vector<int> range = fullData["range"];
+
+      if (range.size() == 1)
+         spec.WithGlobalRange({range[0]});
+      else if (range.size() == 2)
+         spec.WithGlobalRange({range[0], range[1]});
+   }
+   return spec;
+};
+
 } // end NS RDF
 } // end NS Internal
 } // end NS ROOT
+
+std::string
+ROOT::Internal::RDF::GetTypeNameWithOpts(const ROOT::RDF::RDataSource &df, std::string_view colName, bool vector2RVec)
+{
+   return df.GetTypeNameWithOpts(colName, vector2RVec);
+}
+
+const std::vector<std::string> &ROOT::Internal::RDF::GetTopLevelFieldNames(const ROOT::RDF::RDataSource &df)
+{
+   return df.GetTopLevelFieldNames();
+}
+
+const std::vector<std::string> &ROOT::Internal::RDF::GetColumnNamesNoDuplicates(const ROOT::RDF::RDataSource &df)
+{
+   return df.GetColumnNamesNoDuplicates();
+}
+
+void ROOT::Internal::RDF::CallInitializeWithOpts(ROOT::RDF::RDataSource &ds,
+                                                 const std::set<std::string> &suppressErrorsForMissingColumns)
+{
+   ds.InitializeWithOpts(suppressErrorsForMissingColumns);
+}
+
+std::string ROOT::Internal::RDF::DescribeDataset(ROOT::RDF::RDataSource &ds)
+{
+   return ds.DescribeDataset();
+}
+
+ROOT::RDF::RSampleInfo ROOT::Internal::RDF::CreateSampleInfo(
+   const ROOT::RDF::RDataSource &ds, unsigned int slot,
+   const std::unordered_map<std::string, ROOT::RDF::Experimental::RSample *> &sampleMap)
+{
+   return ds.CreateSampleInfo(slot, sampleMap);
+}
+
+void ROOT::Internal::RDF::RunFinalChecks(const ROOT::RDF::RDataSource &ds, bool nodesLeftNotRun)
+{
+   ds.RunFinalChecks(nodesLeftNotRun);
+}
+
+void ROOT::Internal::RDF::ProcessMT(ROOT::RDF::RDataSource &ds, ROOT::Detail::RDF::RLoopManager &lm)
+{
+   ds.ProcessMT(lm);
+}
+
+std::unique_ptr<ROOT::Detail::RDF::RColumnReaderBase>
+ROOT::Internal::RDF::CreateColumnReader(ROOT::RDF::RDataSource &ds, unsigned int slot, std::string_view col,
+                                        const std::type_info &tid, TTreeReader *treeReader)
+{
+   return ds.CreateColumnReader(slot, col, tid, treeReader);
+}
+
+std::vector<ROOT::RDF::Experimental::RSample> ROOT::Internal::RDF::MoveOutSamples(ROOT::RDF::Experimental::RDatasetSpec &spec)
+{
+   return std::move(spec.fSamples);
+}

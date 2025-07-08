@@ -19,9 +19,13 @@ needed to integrate Minuit2 in the %ROOT framework.
 A new class has been introduced, ROOT::Minuit2::Minuit2Minimizer, which implements
 the interface ROOT::Math::Minimizer. Within %ROOT, it can be instantiates also using
 the %ROOT plug-in manager. This class provides a convenient entry point for using Minuit2\.
-An example of using this interface is the %ROOT tutorial _tutorials/fit/NumericalMinimization.C_
+An example of using this interface is the %ROOT tutorial _tutorials/math/NumericalMinimization.C_
 or the Minuit2 test program
 [<tt>testMinimize.cxx</tt>](https://github.com/cxx-hep/root-cern/blob/master/math/minuit2/test/testMinimize.cxx).
+
+\note Some gradient calculations, such as `Numerical2PGradientCalculator` support parallelization
+via OpenMP. To profit from this acceleration, one needs to build ROOT using `minuit2_omp=ON`
+and later call GradientCalculator::SetParallelOMP()
 
 A standalone version of Minuit2 (independent of %ROOT) can be easily built and installed using `CMake`.
 See this [`README`](https://github.com/root-project/root/blob/master/math/minuit2/README.md)
@@ -1872,8 +1876,6 @@ The user's model function is a Gaussian.
       GaussFunction(double mean, double sig, double constant) :
         theMean(mean), theSigma(sig), theConstant(constant) {}
 
-      ~GaussFunction() {}
-
       double m() const {return theMean;}
       double s() const {return theSigma;}
       double c() const {return theConstant;}
@@ -1916,8 +1918,6 @@ The user's `FCN` (GaussFcn) to calculate the $\chi^2$
                           thePositions(pos),
                     theMVariances(mvar),
                     theErrorDef(1.) {}
-
-      ~GaussFcn() {}
 
       virtual double up() const {return theErrorDef;}
       virtual double operator()(const std::vector<double>&) const;

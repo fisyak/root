@@ -34,6 +34,7 @@
 #include "TAttMarker.h"
 #include "TF1AbsComposition.h"
 #include "TMath.h"
+#include "TMatrixDSymfwd.h"
 #include "Math/Types.h"
 #include "Math/ParamFunctor.h"
 
@@ -174,58 +175,6 @@ namespace ROOT {
       struct TF1Builder<Func *> {
          static void Build(TF1 *f, Func *func);
       };
-
-      /// %Internal class used by TF1 for obtaining the type from a functor
-      /// out of the set of valid operator() signatures.
-      template<typename T>
-      struct GetFunctorType {
-      };
-
-      template<typename F, typename T>
-      struct GetFunctorType<T(F::*)(const T *, const double *)> {
-         using type = T;
-      };
-
-      template<typename F, typename T>
-      struct GetFunctorType<T(F::*)(const T *, const double *) const> {
-         using type = T;
-      };
-
-      template<typename F, typename T>
-      struct GetFunctorType<T(F::*)(T *, double *)> {
-         using type = T;
-      };
-
-      template<typename F, typename T>
-      struct GetFunctorType<T(F::*)(T *, double *) const> {
-         using type = T;
-      };
-
-      /// %Internal class used by TF1 to get the right operator() signature
-      /// from a Functor with several ones.
-      template<typename T, typename F>
-      auto GetTheRightOp(T(F::*opPtr)(const T *, const double *)) -> decltype(opPtr)
-      {
-         return opPtr;
-      }
-
-      template<typename T, typename F>
-      auto GetTheRightOp(T(F::*opPtr)(const T *, const double *) const) -> decltype(opPtr)
-      {
-         return opPtr;
-      }
-
-      template<typename T, typename F>
-      auto GetTheRightOp(T(F::*opPtr)(T *, double *)) -> decltype(opPtr)
-      {
-         return opPtr;
-      }
-
-      template<typename T, typename F>
-      auto GetTheRightOp(T(F::*opPtr)(T *, double *) const) -> decltype(opPtr)
-      {
-         return opPtr;
-      }
    }
 }
 
@@ -302,9 +251,9 @@ protected:
 private:
    // NSUM parsing helper functions
    void DefineNSUMTerm(TObjArray *newFuncs, TObjArray *coeffNames,
-		       TString &fullFormula,
-		       TString &formula, int termStart, int termEnd,
-		       Double_t xmin, Double_t xmax);
+               TString &fullFormula,
+               TString &formula, int termStart, int termEnd,
+               Double_t xmin, Double_t xmax);
    int TermCoeffLength(TString &term);
 
 protected:
@@ -462,6 +411,7 @@ public:
    template <class T> T EvalPar(const T *x, const Double_t *params = nullptr);
    virtual Double_t operator()(Double_t x, Double_t y = 0, Double_t z = 0, Double_t t = 0) const;
    template <class T> T operator()(const T *x, const Double_t *params = nullptr);
+   Double_t EvalUncertainty(Double_t x, const TMatrixDSym *covMatrix = nullptr) const;
    void     ExecuteEvent(Int_t event, Int_t px, Int_t py) override;
    virtual void     FixParameter(Int_t ipar, Double_t value);
    /// Return true if function has data in fSave buffer
@@ -565,6 +515,10 @@ public:
       return (fFormula) ? fFormula->GetParNumber(name) : fParams->GetParNumber(name);
    }
    virtual Double_t GetParError(Int_t ipar) const;
+   virtual Double_t GetParError(const char *name) const
+   {
+      return GetParError(GetParNumber(name));
+   }
    virtual const Double_t *GetParErrors() const
    {
       return fParErrors.data();
@@ -594,17 +548,17 @@ public:
    {
       return (fFormula) ? fFormula->GetVariable(name) : 0;
    }
-   virtual Double_t GradientPar(Int_t ipar, const Double_t *x, Double_t eps = 0.01);
+   virtual Double_t GradientPar(Int_t ipar, const Double_t *x, Double_t eps = 0.01) const;
    template <class T>
-   T GradientPar(Int_t ipar, const T *x, Double_t eps = 0.01);
+   T GradientPar(Int_t ipar, const T *x, Double_t eps = 0.01) const;
    template <class T>
-   T GradientParTempl(Int_t ipar, const T *x, Double_t eps = 0.01);
+   T GradientParTempl(Int_t ipar, const T *x, Double_t eps = 0.01) const;
 
-   virtual void     GradientPar(const Double_t *x, Double_t *grad, Double_t eps = 0.01);
+   virtual void     GradientPar(const Double_t *x, Double_t *grad, Double_t eps = 0.01) const;
    template <class T>
-   void GradientPar(const T *x, T *grad, Double_t eps = 0.01);
+   void GradientPar(const T *x, T *grad, Double_t eps = 0.01) const;
    template <class T>
-   void GradientParTempl(const T *x, T *grad, Double_t eps = 0.01);
+   void GradientParTempl(const T *x, T *grad, Double_t eps = 0.01) const;
 
    virtual void     InitArgs(const Double_t *x, const Double_t *params);
    static  void     InitStandardFunctions();
@@ -763,18 +717,32 @@ namespace ROOT {
       template<class Func>
       void TF1Builder<Func>::Build(TF1 *f, Func func)
       {
-         using Fnc_t = typename ROOT::Internal::GetFunctorType<decltype(ROOT::Internal::GetTheRightOp(&Func::operator()))>::type;
-         f->fType = std::is_same<Fnc_t, double>::value? TF1::EFType::kTemplScalar : TF1::EFType::kTemplVec;
-         f->fFunctor.reset(new TF1::TF1FunctorPointerImpl<Fnc_t>(ROOT::Math::ParamFunctorTempl<Fnc_t>(func)));
+         // check if vector interface is supported by Func
+         if constexpr(std::is_invocable_r_v<Double_v, Func, Double_v*, double *>) {
+            // if ROOT was not built with veccore and vc, Double_v is just an alias for the scalar double
+            f->fType = std::is_same<Double_v, double>::value ? TF1::EFType::kTemplScalar : TF1::EFType::kTemplVec;
+            f->fFunctor.reset(new TF1::TF1FunctorPointerImpl(ROOT::Math::ParamFunctorTempl<Double_v>(func)));
+         } else {
+            f->fType = TF1::EFType::kTemplScalar;
+            f->fFunctor.reset(new TF1::TF1FunctorPointerImpl(ROOT::Math::ParamFunctorTempl<double>(func)));
+         }
+
          f->fParams = std::make_unique<TF1Parameters>(f->fNpar);
       }
 
       template<class Func>
       void TF1Builder<Func *>::Build(TF1 *f, Func *func)
       {
-         using Fnc_t = typename ROOT::Internal::GetFunctorType<decltype(ROOT::Internal::GetTheRightOp(&Func::operator()))>::type;
-         f->fType = std::is_same<Fnc_t, double>::value? TF1::EFType::kTemplScalar : TF1::EFType::kTemplVec;
-         f->fFunctor.reset(new TF1::TF1FunctorPointerImpl<Fnc_t>(ROOT::Math::ParamFunctorTempl<Fnc_t>(func)));
+         // check if vector interface is supported by Func
+         if constexpr(std::is_invocable_r_v<Double_v, Func, Double_v*, double *>) {
+            // if ROOT was not built with veccore and vc, Double_v is just an alias for the scalar double
+            f->fType = std::is_same<Double_v, double>::value ? TF1::EFType::kTemplScalar : TF1::EFType::kTemplVec;
+            f->fFunctor.reset(new TF1::TF1FunctorPointerImpl(ROOT::Math::ParamFunctorTempl<Double_v>(func)));
+         } else {
+            f->fType = TF1::EFType::kTemplScalar;
+            f->fFunctor.reset(new TF1::TF1FunctorPointerImpl(ROOT::Math::ParamFunctorTempl<double>(func)));
+         }
+
          f->fParams = std::make_unique<TF1Parameters>(f->fNpar);
       }
 
@@ -902,7 +870,7 @@ void TF1::SetFunction(PtrObj &p, MemFn memFn)
 }
 
 template <class T>
-inline T TF1::GradientPar(Int_t ipar, const T *x, Double_t eps)
+inline T TF1::GradientPar(Int_t ipar, const T *x, Double_t eps) const
 {
    if (fType == EFType::kTemplVec || fType == EFType::kTemplScalar) {
       return GradientParTempl<T>(ipar, x, eps);
@@ -911,7 +879,7 @@ inline T TF1::GradientPar(Int_t ipar, const T *x, Double_t eps)
 }
 
 template <class T>
-inline T TF1::GradientParTempl(Int_t ipar, const T *x, Double_t eps)
+inline T TF1::GradientParTempl(Int_t ipar, const T *x, Double_t eps) const
 {
    if (GetNpar() == 0)
       return 0;
@@ -969,7 +937,7 @@ inline T TF1::GradientParTempl(Int_t ipar, const T *x, Double_t eps)
 }
 
 template <class T>
-inline void TF1::GradientPar(const T *x, T *grad, Double_t eps)
+inline void TF1::GradientPar(const T *x, T *grad, Double_t eps) const
 {
    if (fType == EFType::kTemplVec || fType == EFType::kTemplScalar) {
       GradientParTempl<T>(x, grad, eps);
@@ -978,7 +946,7 @@ inline void TF1::GradientPar(const T *x, T *grad, Double_t eps)
 }
 
 template <class T>
-inline void TF1::GradientParTempl(const T *x, T *grad, Double_t eps)
+inline void TF1::GradientParTempl(const T *x, T *grad, Double_t eps) const
 {
    if (eps < 1e-10 || eps > 1) {
       Warning("Derivative", "parameter esp=%g out of allowed range[1e-10,1], reset to 0.01", eps);

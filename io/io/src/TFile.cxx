@@ -235,6 +235,10 @@ TFile::TFile() : TDirectoryFile(), fCompress(ROOT::RCompressionSetting::EAlgorit
 /// READ_WITHOUT_GLOBALREGISTRATION   | Used by TTreeProcessorMT, not a user callable option.
 ///
 /// If option = "" (default), READ is assumed.
+/// \note Even in READ mode, if the file is the current directory `cd()`, and you create e.g. a new histogram in your code,
+/// the histogram will be appended (but not written) to this directory, and automatically deleted when closing the file.
+/// To avoid this behavior, call hist->SetDirectory(nullptr); after creating it.
+///
 /// The file can be specified as a URL of the form:
 ///
 ///     file:///user/rdm/bla.root or file:/user/rdm/bla.root
@@ -354,6 +358,8 @@ TFile::TFile(const char *fname1, Option_t *option, const char *ftitle, Int_t com
    };
 
    fOption = option;
+   fOption.ToUpper();
+
    if (strlen(fUrl.GetProtocol()) != 0 && strcmp(fUrl.GetProtocol(), "file") != 0 && !fOption.BeginsWith("NET") &&
        !fOption.BeginsWith("WEB")) {
       Error("TFile",
@@ -397,8 +403,6 @@ TFile::TFile(const char *fname1, Option_t *option, const char *ftitle, Int_t com
    fUnits        = 4;
    fCacheReadMap = new TMap();
    SetBit(kBinaryFile, kTRUE);
-
-   fOption.ToUpper();
 
    if (fIsRootFile && !fIsPcmFile && fOption != "NEW" && fOption != "CREATE"
        && fOption != "RECREATE") {
@@ -1080,26 +1084,7 @@ TFile *&TFile::CurrentFile()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Delete object namecycle.
-///
-/// \param[in] namecycle Encodes the name and cycle of the objects to delete
-///
-/// Namecycle identifies an object in the top directory of the file namecycle
-/// has the format <em>name;cycle</em>.
-///   - <em>name  = *</em> means all objects
-///   - <em>cycle = *</em> means all cycles (memory and keys)
-///   - <em>cycle = ""</em> or cycle = 9999 ==> apply to a memory object
-/// When name=* use T* to delete subdirectories also
-///
-/// Examples:
-/// name/cycle | Action
-/// -----------|-------
-/// foo   | delete object named foo in memory
-/// foo;1 | delete cycle 1 of foo on file
-/// foo;* | delete all cycles of foo on disk and also from memory
-/// *;2   | delete all objects on file having the cycle 2
-/// *;*   | delete all objects from memory and file
-/// T*;*  | delete all objects from memory and file and all subdirectories
+/// \copydoc TDirectoryFile::Delete
 
 void TFile::Delete(const char *namecycle)
 {
@@ -1699,22 +1684,27 @@ std::optional<ROOT::Detail::TKeyMapNode> ROOT::Detail::TKeyMapIterable::TIterato
    }
 
    const auto readString = [&buffer, &header](bool skipCheck = false) {
-      char stringLen;
-      char str[256];
+      std::uint8_t stringLenShort;
+      std::uint32_t stringLen;
       if (!skipCheck && ((buffer - header) >= headerSize)) {
          stringLen = 0;
       } else {
-         frombuf(buffer, &stringLen);
-         if (stringLen < 0)
-            stringLen = 0;
-         else if ((buffer - header) + stringLen > headerSize)
+         frombuf(buffer, &stringLenShort);
+         if (stringLenShort == 0xFF)
+            frombuf(buffer, &stringLen);
+         else
+            stringLen = stringLenShort;
+
+         if ((buffer - header) + stringLen > headerSize)
             stringLen = headerSize - (buffer - header);
       }
-      for (int i = 0; i < stringLen; ++i)
-         frombuf(buffer, &str[i]);
-      str[static_cast<int>(stringLen)] = 0;
 
-      return std::string(str, stringLen);
+      std::string str;
+      if (stringLen)
+         str = std::string(buffer, stringLen);
+      buffer += stringLen;
+
+      return str;
    };
 
    node.fClassName = readString(true);
@@ -2810,6 +2800,7 @@ void TFile::MakeProject(const char *dirname, const char * /*classes*/,
             if (gSystem->Unlink(path))
                Warning("MakeProject", "problems unlinking '%s'", path.Data());
          }
+         gSystem->FreeDirectory(dir);
       }
       // Make sure that the relevant dirs exists: this is mandatory, so we fail if unsuccessful
       path.Form("%s/%s/PROOF-INF", pardir.Data(), parname.Data());
@@ -4177,6 +4168,7 @@ TFile *TFile::Open(const char *url, Option_t *options, const char *ftitle,
    // support for asynchronous open, though; the following is completely transparent if
    // such support if not available for the required protocol)
    TString opts(options);
+   opts.ToUpper();
    Int_t ito = opts.Index("TIMEOUT=");
    if (ito != kNPOS) {
       TString sto = opts(ito + std::char_traits<char>::length("TIMEOUT="), opts.Length());
@@ -4911,8 +4903,9 @@ TFile::EFileType TFile::GetType(const char *name, Option_t *option, TString *pre
             }
             // If option "READ" test existence and access
             TString opt = option;
+            opt.ToUpper();
             Bool_t read = (opt.IsNull() ||
-                          !opt.CompareTo("READ", TString::kIgnoreCase)) ? kTRUE : kFALSE;
+                          opt == "READ") ? kTRUE : kFALSE;
             if (read) {
                TString fn = TUrl(lfname).GetFile();
                if (!gSystem->ExpandPathName(fn)) {
@@ -5183,20 +5176,6 @@ Bool_t TFile::Cp(const char *src, const char *dst, Bool_t progressbar,
                  UInt_t buffersize)
 {
    TUrl sURL(src, kTRUE);
-
-   // Files will be open in RAW mode
-   TString raw = "filetype=raw";
-
-   // Set optimization options for the source file
-   TString opt = sURL.GetOptions();
-   if (opt != "") opt += "&";
-   opt += raw;
-   // Netx-related options:
-   //    cachesz = 4*buffersize     -> 4 buffers as peak mem usage
-   //    readaheadsz = 2*buffersize -> Keep at max 4*buffersize bytes outstanding when reading
-   //    rmpolicy = 1               -> Remove from the cache the blk with the least offset
-   opt += TString::Format("&cachesz=%d&readaheadsz=%d&rmpolicy=1", 4*buffersize, 2*buffersize);
-   sURL.SetOptions(opt);
 
    TFile *sfile = nullptr;
 

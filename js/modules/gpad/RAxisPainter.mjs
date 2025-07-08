@@ -288,7 +288,7 @@ class RAxisPainter extends RObjectPainter {
 
       // at the moment when drawing labels, we can try to find most optimal text representation for them
 
-      if ((this.kind === kAxisNormal) && !this.log && (handle.major.length > 0)) {
+      if ((this.kind === kAxisNormal) && !this.log && handle.major.length) {
          let maxorder = 0, minorder = 0, exclorder3 = false;
 
          if (!optionNoexp) {
@@ -314,16 +314,32 @@ class RAxisPainter extends RObjectPainter {
             this.order = order;
             this.ndig = 0;
             let lbls = [], indx = 0, totallen = 0;
-            while (indx<handle.major.length) {
-               const lbl = this.format(handle.major[indx], true);
-               if (lbls.indexOf(lbl) < 0) {
+            while (indx < handle.major.length) {
+               const v0 = handle.major[indx],
+                     lbl = this.format(v0, true);
+
+               let bad_value = lbls.indexOf(lbl) >= 0;
+               if (!bad_value) {
+                  try {
+                     const v1 = parseFloat(lbl) * Math.pow(10, order);
+                     bad_value = (Math.abs(v0) > 1e-30) && (Math.abs(v1 - v0) / Math.abs(v0) > 1e-8);
+                  } catch {
+                     console.warn('Failure by parsing of', lbl);
+                     bad_value = true;
+                  }
+               }
+               if (bad_value) {
+                  if (++this.ndig > 15) {
+                     totallen += 1e10;
+                     break; // not too many digits, anyway it will be exponential
+                  }
+                  lbls = [];
+                  indx = totallen = 0;
+               } else {
                   lbls.push(lbl);
                   totallen += lbl.length;
                   indx++;
-                  continue;
                }
-               if (++this.ndig > 11) break; // not too many digits, anyway it will be exponential
-               lbls = []; indx = 0; totallen = 0;
             }
 
             // for order === 0 we should virtually remove '0.' and extra label on top
@@ -578,7 +594,7 @@ class RAxisPainter extends RObjectPainter {
       }
 
       while (this.handle.next(true)) {
-         let h1 = Math.round(this.ticksSize/4), h2 = 0;
+         let h1 = Math.round(this.ticksSize/4), h2;
 
          if (this.handle.kind < 3)
             h1 = Math.round(this.ticksSize/2);
@@ -620,7 +636,7 @@ class RAxisPainter extends RObjectPainter {
      * @return {Promise} with gaps in both direction */
    async drawLabels(axis_g, side, gaps) {
       const center_lbls = this.isCenteredLabels(),
-            rotate_lbls = this.labelsFont.angle !== 0,
+            rotate_lbls = Boolean(this.labelsFont.angle),
             label_g = axis_g.append('svg:g').attr('class', 'axis_labels').property('side', side),
             lbl_pos = this.handle.lbl_pos || this.handle.major;
       let textscale = 1, maxtextlen = 0, lbls_tilt = false,
@@ -763,7 +779,7 @@ class RAxisPainter extends RObjectPainter {
             rotated = this.isTitleRotated();
 
       return this.startTextDrawingAsync(this.titleFont, 'font', title_g).then(() => {
-         let title_shift_x = 0, title_shift_y = 0, title_basepos = 0;
+         let title_shift_x, title_shift_y, title_basepos;
 
          this.title_align = this.titleCenter ? 'middle' : (this.titleOpposite ^ (this.isReverseAxis() || rotated) ? 'begin' : 'end');
 
@@ -949,7 +965,7 @@ class RAxisPainter extends RObjectPainter {
 
    /** @summary Change zooming in standalone mode */
    zoomStandalone(min, max) {
-      this.changeAxisAttr(1, 'zoomMin', min, 'zoomMax', max);
+      return this.changeAxisAttr(1, 'zoomMin', min, 'zoomMax', max);
    }
 
    /** @summary Redraw axis, used in standalone mode for RAxisDrawable */
@@ -961,30 +977,32 @@ class RAxisPainter extends RObjectPainter {
             labels_len = drawable.fLabels.length,
             min = (labels_len > 0) ? 0 : this.v7EvalAttr('min', 0),
             max = (labels_len > 0) ? labels_len : this.v7EvalAttr('max', 100);
-      let len = pp.getPadLength(drawable.fVertical, drawable.fLength);
+      let len = pp.getPadLength(drawable.fVertical, drawable.fLength),
+          smin = this.v7EvalAttr('zoomMin'),
+          smax = this.v7EvalAttr('zoomMax');
 
       // in vertical direction axis drawn in negative direction
-      if (drawable.fVertical) len -= pp.getPadHeight();
+      if (drawable.fVertical)
+         len -= pp.getPadHeight();
 
-      let smin = this.v7EvalAttr('zoomMin'),
-          smax = this.v7EvalAttr('zoomMax');
       if (smin === smax) {
-         smin = min; smax = max;
+         smin = min;
+         smax = max;
       }
 
       this.configureAxis('axis', min, max, smin, smax, drawable.fVertical, undefined, len, { reverse, labels: labels_len > 0 });
 
-      this.createG();
+      const g = this.createG();
 
       this.standalone = true;  // no need to clean axis container
 
-      const promise = this.drawAxis(this.draw_g, makeTranslate(pos.x, pos.y));
+      const promise = this.drawAxis(g, makeTranslate(pos.x, pos.y));
 
       if (this.isBatchMode()) return promise;
 
       return promise.then(() => {
          if (settings.ContextMenu) {
-            this.draw_g.on('contextmenu', evnt => {
+            g.on('contextmenu', evnt => {
                evnt.stopPropagation(); // disable main context menu
                evnt.preventDefault();  // disable browser context menu
                createMenu(evnt, this).then(menu => {
@@ -999,18 +1017,19 @@ class RAxisPainter extends RObjectPainter {
          addDragHandler(this, { x: pos.x, y: pos.y, width: this.vertical ? 10 : len, height: this.vertical ? len : 10,
                                 only_move: true, redraw: d => this.positionChanged(d) });
 
-         this.draw_g.on('dblclick', () => this.zoomStandalone());
+         g.on('dblclick', () => this.zoomStandalone());
 
          if (settings.ZoomWheel) {
-            this.draw_g.on('wheel', evnt => {
+            g.on('wheel', evnt => {
                evnt.stopPropagation();
                evnt.preventDefault();
 
-               const pos = d3_pointer(evnt, this.draw_g.node()),
-                   coord = this.vertical ? (1 - pos[1] / len) : pos[0] / len,
-                   item = this.analyzeWheelEvent(evnt, coord);
+               const pos2 = d3_pointer(evnt, this.getG().node()),
+                     coord = this.vertical ? (1 - pos2[1] / len) : pos2[0] / len,
+                     item = this.analyzeWheelEvent(evnt, coord);
 
-               if (item.changed) this.zoomStandalone(item.min, item.max);
+               if (item.changed)
+                  this.zoomStandalone(item.min, item.max);
             });
          }
       });
@@ -1031,12 +1050,12 @@ class RAxisPainter extends RObjectPainter {
 
    /** @summary Change axis attribute, submit changes to server and redraw axis when specified
      * @desc Arguments as redraw_mode, name1, value1, name2, value2, ... */
-   changeAxisAttr(redraw_mode) {
+   changeAxisAttr(redraw_mode, ...args) {
       const changes = {};
-      let indx = 1;
-      while (indx < arguments.length - 1) {
-         this.v7AttrChange(changes, arguments[indx], arguments[indx+1]);
-         this.v7SetAttr(arguments[indx], arguments[indx+1]);
+      let indx = 0;
+      while (indx < args.length) {
+         this.v7AttrChange(changes, args[indx], args[indx + 1]);
+         this.v7SetAttr(args[indx], args[indx+1]);
          indx += 2;
       }
       this.v7SendAttrChanges(changes, false); // do not invoke canvas update on the server

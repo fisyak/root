@@ -1,5 +1,5 @@
-import { internals, httpRequest, isBatchMode, isFunc, isStr, create, toJSON,
-         prROOT, clTObjString, clTGraph, clTPolyMarker3D, clTH1, clTH2, clTH3 } from '../core.mjs';
+import { internals, httpRequest, isBatchMode, isFunc, isStr, create, toJSON, getPromise,
+         getKindForType, clTObjString, clTGraph, clTPolyMarker3D, clTH1, clTH2, clTH3 } from '../core.mjs';
 import { select as d3_select } from '../d3.mjs';
 import { kTString, kObject, kAnyP } from '../io.mjs';
 import { kClonesNode, kSTLNode, clTBranchFunc, treeDraw, treeIOTest, TDrawSelector } from '../tree.mjs';
@@ -83,8 +83,9 @@ async function treeDrawProgress(obj, final) {
    if (!final && !this.last_pr)
       return;
 
-   if (this.dump || this.testio) {
-      if (!final) return;
+   if (this.dump || this.dump_entries || this.testio) {
+      if (!final)
+         return;
       if (isBatchMode()) {
          const painter = new BasePainter(this.drawid);
          painter.selectDom().property('_json_object_', obj);
@@ -103,16 +104,17 @@ async function treeDrawProgress(obj, final) {
    // critical is last drawing which should wait for previous one
    // therefore last_pr is kept as indication that promise is not yet processed
 
-   if (!this.last_pr) this.last_pr = Promise.resolve(true);
+   if (!this.last_pr)
+      this.last_pr = Promise.resolve(true);
 
    return this.last_pr.then(() => {
       if (this.obj_painter)
-         this.last_pr = this.obj_painter.redrawObject(obj).then(() => this.obj_painter);
+         this.last_pr = getPromise(this.obj_painter.redrawObject(obj)).then(() => this.obj_painter);
       else if (!obj) {
          if (final) console.log('no result after tree drawing');
          this.last_pr = false; // return false indicating no drawing is done
       } else {
-         this.last_pr = drawTreeDrawResult(this.drawid, obj).then(p => {
+         this.last_pr = drawTreeDrawResult(this.drawid, obj, this.drawopt).then(p => {
             this.obj_painter = p;
             if (!final) this.last_pr = null;
             return p; // return painter for histogram
@@ -143,7 +145,7 @@ function createTreePlayer(player) {
 
    player.showExtraButtons = function(args) {
       const main = this.selectDom(),
-         numentries = this.local_tree?.fEntries || 0;
+            numentries = this.local_tree?.fEntries || 0;
 
       main.select('.treedraw_more').remove(); // remove more button first
 
@@ -352,7 +354,7 @@ function drawTreePlayer(hpainter, itemname, askey, asleaf) {
    if (item._childs && !asleaf) {
       for (let n = 0; n < item._childs.length; ++n) {
          const leaf = item._childs[n];
-         if (leaf && leaf._kind && (leaf._kind.indexOf(prROOT + 'TLeaf') === 0) && (leaf_cnt < 2)) {
+         if (isStr(leaf?._kind) && (leaf._kind.indexOf(getKindForType('TLeaf')) === 0) && (leaf_cnt < 2)) {
             if (leaf_cnt++ > 0) expr += ':';
             expr += leaf._name;
          }

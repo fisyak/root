@@ -20,8 +20,9 @@ ROOT_ADD_GTEST(dataframe_utils dataframe_utils.cxx LIBRARIES ROOTDataFrame)
 ROOT_ADD_GTEST(dataframe_report dataframe_report.cxx LIBRARIES ROOTDataFrame)
 ROOT_ADD_GTEST(dataframe_incomplete_entries dataframe_incomplete_entries.cxx LIBRARIES ROOTDataFrame)
 
-
 if(MSVC)
+  set_source_files_properties(dataframe_cloning.cxx PROPERTIES COMPILE_FLAGS /bigobj)
+  set_source_files_properties(dataframe_interface.cxx PROPERTIES COMPILE_FLAGS /bigobj)
   set_property(TARGET dataframe_cache APPEND_STRING PROPERTY LINK_FLAGS " -STACK:10000000")
   set_property(TARGET dataframe_interface APPEND_STRING PROPERTY LINK_FLAGS " -STACK:10000000")
 endif()
@@ -44,22 +45,28 @@ ROOT_ADD_GTEST(dataframe_helpers dataframe_helpers.cxx LIBRARIES ROOTDataFrame)
 if(MSVC)
   set_source_files_properties(dataframe_helpers.cxx PROPERTIES COMPILE_FLAGS /bigobj)
   set_source_files_properties(dataframe_cache.cxx PROPERTIES COMPILE_FLAGS /bigobj)
+  set_source_files_properties(dataframe_simple.cxx PROPERTIES COMPILE_FLAGS /bigobj)
 endif()
 
-if(NOT (MSVC OR (APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES arm64)) OR win_broken_tests OR M1_BROKEN_TESTS)
-  ROOT_ADD_GTEST(dataframe_snapshot dataframe_snapshot.cxx LIBRARIES ROOTDataFrame)
+if(NOT MSVC OR win_broken_tests)
+  ROOT_ADD_GTEST(dataframe_snapshot dataframe_snapshot.cxx LIBRARIES ROOTDataFrame GenVector)
+  ROOT_GENERATE_DICTIONARY(DataFrameSnapshotUtils ${CMAKE_CURRENT_SOURCE_DIR}/DataFrameSnapshotUtils.hxx
+    MODULE dataframe_snapshot LINKDEF DataFrameSnapshotUtilsLinkDef.hxx OPTIONS -inlineInputHeader)
+endif()
+
+if(NOT MSVC OR win_broken_tests)
+ROOT_ADD_GTEST(dataframe_snapshot_emptyoutput dataframe_snapshot_emptyoutput.cxx LIBRARIES ROOTDataFrame GenVector)
+ROOT_GENERATE_DICTIONARY(DummyDict ${CMAKE_CURRENT_SOURCE_DIR}/DummyHeader.hxx
+                         MODULE dataframe_snapshot_emptyoutput LINKDEF DummyHeaderLinkDef.hxx OPTIONS -inlineInputHeader
+                         DEPENDENCIES ROOTVecOps GenVector)
+ROOT_ADD_GTEST(dataframe_snapshot_ntuple dataframe_snapshot_ntuple.cxx LIBRARIES ROOTDataFrame ROOTNTuple NTupleStruct)
 endif()
 
 ROOT_ADD_GTEST(dataframe_datasetspec dataframe_datasetspec.cxx LIBRARIES ROOTDataFrame)
-if(builtin_nlohmannjson)
-  target_include_directories(dataframe_datasetspec PRIVATE ${CMAKE_SOURCE_DIR}/builtins)
-else()
-  target_link_libraries(dataframe_datasetspec nlohmann_json::nlohmann_json)
-endif()
 
 ROOT_ADD_GTEST(dataframe_display dataframe_display.cxx LIBRARIES ROOTDataFrame)
 ROOT_ADD_GTEST(dataframe_ranges dataframe_ranges.cxx LIBRARIES ROOTDataFrame)
-ROOT_ADD_GTEST(dataframe_leaves dataframe_leaves.cxx LIBRARIES ROOTDataFrame)
+ROOT_ADD_GTEST(dataframe_leaves dataframe_leaves.cxx LIBRARIES ROOTDataFrame Physics)
 ROOT_ADD_GTEST(dataframe_resptr dataframe_resptr.cxx LIBRARIES ROOTDataFrame)
 ROOT_ADD_GTEST(dataframe_take dataframe_take.cxx LIBRARIES ROOTDataFrame)
 ROOT_ADD_GTEST(dataframe_entrylist dataframe_entrylist.cxx LIBRARIES ROOTDataFrame)
@@ -67,6 +74,10 @@ ROOT_ADD_GTEST(dataframe_merge_results dataframe_merge_results.cxx LIBRARIES ROO
 ROOT_ADD_GTEST(dataframe_samplecallback dataframe_samplecallback.cxx CounterHelper.h LIBRARIES ROOTDataFrame)
 ROOT_ADD_GTEST(dataframe_vary dataframe_vary.cxx LIBRARIES ROOTDataFrame)
 ROOT_ADD_GTEST(dataframe_compgraph dataframe_compgraph.cxx LIBRARIES ROOTDataFrame)
+if(MSVC)
+  set_source_files_properties(dataframe_vary.cxx COMPILE_FLAGS /bigobj)
+  set_source_files_properties(dataframe_snapshot.cxx PROPERTIES COMPILE_FLAGS /bigobj)
+endif()
 
 #### TESTS FOR DIFFERENT DATASOURCES ####
 if(MSVC AND MSVC_VERSION GREATER_EQUAL 1925 AND MSVC_VERSION LESS 1929 OR CMAKE_CXX_STANDARD LESS 17)
@@ -89,9 +100,36 @@ configure_file(spec.json . COPYONLY)
 configure_file(pyspec.json . COPYONLY)
 configure_file(spec_ordering_samples_withFriends.json . COPYONLY)
 ROOT_ADD_GTEST(datasource_csv datasource_csv.cxx LIBRARIES ROOTDataFrame)
-if(MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8)
-  set_source_files_properties(dataframe_vary.cxx COMPILE_FLAGS "-bigobj")
+
+ROOT_ADD_GTEST(datasource_tree datasource_tree.cxx LIBRARIES RIO Tree ROOTDataFrame)
+ROOT_GENERATE_DICTIONARY(ClassWithNestedSameNameDict
+                         ${CMAKE_CURRENT_SOURCE_DIR}/ClassWithNestedSameName.hxx
+                         MODULE datasource_tree
+                         LINKDEF ClassWithNestedSameNameLinkDef.hxx
+                         OPTIONS -inlineInputHeader
+                         DEPENDENCIES RIO)
+
+ROOT_ADD_GTEST(datasource_ntuple datasource_ntuple.cxx LIBRARIES ROOTDataFrame)
+if(MSVC)
+  set_source_files_properties(datasource_ntuple.cxx PROPERTIES COMPILE_FLAGS /bigobj)
 endif()
+ROOT_ADD_GTEST(dataframe_unified_constructor dataframe_unified_constructor.cxx LIBRARIES ROOTDataFrame)
+
+ROOT_STANDARD_LIBRARY_PACKAGE(NTupleStruct
+                              NO_INSTALL_HEADERS
+                              HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/NTupleStruct.hxx
+                              SOURCES NTupleStruct.cxx
+                              LINKDEF NTupleStructLinkDef.h
+                              DEPENDENCIES RIO)
+configure_file(NTupleStruct.hxx . COPYONLY)
+if(MSVC AND NOT CMAKE_GENERATOR MATCHES Ninja)
+  add_custom_command(TARGET NTupleStruct POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/libNTupleStruct.dll
+                                      ${CMAKE_CURRENT_BINARY_DIR}/libNTupleStruct.dll)
+endif()
+ROOT_GENERATE_DICTIONARY(ClassWithArraysDict ${CMAKE_CURRENT_SOURCE_DIR}/ClassWithArrays.h
+                          MODULE datasource_ntuple LINKDEF ClassWithArraysLinkDef.h OPTIONS -inlineInputHeader
+                          DEPENDENCIES ROOTVecOps)
 
 #### TESTS REQUIRING EXTRA ROOT FEATURES ####
 if (imt)
@@ -101,33 +139,6 @@ endif()
 if(ARROW_FOUND)
   ROOT_ADD_GTEST(datasource_arrow datasource_arrow.cxx LIBRARIES ROOTDataFrame ${ARROW_SHARED_LIB})
   target_include_directories(datasource_arrow BEFORE PRIVATE ${ARROW_INCLUDE_DIR})
-endif()
-
-if(root7)
-  ROOT_ADD_GTEST(datasource_ntuple datasource_ntuple.cxx LIBRARIES ROOTDataFrame)
-
-  if(NOT MSVC OR win_broken_tests)
-    ROOT_ADD_GTEST(dataframe_snapshot_ntuple dataframe_snapshot_ntuple.cxx LIBRARIES ROOTDataFrame ROOTNTupleUtil)
-  endif()
-
-  ROOT_STANDARD_LIBRARY_PACKAGE(NTupleStruct
-                                NO_INSTALL_HEADERS
-                                HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/NTupleStruct.hxx
-                                SOURCES NTupleStruct.cxx
-                                LINKDEF NTupleStructLinkDef.h
-                                DEPENDENCIES RIO)
-  configure_file(NTupleStruct.hxx . COPYONLY)
-  if(MSVC AND NOT CMAKE_GENERATOR MATCHES Ninja)
-    add_custom_command(TARGET NTupleStruct POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/libNTupleStruct.dll
-                                       ${CMAKE_CURRENT_BINARY_DIR}/libNTupleStruct.dll)
-  endif()
-
-  ROOT_ADD_GTEST(dataframe_unified_constructor dataframe_unified_constructor.cxx LIBRARIES ROOTDataFrame)
-
-  ROOT_GENERATE_DICTIONARY(ClassWithArraysDict ${CMAKE_CURRENT_SOURCE_DIR}/ClassWithArrays.h
-                           MODULE datasource_ntuple LINKDEF ClassWithArraysLinkDef.h OPTIONS -inlineInputHeader
-                           DEPENDENCIES ROOTVecOps)
 endif()
 
 if(sqlite)

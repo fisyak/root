@@ -25,6 +25,7 @@
 #include "TROOT.h"
 #include "TBase64.h"
 #include "TBufferJSON.h"
+#include "RWebWindowWSHandler.hxx"
 
 #include <fstream>
 #include <iostream>
@@ -42,6 +43,9 @@
 #ifdef R__MACOSX
 #include <sys/wait.h>
 #include <crt_externs.h>
+#elif defined(__FreeBSD__)
+#include <sys/wait.h>
+#include <dlfcn.h>
 #else
 #include <wait.h>
 #endif
@@ -121,13 +125,15 @@ class RWebBrowserHandle : public RWebDisplayHandle {
    browser_process_id fPid;
 
 public:
-   RWebBrowserHandle(const std::string &url, const std::string &tmpdir, const std::string &tmpfile, const std::string &dump) :
-      RWebDisplayHandle(url), fTmpDir(tmpdir), fTmpFile(tmpfile)
+   RWebBrowserHandle(const std::string &url, const std::string &tmpdir, const std::string &tmpfile,
+                     const std::string &dump)
+      : RWebDisplayHandle(url), fTmpDir(tmpdir), fTmpFile(tmpfile)
    {
       SetContent(dump);
    }
 
-   RWebBrowserHandle(const std::string &url, const std::string &tmpdir, const std::string &tmpfile, browser_process_id pid)
+   RWebBrowserHandle(const std::string &url, const std::string &tmpdir, const std::string &tmpfile,
+                     browser_process_id pid)
       : RWebDisplayHandle(url), fTmpDir(tmpdir), fTmpFile(tmpfile), fHasPid(true), fPid(pid)
    {
    }
@@ -136,19 +142,30 @@ public:
    {
 #ifdef _MSC_VER
       if (fHasPid)
-         gSystem->Exec(("taskkill /F /PID "s + std::to_string(fPid) + " >NUL 2>NUL").c_str());
-      std::string rmdir = "rmdir /S /Q ", rmfile = "del /F ";
+         gSystem->Exec(("taskkill /F /PID " + std::to_string(fPid) + " >NUL 2>NUL").c_str());
+      std::string rmdir = "rmdir /S /Q ";
 #else
       if (fHasPid)
          kill(fPid, SIGKILL);
-      std::string rmdir = "rm -rf ", rmfile = "rm -f ";
+      std::string rmdir = "rm -rf ";
 #endif
       if (!fTmpDir.empty())
          gSystem->Exec((rmdir + fTmpDir).c_str());
-      if (!fTmpFile.empty())
-         gSystem->Exec((rmfile + fTmpFile).c_str());
+      RemoveStartupFiles();
    }
 
+   void RemoveStartupFiles() override
+   {
+#ifdef _MSC_VER
+      std::string rmfile = "del /F ";
+#else
+      std::string rmfile = "rm -f ";
+#endif
+      if (!fTmpFile.empty()) {
+         gSystem->Exec((rmfile + fTmpFile).c_str());
+         fTmpFile.clear();
+      }
+   }
 };
 
 } // namespace ROOT
@@ -217,6 +234,29 @@ void RWebDisplayHandle::BrowserCreator::TestProg(const std::string &nexttry, boo
 #endif
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////
+/// Create temporary file for web display
+/// Normally gSystem->TempFileName() method used to create file in default temporary directory
+/// For snap chromium use of default temp directory is not always possible therefore one switches to home directory
+/// But one checks if default temp directory modified and already points to /home folder
+
+FILE *RWebDisplayHandle::BrowserCreator::TemporaryFile(TString &name, int use_home_dir, const char *suffix)
+{
+   std::string dirname;
+   if (use_home_dir > 0) {
+      if (use_home_dir == 1) {
+         const char *tmp_dir = gSystem->TempDirectory();
+         if (tmp_dir && (strncmp(tmp_dir, "/home", 5) == 0))
+            use_home_dir = 0;
+         else if (!tmp_dir || (strncmp(tmp_dir, "/tmp", 4) == 0))
+            use_home_dir = 2;
+      }
+
+      if (use_home_dir > 1)
+         dirname = gSystem->GetHomeDirectory();
+   }
+   return gSystem->TempFileName(name, use_home_dir > 1 ? dirname.c_str() : nullptr, suffix);
+}
 
 static void DummyTimeOutHandler(int /* Sig */) {}
 
@@ -264,7 +304,7 @@ RWebDisplayHandle::BrowserCreator::Display(const RWebDisplayArgs &args)
    if (((url.find("token=") != std::string::npos) || (url.find("key=") != std::string::npos)) && !args.IsBatchMode() && !args.IsHeadless()) {
       TString filebase = "root_start_";
 
-      auto f = gSystem->TempFileName(filebase, nullptr, ".html");
+      auto f = TemporaryFile(filebase, IsSnapBrowser() ? 1 : 0, ".html");
 
       bool ferr = false;
 
@@ -354,6 +394,10 @@ RWebDisplayHandle::BrowserCreator::Display(const RWebDisplayArgs &args)
 
 #ifdef R__MACOSX
       char **envp = *_NSGetEnviron();
+#elif defined (__FreeBSD__)
+      //this is needed because the FreeBSD linker does not like to resolve these special symbols
+      //in shared libs with -Wl,--no-undefined
+      char** envp = (char**)dlsym(RTLD_DEFAULT, "environ");
 #else
       char **envp = environ;
 #endif
@@ -586,6 +630,7 @@ RWebDisplayHandle::ChromeCreator::ChromeCreator(bool _edge) : BrowserCreator(tru
    TestProg("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
 #endif
 #ifdef R__LINUX
+   TestProg("/snap/bin/chromium"); // test snap before to detect it properly
    TestProg("/usr/bin/chromium");
    TestProg("/usr/bin/chromium-browser");
    TestProg("/usr/bin/chrome-browser");
@@ -594,21 +639,23 @@ RWebDisplayHandle::ChromeCreator::ChromeCreator(bool _edge) : BrowserCreator(tru
 #endif
 
 // --no-sandbox is required to run chrome with super-user, but only in headless mode
+// --headless=new was used when both old and new were available, but old was removed from chrome 132, see https://developer.chrome.com/blog/removing-headless-old-from-chrome
 
 #ifdef _MSC_VER
-   // here --headless=old required to let normally end of Edge process when --dump-dom is used
-   fBatchExec = gEnv->GetValue((fEnvPrefix + "Batch").c_str(), "$prog --headless=old --no-sandbox $geometry --dump-dom $url");
+   // here --headless=old was used to let normally end of Edge process when --dump-dom is used
+   // while on Windows chrome and edge version not tested, just suppose that newest chrome is used
+   fBatchExec = gEnv->GetValue((fEnvPrefix + "Batch").c_str(), "$prog --headless --no-sandbox $geometry --dump-dom $url");
    // in interactive headless mode fork used to let stop browser via process id
-   fHeadlessExec = gEnv->GetValue((fEnvPrefix + "Headless").c_str(), "fork:--headless=old --no-sandbox --disable-gpu $geometry \"$url\"");
+   fHeadlessExec = gEnv->GetValue((fEnvPrefix + "Headless").c_str(), "fork:--headless --no-sandbox --disable-gpu $geometry \"$url\"");
    fExec = gEnv->GetValue((fEnvPrefix + "Interactive").c_str(), "$prog $geometry --new-window --app=$url &"); // & in windows mean usage of spawn
 #else
 #ifdef R__MACOSX
    bool use_normal = true; // mac does not like new flag
 #else
-   bool use_normal = fChromeVersion < 119;
+   bool use_normal = (fChromeVersion < 119) || (fChromeVersion > 131);
 #endif
    if (use_normal) {
-      // old browser with standard headless mode
+      // old or newest browser with standard headless mode
       fBatchExec = gEnv->GetValue((fEnvPrefix + "Batch").c_str(), "fork:--headless --no-sandbox --disable-extensions --disable-audio-output $geometry --dump-dom $url");
       fHeadlessExec = gEnv->GetValue((fEnvPrefix + "Headless").c_str(), "fork:--headless --no-sandbox --disable-extensions --disable-audio-output $geometry $url");
    } else {
@@ -665,6 +712,9 @@ std::string RWebDisplayHandle::ChromeCreator::MakeProfile(std::string &exec, boo
       TRandom3 rnd;
       rnd.SetSeed(0);
       profile_arg = gSystem->TempDirectory();
+      if ((profile_arg.compare(0, 4, "/tmp") == 0) && IsSnapBrowser())
+         profile_arg = gSystem->GetHomeDirectory();
+
 #ifdef _MSC_VER
       char slash = '\\';
 #else
@@ -697,6 +747,7 @@ RWebDisplayHandle::FirefoxCreator::FirefoxCreator() : BrowserCreator(true)
    TestProg("/Applications/Firefox.app/Contents/MacOS/firefox");
 #endif
 #ifdef R__LINUX
+   TestProg("/snap/bin/firefox");
    TestProg("/usr/bin/firefox");
    TestProg("/usr/bin/firefox-bin");
 #endif
@@ -738,7 +789,7 @@ std::string RWebDisplayHandle::FirefoxCreator::MakeProfile(std::string &exec, bo
 
    const char *ff_profile = gEnv->GetValue("WebGui.FirefoxProfile", "");
    const char *ff_profilepath = gEnv->GetValue("WebGui.FirefoxProfilePath", "");
-   Int_t ff_randomprofile = gEnv->GetValue("WebGui.FirefoxRandomProfile", (Int_t) 1);
+   Int_t ff_randomprofile = RWebWindowWSHandler::GetBoolEnv("WebGui.FirefoxRandomProfile", 1);
    if (ff_profile && *ff_profile) {
       profile_arg = "-P "s + ff_profile;
    } else if (ff_profilepath && *ff_profilepath) {
@@ -747,6 +798,8 @@ std::string RWebDisplayHandle::FirefoxCreator::MakeProfile(std::string &exec, bo
       TRandom3 rnd;
       rnd.SetSeed(0);
       std::string profile_dir = gSystem->TempDirectory();
+      if ((profile_dir.compare(0, 4, "/tmp") == 0) && IsSnapBrowser())
+         profile_dir = gSystem->GetHomeDirectory();
 
 #ifdef _MSC_VER
       char slash = '\\';
@@ -783,6 +836,11 @@ std::string RWebDisplayHandle::FirefoxCreator::MakeProfile(std::string &exec, bo
             user_js << "user_pref(\"toolkit.legacyUserProfileCustomizations.stylesheets\", true);" << std::endl;
             // do not put tabs in title
             user_js << "user_pref(\"browser.tabs.inTitlebar\", 0);" << std::endl;
+
+#ifdef R__LINUX
+            // fix WebGL creation problem on some Linux platforms
+            user_js << "user_pref(\"webgl.out-of-process\", false);" << std::endl;
+#endif
 
             std::ofstream times_json(profile_dir + "/times.json", std::ios::trunc);
             times_json << "{" << std::endl;
@@ -821,8 +879,7 @@ std::string RWebDisplayHandle::FirefoxCreator::MakeProfile(std::string &exec, bo
 bool RWebDisplayHandle::NeedHttpServer(const RWebDisplayArgs &args)
 {
    if ((args.GetBrowserKind() == RWebDisplayArgs::kOff) || (args.GetBrowserKind() == RWebDisplayArgs::kCEF) ||
-       (args.GetBrowserKind() == RWebDisplayArgs::kQt5) || (args.GetBrowserKind() == RWebDisplayArgs::kQt6) ||
-       (args.GetBrowserKind() == RWebDisplayArgs::kLocal))
+       (args.GetBrowserKind() == RWebDisplayArgs::kQt6) || (args.GetBrowserKind() == RWebDisplayArgs::kLocal))
       return false;
 
    if (!args.IsHeadless() && (args.GetBrowserKind() == RWebDisplayArgs::kOn)) {
@@ -830,11 +887,6 @@ bool RWebDisplayHandle::NeedHttpServer(const RWebDisplayArgs &args)
 #ifdef WITH_QT6WEB
       auto &qt6 = FindCreator("qt6", "libROOTQt6WebDisplay");
       if (qt6 && qt6->IsActive())
-         return false;
-#endif
-#ifdef WITH_QT5WEB
-      auto &qt5 = FindCreator("qt5", "libROOTQt5WebDisplay");
-      if (qt5 && qt5->IsActive())
          return false;
 #endif
 #ifdef WITH_CEFWEB
@@ -870,11 +922,7 @@ std::unique_ptr<RWebDisplayHandle> RWebDisplayHandle::Display(const RWebDisplayA
 
    bool handleAsLocal = (args.GetBrowserKind() == RWebDisplayArgs::kLocal) ||
                         (!args.IsHeadless() && (args.GetBrowserKind() == RWebDisplayArgs::kOn)),
-        has_qt5web = false, has_qt6web = false, has_cefweb = false;
-
-#ifdef WITH_QT5WEB
-   has_qt5web = true;
-#endif
+        has_qt6web = false, has_cefweb = false;
 
 #ifdef WITH_QT6WEB
    has_qt6web = true;
@@ -886,12 +934,6 @@ std::unique_ptr<RWebDisplayHandle> RWebDisplayHandle::Display(const RWebDisplayA
 
    if ((handleAsLocal && has_qt6web) || (args.GetBrowserKind() == RWebDisplayArgs::kQt6)) {
       if (try_creator(FindCreator("qt6", "libROOTQt6WebDisplay")))
-         return handle;
-   }
-
-   // qt5 uses older chromium therefore do not invoke by default
-   if (has_qt5web && (args.GetBrowserKind() == RWebDisplayArgs::kQt5)) {
-      if (try_creator(FindCreator("qt5", "libROOTQt5WebDisplay")))
          return handle;
    }
 
@@ -978,7 +1020,7 @@ bool RWebDisplayHandle::CheckIfCanProduceImages(RWebDisplayArgs &args)
 {
    if ((args.GetBrowserKind() != RWebDisplayArgs::kFirefox) && (args.GetBrowserKind() != RWebDisplayArgs::kEdge) &&
        (args.GetBrowserKind() != RWebDisplayArgs::kChrome) && (args.GetBrowserKind() != RWebDisplayArgs::kCEF) &&
-       (args.GetBrowserKind() != RWebDisplayArgs::kQt5) && (args.GetBrowserKind() != RWebDisplayArgs::kQt6)) {
+       (args.GetBrowserKind() != RWebDisplayArgs::kQt6)) {
       bool detected = false;
 
       auto &h1 = FindCreator("chrome", "ChromeCreator");
@@ -1169,12 +1211,25 @@ bool RWebDisplayHandle::ProduceImages(const std::vector<std::string> &fnames, co
       return false;
    }
 
-   auto isChromeBased = (args.GetBrowserKind() == RWebDisplayArgs::kChrome) || (args.GetBrowserKind() == RWebDisplayArgs::kEdge),
+   auto isChrome = (args.GetBrowserKind() == RWebDisplayArgs::kChrome),
+        isChromeBased = isChrome || (args.GetBrowserKind() == RWebDisplayArgs::kEdge),
         isFirefox = args.GetBrowserKind() == RWebDisplayArgs::kFirefox;
 
    std::vector<std::string> draw_kinds;
    bool use_browser_draw = false, can_optimize_json = false;
+   int use_home_dir = 0;
    TString jsonkind;
+
+   // Some Chrome installation do not allow run html code from files, created in /tmp directory
+   // When during session such failures happened, force usage of home directory from the beginning
+   static int chrome_tmp_workaround = 0;
+
+   if (isChrome) {
+      use_home_dir = chrome_tmp_workaround;
+      auto &h1 = FindCreator("chrome", "ChromeCreator");
+      if (h1 && h1->IsActive() && h1->IsSnapBrowser() && (use_home_dir == 0))
+         use_home_dir = 1;
+   }
 
    if (fmts[0] == "s.png") {
       if (!isChromeBased && !isFirefox) {
@@ -1261,10 +1316,11 @@ bool RWebDisplayHandle::ProduceImages(const std::vector<std::string> &fnames, co
    filecont = std::regex_replace(filecont, std::regex("\\$draw_heights"), jsonh.Data());
    filecont = std::regex_replace(filecont, std::regex("\\$draw_objects"), mains);
 
-   TString dump_name;
+   TString dump_name, html_name;
+
    if (!use_browser_draw && (isChromeBased || isFirefox)) {
       dump_name = "canvasdump";
-      FILE *df = gSystem->TempFileName(dump_name);
+      FILE *df = BrowserCreator::TemporaryFile(dump_name, use_home_dir);
       if (!df) {
          R__LOG_ERROR(WebGUILog()) << "Fail to create temporary file for dump-dom";
          return false;
@@ -1273,57 +1329,25 @@ bool RWebDisplayHandle::ProduceImages(const std::vector<std::string> &fnames, co
       fclose(df);
    }
 
-   // When true, place HTML file into home directory
-   // Some Chrome installation do not allow run html code from files, created in /tmp directory
-   static bool chrome_tmp_workaround = false;
-
-   TString tmp_name, html_name;
-
 try_again:
 
-   if ((args.GetBrowserKind() == RWebDisplayArgs::kCEF) || (args.GetBrowserKind() == RWebDisplayArgs::kQt5) || (args.GetBrowserKind() == RWebDisplayArgs::kQt6)) {
+   if ((args.GetBrowserKind() == RWebDisplayArgs::kCEF) || (args.GetBrowserKind() == RWebDisplayArgs::kQt6)) {
       args.SetUrl(""s);
       args.SetPageContent(filecont);
 
-      tmp_name.Clear();
       html_name.Clear();
 
       R__LOG_DEBUG(0, WebGUILog()) << "Using file content_len " << filecont.length() << " to produce batch images ";
 
    } else {
-      tmp_name = "canvasbody";
-      FILE *hf = gSystem->TempFileName(tmp_name);
+      html_name = "canvasbody";
+      FILE *hf = BrowserCreator::TemporaryFile(html_name, use_home_dir, ".html");
       if (!hf) {
          R__LOG_ERROR(WebGUILog()) << "Fail to create temporary file for batch job";
          return false;
       }
       fputs(filecont.c_str(), hf);
       fclose(hf);
-
-      html_name = tmp_name + ".html";
-
-      if (chrome_tmp_workaround) {
-         std::string homedir = gSystem->GetHomeDirectory();
-         auto pos = html_name.Last('/');
-         if (pos == kNPOS) {
-            TRandom3 rnd;
-            rnd.SetSeed(0);
-            html_name = TString::Format("/random%d.html", rnd.Integer(1000000));
-         } else
-            html_name.Remove(0, pos);
-         html_name = homedir + html_name.Data();
-         gSystem->Unlink(html_name.Data());
-         gSystem->Unlink(tmp_name.Data());
-
-         std::ofstream ofs(html_name.Data(), std::ofstream::out);
-         ofs << filecont;
-      } else {
-         if (gSystem->Rename(tmp_name.Data(), html_name.Data()) != 0) {
-            R__LOG_ERROR(WebGUILog()) << "Fail to rename temp file " << tmp_name << " into " << html_name;
-            gSystem->Unlink(tmp_name.Data());
-            return false;
-         }
-      }
 
       args.SetUrl("file://"s + gSystem->UnixPathName(html_name.Data()));
       args.SetPageContent(""s);
@@ -1398,11 +1422,11 @@ try_again:
    } else {
       auto dumpcont = handle->GetContent();
 
-      if ((dumpcont.length() > 20) && (dumpcont.length() < 60) && !chrome_tmp_workaround && isChromeBased) {
+      if ((dumpcont.length() > 20) && (dumpcont.length() < 60) && (use_home_dir < 2) && isChrome) {
          // chrome creates dummy html file with mostly no content
          // problem running chrome from /tmp directory, lets try work from home directory
-
-         chrome_tmp_workaround = true;
+         R__LOG_INFO(WebGUILog()) << "Use home directory for running chrome in batch, set TMPDIR for preferable temp directory";
+         chrome_tmp_workaround = use_home_dir = 2;
          goto try_again;
       }
 

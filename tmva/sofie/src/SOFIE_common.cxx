@@ -1,11 +1,12 @@
 #include "TMVA/SOFIE_common.hxx"
-#include<cctype>
+
+#include <cctype>
 #include <sstream>
 #include <stdexcept>
 
-namespace TMVA{
-namespace Experimental{
-namespace SOFIE{
+namespace TMVA {
+namespace Experimental {
+namespace SOFIE {
 
 /// @brief  Convert shape from integer format to dynamic one (based on Dim)
 /// @param shape
@@ -59,6 +60,9 @@ std::string ConvertTypeToString(ETensorType type){
       case ETensorType::FLOAT : {
          return "float";
       }
+      case ETensorType::INT8 : {
+         return "int8_t";
+      }
       case ETensorType::INT16 : {
          return "int16_t";
       }
@@ -67,6 +71,9 @@ std::string ConvertTypeToString(ETensorType type){
       }
       case ETensorType::INT64 : {
          return "int64_t";
+      }
+      case ETensorType::UINT8 : {
+         return "uint8_t";
       }
       case ETensorType::UINT16 : {
          return "uint16_t";
@@ -375,23 +382,6 @@ std::vector<size_t>  UTILITY::UnidirectionalBroadcastShape(std::vector<size_t> s
    }
 }
 
-// UNidirectional boradcast specializaiton for vector<bool>
-
-// specialization for vector of boolean
-void UTILITY::UnidirectionalBroadcast(const std::vector<bool> & data, const std::vector<size_t>& shape, const std::vector<size_t>& targetShape, std::vector<bool> & broadcastedData)
- {
-   // Prepend shape with ones
-   auto ncdata = const_cast<std::vector<bool> &>(data);
-   if (shape.size() < targetShape.size()) {
-      size_t targetSize = targetShape.size();
-      std::vector<size_t> newShape(targetSize, 1);
-      size_t offset = targetSize - shape.size();
-      std::copy(shape.begin(), shape.end(), newShape.begin() + offset);
-      UTILITY::BroadcastTensor<bool, const std::vector<bool> &, std::vector<bool> &>(ncdata, newShape, targetShape, broadcastedData);
-   }
-   UTILITY::BroadcastTensor<bool, const std::vector<bool> &, std::vector<bool> &>(ncdata, shape, targetShape, broadcastedData);
-}
-
 std::string UTILITY::Clean_name(std::string input_tensor_name){
    std::string s (input_tensor_name);
    std::replace( s.begin(), s.end(), '-', '_');
@@ -424,7 +414,6 @@ std::vector<Dim> UTILITY::ComputeStrideFromShape(const std::vector<Dim> & shape)
    return strides;
 }
 
-
-}//SOFIE
-}//Experimental
-}//TMVA
+} // namespace SOFIE
+} // namespace Experimental
+} // namespace TMVA

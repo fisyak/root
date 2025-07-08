@@ -6,6 +6,9 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
                'sap/ui/model/json/JSONModel',
                'sap/ui/table/Column',
                'sap/ui/table/TreeTable',
+               'sap/ui/table/library',
+               'sap/m/table/columnmenu/Menu',
+               'sap/m/table/columnmenu/ActionItem',
                'sap/ui/layout/HorizontalLayout',
                'sap/m/TabContainerItem',
                'sap/m/MessageToast',
@@ -15,6 +18,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
                'sap/m/ProgressIndicator',
                'sap/m/Page',
                'sap/ui/core/mvc/XMLView',
+               'sap/ui/core/dnd/DropInfo',
                'sap/ui/core/Icon',
                'sap/m/Button',
                'sap/m/library',
@@ -35,6 +39,9 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
            JSONModel,
            tableColumn,
            TreeTable,
+           table_lib,
+           ColumnMenu,
+           MenuActionItem,
            HorizontalLayout,
            TabContainerItem,
            MessageToast,
@@ -44,6 +51,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
            mProgressIndicator,
            mPage,
            XMLView,
+           DropInfo,
            CoreIcon,
            Button,
            mLibrary,
@@ -79,6 +87,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
             ReverseOrder: false,
             ShowHiddenFiles: false,
             AppendToCanvas: false,
+            HandleDoubleClick: true,
             DBLCLKRun: false,
             optTH1: '<dflt>',
             TH1: [
@@ -168,7 +177,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
          this.websocket.connect();
 
          // if true, most operations are performed locally without involving server
-         this.standalone = (this.websocket.kind == 'file');
+         this.standalone = this.websocket.isStandalone();
 
          // add reload handler
          if (!this.standalone && this.websocket.addReloadKeyHandler)
@@ -191,13 +200,19 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
          };
 
          let t = this.getView().byId('treeTable');
+
+         t.setSelectionMode(this.model.isHandleDoubleClick() ? table_lib.SelectionMode.None : table_lib.SelectionMode.Single);
          t.setModel(this.model);
 
          this.model.assignTreeTable(t);
+         this.oMenu = new ColumnMenu();
+         this.getView().addDependent(this.oMenu);
+
          t.addColumn(new tableColumn({
             label: 'Name',
             autoResizable: true,
             visible: true,
+            headerMenu: this.oMenu.getId(),
             template: new HorizontalLayout({
                content: [
                          new CoreIcon({src:'{icon}', tooltip: '{className}' }),
@@ -205,54 +220,24 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
                          ]
             })
          }));
-         t.addColumn(new tableColumn({
-            label: 'Size',
-            autoResizable: true,
-            visible: true,
-            template: new HorizontalLayout({
-               content: [ new mText({text:'{fsize}', wrapping: false }) ]
-            })
-         }));
-         t.addColumn(new tableColumn({
-            label: 'Time',
-            autoResizable: true,
-            visible: false,
-            template: new HorizontalLayout({
-               content: [ new mText({text:'{mtime}', wrapping: false }) ]
-            })
-         }));
-         t.addColumn(new tableColumn({
-            label: 'Type',
-            autoResizable: true,
-            visible: false,
-            template: new HorizontalLayout({
-               content: [ new mText({text:'{ftype}', wrapping: false }) ]
-            })
-         }));
-         t.addColumn(new tableColumn({
-            label: 'UID',
-            autoResizable: true,
-            visible: false,
-            template: new HorizontalLayout({
-               content: [ new mText({text:'{fuid}', wrapping: false }) ]
-            })
-         }));
-         t.addColumn(new tableColumn({
-            label: 'GID',
-            autoResizable: true,
-            visible: false,
-            template: new HorizontalLayout({
-               content: [ new mText({text:'{fgid}', wrapping: false }) ]
-            })
-         }));
-         t.addColumn(new tableColumn({
-            label: 'ClassName',
-            autoResizable: true,
-            visible: false,
-            template: new HorizontalLayout({
-               content: [ new mText({text:'{className}', wrapping: false }) ]
-            })
-         }));
+
+         this.columnNames   = ['Size',  'Time',  'Type',  'UID',  'GID',  'ClassName'];
+         this.columnFields  = ['fsize', 'mtime', 'ftype', 'fuid', 'fgid', 'className'];
+         this.columnVisible = [ true,    false,   false,   false,  false,  false];
+         for (let i = 0; i < this.columnNames.length; ++i) {
+            t.addColumn(new tableColumn({
+               label: this.columnNames[i],
+               autoResizable: true,
+               visible: this.columnVisible[i],
+               headerMenu: this.oMenu.getId(),
+               template: new HorizontalLayout({
+                  content: [ new mText({text:`{${this.columnFields[i]}}`, wrapping: false }) ]
+               })
+            }));
+         }
+
+         this.buildColumnsMenu();
+         // t.getColumns().forEach(column => column.setHeaderMenu(this.oMenu.getId()));
 
          // ignore first resize
          this._columnResized = -1;
@@ -261,22 +246,63 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
          t.addEventDelegate({
             onAfterRendering() {
                this.assignRowHandlers();
-               if (this._columnResized < 1) return;
-               this._columnResized = 0;
-               let fullsz = 4;
-
-               t.getColumns().forEach(col => {
-                  if (col.getVisible()) fullsz += 4 + col.$().width();
-               });
-               // this.getView().byId('masterPage').getParent().removeStyleClass('masterExpanded');
-               this.getView().byId('SplitAppBrowser').getAggregation('_navMaster').setWidth(fullsz + 'px');
+               if (this._columnResized > 0) {
+                  this._columnResized = 0;
+                  this.adjustToColumnsWidths(false);
+               }
             }
          }, this);
 
          t.attachEvent("columnResize", {}, evnt => {
             this._columnResized++;
          }, this);
+
+         this.byId("tabContainer").addDragDropConfig(new DropInfo({
+            drop: event => this.onDrop(event)
+         }));
       },
+
+      buildColumnsMenu() {
+         this.oMenu.removeAllItems();
+
+         for (let i = 0; i < this.columnNames.length; ++i)
+            this.oMenu.addItem(new MenuActionItem({
+               icon: this.columnVisible[i] ? "sap-icon://accept" : "sap-icon://hide",
+               label: this.columnNames[i],
+               press: () => this.pressColumnMenu(i)
+            }));
+         this.oMenu.addItem(new MenuActionItem({
+            icon: 'sap-icon://resize-horizontal',
+            label: 'Resize columns',
+            press: () => this.adjustToColumnsWidths(true)
+         }));
+      },
+
+      pressColumnMenu(indx) {
+         this.columnVisible[indx] = !this.columnVisible[indx];
+
+         const t = this.getView().byId('treeTable');
+         t.getColumns()[indx+1].setVisible(this.columnVisible[indx]);
+
+         this.oMenu.close();
+         this.buildColumnsMenu();
+      },
+
+      adjustToColumnsWidths(auto_resize) {
+         if (auto_resize)
+            this.oMenu.close();
+         let fullsz = 4;
+         const t = this.getView().byId('treeTable');
+         t.getColumns().forEach(col => {
+            if (col.getVisible()) {
+               if (auto_resize)
+                  col.autoResize();
+               fullsz += 4 + col.$().width();
+            }
+         });
+         this.getView().byId('SplitAppBrowser').getAggregation('_navMaster').setWidth(fullsz + 'px');
+      },
+
 
       /* =========================================== */
       /* =============== Image Viewer ============== */
@@ -583,7 +609,6 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
 
       /** @brief Invoke dialog with server side code */
       onSaveAsFile(tab) {
-
          const oModel = tab.getModel();
          FileDialogController.SaveAs({
             websocket: this.websocket,
@@ -749,6 +774,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
 
       onSettingsPress() {
          this._oSettingsModel.setProperty("/AppendToCanvas", this.model.isAppendToCanvas());
+         this._oSettingsModel.setProperty("/HandleDoubleClick", this.model.isHandleDoubleClick());
          this._oSettingsModel.setProperty("/OnlyLastCycle", (this.model.getOnlyLastCycle() > 0));
          this._oSettingsModel.setProperty("/ShowHiddenFiles", this.model.isShowHidden());
          this._oSettingsModel.setProperty("/SortMethod", this.model.getSortMethod());
@@ -775,14 +801,20 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
 
       handleSeetingsConfirm() {
          let append = this._oSettingsModel.getProperty("/AppendToCanvas"),
+             handledbl = this._oSettingsModel.getProperty("/HandleDoubleClick"),
              lastcycle = this._oSettingsModel.getProperty("/OnlyLastCycle"),
              hidden = this._oSettingsModel.getProperty("/ShowHiddenFiles"),
              sort = this._oSettingsModel.getProperty("/SortMethod"),
              reverse = this._oSettingsModel.getProperty("/ReverseOrder"),
-             changed = false;
+             changed = false, changed_dblclick = false;
 
          if (append != this.model.isAppendToCanvas())
             this.model.setAppendToCanvas(append);
+
+         if (handledbl != this.model.isHandleDoubleClick()) {
+            this.model.setHandleDoubleClick(handledbl);
+            changed_dblclick = true;
+         }
 
          if (lastcycle != (this.model.getOnlyLastCycle() > 0)) {
             changed = true;
@@ -808,6 +840,11 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
          if (optmsg != this.lastOptMessage) {
             this.lastOptMessage = optmsg;
             this.websocket.send(optmsg);
+         }
+
+         if (changed_dblclick) {
+            this.assignRowHandlers();
+            this.getView().byId('treeTable').setSelectionMode(this.model.isHandleDoubleClick() ? table_lib.SelectionMode.None : table_lib.SelectionMode.Single);
          }
 
          if (changed)
@@ -1025,18 +1062,53 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
 
       /** @summary Assign the "double click" event handler to each row */
       assignRowHandlers() {
-         let rows = this.byId("treeTable").getRows();
+         const rows = this.byId("treeTable").getRows(),
+               on = this.model.isHandleDoubleClick();
          for (let k = 0; k < rows.length; ++k) {
-            rows[k].$().dblclick(this.onRowDblClick.bind(this, rows[k]));
+            rows[k].$().dblclick(on ? this.onRowDblClick.bind(this, rows[k]) : null)
+                       .css('user-select', 'none');
          }
       },
 
-      /** @summary Double-click event handler */
-      onRowDblClick(row) {
-         let ctxt = row.getBindingContext(),
-             prop = ctxt ? ctxt.getProperty(ctxt.getPath()) : null;
+      onCellClick(oEvent) {
+         if (!this.model.isHandleDoubleClick())
+            this.onRowDblClick(null, oEvent.getParameter('rowBindingContext'));
+      },
 
-         if (!prop || !prop.path) return;
+      onCellContextMenu(oEvent) {
+         oEvent.preventDefault();
+      },
+
+      onDragStart(oEvent) {
+         const oDraggedRow = oEvent.getParameter("target"),
+               oDragSession = oEvent.getParameter("dragSession"),
+               ctxt = oDraggedRow.getBindingContext(),
+               prop = ctxt?.getProperty(ctxt?.getPath());
+
+         // do not support dragging of folders or elements without path
+         if (!prop?.isLeaf || !prop?.path)
+            return oEvent.preventDefault();
+
+         oDragSession.setComplexData("item_property", prop);
+
+         console.log('start dragging ', prop.path);
+      },
+
+      onDrop(oEvent) {
+         const oDragSession = oEvent.getParameter("dragSession"),
+               prop = oDragSession.getComplexData("item_property");
+
+         this.websocket.send("DROP:" + JSON.stringify(prop.path));
+
+         this.invokeWarning("Processing drop of: " + prop.name, 1000);
+      },
+
+      /** @summary Double-click event handler */
+      onRowDblClick(row, ctxt) {
+         if (row) ctxt = row.getBindingContext();
+         const prop = ctxt?.getProperty(ctxt?.getPath());
+         if (!prop?.path)
+            return;
 
          let opt = "<dflt>", exec = "";
 
@@ -1046,7 +1118,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller',
          if (this._oSettingsModel.getProperty("/DBLCLKRun"))
             exec = "exec";
 
-         let args = prop.path.slice(); // make copy of array
+         const args = prop.path.slice(); // make copy of array
          args.push(opt, exec);
 
          this.websocket.send("DBLCLK:" + JSON.stringify(args));

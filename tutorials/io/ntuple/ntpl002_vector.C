@@ -9,9 +9,6 @@
 /// \date April 2019
 /// \author The ROOT Team
 
-// NOTE: The RNTuple classes are experimental at this point.
-// Functionality and interface are still subject to changes.
-
 #include <ROOT/RNTupleModel.hxx>
 #include <ROOT/RNTupleReader.hxx>
 #include <ROOT/RNTupleWriter.hxx>
@@ -27,11 +24,6 @@
 #include <vector>
 #include <utility>
 
-// Import classes from experimental namespace for the time being
-using RNTupleModel = ROOT::Experimental::RNTupleModel;
-using RNTupleReader = ROOT::Experimental::RNTupleReader;
-using RNTupleWriter = ROOT::Experimental::RNTupleWriter;
-
 // Where to store the ntuple of this example
 constexpr char const* kNTupleFileName = "ntpl002_vector.root";
 
@@ -45,7 +37,7 @@ constexpr int kNEvents = 25000;
 void Write()
 {
    // We create a unique pointer to an empty data model
-   auto model = RNTupleModel::Create();
+   auto model = ROOT::RNTupleModel::Create();
 
    // Creating fields of std::vector is the same as creating fields of simple types.  As a result, we get
    // shared pointers of the given type
@@ -56,7 +48,7 @@ void Write()
 
    // We hand-over the data model to a newly created ntuple of name "F", stored in kNTupleFileName
    // In return, we get a unique pointer to an ntuple that we can fill
-   auto ntuple = RNTupleWriter::Recreate(std::move(model), "F", kNTupleFileName);
+   auto writer = ROOT::RNTupleWriter::Recreate(std::move(model), "F", kNTupleFileName);
 
    TH1F hpx("hpx", "This is the px distribution", 100, -4, 4);
    hpx.SetFillColor(48);
@@ -96,7 +88,7 @@ void Write()
             break;
       }
 
-      ntuple->Fill();
+      writer->Fill();
    }
 
    hpx.DrawCopy();
@@ -110,29 +102,28 @@ void Write()
 void Read()
 {
    // Get a unique pointer to an empty RNTuple model
-   auto model = RNTupleModel::Create();
+   auto model = ROOT::RNTupleModel::Create();
 
    // We only define the fields that are needed for reading
    auto fldVpx = model->MakeField<std::vector<float>>("vpx");
 
    // Create an ntuple without imposing a specific data model.  We could generate the data model from the ntuple
    // but here we prefer the view because we only want to access a single field
-   auto ntuple = RNTupleReader::Open(std::move(model), "F", kNTupleFileName);
+   auto reader = ROOT::RNTupleReader::Open(std::move(model), "F", kNTupleFileName);
 
    // Quick overview of the ntuple's key meta-data
-   ntuple->PrintInfo();
+   reader->PrintInfo();
 
    std::cout << "Entry number 42 in JSON format:" << std::endl;
-   ntuple->Show(41);
-   // In a future version of RNTuple, there will be support for ntuple->Scan()
+   reader->Show(41);
 
    TCanvas *c2 = new TCanvas("c2", "Dynamic Filling Example", 200, 10, 700, 500);
    TH1F h("h", "This is the px distribution", 100, -4, 4);
    h.SetFillColor(48);
 
    // Iterate through all the events using i as event number and as an index for accessing the view
-   for (auto entryId : *ntuple) {
-      ntuple->LoadEntry(entryId);
+   for (auto entryId : *reader) {
+      reader->LoadEntry(entryId);
 
       for (auto px : *fldVpx) {
          h.Fill(px);

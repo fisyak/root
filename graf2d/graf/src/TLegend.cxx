@@ -1030,14 +1030,14 @@ void TLegend::RecursiveRemove(TObject *obj)
 /// Save this legend as C++ statements on output stream out
 /// to be used with the SaveAs .C option.
 
-void TLegend::SavePrimitive(std::ostream &out, Option_t* )
+void TLegend::SavePrimitive(std::ostream &out, Option_t *option)
 {
-   SavePrimitiveConstructor(out, Class(), "leg",
-                            TString::Format("%g, %g, %g, %g, nullptr, \"%s\"", GetX1NDC(), GetY1NDC(), GetX2NDC(),
-                                            GetY2NDC(), TString(fOption).ReplaceSpecialCppChars().Data()));
+   SavePrimitiveConstructor(out, Class(), "leg", GetSavePaveArgs("nullptr"));
 
+   if (strcmp(GetName(), "TPave"))
+      out << "   leg->SetName(\"" << GetName() << "\");\n";
    if (fBorderSize != 4)
-      out << "   leg->SetBorderSize(" << fBorderSize << ");" << std::endl;
+      out << "   leg->SetBorderSize(" << fBorderSize << ");\n";
    SaveTextAttributes(out, "leg", 12, 0, 1, 42, 0);
    SaveLineAttributes(out, "leg", -1, -1, -1);
    SaveFillAttributes(out, "leg", -1, -1);
@@ -1046,7 +1046,8 @@ void TLegend::SavePrimitive(std::ostream &out, Option_t* )
       while (auto entry = static_cast<TLegendEntry *>(next()))
          entry->SaveEntry(out, "leg");
    }
-   out << "   leg->Draw();" << std::endl;
+
+   SavePrimitiveDraw(out, "leg", option);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

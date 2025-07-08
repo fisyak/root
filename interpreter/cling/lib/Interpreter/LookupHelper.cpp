@@ -26,6 +26,8 @@
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
 
+#include "EnterUserCodeRAII.h"
+
 using namespace clang;
 
 namespace cling {
@@ -472,6 +474,13 @@ namespace cling {
 
     if (typeName.empty()) return TheQT;
 
+    // findType is called from TClingLookupHelper::GetPartiallyDesugaredNameWithScopeHandling
+    // which is called indirectly from TClassEdit::GetNormalizedName via
+    // the ResolvedTypedef code paths.  Through that code path nothing is
+    // taking the ROOT/Interpreter lock and since this code can modify the
+    // interpreter, we do need to take lock.
+    InterpreterAccessRAII LockAccess(*m_Interpreter);
+
     // Could trigger deserialization of decls.
     Interpreter::PushTransactionRAII RAII(m_Interpreter);
 
@@ -689,13 +698,6 @@ namespace cling {
                   TagDecl* TD = TagTy->getDecl();
                   if (TD) {
                     TheDecl = TD->getDefinition();
-                    // NOTE: if (TheDecl) ... check for theDecl->isInvalidDecl()
-                    if (TD && TD->isInvalidDecl()) {
-                      printf("Warning: FindScope got an invalid tag decl\n");
-                    }
-                    if (TheDecl && TheDecl->isInvalidDecl()) {
-                      printf("ERROR: FindScope about to return an invalid decl\n");
-                    }
                     if (!TheDecl && instantiateTemplate) {
 
                       // Make sure it is not just forward declared, and

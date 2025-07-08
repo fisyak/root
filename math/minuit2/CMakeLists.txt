@@ -40,11 +40,9 @@ if(CMAKE_PROJECT_NAME STREQUAL ROOT)
       Minuit2/FumiliStandardMaximumLikelihoodFCN.h
       Minuit2/FunctionGradient.h
       Minuit2/FunctionMinimum.h
-      Minuit2/GenericFunction.h
       Minuit2/GradientCalculator.h
       Minuit2/HessianGradientCalculator.h
       Minuit2/InitialGradientCalculator.h
-      Minuit2/MPIProcess.h
       Minuit2/MinimumBuilder.h
       Minuit2/MinimumError.h
       Minuit2/MinimumErrorUpdator.h
@@ -75,23 +73,22 @@ if(CMAKE_PROJECT_NAME STREQUAL ROOT)
       Minuit2/MnMinos.h
       Minuit2/MnParabola.h
       Minuit2/MnParabolaFactory.h
-      Minuit2/MnParabolaPoint.h
       Minuit2/MnParameterScan.h
+      Minuit2/MnParameterTransformation.h
       Minuit2/MnPlot.h
+      Minuit2/MnPoint.h
       Minuit2/MnPosDef.h
       Minuit2/MnPrint.h
       Minuit2/MnScan.h
       Minuit2/MnSeedGenerator.h
       Minuit2/MnSimplex.h
       Minuit2/MnStrategy.h
-      Minuit2/MnTiny.h
       Minuit2/MnTraceObject.h
       Minuit2/MnUserCovariance.h
       Minuit2/MnUserFcn.h
       Minuit2/MnUserParameterState.h
       Minuit2/MnUserParameters.h
       Minuit2/MnUserTransformation.h
-      Minuit2/MnVectorTransform.h
       Minuit2/ModularFunctionMinimizer.h
       Minuit2/NegativeG2LineSearch.h
       Minuit2/Numerical2PGradientCalculator.h
@@ -103,9 +100,6 @@ if(CMAKE_PROJECT_NAME STREQUAL ROOT)
       Minuit2/SimplexMinimizer.h
       Minuit2/SimplexParameters.h
       Minuit2/SimplexSeedGenerator.h
-      Minuit2/SinParameterTransformation.h
-      Minuit2/SqrtLowParameterTransformation.h
-      Minuit2/SqrtUpParameterTransformation.h
       Minuit2/VariableMetricBuilder.h
       Minuit2/VariableMetricEDMEstimator.h
       Minuit2/VariableMetricMinimizer.h
@@ -123,6 +117,7 @@ if(CMAKE_PROJECT_NAME STREQUAL ROOT)
       src/FumiliMinimizer.cxx
       src/FumiliStandardChi2FCN.cxx
       src/FumiliStandardMaximumLikelihoodFCN.cxx
+      src/GradientCalculator.cxx
       src/HessianGradientCalculator.cxx
       src/InitialGradientCalculator.cxx
       src/MPIProcess.cxx
@@ -143,6 +138,7 @@ if(CMAKE_PROJECT_NAME STREQUAL ROOT)
       src/MnMinos.cxx
       src/MnParabolaFactory.cxx
       src/MnParameterScan.cxx
+      src/MnParameterTransformation.cxx
       src/MnPlot.cxx
       src/MnPosDef.cxx
       src/MnPrint.cxx
@@ -150,9 +146,7 @@ if(CMAKE_PROJECT_NAME STREQUAL ROOT)
       src/MnScan.cxx
       src/MnSeedGenerator.cxx
       src/MnStrategy.cxx
-      src/MnTiny.cxx
       src/MnTraceObject.cxx
-      src/MnUserFcn.cxx
       src/MnUserParameterState.cxx
       src/MnUserParameters.cxx
       src/MnUserTransformation.cxx
@@ -165,9 +159,6 @@ if(CMAKE_PROJECT_NAME STREQUAL ROOT)
       src/SimplexBuilder.cxx
       src/SimplexParameters.cxx
       src/SimplexSeedGenerator.cxx
-      src/SinParameterTransformation.cxx
-      src/SqrtLowParameterTransformation.cxx
-      src/SqrtUpParameterTransformation.cxx
       src/TMinuit2TraceObject.cxx
       src/VariableMetricBuilder.cxx
       src/VariableMetricEDMEstimator.cxx

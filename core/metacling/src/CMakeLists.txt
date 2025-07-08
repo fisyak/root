@@ -120,7 +120,8 @@ ROOT_LINKER_LIBRARY(Cling
         $<TARGET_OBJECTS:ClingUtils>
         $<TARGET_OBJECTS:Dictgen>
         $<TARGET_OBJECTS:MetaCling>
-        LIBRARIES ${CLING_LIBRARIES} clangCppInterOp ${LINK_LIBS} ${CLING_PLUGIN_LINK_LIBS})
+        $<TARGET_OBJECTS:clangCppInterOp>
+        LIBRARIES ${CLING_LIBRARIES} ${LINK_LIBS} ${CLING_PLUGIN_LINK_LIBS})
 
 # When these two link at the same time, they can exhaust the RAM on many machines, since they both link against llvm.
 add_dependencies(Cling rootcling_stage1)
@@ -137,15 +138,6 @@ if(MSVC)
       __std_terminate
       cling_runtime_internal_throwIfInvalidPointer
   )
-  if(MSVC_VERSION GREATER_EQUAL 1933)
-    set(cling_exports ${cling_exports}
-        __std_find_trivial_1
-        __std_find_trivial_2
-        __std_find_trivial_4
-        __std_find_trivial_8
-    )
-  endif()
-
   set(cling_exports ${cling_exports}
     _Smtx_lock_shared
     _Smtx_unlock_shared

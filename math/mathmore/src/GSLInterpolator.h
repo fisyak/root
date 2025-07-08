@@ -34,6 +34,7 @@
 #include <vector>
 #include <string>
 #include <cassert>
+#include <atomic>
 
 #include "Math/InterpolationTypes.h"
 
@@ -73,11 +74,11 @@ namespace Math {
       {
          assert(fAccel);
          double y = 0;
-         static unsigned int nErrors = 0;
+         static thread_local unsigned int nErrors = 0;
          int ierr = gsl_spline_eval_e(fSpline, x, fAccel, &y);
 
          if (fResetNErrors)
-           nErrors = 0, fResetNErrors = false;
+            nErrors = 0, fResetNErrors = false;
 
          if (ierr) {
             ++nErrors;
@@ -95,11 +96,11 @@ namespace Math {
       {
          assert(fAccel);
          double deriv = 0;
-         static unsigned int nErrors = 0;
+         static thread_local unsigned int nErrors = 0;
          int ierr = gsl_spline_eval_deriv_e(fSpline, x, fAccel, &deriv);
 
          if (fResetNErrors)
-           nErrors = 0, fResetNErrors = false;
+            nErrors = 0, fResetNErrors = false;
 
          if (ierr) {
             ++nErrors;
@@ -116,11 +117,11 @@ namespace Math {
       double Deriv2(double x) const {
          assert(fAccel);
          double deriv2 = 0;
-         static unsigned int nErrors = 0;
+         static thread_local unsigned int nErrors = 0;
          int ierr = gsl_spline_eval_deriv2_e(fSpline, x, fAccel, &deriv2);
 
          if (fResetNErrors)
-           nErrors = 0, fResetNErrors = false;
+            nErrors = 0, fResetNErrors = false;
 
          if (ierr) {
             ++nErrors;
@@ -140,11 +141,11 @@ namespace Math {
 
          assert(fAccel);
          double result = 0;
-         static unsigned int nErrors = 0;
+         static thread_local unsigned int nErrors = 0;
          int ierr = gsl_spline_eval_integ_e(fSpline, a, b, fAccel, &result);
 
          if (fResetNErrors)
-           nErrors = 0, fResetNErrors = false;
+            nErrors = 0, fResetNErrors = false;
 
          if (ierr) {
             ++nErrors;
@@ -164,7 +165,7 @@ namespace Math {
 
    private:
 
-      mutable bool fResetNErrors;  // flag to reset counter for error messages
+      mutable std::atomic<bool> fResetNErrors;  // flag to reset counter for error messages
       gsl_interp_accel * fAccel;
       gsl_spline * fSpline;
       const gsl_interp_type * fInterpType;

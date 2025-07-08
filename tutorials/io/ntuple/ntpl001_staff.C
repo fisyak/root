@@ -11,9 +11,6 @@
 /// \date April 2019
 /// \author The ROOT Team
 
-// NOTE: The RNTuple classes are experimental at this point.
-// Functionality and interface are still subject to changes.
-
 #include <ROOT/RNTupleModel.hxx>
 #include <ROOT/RNTupleReader.hxx>
 #include <ROOT/RNTupleWriter.hxx>
@@ -32,11 +29,6 @@
 #include <sstream>
 #include <utility>
 
-// Import classes from experimental namespace for the time being
-using RNTupleModel = ROOT::Experimental::RNTupleModel;
-using RNTupleReader = ROOT::Experimental::RNTupleReader;
-using RNTupleWriter = ROOT::Experimental::RNTupleWriter;
-
 constexpr char const* kNTupleFileName = "ntpl001_staff.root";
 
 void Ingest() {
@@ -45,7 +37,7 @@ void Ingest() {
    assert(fin.is_open());
 
    // We create a unique pointer to an empty data model
-   auto model = RNTupleModel::Create();
+   auto model = ROOT::RNTupleModel::Create();
 
    // To define the data model, we create fields with a given C++ type and name.  Fields are roughly TTree branches.
    // MakeField returns a shared pointer to a memory location that we can populate to fill the ntuple with data
@@ -63,14 +55,14 @@ void Ingest() {
 
    // We hand-over the data model to a newly created ntuple of name "Staff", stored in kNTupleFileName
    // In return, we get a unique pointer to an ntuple that we can fill
-   auto ntuple = RNTupleWriter::Recreate(std::move(model), "Staff", kNTupleFileName);
+   auto writer = ROOT::RNTupleWriter::Recreate(std::move(model), "Staff", kNTupleFileName);
 
    std::string record;
    while (std::getline(fin, record)) {
       std::istringstream iss(record);
       iss >> *fldCategory >> *fldFlag >> *fldAge >> *fldService >> *fldChildren >> *fldGrade >> *fldStep >> *fldHrweek
           >> *fldCost >> *fldDivision >> *fldNation;
-      ntuple->Fill();
+      writer->Fill();
    }
 
    // The ntuple unique pointer goes out of scope here.  On destruction, the ntuple flushes unwritten data to disk
@@ -79,28 +71,27 @@ void Ingest() {
 
 void Analyze() {
    // Get a unique pointer to an empty RNTuple model
-   auto model = RNTupleModel::Create();
+   auto model = ROOT::RNTupleModel::Create();
 
    // We only define the fields that are needed for reading
    std::shared_ptr<int> fldAge = model->MakeField<int>("Age");
 
    // Create an ntuple and attach the read model to it
-   auto ntuple = RNTupleReader::Open(std::move(model), "Staff", kNTupleFileName);
+   auto reader = ROOT::RNTupleReader::Open(std::move(model), "Staff", kNTupleFileName);
 
    // Quick overview of the ntuple and list of fields.
-   ntuple->PrintInfo();
+   reader->PrintInfo();
 
    std::cout << "The first entry in JSON format:" << std::endl;
-   ntuple->Show(0);
-   // In a future version of RNTuple, there will be support for ntuple->Scan()
+   reader->Show(0);
 
    auto c = new TCanvas("c", "", 200, 10, 700, 500);
    TH1I h("h", "Age Distribution CERN, 1988", 100, 0, 100);
    h.SetFillColor(48);
 
-   for (auto entryId : *ntuple) {
+   for (auto entryId : *reader) {
       // Populate fldAge
-      ntuple->LoadEntry(entryId);
+      reader->LoadEntry(entryId);
       h.Fill(*fldAge);
    }
 

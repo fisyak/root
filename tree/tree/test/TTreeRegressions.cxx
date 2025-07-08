@@ -3,6 +3,9 @@
 #include "TTree.h"
 #include "TInterpreter.h"
 #include "TSystem.h"
+#include "TLeafObject.h"
+#include "TH1F.h"
+#include "TROOT.h"
 
 #include "gtest/gtest.h"
 
@@ -146,6 +149,34 @@ TEST(TTreeRegressions, LeafLongString)
    EXPECT_EQ(strlen(s), 999);
 }
 
+// https://github.com/root-project/root/issues/9319
+TEST(TTreeRegressions, PrintClustersRounding)
+{
+   TMemFile file("tree9319_clusters.root", "RECREATE");
+   TTree t("t", "t");
+   t.SetAutoFlush(5966);
+   int x = 0;
+   t.Branch("x", &x);
+   for (auto i = 0; i < 10000; ++i) {
+      t.Fill();
+   }
+
+   testing::internal::CaptureStdout();
+
+   t.Print("clusters");
+
+   const std::string output = testing::internal::GetCapturedStdout();
+   const auto ref = "******************************************************************************\n"
+                    "*Tree    :t         : t                                                      *\n"
+                    "*Entries :    10000 : Total =           40973 bytes  File  Size =        202 *\n"
+                    "*        :          : Tree compression factor = 118.46                       *\n"
+                    "******************************************************************************\n"
+                    "Cluster Range #  Entry Start      Last Entry           Size   Number of clusters\n"
+                    "0                0                9999                 5966          2\n"
+                    "Total number of clusters: 2 \n"; // This was 1 before the fix
+   EXPECT_EQ(output, ref);
+}
+
 // Issue ROOT-9961
 TEST(TTreeRegressions, PrintTopOnly)
 {
@@ -193,4 +224,58 @@ TEST(TTreeRegressions, PrintTopOnlySplit)
                     "******************************************************************************\n"
                     "branch: ev                           0\n";
    EXPECT_EQ(output, ref);
+}
+
+// https://github.com/root-project/root/issues/12537
+TEST(TTreeRegressions, EmptyLeafObject)
+{
+   TLeafObject tlo;
+   EXPECT_EQ(tlo.GetObject(), nullptr);
+}
+
+// https://its.cern.ch/jira/browse/ROOT-6741
+#define MYSUBCLASS struct MySubClass { int id; double x; };
+#define MYCLASS struct MyClass { std::vector<MySubClass> sub; MySubClass *Get(int id) { for (size_t i = 0; i < sub.size(); ++i) if (sub[i].id == id) return &sub[i]; return nullptr; } };
+MYSUBCLASS
+MYCLASS
+#define TO_LITERAL(string) _QUOTE_(string)
+
+TEST(TTreeRegressions, TTreeFormulaMemberIndex)
+{
+   gInterpreter->Declare(TO_LITERAL(MYSUBCLASS));
+   gInterpreter->Declare(TO_LITERAL(MYCLASS));
+
+   TTree tree("tree", "tree");
+   MyClass mc;
+   tree.Branch("mc", &mc);
+
+   MySubClass s;
+   s.id = 1;
+   s.x = 1.11;
+   mc.sub.push_back(s);
+   s.id = 23;
+   s.x = 2.22;
+   mc.sub.push_back(s);
+   s.id = -2;
+   s.x = 3.33;
+   mc.sub.push_back(s);
+   tree.Fill();
+
+   Long64_t n1 = tree.Draw("mc.Get(1)->x >> h1", "");
+   ASSERT_EQ(n1, 1);
+   auto h1 = gROOT->Get<TH1F>("h1");
+   ASSERT_FLOAT_EQ(mc.Get(1)->x, h1->GetMean());
+   delete h1;
+
+   Long64_t n2 = tree.Draw("mc.Get(23)->x >> h2", "");
+   ASSERT_EQ(n2, 1);
+   auto h2 = gROOT->Get<TH1F>("h2");
+   ASSERT_FLOAT_EQ(mc.Get(23)->x, h2->GetMean());
+   delete h2;
+
+   Long64_t n3 = tree.Draw("mc.Get(-2)->x >> h3", "");
+   ASSERT_EQ(n3, 1);
+   auto h3 = gROOT->Get<TH1F>("h3");
+   ASSERT_FLOAT_EQ(mc.Get(-2)->x, h3->GetMean());
+   delete h3;
 }

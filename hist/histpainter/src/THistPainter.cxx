@@ -283,11 +283,12 @@ using `TH1::GetOption`:
 | "ARR"        | Arrow mode. Shows gradient between adjacent cells.|
 | "BOX"        | A box is drawn for each cell with surface proportional to the content's absolute value. A negative content is marked with a X. |
 | "BOX1"       | A button is drawn for each cell with surface proportional to content's absolute value. A sunken button is drawn for negative values a raised one for positive.|
-| "COL"        | A box is drawn for each cell with a color scale varying with contents. All the none empty bins are painted. Empty bins are not painted unless some bins have a negative content because in that case the null bins might be not empty.  `TProfile2D` histograms are handled differently because, for this type of 2D histograms, it is possible to know if an empty bin has been filled or not. So even if all the bins' contents are positive some empty bins might be painted. And vice versa, if some bins have a negative content some empty bins might be not painted (default).|
+| "COL"        | A box is drawn for each cell with a color scale varying with contents. All the none empty bins (bins with content and error equal to 0) are painted. Empty bins are not painted unless some bins have a negative content because in that case the null bins might be not empty.  `TProfile2D` histograms are handled differently because, for this type of 2D histograms, it is possible to know if an empty bin has been filled or not. So even if all the bins' contents are positive some empty bins might be painted. And vice versa, if some bins have a negative content some empty bins might be not painted (default).|
+| "COL1"       | Same as "COL" but in case of histogram with negative content the empty bins are not drawn.
 | "COLZ"       | Same as "COL". In addition the color palette is also drawn.|
 | "COL2"       | Alternative rendering algorithm to "COL". Can significantly improve rendering performance for large, non-sparse 2-D histograms.|
 | "COLZ2"      | Same as "COL2". In addition the color palette is also drawn.|
-| "Z CJUST"   | In combination with colored options "COL","CONT0" etc: Justify labels in the color palette at color boundaries. For more details see `TPaletteAxis`|
+| "Z CJUST"    | In combination with colored options "COL","CONT0" etc: Justify labels in the color palette at color boundaries. For more details see `TPaletteAxis`|
 | "CANDLE"     | Draw a candle plot along X axis.|
 | "CANDLEX"    | Same as "CANDLE".|
 | "CANDLEY"    | Draw a candle plot along Y axis.|
@@ -1050,8 +1051,8 @@ is the color change between cells.
 
 The color palette in TStyle can be modified via `gStyle->SetPalette()`.
 
-All the non-empty bins are painted. Empty bins are not painted unless
-some bins have a negative content because in that case the null bins
+All the non-empty bins are painted. Empty bins (bins with content and error equal to 0) are 
+not painted unless some bins have a negative content because in that case the null bins
 might be not empty.
 
 `TProfile2D` histograms are handled differently because, for this type of 2D
@@ -2921,7 +2922,7 @@ The supported option is:
 
 | Option   | Description                                                       |
 |----------|-------------------------------------------------------------------|
-| "GLCOL"  | H3 is drawn using semi-transparent colored boxes.  See `$ROOTSYS/tutorials/visualisation/gl/glvox1.C`.|
+| "GLCOL"  | H3 is drawn using semi-transparent colored boxes.  See glvox1.C .|
 
 
 
@@ -2962,8 +2963,7 @@ The supported option is:
 \anchor HP29e
 #### Parametric surfaces
 
-`$ROOTSYS/tutorials/visualisation/gl/glparametric.C` shows how to create parametric
-equations and visualize the surface.
+glparametric.C shows how to create parametric equations and visualize the surface.
 
 \anchor HP29f
 #### Interaction with the plots
@@ -3073,7 +3073,7 @@ graphically. Bin will be highlighted as "bin box" (presented by box
 object). Moreover, any highlight (change of bin) emits signal
 `TCanvas::Highlighted()` which allows the user to react and call their own
 function. For a better understanding see also the tutorial `hist043` to `hist046`
-lacated in `$ROOTSYS/tutorials/hist/`.
+located in `$ROOTSYS/tutorials/hist/`.
 
 Highlight mode is switched on/off by `TH1::SetHighlight()` function
 or interactively from `TH1` context menu. `TH1::IsHighlight()` to verify
@@ -3153,7 +3153,7 @@ void hlprint()
 
 \image html hlsimple.gif "Highlight mode and simple user function"
 
-For more complex demo please see for example `$ROOTSYS/tutorials/io/tree/tree200_temperature.C` file.
+For more complex demo please see for example tree200_temperature.C file.
 
 */
 
@@ -3640,12 +3640,16 @@ void THistPainter::ExecuteEvent(Int_t event, Int_t px, Int_t py)
          bin2 = xaxis->GetLast()+1;
          bin1 = TMath::Max(bin1, 1);
          bin2 = TMath::Min(bin2, xaxis->GetNbins());
+         const bool resetXaxisRange = bin1 == 1 && xaxis->GetFirst() == 1 && bin2 == xaxis->GetNbins() && xaxis->GetLast() == xaxis->GetNbins();
          if (bin2>bin1) xaxis->SetRange(bin1,bin2);
+         if (resetXaxisRange) xaxis->ResetBit(TAxis::kAxisRange);
          bin1 = yaxis->GetFirst()-1;
          bin2 = yaxis->GetLast()+1;
          bin1 = TMath::Max(bin1, 1);
          bin2 = TMath::Min(bin2, yaxis->GetNbins());
+         const bool resetYaxisRange = bin1 == 1 && yaxis->GetFirst() == 1 && bin2 == yaxis->GetNbins() && yaxis->GetLast() == yaxis->GetNbins();
          if (bin2>bin1) yaxis->SetRange(bin1,bin2);
+         if (resetYaxisRange) yaxis->ResetBit(TAxis::kAxisRange);
       }
       gPad->Modified();
       gPad->Update();
@@ -4282,7 +4286,7 @@ Int_t THistPainter::MakeChopt(Option_t *choptin)
       }
       memcpy(l,"    ", 4);
       l = strstr(chopt,"N");
-      if (l && fH->InheritsFrom(TH2Poly::Class())) Hoption.Text += 3000;
+      if (l && fH->InheritsFrom(TH2Poly::Class())) Hoption.Text = 3000 + (Hoption.Text != 1 ? Hoption.Text : 0);
       Hoption.Color = 0;
    }
    l = strstr(chopt,"COLZ");
@@ -5768,7 +5772,7 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
 
 void THistPainter::PaintColorLevels(Option_t*)
 {
-   Double_t z, zc, xk, xstep, yk, ystep, xlow, xup, ylow, yup;
+   Double_t z, e, zc, xk, xstep, yk, ystep, xlow, xup, ylow, yup;
 
    Double_t zmin = fH->GetMinimum();
    Double_t zmax = fH->GetMaximum();
@@ -5841,6 +5845,7 @@ void THistPainter::PaintColorLevels(Option_t*)
          xstep = fXaxis->GetBinWidth(i);
          if (!IsInside(xk+0.5*xstep,yk+0.5*ystep)) continue;
          z     = fH->GetBinContent(bin);
+         e     = fH->GetBinError(bin);
          // if fH is a profile histogram do not draw empty bins
          if (prof2d) {
             const Double_t binEntries = prof2d->GetBinEntries(bin);
@@ -5849,7 +5854,7 @@ void THistPainter::PaintColorLevels(Option_t*)
          } else {
             // don't draw the empty bins for non-profile histograms
             // with positive content
-            if (z == 0) {
+            if (z == 0 && e == 0) {
                if (zmin >= 0 || Hoption.Logz) continue;
                if (Hoption.Color == 2) continue;
             }
@@ -10876,8 +10881,8 @@ void THistPainter::ShowProjectionX(Int_t /*px*/, Int_t py)
    Float_t y   = gPad->PadtoY(upy);
    Int_t biny1 = fH->GetYaxis()->FindBin(y);
    Int_t biny2 = TMath::Min(biny1+nbins-1, fH->GetYaxis()->GetNbins());
-   Int_t py1   = gPad->YtoAbsPixel(fH->GetYaxis()->GetBinLowEdge(biny1));
-   Int_t py2   = gPad->YtoAbsPixel(fH->GetYaxis()->GetBinUpEdge(biny2));
+   Int_t py1   = gPad->YtoAbsPixel(gPad->GetLogy() ? TMath::Log10(fH->GetYaxis()->GetBinLowEdge(biny1)) : fH->GetYaxis()->GetBinLowEdge(biny1));
+   Int_t py2   = gPad->YtoAbsPixel(gPad->GetLogy() ? TMath::Log10(fH->GetYaxis()->GetBinUpEdge(biny2)) : fH->GetYaxis()->GetBinUpEdge(biny2));
 
    if (pyold1 || pyold2) gVirtualX->DrawBox(pxmin,pyold1,pxmax,pyold2,TVirtualX::kFilled);
    gVirtualX->DrawBox(pxmin,py1,pxmax,py2,TVirtualX::kFilled);
@@ -10961,8 +10966,8 @@ void THistPainter::ShowProjectionY(Int_t px, Int_t /*py*/)
    Float_t x   = gPad->PadtoX(upx);
    Int_t binx1 = fH->GetXaxis()->FindBin(x);
    Int_t binx2 = TMath::Min(binx1+nbins-1, fH->GetXaxis()->GetNbins());
-   Int_t px1   = gPad->XtoAbsPixel(fH->GetXaxis()->GetBinLowEdge(binx1));
-   Int_t px2   = gPad->XtoAbsPixel(fH->GetXaxis()->GetBinUpEdge(binx2));
+   Int_t px1   = gPad->XtoAbsPixel(gPad->GetLogx() ? TMath::Log10(fH->GetXaxis()->GetBinLowEdge(binx1)) : fH->GetXaxis()->GetBinLowEdge(binx1));
+   Int_t px2   = gPad->XtoAbsPixel(gPad->GetLogx() ? TMath::Log10(fH->GetXaxis()->GetBinUpEdge(binx2)) : fH->GetXaxis()->GetBinUpEdge(binx2));
 
    if (pxold1 || pxold2) gVirtualX->DrawBox(pxold1,pymin,pxold2,pymax,TVirtualX::kFilled);
    gVirtualX->DrawBox(px1,pymin,px2,pymax,TVirtualX::kFilled);

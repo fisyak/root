@@ -152,7 +152,7 @@ class Polygon {
       this.nsign = 1;
       if (parent)
          this.copyProperties(parent, more);
-      else if (this.vertices.length > 0)
+      else if (this.vertices.length)
          this.calculateProperties();
    }
 
@@ -168,11 +168,12 @@ class Polygon {
    }
 
    calculateProperties(force) {
-      if (this.normal && !force) return;
+      if (this.normal && !force)
+         return;
 
       const a = this.vertices[0],
-          b = this.vertices[1],
-          c = this.vertices[2];
+            b = this.vertices[1],
+            c = this.vertices[2];
 
       this.nsign = 1;
 
@@ -314,10 +315,10 @@ class Node {
 
       if (nodeid !== undefined) this.maxnodeid = nodeid;
 
-      if (front.length > 0)
+      if (front.length)
          this.front = new Node(front);
 
-      if (back.length > 0)
+      if (back.length)
          this.back = new Node(back);
    }
 
@@ -343,13 +344,15 @@ class Node {
       for (let i = first; i < polygon_count; ++i)
          this.divider.splitPolygon(polygons[i], this.polygons, this.polygons, front, back);
 
-      if (front.length > 0) {
-         if (!this.front) this.front = new Node();
+      if (front.length) {
+         if (!this.front)
+            this.front = new Node();
          this.front.build(front);
       }
 
-      if (back.length > 0) {
-         if (!this.back) this.back = new Node();
+      if (back.length) {
+         if (!this.back)
+            this.back = new Node();
          this.back.build(back);
       }
    }
@@ -475,7 +478,7 @@ class Geometry {
       } else if (geometry instanceof Node) {
          this.tree = geometry;
          this.matrix = null; // new Matrix4;
-         return this;
+         return;
       } else if (geometry instanceof THREE.BufferGeometry) {
          const pos_buf = geometry.getAttribute('position').array,
                norm_buf = geometry.getAttribute('normal').array,
@@ -502,8 +505,9 @@ class Geometry {
          }
 
          this.tree = new Node(polygons, nodeid);
-         if (nodeid !== undefined) this.maxid = this.tree.maxnodeid;
-         return this;
+         if (nodeid !== undefined)
+            this.maxid = this.tree.maxnodeid;
+         return;
       } else if (geometry.polygons && (geometry.polygons[0] instanceof Polygon)) {
          const polygons = geometry.polygons;
 
@@ -522,11 +526,11 @@ class Geometry {
          }
 
          this.tree = new Node(polygons, nodeid);
-         if (nodeid !== undefined) this.maxid = this.tree.maxnodeid;
-         return this;
+         if (nodeid !== undefined)
+            this.maxid = this.tree.maxnodeid;
+         return;
       } else
          throw Error('ThreeBSP: Given geometry is unsupported');
-
 
       const polygons = [], nfaces = geometry.faces.length;
       let face, polygon, vertex, normal, useVertexNormals;

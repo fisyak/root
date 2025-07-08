@@ -17,12 +17,6 @@
 #pragma link C++ namespace RooStats;
 #pragma link C++ namespace RooStats::NumberCountingUtils;
 
-// for auto-loading namespaces
-#ifdef USE_FOR_AUTLOADING
-#pragma link C++ class RooStats::NumberCountingUtils;
-#pragma link C++ class RooStats;
-#endif
-
 #pragma link C++ class RooStats::SPlot+;
 #pragma link C++ class RooStats::NumberCountingPdfFactory+;
 
@@ -81,7 +75,6 @@
 #pragma link C++ class RooStats::HypoTestInverter+;
 #pragma link C++ class RooStats::HypoTestInverterResult+;
 #pragma link C++ class RooStats::HypoTestInverterPlot+;
-#pragma link C++ class RooStats::HLFactory+;
 
 // in progress
 #pragma link C++ class RooStats::ConfidenceBelt+;

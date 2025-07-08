@@ -13,8 +13,7 @@
 #include "TBuffer.h"
 #include "TMethod.h"
 #include "TF1.h"
-#include "TMethodCall.h"
-#include <TBenchmark.h>
+#include "TMethodCall.h" 
 #include "TError.h"
 #include "TInterpreter.h"
 #include "TInterpreterValue.h"
@@ -804,9 +803,9 @@ prepareMethod(bool HasParameters, bool HasVariables, const char* FuncName,
    TString prototypeArguments = "";
    if (HasVariables || HasParameters) {
       if (IsVectorized)
-         prototypeArguments.Append("ROOT::Double_v*");
+         prototypeArguments.Append("ROOT::Double_v const*");
       else
-         prototypeArguments.Append("Double_t*");
+         prototypeArguments.Append("Double_t const*");
    }
    auto AddDoublePtrParam = [&prototypeArguments]() {
      prototypeArguments.Append(",");
@@ -992,16 +991,22 @@ void TFormula::FillVecFunctionsShurtCuts() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///    Handling polN
-///    If before 'pol' exist any name, this name will be treated as variable used in polynomial
-///    eg.
-///    varpol2(5) will be replaced with: [5] + [6]*var + [7]*var^2
-///    Empty name is treated like variable x.
-///    Extended format also supports direct variable specification: pol2(x, 0) or pol(x, [A])
-///    Traditional Syntax: polN - Polynomial of degree N
-///          ypol1             [p0]+[p1]*y
-///          pol1(x, 0)        [p0]+[p1]*x
-///          pol2(y, 1)        [p1]+[p2]*y+[p3]*TMath::Sq(y)
+/// \brief Handling Polynomial Notation (polN)
+///
+/// This section describes how polynomials are handled in the code.
+///
+/// - If any name appears before 'pol', it is treated as a variable used in the polynomial.
+///   - Example: `varpol2(5)` will be replaced with `[5] + [6]*var + [7]*var^2`.
+///   - Empty name is treated like variable `x`.
+///
+/// - The extended format allows direct variable specification:
+///   - Example: `pol2(x, 0)` or `pol(x, [A])`.
+///
+/// - Traditional syntax: `polN` represents a polynomial of degree `N`:
+///   - `ypol1` → `[p0] + [p1] * y`
+///   - `pol1(x, 0)` → `[p0] + [p1] * x`
+///   - `pol2(y, 1)` → `[p1] + [p2] * y + [p3] * TMath::Sq(y)`
+////////////////////////////////////////////////////////////////////////////////
 
 void TFormula::HandlePolN(TString &formula)
 {
@@ -2381,7 +2386,7 @@ void TFormula::ProcessFormula(TString &formula)
          TString argType = fVectorized ? "ROOT::Double_v" : "Double_t";
 
          // valid input formula - try to put into Cling (in case of no variables but only parameter we need to add the standard signature)
-         TString argumentsPrototype = TString::Format("%s%s%s", ( (hasVariables || hasParameters) ? (argType + " *x").Data() : ""),
+         TString argumentsPrototype = TString::Format("%s%s%s", ( (hasVariables || hasParameters) ? (argType + " const *x").Data() : ""),
                                                       (hasParameters ? "," : ""), (hasParameters ? "Double_t *p" : ""));
 
          // set the name for Cling using the hash_function
@@ -3198,10 +3203,14 @@ static bool functionExists(const string &Name) {
 }
 
 static void IncludeCladRuntime(Bool_t &IsCladRuntimeIncluded) {
+#ifdef ROOT_SUPPORT_CLAD
    if (!IsCladRuntimeIncluded) {
       IsCladRuntimeIncluded = true;
       gInterpreter->Declare("#include <Math/CladDerivator.h>\n#pragma clad OFF");
    }
+#else
+   IsCladRuntimeIncluded = false;
+#endif
 }
 
 static bool
@@ -3593,8 +3602,12 @@ void TFormula::ReInitializeEvalMethod() {
 ///  - If option = "P" replace the parameter names with their values
 ///  - If option = "CLING" return the actual expression used to build the function  passed to cling
 ///  - If option = "CLINGP" replace in the CLING expression the parameter with their values
+///  @param fl_format specifies the printf floating point precision when option
+///  contains "p". Default is `%g` (6 decimals). If you need more precision,
+///  change e.g. to `%.9f`, or `%a` for a lossless representation.
+///  @see https://cplusplus.com/reference/cstdio/printf/
 
-TString TFormula::GetExpFormula(Option_t *option) const
+TString TFormula::GetExpFormula(Option_t *option, const char *fl_format) const
 {
    TString opt(option);
    if (opt.IsNull() || TestBit(TFormula::kLambda) ) return fFormula;
@@ -3630,7 +3643,7 @@ TString TFormula::GetExpFormula(Option_t *option) const
             TString parNumbName = clingFormula(i+2,j-i-2);
             int parNumber = parNumbName.Atoi();
             assert(parNumber < fNpar);
-            TString replacement = TString::Format("%f",GetParameter(parNumber));
+            TString replacement = TString::Format(fl_format, GetParameter(parNumber));
             clingFormula.Replace(i,j-i+1, replacement );
             i += replacement.Length();
          }
@@ -3652,7 +3665,7 @@ TString TFormula::GetExpFormula(Option_t *option) const
                return expFormula;
             }
             TString parName = expFormula(i+1,j-i-1);
-            TString replacement = TString::Format("%g",GetParameter(parName));
+            TString replacement = TString::Format(fl_format, GetParameter(parName));
             expFormula.Replace(i,j-i+1, replacement );
             i += replacement.Length();
          }
@@ -3666,7 +3679,7 @@ TString TFormula::GetExpFormula(Option_t *option) const
 
 TString TFormula::GetGradientFormula() const {
    std::unique_ptr<TInterpreterValue> v = gInterpreter->MakeInterpreterValue();
-   std::string s("(void (&)(Double_t *, Double_t *, Double_t *)) ");
+   std::string s("(void (&)(Double_t const *, Double_t *, Double_t *)) ");
    s += GetGradientFuncName();
    gInterpreter->Evaluate(s.c_str(), *v);
    return v->ToString();

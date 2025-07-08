@@ -22,11 +22,6 @@ if(sqlite)
   list(APPEND RDATAFRAME_EXTRA_HEADERS ROOT/RSqliteDS.hxx)
 endif()
 
-if(root7)
-  list(APPEND RDATAFRAME_EXTRA_HEADERS ROOT/RNTupleDS.hxx)
-  list(APPEND RDATAFRAME_EXTRA_DEPS ROOTNTuple)
-endif()
-
 if (imt)
   list(APPEND RDATAFRAME_EXTRA_DEPS Imt)
 endif(imt)
@@ -49,6 +44,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTDataFrame
     ROOT/RRootDS.hxx
     ROOT/RSnapshotOptions.hxx
     ROOT/RTrivialDS.hxx
+    ROOT/RTTreeDS.hxx
     ROOT/RDF/ActionHelpers.hxx
     ROOT/RDF/ColumnReaderUtils.hxx
     ROOT/RDF/GraphNode.hxx
@@ -57,6 +53,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTDataFrame
     ROOT/RDF/InterfaceUtils.hxx
     ROOT/RDF/RActionBase.hxx
     ROOT/RDF/RAction.hxx
+    ROOT/RDF/RActionSnapshot.hxx
     ROOT/RDF/RActionImpl.hxx
     ROOT/RDF/RColumnRegister.hxx
     ROOT/RDF/RNewSampleNotifier.hxx
@@ -95,9 +92,11 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTDataFrame
     ROOT/RDF/RVariationReader.hxx
     ROOT/RDF/RVariationsDescription.hxx
     ROOT/RDF/RVariedAction.hxx
+    ROOT/RDF/SnapshotHelpers.hxx
     ROOT/RDF/Utils.hxx
     ROOT/RDF/PyROOTHelpers.hxx
     ROOT/RDF/RDFDescription.hxx
+    ROOT/RNTupleDS.hxx
     ${RDATAFRAME_EXTRA_HEADERS}
   SOURCES
     src/RActionBase.cxx
@@ -107,13 +106,16 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTDataFrame
     src/RCutFlowReport.cxx
     src/RDataFrame.cxx
     src/RDatasetSpec.cxx
+    src/RDataSource.cxx
     src/RDFActionHelpers.cxx
     src/RDFColumnReaderUtils.cxx
     src/RDFColumnRegister.cxx
+    src/RDFColumnReaderUtils.cxx
     src/RDFDisplay.cxx
     src/RDFGraphUtils.cxx
     src/RDFHistoModels.cxx
     src/RDFInterfaceUtils.cxx
+    src/RDFSnapshotHelpers.cxx
     src/RDFUtils.cxx
     src/RDFHelpers.cxx
     src/RFilterBase.cxx
@@ -129,12 +131,14 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTDataFrame
     src/RSample.cxx
     src/RTreeColumnReader.cxx
     src/RResultPtr.cxx
+    src/RTTreeDS.cxx
     src/RVariationBase.cxx
     src/RVariationReader.cxx
     src/RVariationsDescription.cxx
     src/RRootDS.cxx
     src/RTrivialDS.cxx
     src/RDFDescription.cxx
+    src/RNTupleDS.cxx
   DICTIONARY_OPTIONS
     -writeEmptyRootPCM
     ${RDATAFRAME_EXTRA_INCLUDES}
@@ -144,6 +148,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTDataFrame
     Hist
     RIO
     ROOTVecOps
+    ROOTNTuple
     ${RDATAFRAME_EXTRA_DEPS}
   ${EXTRA_DICT_OPTS}
 )
@@ -160,18 +165,10 @@ if(sqlite)
   target_link_libraries(ROOTDataFrame PRIVATE ${SQLITE_LIBRARIES})
 endif()
 
-if(root7)
-  target_sources(ROOTDataFrame PRIVATE src/RNTupleDS.cxx)
-endif(root7)
-
 if(MSVC)
   target_compile_definitions(ROOTDataFrame PRIVATE _USE_MATH_DEFINES)
 endif()
 
-if(builtin_nlohmannjson)
-  target_include_directories(ROOTDataFrame PRIVATE ${CMAKE_SOURCE_DIR}/builtins)
-else()
-  target_link_libraries(ROOTDataFrame PRIVATE nlohmann_json::nlohmann_json)
-endif()
+target_link_libraries(ROOTDataFrame PRIVATE nlohmann_json::nlohmann_json)
 
 ROOT_ADD_TEST_SUBDIRECTORY(test)

@@ -82,10 +82,10 @@ endforeach()
 
 set(CLANG_RESOURCE_DIR_STEM)
 if (builtin_clang)
-  set(CLANG_RESOURCE_DIR_STEM ${CMAKE_BINARY_DIR}/interpreter/llvm-project/llvm/${CMAKE_CFG_INTDIR}/lib/clang)
+  set(CLANG_RESOURCE_DIR_STEM ${CMAKE_BINARY_DIR}/interpreter/llvm-project/llvm/${CMAKE_CFG_INTDIR}/lib${LLVM_LIBDIR_SUFFIX}/clang)
   set(CLANG_RESOURCE_DIR_VERSION ${LLVM_VERSION_MAJOR})
 else ()
-  set(CLANG_RESOURCE_DIR_STEM ${LLVM_LIBRARY_DIR}/clang)
+  set(CLANG_RESOURCE_DIR_STEM ${CLANG_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}/clang)
   # A user can define a clang version to use, otherwise find it (but will error if more than one version is present)
   if (NOT DEFINED CLANG_RESOURCE_DIR_VERSION)
     if (NOT EXISTS ${CLANG_RESOURCE_DIR_STEM})
@@ -117,10 +117,9 @@ set(clinginclude ${CMAKE_SOURCE_DIR}/interpreter/cling/include)
 set(custom_modulemaps)
 if (runtime_cxxmodules)
   set(custom_modulemaps boost.modulemap tinyxml2.modulemap cuda.modulemap module.modulemap.build)
-  # FIXME: We should install vc.modulemap only when Vc is found (Vc_FOUND) but
-  # some systems install it under /usr/include/Vc/Vc which allows rootcling to
-  # discover it and assert that the modulemap is not found.
-  set(custom_modulemaps ${custom_modulemaps} vc.modulemap)
+  if(vc)
+    set(custom_modulemaps ${custom_modulemaps} vc.modulemap)
+  endif()
 
   # We need to override the default modulemap because instead of producing a
   # single std.pcm, produces hundreds of pcms. This changed with MacOSX14.4.sdk
@@ -130,7 +129,18 @@ if (runtime_cxxmodules)
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 15.0.0.15000309)
       set(custom_modulemaps ${custom_modulemaps} std_darwin.MacOSX14.2.sdk.modulemap)
     else()
-      set(custom_modulemaps ${custom_modulemaps} std_darwin.modulemap)
+      set(GENERATED_MODULEMAP ${CMAKE_CURRENT_BINARY_DIR}/std_darwin.modulemap)
+
+      add_custom_command(
+        OUTPUT ${GENERATED_MODULEMAP}
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/cmake/scripts/std_modulemap_darwin_fix.py ${GENERATED_MODULEMAP}
+        DEPENDS ${PROJECT_SOURCE_DIR}/cmake/scripts/std_modulemap_darwin_fix.py
+        COMMENT "Generating wrapped std modulemap for macOS SDK"
+      )
+      add_custom_target(generate_std_modulemap DEPENDS ${GENERATED_MODULEMAP})
+      list(APPEND copy_commands COMMAND ${CMAKE_COMMAND} -E copy ${GENERATED_MODULEMAP} ${CMAKE_BINARY_DIR}/etc/cling/std_darwin.modulemap)
+      list(APPEND files_to_copy ${GENERATED_MODULEMAP})
+      install(FILES ${CMAKE_BINARY_DIR}/etc/cling/std_darwin.modulemap DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/cling)
     endif()
   endif()
 
@@ -204,6 +214,9 @@ else()
         COMMENT "Copying LLVM resource and header files")
 endif()
 add_custom_target(LLVMRES DEPENDS ${stamp_file} CLING)
+if(GENERATED_MODULEMAP)
+  add_dependencies(LLVMRES generate_std_modulemap)
+endif()
 # CLING is a shorthand for CLING_LIBRARIES and some other clang-specific
 # dependencies which ensure the correct order of building. Then the cling header
 # files (such as RuntimeUniverse.h) are moved to a semi-private place in ROOT

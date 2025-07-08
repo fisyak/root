@@ -29,11 +29,8 @@ enum class ESnapshotOutputFormat {
 struct RSnapshotOptions {
    using ECAlgo = ROOT::RCompressionSetting::EAlgorithm::EValues;
    RSnapshotOptions() = default;
-   RSnapshotOptions(const RSnapshotOptions &) = default;
-   RSnapshotOptions(RSnapshotOptions &&) = default;
    RSnapshotOptions(std::string_view mode, ECAlgo comprAlgo, int comprLevel, int autoFlush, int splitLevel, bool lazy,
-                    bool overwriteIfExists = false, bool vector2RVec = true,
-                    const std::optional<int> &basketSize = std::nullopt,
+                    bool overwriteIfExists = false, bool vector2RVec = true, int basketSize = -1,
                     ESnapshotOutputFormat outputFormat = ESnapshotOutputFormat::kDefault)
       : fMode(mode),
         fCompressionAlgorithm(comprAlgo),
@@ -56,7 +53,7 @@ struct RSnapshotOptions {
    bool fLazy = false;                              ///< Do not start the event loop when Snapshot is called
    bool fOverwriteIfExists = false;  ///< If fMode is "UPDATE", overwrite object in output file if it already exists
    bool fVector2RVec = true;         ///< If set to true will convert std::vector columns to RVec when saving to disk
-   std::optional<int> fBasketSize{}; ///< Set a custom basket size option. For more details, see
+   int fBasketSize = -1;             ///< Set a custom basket size option. For more details, see
                                      ///< https://root.cern/manual/trees/#baskets-clusters-and-the-tree-header
    ESnapshotOutputFormat fOutputFormat = ESnapshotOutputFormat::kDefault; ///< Which data format to write to
 };

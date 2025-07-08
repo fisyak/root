@@ -24,9 +24,11 @@ function showProgress(msg, tmout, click_handle) {
       return box.remove();
    }
 
-   if ((arguments.length === 0) || !msg) {
-      if ((tmout !== -1) || (!box.empty() && box.property('with_timeout'))) box.remove();
-      if (modal) modal();
+   if (!arguments.length || !msg) {
+      if ((tmout !== -1) || (!box.empty() && box.property('with_timeout')))
+         box.remove();
+      if (modal)
+         modal();
       return;
    }
 
@@ -74,7 +76,7 @@ function closeCurrentWindow() {
 /** @summary Tries to open ui5
   * @private */
 function tryOpenOpenUI(sources, args) {
-   if (!sources || (sources.length === 0)) {
+   if (!sources?.length) {
       if (isFunc(args.rejectFunc)) {
          args.rejectFunc(Error('openui5 was not possible to load'));
          args.rejectFunc = null;
@@ -88,6 +90,9 @@ function tryOpenOpenUI(sources, args) {
    if ((src.indexOf('roothandler') === 0) && (src.indexOf('://') < 0))
       src = src.replace(/:\//g, '://');
 
+   if (settings.Debug)
+      console.log('Try openui5 from ' + src);
+
    const element = document.createElement('script');
    element.setAttribute('type', 'text/javascript');
    element.setAttribute('id', 'sap-ui-bootstrap');
@@ -97,8 +102,8 @@ function tryOpenOpenUI(sources, args) {
    element.setAttribute('src', src + (args.ui5dbg ? 'resources/sap-ui-core-dbg.js' : 'resources/sap-ui-core.js')); // latest openui5 version
 
    element.setAttribute('data-sap-ui-libs', args.openui5libs ?? 'sap.m, sap.ui.layout, sap.ui.unified, sap.ui.commons');
-
-   element.setAttribute('data-sap-ui-theme', args.openui5theme || 'sap_belize');
+   // element.setAttribute('data-sap-ui-language', args.openui5language ?? 'en');
+   element.setAttribute('data-sap-ui-theme', args.openui5theme || (settings.DarkMode ? 'sap_fiori_3_dark' : 'sap_fiori_3'));
    element.setAttribute('data-sap-ui-compatVersion', 'edge');
    element.setAttribute('data-sap-ui-async', 'true');
    // element.setAttribute('data-sap-ui-bindingSyntax', 'complex');
@@ -115,7 +120,7 @@ function tryOpenOpenUI(sources, args) {
    };
 
    element.onload = function() {
-      console.log(`Load openui5 from ${src}`);
+      args.load_src = src;
    };
 
    document.head.appendChild(element);
@@ -130,7 +135,8 @@ async function loadOpenui5(args) {
    if (typeof globalThis.sap === 'object')
       return globalThis.sap;
 
-   if (!args) args = {};
+   if (!args)
+      args = {};
 
    let rootui5sys = source_dir.replace(/jsrootsys/g, 'rootui5sys');
 
@@ -143,7 +149,7 @@ async function loadOpenui5(args) {
    }
 
    const openui5_sources = [];
-   let openui5_dflt = 'https://openui5.hana.ondemand.com/' + (browser.qt5 ? '1.108.35/' : '1.128.0/'),
+   let openui5_dflt = 'https://openui5.hana.ondemand.com/1.135.0/',
        openui5_root = rootui5sys ? rootui5sys + 'distribution/' : '';
 
    if (isStr(args.openui5src)) {
@@ -157,7 +163,7 @@ async function loadOpenui5(args) {
    } else if (args.ui5dbg)
       openui5_root = ''; // exclude ROOT version in debug mode
 
-   if (openui5_root && (openui5_sources.indexOf(openui5_root) < 0) && !browser.qt5)
+   if (openui5_root && (openui5_sources.indexOf(openui5_root) < 0))
       openui5_sources.push(openui5_root);
    if (openui5_dflt && (openui5_sources.indexOf(openui5_dflt) < 0))
       openui5_sources.push(openui5_dflt);
@@ -167,6 +173,8 @@ async function loadOpenui5(args) {
       args.rejectFunc = reject;
 
       globalThis.completeUI5Loading = function() {
+         console.log(`Load openui5 version ${globalThis.sap.ui.version} from ${args.load_src}`);
+
          globalThis.sap.ui.loader.config({
             paths: {
                jsroot: source_dir,
@@ -178,6 +186,8 @@ async function loadOpenui5(args) {
             args.resolveFunc(globalThis.sap);
             args.resolveFunc = null;
          }
+
+         delete globalThis.completeUI5Loading;
       };
 
       tryOpenOpenUI(openui5_sources, args);
@@ -218,6 +228,10 @@ const ToolbarIcons = {
             'M172.768,256.149H51.726c-28.524,0-51.724,23.205-51.724,51.726v89.915c0,28.504,23.2,51.715,51.724,51.715h121.042   c28.518,0,51.724-23.199,51.724-51.715v-89.915C224.486,279.354,201.286,256.149,172.768,256.149z M177.512,397.784   c0,2.615-2.124,4.736-4.75,4.736H51.726c-2.626-0.006-4.751-2.121-4.751-4.736v-89.909c0-2.626,2.125-4.753,4.751-4.753h121.042 c2.62,0,4.75,2.116,4.75,4.753L177.512,397.784L177.512,397.784z '+
             'M460.293,256.149H339.237c-28.521,0-51.721,23.199-51.721,51.726v89.915c0,28.504,23.2,51.715,51.721,51.715h121.045   c28.521,0,51.721-23.199,51.721-51.715v-89.915C512.002,279.354,488.802,256.149,460.293,256.149z M465.03,397.784   c0,2.615-2.122,4.736-4.748,4.736H339.237c-2.614,0-4.747-2.121-4.747-4.736v-89.909c0-2.626,2.121-4.753,4.747-4.753h121.045 c2.615,0,4.748,2.116,4.748,4.753V397.784z'
    },
+
+   /* eslint-enable @stylistic/js/key-spacing */
+   /* eslint-enable @stylistic/js/comma-spacing */
+   /* eslint-enable @stylistic/js/object-curly-spacing */
 
    createSVG(group, btn, size, title, arg) {
       const use_dark = (arg === true) || (arg === false) ? arg : settings.DarkMode,
@@ -295,7 +309,7 @@ function registerForResize(handle, delay) {
             const mdi = node.property('mdi');
             if (isFunc(mdi?.checkMDIResize))
                mdi.checkMDIResize();
-             else
+            else
                resize(node.node());
          }
       }
@@ -317,17 +331,17 @@ function detectRightButton(event) {
 /** @summary Add move handlers for drawn element
   * @private */
 function addMoveHandler(painter, enabled = true, hover_handler = false) {
-   if (!settings.MoveResize || painter.isBatchMode() || !painter.draw_g)
+   if (!settings.MoveResize || painter.isBatchMode() || !painter.getG())
       return;
 
    if (painter.getPadPainter()?.isEditable() === false)
       enabled = false;
 
    if (!enabled) {
-      if (painter.draw_g.property('assigned_move')) {
+      if (painter.getG().property('assigned_move')) {
          const drag_move = d3_drag().subject(Object);
          drag_move.on('start', null).on('drag', null).on('end', null);
-         painter.draw_g
+         painter.getG()
                .style('cursor', null)
                .property('assigned_move', null)
                .call(drag_move);
@@ -335,7 +349,7 @@ function addMoveHandler(painter, enabled = true, hover_handler = false) {
       return;
    }
 
-   if (painter.draw_g.property('assigned_move'))
+   if (painter.getG().property('assigned_move'))
       return;
 
    const drag_move = d3_drag().subject(Object);
@@ -344,45 +358,45 @@ function addMoveHandler(painter, enabled = true, hover_handler = false) {
    drag_move
       .on('start', function(evnt) {
          move_disabled = this.moveEnabled ? !this.moveEnabled() : false;
-         if (move_disabled) return;
-         if (detectRightButton(evnt.sourceEvent)) return;
+         if (move_disabled || detectRightButton(evnt.sourceEvent))
+            return;
          evnt.sourceEvent.preventDefault();
          evnt.sourceEvent.stopPropagation();
-         const pos = d3_pointer(evnt, this.draw_g.node());
+         const pos = d3_pointer(evnt, this.getG().node());
          not_changed = true;
          if (this.moveStart)
-            this.moveStart(pos[0], pos[1]);
+            this.moveStart(pos[0], pos[1], evnt.sourceEvent);
       }.bind(painter)).on('drag', function(evnt) {
          if (move_disabled) return;
          evnt.sourceEvent.preventDefault();
          evnt.sourceEvent.stopPropagation();
          not_changed = false;
          if (this.moveDrag)
-            this.moveDrag(evnt.dx, evnt.dy);
+            this.moveDrag(evnt.dx, evnt.dy, evnt.sourceEvent);
       }.bind(painter)).on('end', function(evnt) {
          if (move_disabled) return;
          evnt.sourceEvent.preventDefault();
          evnt.sourceEvent.stopPropagation();
          if (this.moveEnd)
-            this.moveEnd(not_changed);
+            this.moveEnd(not_changed, evnt.sourceEvent);
 
          let arg = null;
          if (not_changed) {
             // if not changed - provide click position
-            const pos = d3_pointer(evnt, this.draw_g.node());
+            const pos = d3_pointer(evnt, this.getG().node());
             arg = { x: pos[0], y: pos[1], dbl: false };
          }
          this.getPadPainter()?.selectObjectPainter(this, arg);
       }.bind(painter));
 
-   painter.draw_g
+   painter.getG()
           .style('cursor', hover_handler ? 'pointer' : 'move')
           .property('assigned_move', true)
           .call(drag_move);
 
    if (hover_handler) {
-      painter.draw_g.on('mouseenter', () => painter.draw_g.style('text-decoration', 'underline'))
-                    .on('mouseleave', () => painter.draw_g.style('text-decoration', null));
+      painter.getG().on('mouseenter', () => painter.getG().style('text-decoration', 'underline'))
+                    .on('mouseleave', () => painter.getG().style('text-decoration', null));
    }
 }
 
@@ -527,7 +541,7 @@ function getBinFileContent(content) {
 /** @summary Returns type of file content
   * @private */
 function getContentType(content) {
-   if (content.indexOf('data:') !== 0)
+   if (content.indexOf('data:'))
       return '';
 
    const p = content.indexOf(';');

@@ -23,9 +23,12 @@
 
 #include "RooEvaluatorWrapper.h"
 #include "RooFit/BatchModeDataHelpers.h"
+#include "RooFitImplHelpers.h"
 
 #include <TROOT.h>
 #include <TSystem.h>
+
+#include <Math/Util.h>
 
 #include <fstream>
 #include <set>
@@ -96,6 +99,8 @@ RooFuncWrapper::RooFuncWrapper(const char *name, const char *title, RooAbsReal &
    gInterpreter->Declare("#pragma cling optimize(2)");
 
    // Declare the function and create its derivative.
+   auto print = [](std::string const &msg) { oocoutI(nullptr, Fitting) << msg << std::endl; };
+   ROOT::Math::Util::TimingScope timingScope(print, "Function JIT time:");
    _funcName = ctx.buildFunction(obj, nodeOutputSizes);
    _func = reinterpret_cast<Func>(gInterpreter->ProcessLine((_funcName + ";").c_str()));
 
@@ -140,6 +145,9 @@ RooFuncWrapper::loadParamsAndData(RooArgSet const &paramSet, const RooAbsData *d
    // Extract parameters
    for (auto *param : paramSet) {
       if (!dynamic_cast<RooAbsReal *>(param)) {
+         if (param->isConstant()) {
+            continue;
+         }
          std::stringstream errorMsg;
          errorMsg << "In creation of function " << GetName()
                   << " wrapper: input param expected to be of type RooAbsReal.";
@@ -157,6 +165,7 @@ RooFuncWrapper::loadParamsAndData(RooArgSet const &paramSet, const RooAbsData *d
 
 void RooFuncWrapper::createGradient()
 {
+#ifdef ROOFIT_CLAD
    std::string gradName = _funcName + "_grad_0";
    std::string requestName = _funcName + "_req";
 
@@ -171,7 +180,14 @@ void RooFuncWrapper::createGradient()
                       "}\n"
                       "#pragma clad OFF";
    // clang-format on
-   if (!gInterpreter->Declare(requestFuncStrm.str().c_str())) {
+   auto print = [](std::string const &msg) { oocoutI(nullptr, Fitting) << msg << std::endl; };
+
+   bool cladSuccess = false;
+   {
+      ROOT::Math::Util::TimingScope timingScope(print, "Gradient generation time:");
+      cladSuccess = !gInterpreter->Declare(requestFuncStrm.str().c_str());
+   }
+   if (cladSuccess) {
       std::stringstream errorMsg;
       errorMsg << "Function " << GetName() << " could not be differentiated. See above for details.";
       oocoutE(nullptr, InputArguments) << errorMsg.str() << std::endl;
@@ -182,9 +198,17 @@ void RooFuncWrapper::createGradient()
    // resolve to the one that we want. Without the static_cast, getting the
    // function pointer would be ambiguous.
    std::stringstream ss;
+   ROOT::Math::Util::TimingScope timingScope(print, "Gradient IR to machine code time:");
    ss << "static_cast<void (*)(double *, double const *, double const *, double *)>(" << gradName << ");";
    _grad = reinterpret_cast<Grad>(gInterpreter->ProcessLine(ss.str().c_str()));
    _hasGradient = true;
+#else
+   _hasGradient = false;
+   std::stringstream errorMsg;
+   errorMsg << "Function " << GetName() << " could not be differentiated since ROOT was built without Clad support.";
+   oocoutE(nullptr, InputArguments) << errorMsg.str() << std::endl;
+   throw std::runtime_error(errorMsg.str().c_str());
+#endif
 }
 
 void RooFuncWrapper::gradient(double *out) const

@@ -1,7 +1,7 @@
 
 #include "Utils.h"
 
-#include "clang/Interpreter/CppInterOp.h"
+#include "CppInterOp/CppInterOp.h"
 
 #ifdef CPPINTEROP_USE_CLING
 #include "cling/Interpreter/Interpreter.h"
@@ -13,6 +13,7 @@
 
 #include "clang/Basic/Version.h"
 
+#include <clang-c/CXErrorCode.h>
 #include "clang-c/CXCppInterOp.h"
 
 #include "llvm/ADT/SmallString.h"
@@ -58,6 +59,9 @@ TEST(InterpreterTest, DebugFlag) {
 }
 
 TEST(InterpreterTest, Evaluate) {
+#ifdef EMSCRIPTEN
+  GTEST_SKIP() << "Test fails for Emscipten builds";
+#endif
 #ifdef _WIN32
   GTEST_SKIP() << "Disabled on Windows. Needs fixing.";
 #endif
@@ -76,22 +80,107 @@ TEST(InterpreterTest, Evaluate) {
   EXPECT_FALSE(HadError) ;
 }
 
+TEST(InterpreterTest, DeleteInterpreter) {
+  auto* I1 = Cpp::CreateInterpreter();
+  auto* I2 = Cpp::CreateInterpreter();
+  auto* I3 = Cpp::CreateInterpreter();
+  EXPECT_TRUE(I1 && I2 && I3) << "Failed to create interpreters";
+
+  EXPECT_EQ(I3, Cpp::GetInterpreter()) << "I3 is not active";
+
+  EXPECT_TRUE(Cpp::DeleteInterpreter(nullptr));
+  EXPECT_EQ(I2, Cpp::GetInterpreter());
+
+  auto* I4 = reinterpret_cast<void*>(static_cast<std::uintptr_t>(~0U));
+  EXPECT_FALSE(Cpp::DeleteInterpreter(I4));
+
+  EXPECT_TRUE(Cpp::DeleteInterpreter(I1));
+  EXPECT_EQ(I2, Cpp::GetInterpreter()) << "I2 is not active";
+}
+
+TEST(InterpreterTest, ActivateInterpreter) {
+#ifdef EMSCRIPTEN_STATIC_LIBRARY
+  GTEST_SKIP() << "Test fails for Emscipten static library build";
+#endif
+  EXPECT_FALSE(Cpp::ActivateInterpreter(nullptr));
+  auto* Cpp14 = Cpp::CreateInterpreter({"-std=c++14"});
+  auto* Cpp17 = Cpp::CreateInterpreter({"-std=c++17"});
+  auto* Cpp20 = Cpp::CreateInterpreter({"-std=c++20"});
+
+  EXPECT_TRUE(Cpp14 && Cpp17 && Cpp20);
+  EXPECT_TRUE(Cpp::Evaluate("__cplusplus") == 202002L)
+      << "Failed to activate C++20";
+
+  auto* UntrackedI = reinterpret_cast<void*>(static_cast<std::uintptr_t>(~0U));
+  EXPECT_FALSE(Cpp::ActivateInterpreter(UntrackedI));
+
+  EXPECT_TRUE(Cpp::ActivateInterpreter(Cpp14));
+  EXPECT_TRUE(Cpp::Evaluate("__cplusplus") == 201402L);
+
+  Cpp::DeleteInterpreter(Cpp14);
+  EXPECT_EQ(Cpp::GetInterpreter(), Cpp20);
+
+  EXPECT_TRUE(Cpp::ActivateInterpreter(Cpp17));
+  EXPECT_TRUE(Cpp::Evaluate("__cplusplus") == 201703L);
+}
+
 TEST(InterpreterTest, Process) {
+#ifdef EMSCRIPTEN_STATIC_LIBRARY
+  GTEST_SKIP() << "Test fails for Emscipten static library build";
+#endif
 #ifdef _WIN32
   GTEST_SKIP() << "Disabled on Windows. Needs fixing.";
 #endif
   if (llvm::sys::RunningOnValgrind())
     GTEST_SKIP() << "XFAIL due to Valgrind report";
-  Cpp::CreateInterpreter();
+  std::vector<const char*> interpreter_args = { "-include", "new" };
+  auto* I = Cpp::CreateInterpreter(interpreter_args);
   EXPECT_TRUE(Cpp::Process("") == 0);
   EXPECT_TRUE(Cpp::Process("int a = 12;") == 0);
   EXPECT_FALSE(Cpp::Process("error_here;") == 0);
   // Linker/JIT error.
   EXPECT_FALSE(Cpp::Process("int f(); int res = f();") == 0);
+
+  // C API
+  auto* CXI = clang_createInterpreterFromRawPtr(I);
+  clang_Interpreter_declare(CXI, "#include <iostream>", false);
+  clang_Interpreter_process(CXI, "int c = 42;");
+  auto* CXV = clang_createValue();
+  auto Res = clang_Interpreter_evaluate(CXI, "c", CXV);
+  EXPECT_EQ(Res, CXError_Success);
+  clang_Value_dispose(CXV);
+  clang_Interpreter_dispose(CXI);
+}
+
+TEST(InterpreterTest, EmscriptenExceptionHandling) {
+#ifndef EMSCRIPTEN
+  GTEST_SKIP() << "This test is intended to check exception handling for Emscripten builds.";
+#endif
+
+  std::vector<const char*> Args = {
+    "-std=c++20",
+    "-v",
+    "-fexceptions",
+    "-fcxx-exceptions",
+    "-mllvm", "-enable-emscripten-cxx-exceptions",
+    "-mllvm", "-enable-emscripten-sjlj"
+  };
+
+  Cpp::CreateInterpreter(Args);
+
+  const char* tryCatchCode = R"(
+    try {
+      throw 1;
+    } catch (...) {
+      0;
+    }
+  )";
+
+  EXPECT_TRUE(Cpp::Process(tryCatchCode) == 0);
 }
 
 TEST(InterpreterTest, CreateInterpreter) {
-  auto I = Cpp::CreateInterpreter();
+  auto* I = Cpp::CreateInterpreter();
   EXPECT_TRUE(I);
   // Check if the default standard is c++14
 
@@ -115,17 +204,40 @@ TEST(InterpreterTest, CreateInterpreter) {
 
 #ifndef CPPINTEROP_USE_CLING
   // C API
-  auto CXI = clang_createInterpreterFromRawPtr(I);
+  auto* CXI = clang_createInterpreterFromRawPtr(I);
   auto CLI = clang_Interpreter_getClangInterpreter(CXI);
   EXPECT_TRUE(CLI);
+
   auto I2 = clang_Interpreter_takeInterpreterAsPtr(CXI);
   EXPECT_EQ(I, I2);
   clang_Interpreter_dispose(CXI);
 #endif
 }
 
+#ifndef CPPINTEROP_USE_CLING
+TEST(InterpreterTest, CreateInterpreterCAPI) {
+  const char* argv[] = {"-std=c++17"};
+  auto *CXI = clang_createInterpreter(argv, 1);
+  auto CLI = clang_Interpreter_getClangInterpreter(CXI);
+  EXPECT_TRUE(CLI);
+  clang_Interpreter_dispose(CXI);
+}
+
+TEST(InterpreterTest, CreateInterpreterCAPIFailure) {
+#ifdef _WIN32
+  GTEST_SKIP() << "Disabled on Windows. Needs fixing.";
+#endif
+  const char* argv[] = {"-fsyntax-only", "-Xclang", "-invalid-plugin"};
+  auto *CXI = clang_createInterpreter(argv, 3);
+  EXPECT_EQ(CXI, nullptr);
+}
+#endif
+
 #ifdef LLVM_BINARY_DIR
 TEST(InterpreterTest, DetectResourceDir) {
+#ifdef EMSCRIPTEN
+  GTEST_SKIP() << "Test fails for Emscipten builds";
+#endif
 #else
 TEST(InterpreterTest, DISABLED_DetectResourceDir) {
 #endif // LLVM_BINARY_DIR
@@ -145,6 +257,9 @@ TEST(InterpreterTest, DISABLED_DetectResourceDir) {
 }
 
 TEST(InterpreterTest, DetectSystemCompilerIncludePaths) {
+#ifdef EMSCRIPTEN
+  GTEST_SKIP() << "Test fails for Emscipten builds";
+#endif
 #ifdef _WIN32
   GTEST_SKIP() << "Disabled on Windows. Needs fixing.";
 #endif
@@ -153,7 +268,7 @@ TEST(InterpreterTest, DetectSystemCompilerIncludePaths) {
   EXPECT_FALSE(includes.empty());
 }
 
-TEST(InterpreterTest, GetIncludePaths) {
+TEST(InterpreterTest, IncludePaths) {
   std::vector<std::string> includes;
   Cpp::GetIncludePaths(includes);
   EXPECT_FALSE(includes.empty());
@@ -169,6 +284,12 @@ TEST(InterpreterTest, GetIncludePaths) {
   Cpp::GetIncludePaths(includes, true, true);
   EXPECT_FALSE(includes.empty());
   EXPECT_TRUE(includes.size() >= len);
+
+  len = includes.size();
+  Cpp::AddIncludePath("/non/existent/");
+  Cpp::GetIncludePaths(includes);
+  EXPECT_NE(std::find(includes.begin(), includes.end(), "/non/existent/"),
+             std::end(includes));
 }
 
 TEST(InterpreterTest, CodeCompletion) {
