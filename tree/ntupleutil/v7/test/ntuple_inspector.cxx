@@ -374,7 +374,6 @@ TEST(RNTupleInspector, ColumnsByType)
    }
 
    auto inspector = RNTupleInspector::Create("ntuple", fileGuard.GetPath());
-
    EXPECT_EQ(2U, inspector->GetColumnsByType(ENTupleColumnType::kSplitInt64).size());
    for (const auto colId : inspector->GetColumnsByType(ENTupleColumnType::kSplitInt64)) {
       EXPECT_EQ(ENTupleColumnType::kSplitInt64, inspector->GetColumnInspector(colId).GetType());
@@ -386,12 +385,42 @@ TEST(RNTupleInspector, ColumnsByType)
    }
 
    EXPECT_EQ(1U, inspector->GetColumnsByType(ENTupleColumnType::kSplitIndex64).size());
-   EXPECT_EQ(1U, inspector->GetColumnsByType(ENTupleColumnType::kSplitIndex64).size());
    for (const auto colId : inspector->GetColumnsByType(ENTupleColumnType::kSplitIndex64)) {
       EXPECT_EQ(ENTupleColumnType::kSplitIndex64, inspector->GetColumnInspector(colId).GetType());
    }
 
    EXPECT_EQ(0U, inspector->GetColumnsByType(ENTupleColumnType::kSplitReal64).size());
+}
+
+TEST(RNTupleInspector, AllColumnsOfField)
+{
+   FileRaii fileGuard("test_ntuple_inspector_all_columns_of_field.root");
+   {
+      auto model = RNTupleModel::Create();
+      auto nFldInt1 = model->MakeField<std::int64_t>("int1");
+      auto nFldInt2 = model->MakeField<std::int64_t>("int2");
+      auto nFldFloat = model->MakeField<float>("float");
+      auto nFldFloatVec = model->MakeField<std::vector<float>>("floatVec");
+
+      auto writeOptions = RNTupleWriteOptions();
+      writeOptions.SetCompression(505);
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath(), writeOptions);
+   }
+
+   auto inspector = RNTupleInspector::Create("ntuple", fileGuard.GetPath());
+
+   EXPECT_EQ(1U, inspector->GetAllColumnsOfField(0).size());
+   EXPECT_EQ(1U, inspector->GetAllColumnsOfField(1).size());
+   for (const auto colId : inspector->GetAllColumnsOfField(0)) {
+      EXPECT_EQ(ENTupleColumnType::kSplitInt64, inspector->GetColumnInspector(colId).GetType());
+   }
+
+   EXPECT_EQ(1U, inspector->GetAllColumnsOfField(2).size());
+   for (const auto colId : inspector->GetAllColumnsOfField(2)) {
+      EXPECT_EQ(ENTupleColumnType::kSplitReal32, inspector->GetColumnInspector(colId).GetType());
+   }
+
+   EXPECT_EQ(2U, inspector->GetAllColumnsOfField(3).size());
 }
 
 TEST(RNTupleInspector, ColumnTypes)
@@ -812,4 +841,24 @@ TEST(RNTupleInspector, MultiColumnRepresentations)
    EXPECT_EQ(1u, px0Inspector.GetNElements());
    EXPECT_EQ(ENTupleColumnType::kReal16, px1Inspector.GetType());
    EXPECT_EQ(1u, px1Inspector.GetNElements());
+}
+
+TEST(RNTupleInspector, FieldTreeAsDot)
+{
+   FileRaii fileGuard("test_ntuple_inspector_fields_tree_as_dot.root");
+   {
+      auto model = RNTupleModel::Create();
+      auto fldFloat1 = model->MakeField<float>("float1");
+      auto fldInt = model->MakeField<std::int32_t>("int");
+      auto writer = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath());
+   }
+   auto inspector = RNTupleInspector::Create("ntuple", fileGuard.GetPath());
+   std::ostringstream dotStream;
+   inspector->PrintFieldTreeAsDot(dotStream);
+   const std::string dot = dotStream.str();
+   const std::string &expected =
+      "digraph D {\nnode[shape=box]\n0[label=<<b>RFieldZero</b>>]\n0->1\n1[label=<<b>Name: "
+      "</b>float1<br></br><b>Type: </b>float<br></br><b>ID: </b>0<br></br>>]\n0->2\n2[label=<<b>Name: "
+      "</b>int<br></br><b>Type: </b>std::int32_t<br></br><b>ID: </b>1<br></br>>]\n}";
+   EXPECT_EQ(dot, expected);
 }

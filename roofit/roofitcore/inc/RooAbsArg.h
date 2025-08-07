@@ -533,7 +533,6 @@ protected:
    virtual bool isValid() const ;
 
    virtual void getParametersHook(const RooArgSet* /*nset*/, RooArgSet* /*list*/, bool /*stripDisconnected*/) const {} ;
-   virtual void getObservablesHook(const RooArgSet* /*nset*/, RooArgSet* /*list*/) const {} ;
 
    void clearValueAndShapeDirty() const {
      _valueDirty=false ;
@@ -666,9 +665,6 @@ private:
   bool _isConstant = false; //! Cached isConstant status
 
   mutable bool _localNoInhibitDirty = false; //! Prevent 'AlwaysDirty' mode for this node
-
-/*   RooArgSet _leafNodeCache ; //! Cached leaf nodes */
-/*   RooArgSet _branchNodeCache //! Cached branch nodes     */
 
   mutable RooWorkspace *_myws = nullptr; //! In which workspace do I live, if any
 

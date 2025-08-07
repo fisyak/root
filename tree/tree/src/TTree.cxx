@@ -100,9 +100,9 @@ It is strongly recommended to persistify those as objects rather than lists of l
    - `I` : a 32 bit signed integer (`Int_t`)
    - `i` : a 32 bit unsigned integer (`UInt_t`)
    - `F` : a 32 bit floating point (`Float_t`)
-   - `f` : a 21 bit floating point with truncated mantissa (`Float16_t`): 1 for the sign, 8 for the exponent and 12 for the mantissa. Can be customized with suffix `[min,max(,nbits)]`.
+   - `f` : a 24 bit (or 32) floating point with truncated mantissa (`Float16_t`, stored as 3 bytes by default or as fixed-point arithmetic 4 bytes Int_t if range is customized; occupies 4 bytes in memory): By default, in disk, only 21 bits are used: 1 for the sign, 8 for the exponent and 12 for the mantissa. Can be customized with suffix `[min,max(,nbits)] `where `nbits` is for the mantissa.
    - `D` : a 64 bit floating point (`Double_t`)
-   - `d` : a 32 bit truncated floating point (`Double32_t`): 1 for the sign, 8 for the exponent and 23 for the mantissa. Can be customized with suffix `[min,max(,nbits)]`.
+   - `d` : a 32 (or 24) bit floating point with truncated mantissa (`Double32_t`, stored as a 4 bytes Float_t by default or as 3 bytes if range is customized; occupies 8 bytes in memory): By default, in disk, 1 bit is used for the sign, 8 for the exponent and 23 for the mantissa. Can be customized to 3 bytes (24 bits) with suffix `[min,max(,nbits)]` where `nbits` is for the mantissa.
    - `L` : a 64 bit signed integer (`Long64_t`)
    - `l` : a 64 bit unsigned integer (`ULong64_t`)
    - `G` : a long signed integer, stored as 64 bit (`Long_t`)
@@ -5998,13 +5998,14 @@ Long64_t TTree::GetEntryNumberWithIndex(Long64_t major, Long64_t minor) const
 ////////////////////////////////////////////////////////////////////////////////
 /// Read entry corresponding to major and minor number.
 ///
-///  The function returns the total number of bytes read.
+///  The function returns the total number of bytes read; -1 if entry not found.
 ///  If the Tree has friend trees, the corresponding entry with
 ///  the index values (major,minor) is read. Note that the master Tree
 ///  and its friend may have different entry serial numbers corresponding
 ///  to (major,minor).
+/// \note See TTreeIndex::GetEntryNumberWithIndex for information about the maximum values accepted for major and minor
 
-Int_t TTree::GetEntryWithIndex(Int_t major, Int_t minor)
+Int_t TTree::GetEntryWithIndex(Long64_t major, Long64_t minor)
 {
    // We already have been visited while recursively looking
    // through the friends tree, let's return.
@@ -7541,16 +7542,14 @@ void TTree::PrintCacheStats(Option_t* option) const
 /// filename must contain a valid class implementation derived from TSelector,
 /// where TSelector has the following member functions:
 ///
-/// - `Begin()`:         called every time a loop on the tree starts,
-///                      a convenient place to create your histograms.
-/// - `SlaveBegin()`:    called after Begin(), when on PROOF called only on the
-///                      slave servers.
-/// - `Process()`:       called for each event, in this function you decide what
-///                      to read and fill your histograms.
-/// - `SlaveTerminate`:  called at the end of the loop on the tree, when on PROOF
-///                      called only on the slave servers.
-/// - `Terminate()`:     called at the end of the loop on the tree,
-///                      a convenient place to draw/fit your histograms.
+/// - `Begin()`:          called every time a loop on the tree starts,
+///                       a convenient place to create your histograms.
+/// - `SlaveBegin()`:     called after Begin()
+/// - `Process()`:        called for each event, in this function you decide what
+///                       to read and fill your histograms.
+/// - `SlaveTerminate()`: called at the end of the loop on the tree
+/// - `Terminate()`:      called at the end of the loop on the tree,
+///                       a convenient place to draw/fit your histograms.
 ///
 /// If filename is of the form file.C, the file will be interpreted.
 ///
@@ -7620,16 +7619,14 @@ Long64_t TTree::Process(const char* filename, Option_t* option, Long64_t nentrie
 ///
 ///   The TSelector class has the following member functions:
 ///
-/// - `Begin()`:        called every time a loop on the tree starts,
-///                     a convenient place to create your histograms.
-/// - `SlaveBegin()`:   called after Begin(), when on PROOF called only on the
-///                     slave servers.
-/// - `Process()`:      called for each event, in this function you decide what
-///                     to read and fill your histograms.
-/// - `SlaveTerminate`: called at the end of the loop on the tree, when on PROOF
-///                     called only on the slave servers.
-/// - `Terminate()`:    called at the end of the loop on the tree,
-///                     a convenient place to draw/fit your histograms.
+/// - `Begin()`:          called every time a loop on the tree starts,
+///                       a convenient place to create your histograms.
+/// - `SlaveBegin()`:     called after Begin()
+/// - `Process()`:        called for each event, in this function you decide what
+///                       to read and fill your histograms.
+/// - `SlaveTerminate()`: called at the end of the loop on the tree
+/// - `Terminate()`:      called at the end of the loop on the tree,
+///                       a convenient place to draw/fit your histograms.
 ///
 ///  If the Tree (Chain) has an associated EventList, the loop is on the nentries
 ///  of the EventList, starting at firstentry, otherwise the loop is on the
