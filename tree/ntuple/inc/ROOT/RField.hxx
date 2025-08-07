@@ -79,7 +79,7 @@ public:
       /// The type given to RFieldBase::Create was unknown
       kUnknownType,
       /// The field could not be created because its descriptor had an unknown structural role
-      kUnknownStructure
+      kUnknownStructure,
    };
 
 private:
@@ -297,7 +297,7 @@ public:
 template <typename T>
 class RField<T, typename std::enable_if<std::is_enum_v<T>>::type> final : public REnumField {
 public:
-   static std::string TypeName() { return ROOT::Internal::GetDemangledTypeName(typeid(T)); }
+   static std::string TypeName() { return ROOT::Internal::GetRenormalizedTypeName(typeid(T)); }
    RField(std::string_view name) : REnumField(name, TypeName()) {}
    RField(RField &&other) = default;
    RField &operator=(RField &&other) = default;
@@ -352,12 +352,13 @@ protected:
 
    void ConstructValue(void *where) const final { new (where) T{0}; }
 
-public:
    RSimpleField(std::string_view name, std::string_view type)
       : RFieldBase(name, type, ROOT::ENTupleStructure::kLeaf, true /* isSimple */)
    {
       fTraits |= kTraitTrivialType;
    }
+
+public:
    RSimpleField(RSimpleField &&other) = default;
    RSimpleField &operator=(RSimpleField &&other) = default;
    ~RSimpleField() override = default;
@@ -393,12 +394,14 @@ namespace ROOT {
 
 template <typename SizeT>
 class RField<RNTupleCardinality<SizeT>> final : public RCardinalityField {
+   using CardinalityType = RNTupleCardinality<SizeT>;
+
 protected:
    std::unique_ptr<ROOT::RFieldBase> CloneImpl(std::string_view newName) const final
    {
-      return std::make_unique<RField<RNTupleCardinality<SizeT>>>(newName);
+      return std::make_unique<RField>(newName);
    }
-   void ConstructValue(void *where) const final { new (where) RNTupleCardinality<SizeT>(0); }
+   void ConstructValue(void *where) const final { new (where) CardinalityType(0); }
 
    /// Get the number of elements of the collection identified by globalIndex
    void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final
@@ -406,7 +409,7 @@ protected:
       RNTupleLocalIndex collectionStart;
       ROOT::NTupleSize_t size;
       fPrincipalColumn->GetCollectionInfo(globalIndex, &collectionStart, &size);
-      *static_cast<RNTupleCardinality<SizeT> *>(to) = size;
+      *static_cast<CardinalityType *>(to) = size;
    }
 
    /// Get the number of elements of the collection identified by clusterIndex
@@ -415,7 +418,7 @@ protected:
       RNTupleLocalIndex collectionStart;
       ROOT::NTupleSize_t size;
       fPrincipalColumn->GetCollectionInfo(localIndex, &collectionStart, &size);
-      *static_cast<RNTupleCardinality<SizeT> *>(to) = size;
+      *static_cast<CardinalityType *>(to) = size;
    }
 
    std::size_t ReadBulkImpl(const RBulkSpec &bulkSpec) final
@@ -424,7 +427,7 @@ protected:
       ROOT::NTupleSize_t collectionSize;
       fPrincipalColumn->GetCollectionInfo(bulkSpec.fFirstIndex, &collectionStart, &collectionSize);
 
-      auto typedValues = static_cast<RNTupleCardinality<SizeT> *>(bulkSpec.fValues);
+      auto typedValues = static_cast<CardinalityType *>(bulkSpec.fValues);
       typedValues[0] = collectionSize;
 
       auto lastOffset = collectionStart.GetIndexInCluster() + collectionSize;
@@ -452,8 +455,8 @@ public:
    RField &operator=(RField &&other) = default;
    ~RField() final = default;
 
-   size_t GetValueSize() const final { return sizeof(RNTupleCardinality<SizeT>); }
-   size_t GetAlignment() const final { return alignof(RNTupleCardinality<SizeT>); }
+   size_t GetValueSize() const final { return sizeof(CardinalityType); }
+   size_t GetAlignment() const final { return alignof(CardinalityType); }
 };
 
 /// TObject requires special handling of the fBits and fUniqueID members
@@ -495,8 +498,7 @@ public:
    void AcceptVisitor(ROOT::Detail::RFieldVisitor &visitor) const final;
 };
 
-// Has to be implemented after the definition of all RField<T> types
-// The void type is specialized in RField.cxx
+// Have to be implemented after the definition of all RField<T> types
 
 namespace Internal {
 
@@ -526,6 +528,8 @@ std::unique_ptr<T, typename RFieldBase::RCreateObjectDeleter<T>::deleter> RField
    }
    return std::unique_ptr<T>(static_cast<T *>(CreateObjectRawPtr()));
 }
+
+// The void type is specialized in RField.cxx
 
 template <>
 struct RFieldBase::RCreateObjectDeleter<void> {

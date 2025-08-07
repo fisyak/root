@@ -30,7 +30,6 @@ if(roofit)
         ROOT/_pythonization/_roofit/_rooarglist.py
         ROOT/_pythonization/_roofit/_rooargset.py
         ROOT/_pythonization/_roofit/_roocategory.py
-        ROOT/_pythonization/_roofit/_roochi2var.py
         ROOT/_pythonization/_roofit/_roodatahist.py
         ROOT/_pythonization/_roofit/_roodataset.py
         ROOT/_pythonization/_roofit/_roodecays.py
@@ -39,7 +38,6 @@ if(roofit)
         ROOT/_pythonization/_roofit/_roojsonfactorywstool.py
         ROOT/_pythonization/_roofit/_roomcstudy.py
         ROOT/_pythonization/_roofit/_roomsgservice.py
-        ROOT/_pythonization/_roofit/_roonllvar.py
         ROOT/_pythonization/_roofit/_rooprodpdf.py
         ROOT/_pythonization/_roofit/_roorealvar.py
         ROOT/_pythonization/_roofit/_roosimultaneous.py
@@ -227,22 +225,7 @@ endif()
 
 if(NOT MSVC)
   # Make sure that relative RUNPATH to main ROOT libraries is always correct.
-
-  file(RELATIVE_PATH pymoduledir_to_libdir_build ${pymoduledir_build} "${localruntimedir}")
-  file(RELATIVE_PATH pymoduledir_to_libdir_install ${CMAKE_INSTALL_PREFIX}/${pymoduledir_install} "${CMAKE_INSTALL_FULL_LIBDIR}")
-
-  if(APPLE)
-    set_target_properties(${libname} PROPERTIES
-        BUILD_RPATH "@loader_path/${pymoduledir_to_libdir_build}"
-        INSTALL_RPATH "@loader_path/${pymoduledir_to_libdir_install}"
-    )
-  else()
-    set_target_properties(${libname} PROPERTIES
-        BUILD_RPATH "$ORIGIN/${pymoduledir_to_libdir_build}"
-        INSTALL_RPATH "$ORIGIN/${pymoduledir_to_libdir_install}"
-    )
-  endif()
-
+  ROOT_APPEND_LIBDIR_TO_INSTALL_RPATH(${libname} ${pymoduledir_install})
 endif()
 
 # Install library
