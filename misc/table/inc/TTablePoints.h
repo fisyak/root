@@ -15,7 +15,7 @@
 #include "TPoints3DABC.h"
 #include "TTableSorter.h"
 #include "TTable.h"
-
+#include "TMath.h"
 class TTablePoints : public TPoints3DABC
 {
 protected:
