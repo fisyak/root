@@ -1437,6 +1437,15 @@ TCling::TCling(const char *name, const char *title, const char* const argv[], vo
       clingArgsStorage.push_back("-mllvm");
       clingArgsStorage.push_back("-optimize-regalloc=0");
 #endif
+
+#ifdef CLING_WITH_ADAPTIVECPP
+      std::string acppInclude(TROOT::GetIncludeDir() + "/AdaptiveCpp");
+
+      clingArgsStorage.push_back("-isystem");
+      clingArgsStorage.push_back(acppInclude);
+      clingArgsStorage.push_back("-mllvm");
+      clingArgsStorage.push_back("-acpp-sscp");
+#endif
    }
 
    // Process externally passed arguments if present.
@@ -3538,7 +3547,7 @@ void TCling::RegisterLoadedSharedLibrary(const char* filename)
    // Check that this is not a system library
    static const int bufsize = 260;
    char posixwindir[bufsize];
-   char *windir = getenv("WINDIR");
+   char *windir = std::getenv("WINDIR");
    if (windir)
       cygwin_conv_path(CCP_WIN_A_TO_POSIX, windir, posixwindir, bufsize);
    else
@@ -6381,6 +6390,9 @@ Int_t TCling::AutoLoad(const char *cls, Bool_t knowDictNotLoaded /* = kFALSE */)
    // quality of the search (i.e. bad in case of library with no pcm and no rootmap
    // file).
    TInterpreter::SuspendAutoParsing autoParseRaii(this);
+   // During the process, we might need to look at member properties which could
+   // trigger deserialization with modules enabled.
+   cling::Interpreter::PushTransactionRAII deserRaii(GetInterpreterImpl());
    std::unordered_set<std::string> visited;
    return DeepAutoLoadImpl(cls, visited, false /*normalized*/);
 }

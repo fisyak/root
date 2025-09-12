@@ -53,7 +53,11 @@ set(LLVM_FORCE_USE_OLD_TOOLCHAIN ON CACHE BOOL "")
 # found before (because the user turned on cuda or tmva-gpu), this will not have
 # an effect, which is fine.
 # (Note that the option is very counter-intuitive: We turn *on* disabling it...)
-set(CMAKE_DISABLE_FIND_PACKAGE_CUDA ON)
+# Except when we want to build cling with adaptiveCpp, in which case adaptiveCpp
+# needs to find CUDA in order to build the backend.
+if(NOT experimental_adaptivecpp)
+  set(CMAKE_DISABLE_FIND_PACKAGE_CUDA ON)
+endif()
 
 # will be set again in case NOT builtin_llvm
 set(LLVM_DIR "${CMAKE_CURRENT_BINARY_DIR}/llvm-project/llvm")
@@ -190,6 +194,8 @@ if(builtin_llvm)
   # in production builds.
   set(LLVM_UNREACHABLE_OPTIMIZE FALSE)
 
+  set(_build_type ${CMAKE_BUILD_TYPE})
+
   # Multi-configuration generators ignore CMAKE_BUILD_TYPE, so
   # in that case we set the flags for all configurations to the
   # flags of the build type assigned to LLVM_BUILD_TYPE.
@@ -218,6 +224,13 @@ if(builtin_llvm)
 
   set(LLVM_ENABLE_PROJECTS "clang" CACHE STRING "")
 
+  if(experimental_adaptivecpp)
+    # Register AdaptiveCpp as an external project
+    set(LLVM_EXTERNAL_PROJECTS "AdaptiveCpp" CACHE STRING "")
+    set(LLVM_EXTERNAL_ADAPTIVECPP_SOURCE_DIR "${ADAPTIVE_CPP_SOURCE_DIR}" CACHE STRING "")
+    set(LLVM_ADAPTIVECPP_LINK_INTO_TOOLS ON CACHE BOOL "") # To force-link the plugin into clang
+  endif()
+
   # Always build LLVM with C++17. It is not necessary to compile with the same
   # C++ standard as the rest of ROOT and sometimes it doesn't even work.
   set(_cxx_standard ${CMAKE_CXX_STANDARD})
@@ -241,6 +254,7 @@ if(builtin_llvm)
   endif()
 
   set(CMAKE_CXX_STANDARD ${_cxx_standard})
+  set(CMAKE_BUILD_TYPE ${_build_type})
 
   set(LLVM_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/llvm-project/llvm/include
     ${CMAKE_CURRENT_BINARY_DIR}/llvm-project/llvm/include

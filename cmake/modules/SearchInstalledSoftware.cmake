@@ -28,27 +28,28 @@ macro(ROOT_CHECK_CONNECTION option)
       # If the connection check is disabled, just assume there is internet
       # connection
       set(NO_CONNECTION FALSE)
-    endif()
-    message(STATUS "Checking internet connectivity")
-    file(DOWNLOAD https://root.cern/files/cmake_connectivity_test.txt ${CMAKE_CURRENT_BINARY_DIR}/cmake_connectivity_test.txt
-      TIMEOUT 10 STATUS DOWNLOAD_STATUS
-    )
-    # Get the status code from the download status
-    list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
-    # Check if download was successful.
-    if(${STATUS_CODE} EQUAL 0)
-      # Success
-      message(STATUS "Checking internet connectivity - found")
-      # Now let's delete the file
-      file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/cmake_connectivity_test.txt)
-      set(NO_CONNECTION FALSE)
     else()
-      # Error
-      if(fail-on-missing)
-        message(FATAL_ERROR "No internet connection. Please check your connection, set '-D${option}' or disable 'fail-on-missing' to automatically disable options requiring internet access. You can also bypass the connection check with -Dcheck_connection=OFF.")
+      message(STATUS "Checking internet connectivity")
+      file(DOWNLOAD https://root.cern/files/cmake_connectivity_test.txt ${CMAKE_CURRENT_BINARY_DIR}/cmake_connectivity_test.txt
+        TIMEOUT 10 STATUS DOWNLOAD_STATUS
+      )
+      # Get the status code from the download status
+      list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
+      # Check if download was successful.
+      if(${STATUS_CODE} EQUAL 0)
+        # Success
+        message(STATUS "Checking internet connectivity - found")
+        # Now let's delete the file
+        file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/cmake_connectivity_test.txt)
+        set(NO_CONNECTION FALSE)
+      else()
+        # Error
+        if(fail-on-missing)
+          message(FATAL_ERROR "No internet connection. Please check your connection, set '-D${option}' or disable 'fail-on-missing' to automatically disable options requiring internet access. You can also bypass the connection check with -Dcheck_connection=OFF.")
+        endif()
+        message(STATUS "Checking internet connectivity - failed: will not automatically download external dependencies. You can bypass the connection check with -Dcheck_connection=OFF.")
+        set(NO_CONNECTION TRUE)
       endif()
-      message(STATUS "Checking internet connectivity - failed: will not automatically download external dependencies. You can bypass the connection check with -Dcheck_connection=OFF.")
-      set(NO_CONNECTION TRUE)
     endif()
   endif()
 endmacro()
@@ -1292,7 +1293,11 @@ int main() { return 0; }" tbb_exception_result)
     endif()
   endif()
 
-  set(TBB_CXXFLAGS "-DTBB_SUPPRESS_DEPRECATED_MESSAGES=1")
+  if(MSVC)
+    set(TBB_CXXFLAGS "-D__TBB_NO_IMPLICIT_LINKAGE=1 -DTBB_SUPPRESS_DEPRECATED_MESSAGES=1")
+  else()
+    set(TBB_CXXFLAGS "-DTBB_SUPPRESS_DEPRECATED_MESSAGES=1")
+  endif()
 endif()
 
 if(builtin_tbb)
@@ -1650,6 +1655,36 @@ if (vecgeom)
     endif()
   else()
     message(STATUS "   Found VecGeom " ${VecGeom_VERSION})
+  endif()
+endif()
+
+if(experimental_adaptivecpp)
+  # Building adaptivecpp requires an internet connection, if we're not side-loading the source directory
+  if(NOT DEFINED ADAPTIVECPP_SOURCE_DIR)
+    ROOT_CHECK_CONNECTION_AND_DISABLE_OPTION("experimental_adaptivecpp")
+  endif()
+  include(SetupAdaptiveCpp)
+
+  add_compile_definitions(CLING_WITH_ADAPTIVECPP)
+
+  set(HIPSYCL_NO_FIBERS ON)
+  set(WITH_OPENCL_BACKEND OFF)
+  set(WITH_LEVEL_ZERO_BACKEND OFF)
+
+  find_package(AdaptiveCpp REQUIRED)
+  if (AdaptiveCpp_FOUND)
+    set(sycl ON)
+    set(SYCL_COMPILER_FLAGS "-ffast-math ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_BUILD_TYPE_UPPER}}")
+    message(STATUS "SYCL compiler flags: ${SYCL_COMPILER_FLAGS}")
+    separate_arguments(SYCL_COMPILER_FLAGS NATIVE_COMMAND ${SYCL_COMPILER_FLAGS})
+    message(STATUS "AdaptiveCpp sycl enabled")
+  else()
+    if(fail-on-missing)
+      message(FATAL_ERROR "AdaptiveCpp library not found")
+    else()
+      message(STATUS "AdaptiveCpp library not found")
+      set(sycl OFF CACHE BOOL "Disabled because no SYCL implementation is not found" FORCE)
+    endif()
   endif()
 endif()
 

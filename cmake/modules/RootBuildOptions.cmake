@@ -128,6 +128,7 @@ ROOT_BUILD_OPTION(davix ON "Enable support for Davix (HTTP/WebDAV access)")
 ROOT_BUILD_OPTION(dcache OFF "Enable support for dCache (requires libdcap from DESY)")
 ROOT_BUILD_OPTION(dev OFF "Enable recommended developer compilation flags, reduce exposed includes")
 ROOT_BUILD_OPTION(distcc OFF "Enable distcc usage for speeding up builds (ccache is called first if enabled)")
+ROOT_BUILD_OPTION(experimental_adaptivecpp OFF "Build AdaptiveCPP for SYCL support")
 ROOT_BUILD_OPTION(fcgi OFF "Enable FastCGI support in HTTP server")
 ROOT_BUILD_OPTION(fftw3 OFF "Enable support for FFTW3 [GPL]")
 ROOT_BUILD_OPTION(fitsio ON "Enable support for reading FITS images")
@@ -412,7 +413,6 @@ endforeach()
 
 if(DEFINED rpath)
   message(DEPRECATION ">>> Option 'rpath' is deprecated and without effect."
-      " See https://root.cern/doc/v638/release-notes.html"
       " Relative RPATHs to the main ROOT libraries are unconditionally appended to all ROOT"
       " executables and libraries."
       "") # empty line at the end to make the deprecation message more visible
