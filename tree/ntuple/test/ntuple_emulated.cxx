@@ -32,6 +32,12 @@ TEST(RNTupleEmulated, EmulatedFields_Simple)
       auto model = RNTupleModel::Create();
       model->AddField(RFieldBase::Create("f", "Outer_Simple").Unwrap());
 
+      // TStreamerInfo::Build will report a warning for interpreted classes (but only for members).
+      // See also https://github.com/root-project/root/issues/9371
+      ROOT::TestSupport::CheckDiagsRAII diagRAII;
+      diagRAII.optionalDiag(kWarning, "TStreamerInfo::Build", "has no streamer or dictionary",
+                            /*matchFullMessage=*/false);
+
       auto writer = RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath());
       writer->Fill();
 
@@ -42,13 +48,6 @@ TEST(RNTupleEmulated, EmulatedFields_Simple)
       ProcessLine("ptrOuter->fInner.fInt2 = 82;");
       ProcessLine("ptrOuter->fInt1 = 93;");
       writer->Fill();
-
-      // TStreamerInfo::Build will report a warning for interpreted classes (but only for members).
-      // See also https://github.com/root-project/root/issues/9371
-      ROOT::TestSupport::CheckDiagsRAII diagRAII;
-      diagRAII.optionalDiag(kWarning, "TStreamerInfo::Build", "has no streamer or dictionary",
-                            /*matchFullMessage=*/false);
-      writer.reset();
    });
 
    auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
@@ -145,6 +144,12 @@ TEST(RNTupleEmulated, EmulatedFields_Vecs)
       auto model = RNTupleModel::Create();
       model->AddField(RFieldBase::Create("outers", "std::vector<Outer_Vecs>").Unwrap());
 
+      // TStreamerInfo::Build will report a warning for interpreted classes (but only for members).
+      // See also https://github.com/root-project/root/issues/9371
+      ROOT::TestSupport::CheckDiagsRAII diagRAII;
+      diagRAII.optionalDiag(kWarning, "TStreamerInfo::Build", "has no streamer or dictionary",
+                            /*matchFullMessage=*/false);
+
       auto writer = RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath());
       writer->Fill();
 
@@ -155,13 +160,6 @@ TEST(RNTupleEmulated, EmulatedFields_Vecs)
       ProcessLine("(*ptrOuters)[0].fInners.push_back(Inner_Vecs{42.f});");
       ProcessLine("(*ptrOuters)[0].fInner.fFlt = 84.f;");
       writer->Fill();
-
-      // TStreamerInfo::Build will report a warning for interpreted classes (but only for members).
-      // See also https://github.com/root-project/root/issues/9371
-      ROOT::TestSupport::CheckDiagsRAII diagRAII;
-      diagRAII.optionalDiag(kWarning, "TStreamerInfo::Build", "has no streamer or dictionary",
-                            /*matchFullMessage=*/false);
-      writer.reset();
    });
 
    auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
@@ -318,15 +316,14 @@ TEST(RNTupleEmulated, EmulatedFields_EmptyStruct)
       auto model = RNTupleModel::Create();
       model->AddField(RFieldBase::Create("f", "Outer_EmptyStruct").Unwrap());
 
-      auto writer = RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath());
-      writer->Fill();
-
       // TStreamerInfo::Build will report a warning for interpreted classes (but only for members).
       // See also https://github.com/root-project/root/issues/9371
       ROOT::TestSupport::CheckDiagsRAII diagRAII;
       diagRAII.optionalDiag(kWarning, "TStreamerInfo::Build", "has no streamer or dictionary",
                             /*matchFullMessage=*/false);
-      writer.reset();
+
+      auto writer = RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath());
+      writer->Fill();
    });
 
    auto reader = RNTupleReader::Open("ntpl", fileGuard.GetPath());
@@ -680,20 +677,13 @@ TEST(RNTupleEmulated, CollectionProxy)
    EXPECT_NE(field.GetTraits() & RFieldBase::kTraitEmulatedField, 0);
    EXPECT_EQ(field.GetValueSize(), sizeof(std::vector<char>));
 
-   const auto *vec = dynamic_cast<const ROOT::RVectorField *>(&field);
-   ASSERT_NE(vec, nullptr);
-   RNTupleLocalIndex collectionStart;
-   ROOT::NTupleSize_t size;
-   vec->GetCollectionInfo(0, &collectionStart, &size);
-   EXPECT_EQ(collectionStart.GetClusterId(), 0);
-   EXPECT_EQ(collectionStart.GetIndexInCluster(), 0);
-   EXPECT_EQ(size, 100);
-   vec->GetCollectionInfo(1, &collectionStart, &size);
-   EXPECT_EQ(collectionStart.GetClusterId(), 0);
-   EXPECT_EQ(collectionStart.GetIndexInCluster(), 100);
-   EXPECT_EQ(size, 0);
-
+   auto vec = std::static_pointer_cast<std::vector<char>>(reader->GetModel().GetDefaultEntry().GetPtr<void>("proxyC"));
    reader->LoadEntry(0);
+   EXPECT_EQ(100u, vec->size());
+   EXPECT_EQ(0x42, vec->at(0));
+   EXPECT_EQ(0x42, vec->at(99));
+   reader->LoadEntry(1);
+   EXPECT_EQ(0u, vec->size());
 }
 
 TEST(RNTupleEmulated, MergeEmulated)

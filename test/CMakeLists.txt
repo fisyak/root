@@ -68,7 +68,9 @@ ROOT_EXECUTABLE(eventexe MainEvent.cxx LIBRARIES Event RIO Tree TreePlayer Hist 
 ROOT_ADD_TEST(test-event COMMAND eventexe)
 
 #---guitest------------------------------------------------------------------------------------
-ROOT_EXECUTABLE(guitest guitest.cxx LIBRARIES RIO Gui Gpad Hist)
+if(TARGET Gui)
+  ROOT_EXECUTABLE(guitest guitest.cxx LIBRARIES RIO Gui Gpad Hist)
+endif()
 
 #---hsimple------------------------------------------------------------------------------------
 #ROOT_EXECUTABLE(hsimple hsimple.cxx LIBRARIES RIO Tree Hist)
@@ -88,7 +90,7 @@ if((NOT (APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES arm64) OR M1_BROKEN_TESTS) AND
 endif()
 
 #--minexam-------------------------------------------------------------------------------------
-ROOT_EXECUTABLE(minexam minexam.cxx LIBRARIES Minuit)
+ROOT_EXECUTABLE(minexam minexam.cxx LIBRARIES Hist)
 ROOT_ADD_TEST(test-minexam COMMAND minexam)
 
 #--tstring-------------------------------------------------------------------------------------
@@ -159,8 +161,8 @@ ROOT_ADD_TEST(test-stresslinear-interpreted COMMAND ${ROOT_root_CMD} -b -q -l ${
               FAILREGEX "FAILED|Error in" LABELS longtest)
 
 #--stressGraphics------------------------------------------------------------------------------------
-if(ROOT_opengl_FOUND)
-  ROOT_EXECUTABLE(stressGraphics stressGraphics.cxx LIBRARIES Graf Gpad Postscript)
+if(ROOT_opengl_FOUND AND TARGET TreeViewer)
+  ROOT_EXECUTABLE(stressGraphics stressGraphics.cxx LIBRARIES Graf Gpad Postscript TreeViewer HistPainter)
   if(MSVC)
     set_property(TARGET stressGraphics APPEND_STRING PROPERTY LINK_FLAGS "/STACK:4000000")
   endif()
@@ -181,6 +183,11 @@ if(ROOT_opengl_FOUND)
                 COMMAND ${ROOT_root_CMD} -b --web=off -q -l ${CMAKE_CURRENT_SOURCE_DIR}/stressGraphics.cxx
                 FAILREGEX "FAILED|Error in"
                 DEPENDS test-stressgraphics)
+  ROOT_ADD_TEST(test-stressgraphics-svg
+                ENVIRONMENT LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:$ENV{LD_LIBRARY_PATH}
+                COMMAND stressGraphics -b --web=off -p=svg --svg=${CMAKE_CURRENT_SOURCE_DIR}/svg_ref/
+                FAILREGEX "FAILED|Error in"
+                LABELS longtest)
   if(CHROME_EXECUTABLE)
     ROOT_ADD_TEST(test-stressgraphics-chrome
                   RUN_SERIAL

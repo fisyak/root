@@ -24,7 +24,6 @@
 
 #include <RZip.h>
 #include <TError.h>
-#include <TVirtualStreamerInfo.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -167,6 +166,16 @@ bool ROOT::RFieldDescriptor::IsCustomClass() const
    }
 
    return true;
+}
+
+bool ROOT::RFieldDescriptor::IsCustomEnum(const RNTupleDescriptor &desc) const
+{
+   return Internal::IsCustomEnumFieldDesc(desc, *this);
+}
+
+bool ROOT::RFieldDescriptor::IsStdAtomic() const
+{
+   return Internal::IsStdAtomicFieldDesc(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -785,6 +794,8 @@ ROOT::RNTupleDescriptor ROOT::RNTupleDescriptor::Clone() const
    clone.fSortedClusterGroupIds = fSortedClusterGroupIds;
    for (const auto &d : fClusterDescriptors)
       clone.fClusterDescriptors.emplace(d.first, d.second.Clone());
+   for (const auto &d : fAttributeSets)
+      clone.fAttributeSets.emplace_back(d.Clone());
    return clone;
 }
 
@@ -1105,6 +1116,19 @@ void ROOT::Internal::RNTupleDescriptorBuilder::SetFeature(unsigned int flag)
    fDescriptor.fFeatureFlags.insert(flag);
 }
 
+ROOT::RResult<ROOT::Experimental::RNTupleAttrSetDescriptor>
+ROOT::Experimental::Internal::RNTupleAttrSetDescriptorBuilder::MoveDescriptor()
+{
+   if (fDesc.fName.empty())
+      return R__FAIL("attribute set name cannot be empty");
+   if (fDesc.fAnchorLength == 0)
+      return R__FAIL("invalid anchor length");
+   if (fDesc.fAnchorLocator.GetType() == RNTupleLocator::kTypeUnknown)
+      return R__FAIL("invalid locator type");
+
+   return std::move(fDesc);
+}
+
 ROOT::RResult<ROOT::RColumnDescriptor> ROOT::Internal::RColumnDescriptorBuilder::MakeDescriptor() const
 {
    if (fColumn.GetLogicalId() == ROOT::kInvalidDescriptorId)
@@ -1359,46 +1383,17 @@ void ROOT::Internal::RNTupleDescriptorBuilder::ReplaceExtraTypeInfo(RExtraTypeIn
       fDescriptor.fExtraTypeInfoDescriptors.emplace_back(std::move(extraTypeInfoDesc));
 }
 
-RNTupleSerializer::StreamerInfoMap_t ROOT::Internal::RNTupleDescriptorBuilder::BuildStreamerInfos() const
+ROOT::RResult<void>
+ROOT::Internal::RNTupleDescriptorBuilder::AddAttributeSet(Experimental::RNTupleAttrSetDescriptor &&attrSetDesc)
 {
-   RNTupleSerializer::StreamerInfoMap_t streamerInfoMap;
-   const auto &desc = GetDescriptor();
-
-   std::function<void(const RFieldDescriptor &)> fnWalkFieldTree;
-   fnWalkFieldTree = [&desc, &streamerInfoMap, &fnWalkFieldTree](const RFieldDescriptor &fieldDesc) {
-      if (fieldDesc.IsCustomClass()) {
-         // Add streamer info for this class to streamerInfoMap
-         auto cl = TClass::GetClass(fieldDesc.GetTypeName().c_str());
-         if (!cl) {
-            throw RException(R__FAIL(std::string("cannot get TClass for ") + fieldDesc.GetTypeName()));
-         }
-         auto streamerInfo = cl->GetStreamerInfo(fieldDesc.GetTypeVersion());
-         if (!streamerInfo) {
-            throw RException(R__FAIL(std::string("cannot get streamerInfo for ") + fieldDesc.GetTypeName()));
-         }
-         streamerInfoMap[streamerInfo->GetNumber()] = streamerInfo;
-      }
-
-      // Recursively traverse sub fields
-      for (const auto &subFieldDesc : desc.GetFieldIterable(fieldDesc)) {
-         fnWalkFieldTree(subFieldDesc);
-      }
-   };
-
-   fnWalkFieldTree(desc.GetFieldZero());
-
-   // Add the streamer info records from streamer fields: because of runtime polymorphism we may need to add additional
-   // types not covered by the type names stored in the field headers
-   for (const auto &extraTypeInfo : desc.GetExtraTypeInfoIterable()) {
-      if (extraTypeInfo.GetContentId() != EExtraTypeInfoIds::kStreamerInfo)
-         continue;
-      // Ideally, we would avoid deserializing the streamer info records of the streamer fields that we just serialized.
-      // However, this happens only once at the end of writing and only when streamer fields are used, so the
-      // preference here is for code simplicity.
-      streamerInfoMap.merge(RNTupleSerializer::DeserializeStreamerInfos(extraTypeInfo.GetContent()).Unwrap());
+   auto &attrSets = fDescriptor.fAttributeSets;
+   if (std::find_if(attrSets.begin(), attrSets.end(), [&name = attrSetDesc.GetName()](const auto &desc) {
+          return desc.GetName() == name;
+       }) != attrSets.end()) {
+      return R__FAIL("attribute sets with duplicate names");
    }
-
-   return streamerInfoMap;
+   attrSets.push_back(std::move(attrSetDesc));
+   return RResult<void>::Success();
 }
 
 ROOT::RClusterDescriptor::RColumnRangeIterable ROOT::RClusterDescriptor::GetColumnRangeIterable() const
@@ -1473,4 +1468,52 @@ ROOT::RNTupleDescriptor::RClusterDescriptorIterable ROOT::RNTupleDescriptor::Get
 ROOT::RNTupleDescriptor::RExtraTypeInfoDescriptorIterable ROOT::RNTupleDescriptor::GetExtraTypeInfoIterable() const
 {
    return RExtraTypeInfoDescriptorIterable(*this);
+}
+
+ROOT::Experimental::RNTupleAttrSetDescriptorIterable ROOT::RNTupleDescriptor::GetAttrSetIterable() const
+{
+   return Experimental::RNTupleAttrSetDescriptorIterable(*this);
+}
+
+bool ROOT::Experimental::RNTupleAttrSetDescriptor::operator==(const RNTupleAttrSetDescriptor &other) const
+{
+   return fAnchorLength == other.fAnchorLength && fSchemaVersionMajor == other.fSchemaVersionMajor &&
+          fSchemaVersionMinor == other.fSchemaVersionMinor && fAnchorLocator == other.fAnchorLocator &&
+          fName == other.fName;
+};
+
+ROOT::Experimental::RNTupleAttrSetDescriptor ROOT::Experimental::RNTupleAttrSetDescriptor::Clone() const
+{
+   RNTupleAttrSetDescriptor desc;
+   desc.fAnchorLength = fAnchorLength;
+   desc.fSchemaVersionMajor = fSchemaVersionMajor;
+   desc.fSchemaVersionMinor = fSchemaVersionMinor;
+   desc.fAnchorLocator = fAnchorLocator;
+   desc.fName = fName;
+   return desc;
+}
+
+bool ROOT::Internal::IsCustomEnumFieldDesc(const RNTupleDescriptor &desc, const RFieldDescriptor &fieldDesc)
+{
+   if (fieldDesc.GetStructure() != ROOT::ENTupleStructure::kPlain)
+      return false;
+   if (fieldDesc.GetTypeName().rfind("std::", 0) == 0)
+      return false;
+
+   auto subFieldId = desc.FindFieldId("_0", fieldDesc.GetId());
+   if (subFieldId == kInvalidDescriptorId)
+      return false;
+
+   static const std::string gIntTypeNames[] = {"bool",         "char",          "std::int8_t",  "std::uint8_t",
+                                               "std::int16_t", "std::uint16_t", "std::int32_t", "std::uint32_t",
+                                               "std::int64_t", "std::uint64_t"};
+   return std::find(std::begin(gIntTypeNames), std::end(gIntTypeNames),
+                    desc.GetFieldDescriptor(subFieldId).GetTypeName()) != std::end(gIntTypeNames);
+}
+
+bool ROOT::Internal::IsStdAtomicFieldDesc(const RFieldDescriptor &fieldDesc)
+{
+   if (fieldDesc.GetStructure() != ROOT::ENTupleStructure::kPlain)
+      return false;
+   return (fieldDesc.GetTypeName().rfind("std::atomic<", 0) == 0);
 }

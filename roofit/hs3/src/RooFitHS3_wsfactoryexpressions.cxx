@@ -43,6 +43,13 @@ auto RooFitHS3_wsfactoryexpressions = R"({
             "coefficients"
         ]
     },
+    "efficiency_product_pdf_dist": {
+        "class": "RooEffProd",
+        "arguments": [
+            "pdf",
+            "eff"
+        ]
+    },
     "gamma_dist": {
         "class": "RooGamma",
         "arguments": [
@@ -105,11 +112,11 @@ auto RooFitHS3_wsfactoryexpressions = R"({
             "factors"
         ]
     },
-    "step": {
-        "class": "ParamHistFunc",
+    "projected_dist": {
+        "class": "RooProjectedPdf",
         "arguments": [
-            "variables",
-            "parameters"
+            "input_pdf",
+            "observables"
         ]
     },
     "sum": {

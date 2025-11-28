@@ -101,6 +101,75 @@ TEST(RDFSnapshotRNTuple, LazyNotTriggered)
    EXPECT_TRUE(gSystem->AccessPathName(fileGuard.GetPath().c_str()));
 }
 
+TEST(RDFSnapshotRNTuple, WriteOpts)
+{
+   FileRAII fileGuard{"RDFSnapshotRNTuple_write_opts.root"};
+   const std::vector<std::string> columns = {"x"};
+
+   auto df = ROOT::RDataFrame(100ull).Define("x", [] { return std::uint64_t(10); });
+
+   RSnapshotOptions opts;
+   opts.fOutputFormat = ROOT::RDF::ESnapshotOutputFormat::kRNTuple;
+   opts.fCompressionAlgorithm = ROOT::RCompressionSetting::EAlgorithm::kUndefined;
+   opts.fCompressionLevel = 0;
+   // 2 clusters
+   opts.fApproxZippedClusterSize = 50 * sizeof(std::uint64_t);
+   opts.fMaxUnzippedClusterSize = 50 * sizeof(std::uint64_t);
+   // 4 pages, 2 per cluster
+   opts.fInitialUnzippedPageSize = 5 * sizeof(std::uint64_t);
+   opts.fMaxUnzippedPageSize = 25 * sizeof(std::uint64_t);
+   opts.fEnablePageChecksums = false;
+   opts.fEnableSamePageMerging = false;
+
+   auto sdf = df.Snapshot("ntuple", fileGuard.GetPath(), "x", opts);
+
+   EXPECT_EQ(columns, sdf->GetColumnNames());
+
+   auto reader = RNTupleReader::Open("ntuple", fileGuard.GetPath());
+   EXPECT_EQ(2, reader->GetDescriptor().GetNClusters());
+   EXPECT_EQ(2, reader->GetDescriptor().GetClusterDescriptor(0).GetPageRange(0).GetPageInfos().size());
+   EXPECT_EQ(2, reader->GetDescriptor().GetClusterDescriptor(1).GetPageRange(0).GetPageInfos().size());
+   EXPECT_FALSE(reader->GetDescriptor().GetClusterDescriptor(0).GetPageRange(0).GetPageInfos()[0].HasChecksum());
+
+   // Setting TTree-specific options while the output format is set to RNTuple should result in a warning
+   {
+      RSnapshotOptions unusedOpts;
+      unusedOpts.fOutputFormat = ROOT::RDF::ESnapshotOutputFormat::kRNTuple;
+      unusedOpts.fAutoFlush = 1;
+
+      ROOT_EXPECT_WARNING(df.Snapshot("ntuple", "RDFSnapshotRNTuple_write_opts_unused.root", "x", unusedOpts),
+                          "Snapshot",
+                          "The TTree-specific fAutoFlush option in RSnapshotOptions has been set, but the output "
+                          "format is set to RNTuple, so this option won't have any effect. Use the fNTupleWriteOptions "
+                          "option available in RSnapshotOptions to configure the output RNTuple. Alternatively, change "
+                          "fOutputFormat to snapshot to TTree instead.");
+   }
+   {
+      RSnapshotOptions unusedOpts;
+      unusedOpts.fOutputFormat = ROOT::RDF::ESnapshotOutputFormat::kRNTuple;
+      unusedOpts.fSplitLevel = 1;
+
+      ROOT_EXPECT_WARNING(df.Snapshot("ntuple", "RDFSnapshotRNTuple_write_opts_unused.root", "x", unusedOpts),
+                          "Snapshot",
+                          "The TTree-specific fSplitLevel option in RSnapshotOptions has been set, but the output "
+                          "format is set to RNTuple, so this option won't have any effect. Use the fNTupleWriteOptions "
+                          "option available in RSnapshotOptions to configure the output RNTuple. Alternatively, change "
+                          "fOutputFormat to snapshot to TTree instead.");
+   }
+   {
+      RSnapshotOptions unusedOpts;
+      unusedOpts.fOutputFormat = ROOT::RDF::ESnapshotOutputFormat::kRNTuple;
+      unusedOpts.fBasketSize = 64000;
+
+      ROOT_EXPECT_WARNING(df.Snapshot("ntuple", "RDFSnapshotRNTuple_write_opts_unused.root", "x", unusedOpts),
+                          "Snapshot",
+                          "The TTree-specific fBasketSize option in RSnapshotOptions has been set, but the output "
+                          "format is set to RNTuple, so this option won't have any effect. Use the fNTupleWriteOptions "
+                          "option available in RSnapshotOptions to configure the output RNTuple. Alternatively, change "
+                          "fOutputFormat to snapshot to TTree instead.");
+   }
+}
+
 TEST(RDFSnapshotRNTuple, Compression)
 {
    FileRAII fileGuard{"RDFSnapshotRNTuple_compression.root"};

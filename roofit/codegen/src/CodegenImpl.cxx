@@ -137,10 +137,10 @@ std::string realSumPdfTranslateImpl(CodegenContext &ctx, RooAbsArg const &arg, R
 
 void codegenImpl(RooFit::Detail::RooFixedProdPdf &arg, CodegenContext &ctx)
 {
-   if (arg.cache()._isRearranged) {
-      ctx.addResult(&arg, ctx.buildCall(mathFunc("ratio"), *arg.cache()._rearrangedNum, *arg.cache()._rearrangedDen));
+   if (arg.isRearranged()) {
+      ctx.addResult(&arg, ctx.buildCall(mathFunc("ratio"), *arg.rearrangedNum(), *arg.rearrangedDen()));
    } else {
-      ctx.addResult(&arg, ctx.buildCall(mathFunc("product"), arg.cache()._partList, arg.cache()._partList.size()));
+      ctx.addResult(&arg, ctx.buildCall(mathFunc("product"), *arg.partList(), arg.partList()->size()));
    }
 }
 
@@ -381,7 +381,10 @@ void codegenImpl(RooFormulaVar &arg, CodegenContext &ctx)
    arg.getVal(); // to trigger the creation of the TFormula
    std::string funcName = arg.getUniqueFuncName();
    ctx.collectFunction(funcName);
-   ctx.addResult(&arg, ctx.buildCall(funcName, arg.dependents()));
+   // We have to force the array type to be "double" because that's what the
+   // declared function wrapped by the TFormula expects.
+   auto inputVar = ctx.buildArg(arg.dependents(), /*arrayType=*/"double");
+   ctx.addResult(&arg, funcName + "(" + inputVar + ")");
 }
 
 void codegenImpl(RooEffProd &arg, CodegenContext &ctx)
@@ -424,7 +427,10 @@ void codegenImpl(RooGenericPdf &arg, CodegenContext &ctx)
    arg.getVal(); // to trigger the creation of the TFormula
    std::string funcName = arg.getUniqueFuncName();
    ctx.collectFunction(funcName);
-   ctx.addResult(&arg, ctx.buildCall(funcName, arg.dependents()));
+   // We have to force the array type to be "double" because that's what the
+   // declared function wrapped by the TFormula expects.
+   auto inputVar = ctx.buildArg(arg.dependents(), /*arrayType=*/"double");
+   ctx.addResult(&arg, funcName + "(" + inputVar + ")");
 }
 
 void codegenImpl(RooHistFunc &arg, CodegenContext &ctx)
@@ -623,6 +629,7 @@ void codegenImpl(RooRealIntegral &arg, CodegenContext &ctx)
       << "   const int n = 1000; // number of sampling points\n"
       << "   double d = " << intVar.getMax(arg.intRange()) << " - " << intVar.getMin(arg.intRange()) << ";\n"
       << "   double eps = d / n;\n"
+      << "   #pragma clad checkpoint loop\n"
       << "   for (int i = 0; i < n; ++i) {\n"
       << "      " << obsName << "[0] = " << intVar.getMin(arg.intRange()) << " + eps * i;\n"
       << "      double tmpA = " << funcName << "(params, " << obsName << ", xlArr);\n"

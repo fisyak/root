@@ -18,13 +18,10 @@ if(DEFINED ROOT_SOURCE_DIR)  # Testing using the binary tree
   set(ROOT_root_CMD root.exe)
   if(NOT MSVC)  # Ignore environment on Windows
     set(ROOT_environ PATH=${CMAKE_BINARY_DIR}/bin:$ENV{PATH}
-                     ${ld_library_path}=${CMAKE_BINARY_DIR}/lib:$ENV{${ld_library_path}}
-                     ROOTSYS=${CMAKE_BINARY_DIR}
-                     ROOT_INCLUDE_PATH=${CMAKE_BINARY_DIR}/tutorials/io/tree
+                     ROOT_INCLUDE_PATH=${CMAKE_BINARY_DIR}/tutorials/io/tree:${DEFAULT_ROOT_INCLUDE_PATH}
                      PYTHONPATH=${CMAKE_BINARY_DIR}/lib:$ENV{PYTHONPATH})
   else()
-    set(ROOT_environ ROOTSYS=${CMAKE_BINARY_DIR}
-                     ROOT_INCLUDE_PATH=${CMAKE_BINARY_DIR}/tutorials/io/tree
+    set(ROOT_environ ROOT_INCLUDE_PATH=${CMAKE_BINARY_DIR}/tutorials/io/tree:${DEFAULT_ROOT_INCLUDE_PATH}
                      PYTHONPATH=${CMAKE_BINARY_DIR}/bin;$ENV{PYTHONPATH})
   endif()
 else()                       # testing using an installation
@@ -37,11 +34,13 @@ else()                       # testing using an installation
   enable_testing()
 endif()
 
-# Set the environment for the tutorials, which is the eventual ROOT_environ
+# - Set the environment for the tutorials, which is the eventual ROOT_environ
 # plus some environment variables related to limiting the number of threads
-# used by NumPy.
+# used by NumPy and enabling batch mode.
 # See: https://stackoverflow.com/questions/30791550/limit-number-of-threads-in-numpy
-set(TUTORIAL_ENV ${ROOT_environ} OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1)
+# - For matplotlib, disable a blocking event loop on show() using a non-interactive backend
+set(TUTORIAL_ENV ${ROOT_environ} ROOT_BATCH=1 OMP_NUM_THREADS=1 
+                 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLBACKEND=AGG)
 
 #---Copy the CTestCustom.cmake file into the build directory--------
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/CTestCustom.cmake ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
@@ -127,6 +126,10 @@ if (NOT dataframe)
         roofit/roofit/rf408_RDataFrameToRooFit.py
         roofit/roofit/rf618_mixture_models.py # depends on analysis/dataframe/df106_HiggsToFourLeptons.py
     )
+    # RNTuple tutorials depending on RDataFrame
+    list(APPEND dataframe_veto io/ntuple/ntpl004_dimuon.C)
+    list(APPEND dataframe_veto io/ntuple/ntpl008_import.C)
+    list(APPEND dataframe_veto io/ntuple/ntpl011_global_temperatures.C)
 endif()
 
 if(NOT sqlite)
@@ -141,6 +144,17 @@ if(NOT davix)
     set(davix_veto
         legacy/hist040_TH2Poly_europe.C hist/hist039_TH2Poly_usa.*
         legacy/multicore/mp104_processH1.C analysis/parallel/mp_processSelector.C)
+    list(APPEND davix_veto io/ntuple/ntpl004_dimuon.C)
+    list(APPEND davix_veto io/ntuple/ntpl008_import.C)
+    list(APPEND davix_veto io/ntuple/ntpl011_global_temperatures.C)
+endif()
+
+if(NOT sycl)
+  list(APPEND sycl_veto heterogeneous/syclintro.C math/mathcoreGenVectorSYCL.C)
+endif()
+
+if(NOT experimental_genvectorx)
+  list(APPEND sycl_veto math/mathcoreGenVectorSYCL.C)
 endif()
 
 if(NOT geom)
@@ -302,6 +316,15 @@ set(gui_veto math/fit/fitpanel_playback.C
 if (NOT webgui)
   list(APPEND gui_veto visualisation/graphics/save_batch.C visualisation/rcanvas/df104.py visualisation/rcanvas/df105.py)
 endif()
+if(NOT TARGET Gui)
+  list(APPEND gui_veto io/tree/tree140_spider.C io/tree/tree141_parallelcoord.C io/tree/tree142_parallelcoordtrans.C io/tree/tree143_drawsparse.C
+    machine_learning/TMVAClassification.C machine_learning/TMVAClassificationApplication.C machine_learning/TMVAClassificationCategory.C
+    machine_learning/TMVAClassificationCategoryApplication.C machine_learning/TMVACrossValidation.C machine_learning/TMVACrossValidationApplication.C
+    machine_learning/TMVACrossValidationRegression.C machine_learning/TMVAMulticlass.C machine_learning/TMVARegression.C
+    machine_learning/TMVARegressionApplication.C math/multidimSampling.C visualization/gl/parallelcoordtrans.C
+    legacy/thread/threadsh2.C
+  )
+endif()
 
 if (NOT ROOT_tmva_FOUND)
   list(APPEND tmva_veto machine_learning/*.C machine_learning/*.py machine_learning/envelope/*.C machine_learning/keras/*.C machine_learning/keras/*.py machine_learning/pytorch/*.py )
@@ -318,10 +341,10 @@ else()
     list(APPEND tmva_veto machine_learning/envelope/classification.C)
   endif()
   #these depends on external packages
-  ROOT_FIND_PYTHON_MODULE(torch QUIET)
-  ROOT_FIND_PYTHON_MODULE(keras QUIET)
-  ROOT_FIND_PYTHON_MODULE(sonnet QUIET)
-  ROOT_FIND_PYTHON_MODULE(graph_nets QUIET)
+  ROOT_FIND_PYTHON_MODULE(torch)
+  ROOT_FIND_PYTHON_MODULE(keras)
+  ROOT_FIND_PYTHON_MODULE(sonnet)
+  ROOT_FIND_PYTHON_MODULE(graph_nets)
   if (NOT BLAS_FOUND)
     list(APPEND tmva_veto machine_learning/TMVA_SOFIE_GNN_Application.C)
     list(APPEND tmva_veto machine_learning/TMVA_SOFIE_RDataFrame.C)
@@ -376,19 +399,11 @@ endif()
 
 if(root7)
   set(root7_veto analysis/dataframe/df013_InspectAnalysis.C
-                 tutorials/visualisation/webgui/browserv7/browser.cxx
-                 tutorials/visualisation/webgui/browserv7/filedialog.cxx
-                 tutorials/visualisation/webgui/fitpanelv7/fitpanel6.cxx
+                 visualisation/webgui/browserv7/browser.cxx
+                 visualisation/webgui/browserv7/filedialog.cxx
+                 visualisation/webgui/fitpanelv7/fitpanel6.cxx
       )
-  if(NOT davix)
-    list(APPEND root7_veto io/ntuple/ntpl004_dimuon.C)
-    list(APPEND root7_veto io/ntuple/ntpl008_import.C)
-    list(APPEND root7_veto io/ntuple/ntpl011_global_temperatures.C)
-  endif()
   if(NOT dataframe)
-    list(APPEND root7_veto io/ntuple/ntpl011_global_temperatures.C)
-    list(APPEND root7_veto io/ntuple/ntpl004_dimuon.C)
-    list(APPEND root7_veto io/ntuple/ntpl008_import.C)
     list(APPEND root7_veto visualisation/rcanvas/df104.py)
     list(APPEND root7_veto visualisation/rcanvas/df105.py)
   endif()
@@ -402,15 +417,10 @@ else()
   if(MSVC AND NOT win_broken_tests)
     list(APPEND root7_veto analysis/dataframe/df013_InspectAnalysis.C)
   endif()
-  file(GLOB v7_veto_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/ visualisation/webgui/browserv7/*.cxx visualisation/webgui/fitpanelv7/*.cxx visualisation/rcanvas/*.py visualisation/rcanvas/*.cxx)
+  file(GLOB v7_veto_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/ hist/histv7/*.C visualisation/webgui/browserv7/*.cxx visualisation/webgui/fitpanelv7/*.cxx visualisation/rcanvas/*.py visualisation/rcanvas/*.cxx)
   list(APPEND root7_veto ${v7_veto_files})
-  # This depends on ntupleutil
-  list(APPEND root7_veto io/ntuple/ntpl008_import.C)
   # This depends on RCanvas
   list(APPEND root7_veto io/ntuple/ntpl011_global_temperatures.C)
-  if((NOT davix) OR (NOT dataframe))
-    list(APPEND root7_veto io/ntuple/ntpl004_dimuon.C)
-  endif()
 endif()
 
 #---These ones are disabled !!! ------------------------------------
@@ -495,6 +505,7 @@ set(all_veto hsimple.C
              ${tbb_veto}
              ${imt_veto}
              ${classic_veto}
+             ${sycl_veto}
              ${geom_veto}
              ${pythia_veto}
              ${vecgeom_veto}
@@ -507,11 +518,11 @@ set(all_veto hsimple.C
 
 file(GLOB_RECURSE tutorials RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.C)
 if(webgui)
-  file(GLOB_RECURSE visualisation/tutorials_webcanv RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} visualisation/webcanv/*.cxx)
-  list(APPEND tutorials ${visualisation/tutorials_webcanv})
+  file(GLOB_RECURSE tutorials_webcanv RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} visualisation/webcanv/*.cxx)
+  list(APPEND tutorials ${tutorials_webcanv})
 endif()
 if(root7 AND webgui)
-  file(GLOB_RECURSE tutorials_exp RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} visualisation/rcanvas/*.cxx tutorials/visualisation/webgui/browserv7/*.cxx tutorials/visualisation/webgui/fitpanelv7/*.cxx)
+  file(GLOB_RECURSE tutorials_exp RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} visualisation/rcanvas/*.cxx visualisation/webgui/browserv7/*.cxx visualisation/webgui/fitpanelv7/*.cxx)
   list(APPEND tutorials ${tutorials_exp})
 endif()
 file(GLOB tutorials_veto RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${all_veto})
@@ -537,13 +548,6 @@ set(returncode_1 math/fit/fit2a.C
                  visualisation/graphics/tmathtext.C visualisation/graphics/tmathtext2.C
                  visualisation/graphs/gr106_exclusiongraph.C
                  visualisation/graphs/gr016_struct.C
-                 hist/hist102_TH2_contour_list.C
-                 hist/hist006_TH1_bar_charts.C
-                 hist/hist037_TH2Poly_boxes.C
-                 hist/hist060_TH1_stats.C
-                 hist/hist014_TH1_cumulative.C
-                 hist/hist004_TH1_labels.C
-                 hist/hist036_TH2_labels.C
                  analysis/tree/h1analysis.C
                  math/chi2test.C
                  math/r/SimpleFitting.C)
@@ -762,9 +766,6 @@ endforeach()
 #---Python tutorials-----------------------------------------------------
 if(ROOT_pyroot_FOUND)
 
-  # Copy .rootlogon.py file into the build directory. It disables graphics for the Python tutorials
-  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/.rootlogon.py ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
-
   file(GLOB_RECURSE pytutorials RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.py)
 
   # Now python-specific vetos:
@@ -944,6 +945,7 @@ if(ROOT_pyroot_FOUND)
   )
   file(GLOB requires_tensorflow RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
       machine_learning/RBatchGenerator_TensorFlow.py
+      machine_learning/TMVA_CNN_Classification.py
   )
 
   file(GLOB requires_matplotlib RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -1033,10 +1035,9 @@ if(ROOT_pyroot_FOUND)
                 ${py_will_fail})
 
     if(${t} IN_LIST multithreaded)
-      # Makes sure that this doesn't run in parallel with other multithreaded tutorials, and that cmake doesn't start too
-      # many other tests. That we use 4 processors is actually a lie, because IMT takes whatever it finds.
-      # However, even this poor indication of MT behaviour is a good hint for cmake to reduce congestion.
-      set_tests_properties(${tutorial_name} PROPERTIES RESOURCE_LOCK multithreaded PROCESSORS ${NProcessors})
+      # Makes sure that this doesn't run in parallel with too many other multithreaded tutorials.
+      # The number of threads used by the tutorials is limited by setting ROOT_MAX_THREADS (see above).
+      set_tests_properties(${tutorial_name} PROPERTIES PROCESSORS ${NProcessors})
     endif()
 
     if(${t} IN_LIST distrdf_spark_tutorials)

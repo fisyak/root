@@ -22,6 +22,8 @@
 #include <string>
 #include <vector>
 
+#include "logging.hxx"
+#include "optparse.hxx"
 #include "wildcards.hpp"
 
 #include <TBranch.h>
@@ -106,12 +108,6 @@ Examples:
   Display contents of the ROOT file 'example.root', traversing recursively any TDirectory.
 )";
 
-static ROOT::RLogChannel &RootLsChannel()
-{
-   static ROOT::RLogChannel sLog("ROOTLS");
-   return sLog;
-}
-
 static bool ClassInheritsFrom(const char *class_, const char *baseClass)
 {
    const auto *cl = TClass::GetClass(class_);
@@ -158,7 +154,7 @@ struct RootLsSource {
 };
 
 struct RootLsArgs {
-   enum Flags {
+   enum EFlags {
       kNone = 0x0,
       kOneColumn = 0x1,
       kLongListing = 0x2,
@@ -167,7 +163,7 @@ struct RootLsArgs {
       kRecursiveListing = 0x10,
    };
 
-   enum class PrintUsage {
+   enum class EPrintUsage {
       kNo,
       kShort,
       kLong
@@ -175,7 +171,7 @@ struct RootLsArgs {
 
    std::uint32_t fFlags = 0;
    std::vector<RootLsSource> fSources;
-   PrintUsage fPrintUsageAndExit = PrintUsage::kNo;
+   EPrintUsage fPrintUsageAndExit = EPrintUsage::kNo;
 };
 
 struct V2i {
@@ -281,7 +277,7 @@ static void PrintRNTuple(std::ostream &stream, const ROOT::RNTupleDescriptor &de
    std::size_t maxNameLen = 0, maxTypeLen = 0;
    std::vector<const ROOT::RFieldDescriptor *> fields;
    fields.reserve(rootField.GetLinkIds().size());
-   for (const auto &field: desc.GetFieldIterable(rootField.GetId())) {
+   for (const auto &field : desc.GetFieldIterable(rootField.GetId())) {
       fields.push_back(&field);
       maxNameLen = std::max(maxNameLen, field.GetFieldName().length());
       maxTypeLen = std::max(maxTypeLen, field.GetTypeName().length());
@@ -384,7 +380,7 @@ static void PrintNodesDetailed(std::ostream &stream, const RootLsTree &tree,
                const auto &desc = reader->GetDescriptor();
                PrintRNTuple(stream, desc, indent + 2, desc.GetFieldZero());
             } else {
-               R__LOG_ERROR(RootLsChannel()) << "failed to read RNTuple object: " << child.fName;
+               Err() << "failed to read RNTuple object: " << child.fName << "\n";
             }
          }
       }
@@ -481,11 +477,11 @@ static void PrintNodesInColumns(std::ostream &stream, const RootLsTree &tree,
 
    const bool isTerminal = terminalSize.x + terminalSize.y > 0;
 
-   bool mustIndent = false;
+   auto curCol = 0u;
    for (auto i = 0u; i < nNodes; ++i) {
       NodeIdx childIdx = nodesBegin[i];
       const auto &child = tree.fNodes[childIdx];
-      if ((i % nCols) == 0 || mustIndent) {
+      if (curCol == 0) {
          PrintIndent(stream, indent);
       }
 
@@ -498,22 +494,39 @@ static void PrintNodesInColumns(std::ostream &stream, const RootLsTree &tree,
             stream << Color(kAnsiGreen);
       }
 
-      const bool isExtremal = !(((i + 1) % nCols) != 0 && i != nNodes - 1);
+      // Handle line breaks. Lines are broken in the following situations:
+      // - when the current column number reaches the max number of columns
+      // - when we are in recursive mode and the item is a directory with children
+      // - when we are in recursive mode and the NEXT item is a directory with children
+      
+      const bool isDirWithRecursiveDisplay = isDir && (flags & RootLsArgs::kRecursiveListing) && child.fNChildren > 0;
+
+      bool nextIsDirWithRecursiveDisplay = false;
+      if ((flags & RootLsArgs::kRecursiveListing) && i < nNodes - 1) {
+         NodeIdx nextChildIdx = nodesBegin[i + 1];
+         const auto &nextChild = tree.fNodes[nextChildIdx];
+         nextIsDirWithRecursiveDisplay =
+            nextChild.fNChildren > 0 && ClassInheritsFrom(nextChild.fClassName.c_str(), "TDirectory");
+      }
+
+      const bool isExtremal = (((curCol + 1) % nCols) == 0) || (i == nNodes - 1) || isDirWithRecursiveDisplay ||
+                              nextIsDirWithRecursiveDisplay;
       if (!isExtremal) {
-         stream << std::left << std::setw(colWidths[i % nCols]) << child.fName;
+         stream << std::left << std::setw(colWidths[curCol % nCols]) << child.fName;
       } else {
          stream << std::setw(1) << child.fName;
       }
       stream << Color(kAnsiNone);
 
-      if (isExtremal)
-         stream << "\n";
+      if (isExtremal) {
+         stream << '\n';
+         curCol = 0;
+      } else {
+         ++curCol;
+      }
 
-      if (isDir && (flags & RootLsArgs::kRecursiveListing)) {
-         if (!isExtremal)
-            stream << "\n";
+      if (isDirWithRecursiveDisplay) {
          PrintChildrenInColumns(stream, tree, childIdx, flags, indent + 2);
-         mustIndent = true;
       }
    }
 }
@@ -677,79 +690,40 @@ static RootLsTree GetMatchingPathsInFile(std::string_view fileName, std::string_
    return nodeTree;
 }
 
-static bool MatchShortFlag(char arg, char matched, RootLsArgs::Flags flagVal, std::uint32_t &outFlags)
-{
-   if (arg == matched) {
-      outFlags |= flagVal;
-      return true;
-   }
-   return false;
-}
-
-static bool MatchLongFlag(const char *arg, const char *matched, RootLsArgs::Flags flagVal, std::uint32_t &outFlags)
-{
-   if (strcmp(arg, matched) == 0) {
-      outFlags |= flagVal;
-      return true;
-   }
-   return false;
-}
-
 static RootLsArgs ParseArgs(const char **args, int nArgs)
 {
    RootLsArgs outArgs;
-   std::vector<int> sourceArgs;
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-h", "--help"});
+   opts.AddFlag({"-1", "--oneColumn"});
+   opts.AddFlag({"-l", "--longListing"});
+   opts.AddFlag({"-t", "--treeListing"});
+   opts.AddFlag({"-R", "--rntupleListing"});
+   opts.AddFlag({"-r", "--recursiveListing"});
 
-   // First match all flags, then process positional arguments (since we need the flags to properly process them).
-   for (int i = 0; i < nArgs; ++i) {
-      const char *arg = args[i];
-      if (arg[0] == '-') {
-         ++arg;
-         if (arg[0] == '-') {
-            // long flag
-            ++arg;
-            bool matched = MatchLongFlag(arg, "oneColumn", RootLsArgs::kOneColumn, outArgs.fFlags) ||
-                           MatchLongFlag(arg, "longListing", RootLsArgs::kLongListing, outArgs.fFlags) ||
-                           MatchLongFlag(arg, "treeListing", RootLsArgs::kTreeListing, outArgs.fFlags) ||
-                           MatchLongFlag(arg, "recursiveListing", RootLsArgs::kRecursiveListing, outArgs.fFlags) ||
-                           MatchLongFlag(arg, "rntupleListing", RootLsArgs::kRNTupleListing, outArgs.fFlags);
-            if (!matched) {
-               if (strcmp(arg, "help") == 0) {
-                  outArgs.fPrintUsageAndExit = RootLsArgs::PrintUsage::kLong;
-               } else {
-                  R__LOG_ERROR(RootLsChannel()) << "unrecognized argument: --" << arg << "\n";
-                  if (outArgs.fPrintUsageAndExit == RootLsArgs::PrintUsage::kNo)
-                     outArgs.fPrintUsageAndExit = RootLsArgs::PrintUsage::kShort;
-               }
-            }
-         } else {
-            // short flag
-            while (*arg) {
-               bool matched = MatchShortFlag(*arg, '1', RootLsArgs::kOneColumn, outArgs.fFlags) ||
-                              MatchShortFlag(*arg, 'l', RootLsArgs::kLongListing, outArgs.fFlags) ||
-                              MatchShortFlag(*arg, 't', RootLsArgs::kTreeListing, outArgs.fFlags) ||
-                              MatchShortFlag(*arg, 'r', RootLsArgs::kRecursiveListing, outArgs.fFlags) ||
-                              MatchShortFlag(*arg, 'R', RootLsArgs::kRNTupleListing, outArgs.fFlags);
-               if (!matched) {
-                  if (*arg == 'h') {
-                     outArgs.fPrintUsageAndExit = RootLsArgs::PrintUsage::kLong;
-                  } else {
-                     R__LOG_ERROR(RootLsChannel()) << "unrecognized argument: -" << *arg << "\n";
-                     if (outArgs.fPrintUsageAndExit == RootLsArgs::PrintUsage::kNo)
-                        outArgs.fPrintUsageAndExit = RootLsArgs::PrintUsage::kShort;
-                  }
-               }
-               ++arg;
-            }
-         }
-      } else {
-         sourceArgs.push_back(i);
-      }
+   opts.Parse(args, nArgs);
+   for (const auto &err : opts.GetErrors())
+      Err() << err << "\n";
+
+   if (opts.GetSwitch("help")) {
+      outArgs.fPrintUsageAndExit = RootLsArgs::EPrintUsage::kLong;
+      return outArgs;
    }
 
+   if (!opts.GetErrors().empty() || opts.GetArgs().empty()) {
+      outArgs.fPrintUsageAndExit = RootLsArgs::EPrintUsage::kShort;
+      return outArgs;
+   }
+
+   outArgs.fFlags |= opts.GetSwitch("oneColumn") * RootLsArgs::kOneColumn;
+   outArgs.fFlags |= opts.GetSwitch("longListing") * RootLsArgs::kLongListing;
+   outArgs.fFlags |= opts.GetSwitch("treeListing") * RootLsArgs::kTreeListing;
+   outArgs.fFlags |= opts.GetSwitch("recursiveListing") * RootLsArgs::kRecursiveListing;
+   outArgs.fFlags |= opts.GetSwitch("rntupleListing") * RootLsArgs::kRNTupleListing;
+
    // Positional arguments
-   for (int argIdx : sourceArgs) {
-      const char *arg = args[argIdx];
+   for (const auto &argStr : opts.GetArgs()) {
+      const char *arg = argStr.c_str();
       RootLsSource &newSource = outArgs.fSources.emplace_back();
 
       // Handle known URI prefixes
@@ -783,10 +757,12 @@ int main(int argc, char **argv)
    // Ignore diagnostics up to (but excluding) kError to avoid spamming users with TClass::Init warnings.
    gErrorIgnoreLevel = kError;
 
+   InitLog("rootls");
+
    auto args = ParseArgs(const_cast<const char **>(argv) + 1, argc - 1);
-   if (args.fPrintUsageAndExit != RootLsArgs::PrintUsage::kNo) {
+   if (args.fPrintUsageAndExit != RootLsArgs::EPrintUsage::kNo) {
       std::cerr << "usage: rootls [-1hltr] FILE [FILE ...]\n";
-      if (args.fPrintUsageAndExit == RootLsArgs::PrintUsage::kLong) {
+      if (args.fPrintUsageAndExit == RootLsArgs::EPrintUsage::kLong) {
          std::cerr << kLongHelp;
          return 0;
       }

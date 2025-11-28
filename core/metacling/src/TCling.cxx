@@ -135,7 +135,7 @@ clang/LLVM technology.
 #include <map>
 #include <set>
 #include <stdexcept>
-#include <stdint.h>
+#include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -153,8 +153,8 @@ clang/LLVM technology.
 #define R__DLLEXPORT __attribute__ ((visibility ("default")))
 #include <sys/stat.h>
 #endif
-#include <limits.h>
-#include <stdio.h>
+#include <climits>
+#include <cstdio>
 
 #ifdef __APPLE__
 #include <dlfcn.h>
@@ -1346,8 +1346,8 @@ static void RegisterPreIncludedHeaders(cling::Interpreter &clingInterp)
 
       PreIncludes += gClassDefInterpMacro + "\n"
                      + gInterpreterClassDef + "\n"
-                     "#undef ClassImp\n"
-                     "#define ClassImp(X);\n";
+                     "#undef ClassImp\n"       // bw compatibility
+                     "#define ClassImp(X);\n"; // bw compatibility
    }
    if (!hasCxxModules)
       PreIncludes += "#include <string>\n";
@@ -1846,7 +1846,7 @@ void TCling::LoadPCMImpl(TFile &pcmFile)
          }
       }
 
-      protoClasses->Clear(); // Ownership was transfered to TClassTable.
+      protoClasses->Clear(); // Ownership was transferred to TClassTable.
       delete protoClasses;
    }
 
@@ -1855,7 +1855,7 @@ void TCling::LoadPCMImpl(TFile &pcmFile)
    if (dataTypes) {
       for (auto typedf : *dataTypes)
          gROOT->GetListOfTypes()->Add(typedf);
-      dataTypes->Clear(); // Ownership was transfered to TListOfTypes.
+      dataTypes->Clear(); // Ownership was transferred to TListOfTypes.
       delete dataTypes;
    }
 }
@@ -2762,15 +2762,6 @@ void TCling::InspectMembers(TMemberInspector& insp, const void* obj,
    if (TClassEdit::IsStdArray(cl->GetName())) {
       // We treat std arrays as C arrays
       return;
-   }
-
-   if (TClassEdit::IsUniquePtr(cl->GetName())) {
-      // Ignore error caused by the inside of std::unique_ptr
-      // This is needed solely because of rootclingIO's IsUnsupportedUniquePointer
-      // which checks the number of elements in the GetListOfRealData.
-      // If this usage is removed, this can be replaced with a return statement.
-      // See https://github.com/root-project/root/issues/13574
-      isTransient = true;
    }
 
    const char* cobj = (const char*) obj; // for ptr arithmetics
@@ -4442,6 +4433,11 @@ void TCling::CreateListOfBaseClasses(TClass *cl) const
    if (cl->fBase) {
       return;
    }
+   // Ignore the base class (e.g. `std::_Complex_base` on Windows)
+   if (TClassEdit::GetComplexType(cl->GetName()) != TClassEdit::EComplexType::kNone) {
+      cl->fBase = new TList();
+      return;
+   }
    TClingClassInfo *tci = (TClingClassInfo *)cl->GetClassInfo();
    if (!tci) return;
    TClingBaseClassInfo t(GetInterpreterImpl(), tci);
@@ -4873,7 +4869,7 @@ TInterpreter::DeclId_t TCling::GetDataMember(ClassInfo_t *opaque_cl, const char 
    DeclarationName DName = &SemaR.Context.Idents.get(name);
 
    LookupResult R(SemaR, DName, SourceLocation(), Sema::LookupOrdinaryName,
-                  Sema::ForExternalRedeclaration);
+                  RedeclarationKind::ForExternalRedeclaration);
 
    cling::utils::Lookup::Named(&SemaR, R);
 
@@ -5147,8 +5143,8 @@ void TCling::GetFunctionOverloads(ClassInfo_t *cl, const char *funcname,
    }
 
    // NotForRedeclaration: we want to find names in inline namespaces etc.
-   clang::LookupResult R(S, DName, clang::SourceLocation(),
-                         Sema::LookupOrdinaryName, clang::Sema::NotForRedeclaration);
+   clang::LookupResult R(S, DName, clang::SourceLocation(), Sema::LookupOrdinaryName,
+                         RedeclarationKind::NotForRedeclaration);
    R.suppressDiagnostics(); // else lookup with NotForRedeclaration will check access etc
    S.LookupQualifiedName(R, const_cast<DeclContext*>(DeclCtx));
    if (R.empty()) return;
@@ -5484,7 +5480,7 @@ Longptr_t TCling::ExecuteMacro(const char* filename, EErrorCode* error)
 const char* TCling::GetTopLevelMacroName() const
 {
    Warning("GetTopLevelMacroName", "Must change return type!");
-   return fCurExecutingMacros.back();
+   return fCurExecutingMacros.empty() ? nullptr : fCurExecutingMacros.back();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5535,7 +5531,7 @@ const char* TCling::GetCurrentMacroName() const
    Warning("GetCurrentMacroName", "Must change return type!");
 #endif
 #endif
-   return fCurExecutingMacros.back();
+   return fCurExecutingMacros.empty() ? nullptr : fCurExecutingMacros.back();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6390,9 +6386,6 @@ Int_t TCling::AutoLoad(const char *cls, Bool_t knowDictNotLoaded /* = kFALSE */)
    // quality of the search (i.e. bad in case of library with no pcm and no rootmap
    // file).
    TInterpreter::SuspendAutoParsing autoParseRaii(this);
-   // During the process, we might need to look at member properties which could
-   // trigger deserialization with modules enabled.
-   cling::Interpreter::PushTransactionRAII deserRaii(GetInterpreterImpl());
    std::unordered_set<std::string> visited;
    return DeepAutoLoadImpl(cls, visited, false /*normalized*/);
 }
@@ -7019,8 +7012,7 @@ void TCling::InvalidateCachedDecl(const std::tuple<TListOfDataMembers*,
             InvalidateCachedDecl(Lists, I);
 
          // For NamespaceDecl (redeclarable), only invalidate this redecl.
-         if (D->getKind() != Decl::Namespace
-             || cast<NamespaceDecl>(D)->isOriginalNamespace())
+         if (D->getKind() != Decl::Namespace || cast<NamespaceDecl>(D)->isFirstDecl())
             C->ResetClassInfo();
       }
    }

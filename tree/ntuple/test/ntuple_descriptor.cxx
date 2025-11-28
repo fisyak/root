@@ -372,6 +372,39 @@ TEST(RNTupleDescriptor, GetTypeNameForComparison)
    }
 }
 
+TEST(RNTupleDescriptor, AttributeSets)
+{
+   RNTupleLocator locator;
+   locator.SetType(ROOT::RNTupleLocator::kTypeFile);
+   locator.SetPosition(128ul);
+   ROOT::Experimental::Internal::RNTupleAttrSetDescriptorBuilder builder;
+   builder.SchemaVersion(1, 0).AnchorLength(1024).AnchorLocator(locator).Name("AttrSetName");
+   RNTupleDescriptorBuilder descBuilder;
+   descBuilder.SetVersion(1, 0, 1, 0);
+   descBuilder.SetNTuple("ntpl", "");
+   descBuilder.AddAttributeSet(builder.MoveDescriptor().Unwrap());
+
+   locator.SetPosition(555ul);
+   builder.SchemaVersion(2, 4).AnchorLength(200).AnchorLocator(locator).Name("AttrSetName 2");
+   descBuilder.AddAttributeSet(builder.MoveDescriptor().Unwrap());
+
+   auto desc = descBuilder.MoveDescriptor();
+   ASSERT_EQ(desc.GetNAttributeSets(), 2);
+   auto attrSets = desc.GetAttrSetIterable().begin();
+   EXPECT_EQ(attrSets->GetName(), "AttrSetName");
+   EXPECT_EQ(attrSets->GetAnchorLength(), 1024);
+   EXPECT_EQ(attrSets->GetSchemaVersionMajor(), 1);
+   EXPECT_EQ(attrSets->GetSchemaVersionMinor(), 0);
+   EXPECT_EQ(attrSets->GetAnchorLocator().GetPosition<std::uint64_t>(), 128);
+
+   ++attrSets;
+   EXPECT_EQ(attrSets->GetName(), "AttrSetName 2");
+   EXPECT_EQ(attrSets->GetAnchorLength(), 200);
+   EXPECT_EQ(attrSets->GetSchemaVersionMajor(), 2);
+   EXPECT_EQ(attrSets->GetSchemaVersionMinor(), 4);
+   EXPECT_EQ(attrSets->GetAnchorLocator().GetPosition<std::uint64_t>(), 555);
+}
+
 TEST(RFieldDescriptorIterable, IterateOverFieldNames)
 {
    auto model = RNTupleModel::Create();
@@ -574,88 +607,6 @@ TEST(RNTupleDescriptor, Clone)
    const auto &desc = ntuple->GetDescriptor();
    auto clone = desc.Clone();
    EXPECT_EQ(desc, clone);
-}
-
-TEST(RNTupleDescriptor, BuildStreamerInfos)
-{
-   auto fnBuildStreamerInfosOf = [](const RFieldBase &field) -> RNTupleSerializer::StreamerInfoMap_t {
-      RNTupleDescriptorBuilder descBuilder;
-      descBuilder.SetNTuple("test", "");
-      descBuilder.AddField(
-         RFieldDescriptorBuilder().FieldId(0).Structure(ROOT::ENTupleStructure::kRecord).MakeDescriptor().Unwrap());
-      auto fieldBuilder = RFieldDescriptorBuilder::FromField(field);
-      descBuilder.AddField(fieldBuilder.FieldId(1).MakeDescriptor().Unwrap());
-      descBuilder.AddFieldLink(0, 1);
-      int i = 2;
-      // In this test, we only support field hierarchies up to 2 levels
-      for (const auto &child : field.GetConstSubfields()) {
-         fieldBuilder = RFieldDescriptorBuilder::FromField(*child);
-         descBuilder.AddField(fieldBuilder.FieldId(i).MakeDescriptor().Unwrap());
-         descBuilder.AddFieldLink(1, i);
-         const auto childId = i;
-         i++;
-         for (const auto &grandChild : child->GetConstSubfields()) {
-            fieldBuilder = RFieldDescriptorBuilder::FromField(*grandChild);
-            descBuilder.AddField(fieldBuilder.FieldId(i).MakeDescriptor().Unwrap());
-            descBuilder.AddFieldLink(childId, i);
-            i++;
-         }
-      }
-      return descBuilder.BuildStreamerInfos();
-   };
-
-   RNTupleSerializer::StreamerInfoMap_t streamerInfoMap;
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "float").Unwrap());
-   EXPECT_TRUE(streamerInfoMap.empty());
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "std::vector<float>").Unwrap());
-   EXPECT_TRUE(streamerInfoMap.empty());
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "std::pair<float, float>").Unwrap());
-   EXPECT_TRUE(streamerInfoMap.empty());
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "std::map<int, float>").Unwrap());
-   EXPECT_TRUE(streamerInfoMap.empty());
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "std::unordered_map<int, float>").Unwrap());
-   EXPECT_TRUE(streamerInfoMap.empty());
-
-   std::vector<std::unique_ptr<RFieldBase>> itemFields;
-   streamerInfoMap = fnBuildStreamerInfosOf(ROOT::RRecordField("f", std::move(itemFields)));
-   EXPECT_TRUE(streamerInfoMap.empty());
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "CustomStruct").Unwrap());
-   EXPECT_EQ(1u, streamerInfoMap.size());
-   EXPECT_STREQ("CustomStruct", streamerInfoMap.begin()->second->GetName());
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "std::vector<CustomStruct>").Unwrap());
-   EXPECT_EQ(1u, streamerInfoMap.size());
-   EXPECT_STREQ("CustomStruct", streamerInfoMap.begin()->second->GetName());
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "std::map<int, CustomStruct>").Unwrap());
-   EXPECT_EQ(1u, streamerInfoMap.size());
-   EXPECT_STREQ("CustomStruct", streamerInfoMap.begin()->second->GetName());
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "DerivedA").Unwrap());
-   EXPECT_EQ(2u, streamerInfoMap.size());
-   std::vector<std::string> typeNames;
-   for (const auto &[_, si] : streamerInfoMap) {
-      typeNames.emplace_back(si->GetName());
-   }
-   std::sort(typeNames.begin(), typeNames.end());
-   EXPECT_STREQ("CustomStruct", typeNames[0].c_str());
-   EXPECT_STREQ("DerivedA", typeNames[1].c_str());
-
-   streamerInfoMap = fnBuildStreamerInfosOf(*RFieldBase::Create("f", "std::pair<CustomStruct, DerivedA>").Unwrap());
-   EXPECT_EQ(2u, streamerInfoMap.size());
-   typeNames.clear();
-   for (const auto &[_, si] : streamerInfoMap) {
-      typeNames.emplace_back(si->GetName());
-   }
-   std::sort(typeNames.begin(), typeNames.end());
-   EXPECT_STREQ("CustomStruct", typeNames[0].c_str());
-   EXPECT_STREQ("DerivedA", typeNames[1].c_str());
 }
 
 TEST(RNTupleDescriptor, CloneSchema)

@@ -74,7 +74,6 @@ Bool_t TIdleTimer::Notify()
 }
 
 
-ClassImp(TApplication);
 
 static void CallEndOfProcessCleanups()
 {
@@ -177,6 +176,10 @@ TApplication::TApplication(const char *appClassName, Int_t *argc, char **argv,
 
    if (fArgv)
       gSystem->SetProgname(fArgv[0]);
+
+   // Alternative to '-b' command line switch (i.e. for pyROOT)
+   if (gSystem->Getenv("ROOT_BATCH"))
+      MakeBatch();
 
    // Tell TSystem the TApplication has been created
    gSystem->NotifyApplicationCreated();
@@ -989,8 +992,8 @@ TString TApplication::GetSetup()
                                          gROOT->GetGitBranch(),
                                          gROOT->GetGitCommit()));
    }
-   lines.emplace_back(TString::Format("With %s",
-                                      gSystem->GetBuildCompilerVersionStr()));
+   lines.emplace_back(TString::Format("With %s std%ld",
+                                      gSystem->GetBuildCompilerVersionStr(), __cplusplus));
    lines.emplace_back("Binary directory: "+ gROOT->GetBinDir());
    lines.emplace_back("```");
    TString setup = "";

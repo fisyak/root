@@ -22,7 +22,7 @@
 #include <ROOT/RConfig.hxx>
 #include "strlcpy.h"
 
-#include <ctype.h>
+#include <cctype>
 #include <fcntl.h>
 #include <pwd.h>
 #include <cstdio>
@@ -53,7 +53,7 @@
     defined(__APPLE__) || defined(__MACH__) || defined(cygwingcc)
 #include <grp.h>
 #include <sys/types.h>
-#include <signal.h>
+#include <csignal>
 #endif
 
 #ifdef _AIX
@@ -3210,7 +3210,7 @@ int RpdSavePubKey(const char *PubKey, int OffSet, char *user)
       }
    }
 
-   // Write the key if no error occured
+   // Write the key if no error occurred
    if (retval == 0) {
       while (write(ipuk, PubKey, gPubKeyLen) < 0 && GetErrno() == EINTR)
          ResetErrno();
@@ -3870,7 +3870,7 @@ void RpdFreeKeys()
 ////////////////////////////////////////////////////////////////////////////////
 /// Receives client protocol and returns daemon protocol.
 /// Returns:  0 if ok
-///          -1 if any error occured
+///          -1 if any error occurred
 ///          -2 if special action (e.g. cleanup): no need to continue
 
 int RpdProtocol(int ServType)

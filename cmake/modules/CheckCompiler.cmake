@@ -65,7 +65,7 @@ endif()
 
 #----Test if clang setup works----------------------------------------------------------------------
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-  exec_program(${CMAKE_CXX_COMPILER} ARGS "--version 2>&1 | grep version" OUTPUT_VARIABLE _clang_version_info)
+  execute_process(COMMAND ${CMAKE_CXX_COMPILER} "--version 2>&1 | grep version" OUTPUT_VARIABLE _clang_version_info ERROR_VARIABLE _clang_version_info OUTPUT_STRIP_TRAILING_WHITESPACE)
   string(REGEX REPLACE "^.*[ ]version[ ]([0-9]+)\\.[0-9]+.*" "\\1" CLANG_MAJOR "${_clang_version_info}")
   string(REGEX REPLACE "^.*[ ]version[ ][0-9]+\\.([0-9]+).*" "\\1" CLANG_MINOR "${_clang_version_info}")
 
@@ -162,7 +162,11 @@ endif()
 # so we check the value of __cplusplus.
 # This default value can be overridden by specifying one at the prompt.
 if (MSVC)
-   set(CXX_STANDARD_STRING "201703L")
+   if(MSVC_VERSION GREATER_EQUAL 1950)
+     set(CXX_STANDARD_STRING "202002L")
+   else()
+     set(CXX_STANDARD_STRING "201703L")
+   endif()
 else()
    execute_process(COMMAND echo __cplusplus
                    COMMAND ${CMAKE_CXX_COMPILER} -E -x c++ -

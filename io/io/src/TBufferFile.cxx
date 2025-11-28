@@ -17,7 +17,7 @@
 The concrete implementation of TBuffer for writing/reading to/from a ROOT file or socket.
 */
 
-#include <string.h>
+#include <cstring>
 #include <typeinfo>
 #include <string>
 #include <limits>
@@ -56,7 +56,6 @@ const Version_t kMaxVersion     = 0x3FFF;      // highest possible version numbe
 const Int_t  kMapOffset         = 2;   // first 2 map entries are taken by null obj and self obj
 
 
-ClassImp(TBufferFile);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Thread-safe check on StreamerInfos of a TClass
@@ -1697,7 +1696,7 @@ void TBufferFile::ReadFastArray(void **start, const TClass *cl, Int_t n,
              // is indeed pointing to the same object as the object the user set up
              // in the default constructor).
              ) {
-            ((TClass*)cl)->Destructor(old,kFALSE); // call delete and desctructor
+            ((TClass*)cl)->Destructor(old,kFALSE); // call delete and destructor
          }
       }
 
@@ -2661,7 +2660,7 @@ void TBufferFile::WriteObjectClass(const void *actualObjectStart, const TClass *
 
    if (!actualObjectStart) {
 
-      // save kNullTag to represent NULL pointer
+      // save kNullTag to represent nullptr pointer
       *this << (UInt_t) kNullTag;
 
    } else {

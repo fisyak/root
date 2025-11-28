@@ -10,6 +10,7 @@ class QRawPulseR : public TObject
 		QRawPulseR();
 		~QRawPulseR() override;
 		const QRawPulseR& operator=(const QRawPulseR& P);
+		QRawPulseR(const QRawPulseR& P) = default;
 		void SetDataHist(const int, double*);
 		void SetChannel(const Int_t chan) {fChannel = chan;}
 
@@ -21,7 +22,6 @@ class QRawPulseR : public TObject
 	ClassDefOverride(QRawPulseR, 1)
 };
 
-ClassImp(QRawPulseR);
 
 QRawPulseR::QRawPulseR()
 {
@@ -60,6 +60,7 @@ class QRawTriggerPulseR : public QRawPulseR
 		QRawTriggerPulseR();
 		~QRawTriggerPulseR() override;
 		const QRawTriggerPulseR& operator=(const QRawTriggerPulseR& P);
+		QRawTriggerPulseR(const QRawTriggerPulseR& P) = default;
 		Int_t GetTriggerPosition() const { return ftrigger_position; }
 
 	private:
@@ -68,7 +69,6 @@ class QRawTriggerPulseR : public QRawPulseR
 	ClassDefOverride(QRawTriggerPulseR, 1);
 };
 
-ClassImp(QRawTriggerPulseR);
 
 QRawTriggerPulseR::QRawTriggerPulseR() : QRawPulseR() 
 {
@@ -103,10 +103,9 @@ class QRawEventR : public TObject
 		QRawPulseR fraw_pulse;
 		QRawTriggerPulseR fraw_trigger_pulse;
 
-	ClassDef (QRawEventR, 1)
+	ClassDefOverride (QRawEventR, 1)
 };
 
-ClassImp(QRawEventR);
 
 QRawEventR::QRawEventR() 
 {

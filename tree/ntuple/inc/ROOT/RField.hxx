@@ -49,9 +49,26 @@ namespace Detail {
 class RFieldVisitor;
 } // namespace Detail
 
+class RFieldZero;
+namespace Internal {
+void SetAllowFieldSubstitutions(RFieldZero &fieldZero, bool val);
+}
+
 /// The container field for an ntuple model, which itself has no physical representation.
 /// Therefore, the zero field must not be connected to a page source or sink.
 class RFieldZero final : public RFieldBase {
+   friend void ROOT::Internal::SetAllowFieldSubstitutions(RFieldZero &, bool);
+
+   /// If field substitutions are allowed, upon connecting to a page source the field hierarchy will replace created
+   /// fields by fields that match the on-disk schema. This happens for
+   ///     - Vector fields (RVectorField, RRVecField) that connect to an on-disk fixed-size array
+   ///     - Streamer fields that connect to an on-disk class field
+   /// Field substitutions must not be enabled when the field hierarchy already handed out RValue objects because
+   /// they would leave dangling field pointers to the replaced fields. This is used in cases when the field/model
+   /// is created by RNTuple (not imposed), before it is made available to the user.
+   /// This flag is reset on Clone().
+   bool fAllowFieldSubstitutions = false;
+
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final;
    void ConstructValue(void *) const final {}
@@ -64,6 +81,10 @@ public:
    size_t GetAlignment() const final { return 0; }
 
    void AcceptVisitor(ROOT::Detail::RFieldVisitor &visitor) const final;
+
+   bool GetAllowFieldSubstitutions() const { return fAllowFieldSubstitutions; }
+   /// Moves all subfields into the returned vector.
+   std::vector<std::unique_ptr<RFieldBase>> ReleaseSubfields();
 };
 
 /// Used in RFieldBase::Check() to record field creation failures.
@@ -187,7 +208,7 @@ protected:
    void ReadGlobalImpl(ROOT::NTupleSize_t globalIndex, void *to) final;
    void ReadInClusterImpl(RNTupleLocalIndex localIndex, void *to) final;
 
-   void BeforeConnectPageSource(ROOT::Internal::RPageSource &pageSource) final;
+   std::unique_ptr<RFieldBase> BeforeConnectPageSource(ROOT::Internal::RPageSource &pageSource) final;
    void ReconcileOnDiskField(const RNTupleDescriptor &desc) final;
 
 public:
@@ -201,6 +222,11 @@ public:
    size_t GetAlignment() const final { return fMaxAlignment; }
    std::uint32_t GetTypeVersion() const final;
    std::uint32_t GetTypeChecksum() const final;
+   /// For polymorphic classes (that declare or inherit at least one virtual method), return the expected dynamic type
+   /// of any user object. If the class is not polymorphic, return nullptr.
+   const std::type_info *GetPolymorphicTypeInfo() const;
+   /// Return the TClass instance backing this field.
+   const TClass *GetClass() const { return fClass; }
    void AcceptVisitor(ROOT::Detail::RFieldVisitor &visitor) const final;
 };
 
@@ -242,7 +268,7 @@ protected:
    // Returns the list of seen streamer infos
    ROOT::RExtraTypeInfoDescriptor GetExtraTypeInfo() const final;
 
-   void BeforeConnectPageSource(ROOT::Internal::RPageSource &source) final;
+   std::unique_ptr<RFieldBase> BeforeConnectPageSource(ROOT::Internal::RPageSource &source) final;
    void ReconcileOnDiskField(const RNTupleDescriptor &desc) final;
 
 public:
@@ -255,6 +281,7 @@ public:
    size_t GetAlignment() const final;
    std::uint32_t GetTypeVersion() const final;
    std::uint32_t GetTypeChecksum() const final;
+   TClass *GetClass() const { return fClass; }
    void AcceptVisitor(ROOT::Detail::RFieldVisitor &visitor) const final;
 };
 
@@ -292,7 +319,7 @@ template <typename T, typename = void>
 class RField final : public RClassField {
 public:
    static std::string TypeName() { return ROOT::Internal::GetRenormalizedTypeName(typeid(T)); }
-   RField(std::string_view name) : RClassField(name, TypeName())
+   RField(std::string_view name) : RClassField(name, Internal::GetDemangledTypeName(typeid(T)))
    {
       static_assert(std::is_class_v<T>, "no I/O support for this basic C++ type");
    }
@@ -355,17 +382,24 @@ public:
 
 template <typename T>
 class RSimpleField : public RFieldBase {
+   void ReconcileIntegralField(const RNTupleDescriptor &desc);
+   void ReconcileFloatingPointField(const RNTupleDescriptor &desc);
+
 protected:
    void GenerateColumns() override { GenerateColumnsImpl<T>(); }
    void GenerateColumns(const ROOT::RNTupleDescriptor &desc) override { GenerateColumnsImpl<T>(desc); }
 
    void ConstructValue(void *where) const final { new (where) T{0}; }
 
-   void ReconcileOnDiskField(const RNTupleDescriptor &desc) final
+   void ReconcileOnDiskField(const RNTupleDescriptor &desc) override
    {
-      // Differences in the type name don't matter for simple fields; the valid column representations take
-      // care of (allowed) schema differences.
-      EnsureMatchingOnDiskField(desc.GetFieldDescriptor(GetOnDiskId()), kDiffTypeName);
+      if constexpr (std::is_integral_v<T>) {
+         ReconcileIntegralField(desc);
+      } else if constexpr (std::is_floating_point_v<T>) {
+         ReconcileFloatingPointField(desc);
+      } else {
+         RFieldBase::ReconcileOnDiskField(desc);
+      }
    }
 
    RSimpleField(std::string_view name, std::string_view type)

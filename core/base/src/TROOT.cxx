@@ -627,7 +627,6 @@ TROOT *ROOT::Internal::gROOTLocal = ROOT::GetROOT();
 Int_t gDebug;
 
 
-ClassImp(TROOT);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -828,16 +827,18 @@ TROOT::TROOT(const char *name, const char *title, VoidFuncPtr_t *initfunc) : TDi
    gGXBatch         = new TVirtualX("Batch", "ROOT Interface to batch graphics");
    gVirtualX        = gGXBatch;
 
-#if defined(R__WIN32)
-   fBatch = kFALSE;
-#elif defined(R__HAS_COCOA)
-   fBatch = kFALSE;
-#else
-   if (gSystem->Getenv("DISPLAY"))
-      fBatch = kFALSE;
-   else
+   if (gSystem->Getenv("ROOT_BATCH"))
       fBatch = kTRUE;
+   else {
+#if defined(R__WIN32) || defined(R__HAS_COCOA)
+      fBatch = kFALSE;
+#else
+      if (gSystem->Getenv("DISPLAY"))
+         fBatch = kFALSE;
+      else
+         fBatch = kTRUE;
 #endif
+   }
 
    const char *webdisplay = gSystem->Getenv("ROOT_WEBDISPLAY");
    if (!webdisplay || !*webdisplay)
@@ -1465,7 +1466,7 @@ const char *TROOT::FindObjectClassName(const char *name) const
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return path name of obj somewhere in the //root/... path.
-/// The function returns the first occurence of the object in the list
+/// The function returns the first occurrence of the object in the list
 /// of folders. The returned string points to a static char array in TROOT.
 /// If this function is called in a loop or recursively, it is the
 /// user's responsibility to copy this string in their area.
@@ -2801,7 +2802,8 @@ void TROOT::SetMacroPath(const char *newpath)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set batch mode for ROOT
 /// If the argument evaluates to `true`, the session does not use interactive graphics.
-/// If web graphics runs in server mode, the web widgets are still available via URL
+/// Batch mode can also be enabled by setting the ROOT_BATCH environment variable.
+/// If web graphics runs in server mode, the web widgets are still available via URL.
 
 void TROOT::SetBatch(Bool_t batch)
 {

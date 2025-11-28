@@ -30,14 +30,14 @@ ROOT_GENERATE_DICTIONARY(RXTupleDict ${CMAKE_CURRENT_SOURCE_DIR}/RXTuple.hxx
                        LINKDEF RXTupleLinkDef.h
                        DEPENDENCIES RIO)
 ROOT_ADD_GTEST(ntuple_descriptor ntuple_descriptor.cxx LIBRARIES ROOTNTuple)
-ROOT_GENERATE_DICTIONARY(RNTupleDescriptorDict ${CMAKE_CURRENT_SOURCE_DIR}/RNTupleDescriptorDict.hxx
-                         MODULE ntuple_descriptor
-                         LINKDEF RNTupleDescriptorLinkDef.h
-                         OPTIONS -inlineInputHeader
-                         DEPENDENCIES RIO)
 
 ROOT_ADD_GTEST(ntuple_endian ntuple_endian.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_evolution_type ntuple_evolution_type.cxx LIBRARIES ROOTNTuple)
+ROOT_GENERATE_DICTIONARY(STLContainerEvolutionDict ${CMAKE_CURRENT_SOURCE_DIR}/STLContainerEvolution.hxx
+                         MODULE ntuple_evolution_type
+                         LINKDEF STLContainerEvolutionLinkDef.h
+                         OPTIONS -inlineInputHeader
+                         DEPENDENCIES CustomStruct)
 if(NOT MSVC)
   # These unit tests rely on fork(), which is not available on Windows.
   ROOT_ADD_GTEST(ntuple_evolution_shape ntuple_evolution_shape.cxx LIBRARIES ROOTNTuple)
@@ -92,6 +92,7 @@ ROOT_ADD_GTEST(ntuple_extended ntuple_extended.cxx LIBRARIES ROOTNTuple MathCore
 if(NOT MSVC OR win_broken_tests)
   ROOT_ADD_GTEST(ntuple_largefile1 ntuple_largefile1.cxx LIBRARIES ROOTNTuple MathCore)
   ROOT_ADD_GTEST(ntuple_largefile2 ntuple_largefile2.cxx LIBRARIES ROOTNTuple MathCore)
+  ROOT_ADD_GTEST(ntuple_largevector ntuple_largevector.cxx LIBRARIES ROOTNTuple)
 endif()
 ROOT_ADD_GTEST(ntuple_randomaccess ntuple_randomaccess.cxx LIBRARIES ROOTNTuple MathCore)
 
@@ -105,12 +106,10 @@ ROOT_GENERATE_DICTIONARY(StreamerFieldDict ${CMAKE_CURRENT_SOURCE_DIR}/StreamerF
                          DEPENDENCIES RIO)
 
 if(MSVC)
-  set(genreflex ${CMAKE_BINARY_DIR}/bin/genreflex.exe)
-  set(command ${CMAKE_COMMAND} -E env "ROOTIGNOREPREFIX=1" ${genreflex})
+  set(command ${CMAKE_COMMAND} -E env "ROOTIGNOREPREFIX=1" $<TARGET_FILE:genreflex>)
 else()
-  set(genreflex ${CMAKE_BINARY_DIR}/bin/genreflex)
   set(command ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:$ENV{LD_LIBRARY_PATH}"
-              "ROOTIGNOREPREFIX=1" ${genreflex})
+              "ROOTIGNOREPREFIX=1" $<TARGET_FILE:genreflex>)
 endif()
 
 configure_file(StreamerFieldXML.h . COPYONLY)

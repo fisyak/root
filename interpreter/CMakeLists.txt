@@ -11,7 +11,7 @@ if (NOT builtin_clang)
 endif()
 
 #--Set the LLVM version required for ROOT-----------------------------------------------------------
-set(ROOT_LLVM_VERSION_REQUIRED_MAJOR 18)
+set(ROOT_LLVM_VERSION_REQUIRED_MAJOR 20)
 
 #---Define the way we want to build and what of llvm/clang/cling------------------------------------
 set(LLVM_ENABLE_RTTI ON CACHE BOOL "")
@@ -130,12 +130,8 @@ else()
   set(CMAKE_C_VISIBILITY_PRESET hidden)
 endif()
 if (NOT MSVC AND NOT APPLE)
-  # Requires the linker to resolve the symbol internally and prevents
-  # conflicts when linked with another software using also LLVM like in
-  # the problem reported for Julia in
-  # https://github.com/JuliaHEP/ROOT.jl/issues/17#issuecomment-882719292
-  # Only needed for Linux: Mac uses linker namespaces and  Windows explicit export/import
-  string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,-Bsymbolic")
+  # Allow the compiler to optimize knowing that symbols defined in libCling.so
+  # are not interposed.
   ROOT_ADD_CXX_FLAG(CMAKE_CXX_FLAGS "-fno-semantic-interposition")
 endif()
 set(CMAKE_VISIBILITY_INLINES_HIDDEN "ON")
@@ -481,8 +477,6 @@ if (builtin_cling)
   add_subdirectory(cling EXCLUDE_FROM_ALL)
   add_dependencies(CLING ${CLING_LIBRARIES})
 
-  set(CLING_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/cling/include CACHE STRING "")
-
 
 
   #---These are the libraries that we link ROOT with CLING---------------------------
@@ -558,24 +552,15 @@ mark_as_advanced(CLEAR LLVM_ENABLE_ASSERTIONS LLVM_BUILD_TYPE)
 
 ##################### LIBINTEROP ###########################
 
-#---Set InterOp include directories, for any ROOT component that requires the headers--------------------------------------------------------
-set(CPPINTEROP_INCLUDE_DIRS
-  ${CMAKE_CURRENT_SOURCE_DIR}/CppInterOp/include
-  CACHE STRING "CppInterOp include directories.")
-
 #---Set InterOp to build on Cling, this can be toggled to use Clang-REPL-------------------------------------------------------
 set(CPPINTEROP_USE_CLING ON CACHE BOOL "" FORCE)
 set(CPPINTEROP_USE_REPL OFF CACHE BOOL "" FORCE)
 
 #---Disable testing on InterOp if ROOT's testing is OFF (InterOp tests are enabled by default) -------------------------------------------------------
-ROOT_CHECK_CONNECTION("CPPINTEROP_ENABLE_TESTING=OFF")
-if(testing AND NOT NO_CONNECTION)
-  set(CPPINTEROP_ENABLE_TESTING ON CACHE BOOL "" FORCE)
+if(testing)
+  set(CPPINTEROP_ENABLE_TESTING ON CACHE BOOL "Enable gtest in CppInterOp")
 else()
-  if(NO_CONNECTION)
-    message(STATUS "No internet connection, disabling the `CppInterOp testing infrastructure` option")
-  endif()
-  set(CPPINTEROP_ENABLE_TESTING OFF CACHE BOOL "")
+  set(CPPINTEROP_ENABLE_TESTING OFF CACHE BOOL "Enable gtest in CppInterOp")
 endif()
 
 add_subdirectory(CppInterOp)

@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 class TBuffer;
 
@@ -24,7 +25,7 @@ A regular axis with equidistant bins in the interval \f$[fLow, fHigh)\f$.
 
 For example, the following creates a regular axis with 10 normal bins between 5 and 15:
 \code
-ROOT::Experimental::RRegularAxis axis(10, 5, 15);
+ROOT::Experimental::RRegularAxis axis(10, {5, 15});
 \endcode
 
 It is possible to disable underflow and overflow bins by passing `enableFlowBins = false`. In that case, arguments
@@ -34,6 +35,10 @@ outside the axis will be silently discarded.
 Feedback is welcome!
 */
 class RRegularAxis final {
+public:
+   using ArgumentType = double;
+
+private:
    /// The number of normal bins
    std::size_t fNNormalBins;
    /// The lower end of the axis interval
@@ -49,20 +54,19 @@ public:
    /// Construct a regular axis object.
    ///
    /// \param[in] nNormalBins the number of normal bins, must be > 0
-   /// \param[in] low the lower end of the axis interval (inclusive)
-   /// \param[in] high the upper end of the axis interval (exclusive), must be > low
+   /// \param[in] interval the axis interval (lower end inclusive, upper end exclusive)
    /// \param[in] enableFlowBins whether to enable underflow and overflow bins
-   RRegularAxis(std::size_t nNormalBins, double low, double high, bool enableFlowBins = true)
-      : fNNormalBins(nNormalBins), fLow(low), fHigh(high), fEnableFlowBins(enableFlowBins)
+   RRegularAxis(std::size_t nNormalBins, std::pair<double, double> interval, bool enableFlowBins = true)
+      : fNNormalBins(nNormalBins), fLow(interval.first), fHigh(interval.second), fEnableFlowBins(enableFlowBins)
    {
       if (nNormalBins == 0) {
          throw std::invalid_argument("nNormalBins must be > 0");
       }
-      if (low >= high) {
-         std::string msg = "high must be > low, but " + std::to_string(low) + " >= " + std::to_string(high);
+      if (fLow >= fHigh) {
+         std::string msg = "high must be > low, but " + std::to_string(fLow) + " >= " + std::to_string(fHigh);
          throw std::invalid_argument(msg);
       }
-      fInvBinWidth = nNormalBins / (high - low);
+      fInvBinWidth = nNormalBins / (fHigh - fLow);
    }
 
    std::size_t GetNNormalBins() const { return fNNormalBins; }
@@ -97,6 +101,9 @@ public:
       }
 
       std::size_t bin = (x - fLow) * fInvBinWidth;
+      if (bin >= fNNormalBins) {
+         bin = fNNormalBins - 1;
+      }
       return {bin, true};
    }
 

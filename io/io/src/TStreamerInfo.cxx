@@ -82,7 +82,6 @@ std::atomic<Int_t> TStreamerInfo::fgCount{0};
 
 const Int_t kMaxLen = 1024;
 
-ClassImp(TStreamerInfo);
 
 static void R__TObjArray_InsertAt(TObjArray *arr, TObject *obj, Int_t at)
 {
@@ -5392,7 +5391,7 @@ void TStreamerInfo::PrintValue(const char *name, char *pointer, Int_t i, Int_t l
    } else        {
       if (i < 0) {
          if (pointer==0) {
-            printf("NULL\n");
+            printf("nullptr\n");
          } else {
             const static TClassRef stringClass("string");
             if (fClass == stringClass) {

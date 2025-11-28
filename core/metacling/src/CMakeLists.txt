@@ -50,7 +50,7 @@ target_include_directories(MetaCling SYSTEM PRIVATE
   ${CLANG_INCLUDE_DIRS}
   ${LLVM_INCLUDE_DIRS}
   ${CLAD_INCLUDE_DIRS}
-  ${CPPINTEROP_INCLUDE_DIRS}
+  ${CMAKE_SOURCE_DIR}/interpreter/CppInterOp/include
 )
 
 target_include_directories(MetaCling PRIVATE
@@ -129,6 +129,8 @@ ROOT_LINKER_LIBRARY(Cling
         $<TARGET_OBJECTS:MetaCling>
         $<TARGET_OBJECTS:clangCppInterOp>
         LIBRARIES ${CLING_LIBRARIES} ${LINK_LIBS} ${CLING_PLUGIN_LINK_LIBS})
+
+target_link_libraries(Cling PRIVATE Core RIO)
 
 # When these two link at the same time, they can exhaust the RAM on many machines, since they both link against llvm.
 add_dependencies(Cling rootcling_stage1)
@@ -217,17 +219,30 @@ if(MSVC)
     set(cling_link_str "${cling_link_str} /EXPORT:${sym}")
   endforeach(sym ${cling_exports})
   set_property(TARGET Cling APPEND_STRING PROPERTY LINK_FLAGS "${cling_link_str} ${CLAD_LIBS}")
-  add_dependencies(Cling Core RIO)
-  target_link_libraries(Cling PUBLIC Core RIO)
 endif()
 
-if(APPLE)
-  target_link_libraries(Cling PUBLIC -Wl,-w -Wl,-bind_at_load -Wl,-undefined,dynamic_lookup)
-elseif(NOT MSVC)
-  target_link_libraries(Cling PUBLIC -Wl,--unresolved-symbols=ignore-in-object-files)
+if(NOT APPLE AND NOT MSVC)
+  # Require the linker to resolve the symbol internally and prevent
+  # conflicts when linked with another software using also LLVM like in
+  # the problem reported for Julia in
+  # https://github.com/JuliaHEP/ROOT.jl/issues/17#issuecomment-882719292
+  # and by ALICE in https://github.com/root-project/root/issues/19889
+  # Only needed for Linux: Mac uses linker namespaces and  Windows explicit export/import
+  target_link_libraries(Cling PRIVATE -Wl,-Bsymbolic)
+  # We compile with -fvisibility=hidden in interpreter/, but some symbols of
+  # instantiated templates remain. Use a version script to hide them.
+  target_link_libraries(Cling PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/libCling.script)
+  set_target_properties(Cling PROPERTIES LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libCling.script)
+  # After inlining and hiding symbols, some of them are not referenced anymore
+  # and can be collected by the linker, reducing the library size.
+  target_link_libraries(Cling PRIVATE -Wl,--gc-sections)
+  # Additionally, for Release builds, strip the binary to remove symbol tables.
+  add_custom_command(TARGET Cling POST_BUILD
+    COMMAND $<$<CONFIG:Release>:${CMAKE_STRIP}>
+    ARGS $<TARGET_FILE:Cling>)
 endif()
 
 if (CMAKE_SYSTEM_NAME MATCHES FreeBSD)
-  target_link_libraries(Cling PUBLIC util procstat)
+  target_link_libraries(Cling PRIVATE util procstat)
 endif()
 

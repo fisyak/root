@@ -39,7 +39,6 @@ using std::map, std::pair, std::make_pair, std::list, std::max, std::string;
 #endif
 #include "v5/TFormula.h"
 
-ClassImp(TFormula);
 
 namespace {
 
@@ -121,17 +120,17 @@ std::string doubleToString(double val)
     above also applies to the predefined parametrized functions like `gaus` and
     `expo`.
 
-    Comparisons operators are also supported `(&amp;&amp;, ||, ==, &lt;=, &gt;=, !)`
+    Comparisons operators are also supported `(&&, ||, ==, <=, >=, !)`
 
     Examples:
 
-    `sin(x*(x&lt;0.5 || x&gt;1))`
+    `sin(x*(x<0.5 || x>1))`
 
     If the result of a comparison is TRUE, the result is 1, otherwise 0.
 
     Already predefined names can be given. For example, if the formula
 
-    `TFormula old("old",sin(x*(x&lt;0.5 || x&gt;1)))`
+    `TFormula old("old",sin(x*(x<0.5 || x>1)))`
 
     one can assign a name to the formula. By default the name of the object = title = formula itself.
 
@@ -139,7 +138,7 @@ std::string doubleToString(double val)
 
     is equivalent to:
 
-    `TFormula new("new","x*sin(x*(x&lt;0.5 || x&gt;1))")`
+    `TFormula new("new","x*sin(x*(x<0.5 || x>1))")`
 
     The class supports unlimited number of variables and parameters.
     By default the names which can be used for the variables are `x,y,z,t` or
@@ -883,7 +882,7 @@ bool TFormula::PrepareEvalMethod()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///    Inputs formula, transfered to C++ code into Cling
+///    Inputs formula, transferred to C++ code into Cling
 
 void TFormula::InputFormulaIntoCling()
 {
@@ -2212,7 +2211,7 @@ void TFormula::ProcessFormula(TString &formula)
 
          if (fun.fName.Contains("::")) // add support for nested namespaces
          {
-            // look for last occurence of "::"
+            // look for last occurrence of "::"
             std::string name(fun.fName.Data());
             size_t index = name.rfind("::");
             assert(index != std::string::npos);

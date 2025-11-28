@@ -67,6 +67,50 @@ struct RNTupleClusterBoundaries {
 std::vector<ROOT::Internal::RNTupleClusterBoundaries> GetClusterBoundaries(const RNTupleDescriptor &desc);
 } // namespace Internal
 
+namespace Experimental {
+
+// clang-format off
+/**
+\class ROOT::Experimental::RNTupleAttrSetDescriptor
+\ingroup NTuple
+\brief Metadata stored for every Attribute Set linked to an RNTuple.
+*/
+// clang-format on
+class RNTupleAttrSetDescriptor final {
+   friend class Experimental::Internal::RNTupleAttrSetDescriptorBuilder;
+
+   std::uint16_t fSchemaVersionMajor = 0;
+   std::uint16_t fSchemaVersionMinor = 0;
+   std::uint32_t fAnchorLength = 0; ///< uncompressed size of the linked anchor
+   // The locator of the AttributeSet anchor.
+   // In case of kTypeFile, it points to the beginning of the Anchor's payload.
+   // NOTE: Only kTypeFile is supported at the moment.
+   RNTupleLocator fAnchorLocator;
+   std::string fName;
+
+public:
+   RNTupleAttrSetDescriptor() = default;
+   RNTupleAttrSetDescriptor(const RNTupleAttrSetDescriptor &other) = delete;
+   RNTupleAttrSetDescriptor &operator=(const RNTupleAttrSetDescriptor &other) = delete;
+   RNTupleAttrSetDescriptor(RNTupleAttrSetDescriptor &&other) = default;
+   RNTupleAttrSetDescriptor &operator=(RNTupleAttrSetDescriptor &&other) = default;
+
+   bool operator==(const RNTupleAttrSetDescriptor &other) const;
+   bool operator!=(const RNTupleAttrSetDescriptor &other) const { return !(*this == other); }
+
+   const std::string &GetName() const { return fName; }
+   std::uint16_t GetSchemaVersionMajor() const { return fSchemaVersionMajor; }
+   std::uint16_t GetSchemaVersionMinor() const { return fSchemaVersionMinor; }
+   std::uint32_t GetAnchorLength() const { return fAnchorLength; }
+   const RNTupleLocator &GetAnchorLocator() const { return fAnchorLocator; }
+
+   RNTupleAttrSetDescriptor Clone() const;
+};
+
+class RNTupleAttrSetDescriptorIterable;
+
+} // namespace Experimental
+
 // clang-format off
 /**
 \class ROOT::RFieldDescriptor
@@ -145,10 +189,10 @@ public:
    std::uint32_t GetColumnCardinality() const { return fColumnCardinality; }
    std::optional<std::uint32_t> GetTypeChecksum() const { return fTypeChecksum; }
    bool IsProjectedField() const { return fProjectionSourceId != ROOT::kInvalidDescriptorId; }
-   /// Tells if the field describes a user-defined class rather than a fundamental type, a collection, or one of the
-   /// natively supported stdlib classes.
-   /// The dictionary does not need to be available for this method.
-   bool IsCustomClass() const;
+
+   bool IsCustomClass() const R__DEPRECATED(6, 42, "removed from public interface");
+   bool IsCustomEnum(const RNTupleDescriptor &desc) const R__DEPRECATED(6, 42, "removed from public interface");
+   bool IsStdAtomic() const R__DEPRECATED(6, 42, "removed from public interface");
 };
 
 // clang-format off
@@ -697,6 +741,8 @@ private:
    std::vector<ROOT::DescriptorId_t> fSortedClusterGroupIds;
    /// Potentially a subset of all the available clusters
    std::unordered_map<ROOT::DescriptorId_t, RClusterDescriptor> fClusterDescriptors;
+   /// List of AttributeSets linked to this RNTuple
+   std::vector<Experimental::RNTupleAttrSetDescriptor> fAttributeSets;
 
    // We don't expose this publicly because when we add sharded clusters, this interface does not make sense anymore
    ROOT::DescriptorId_t FindClusterId(ROOT::NTupleSize_t entryIdx) const;
@@ -714,6 +760,7 @@ public:
    class RClusterGroupDescriptorIterable;
    class RClusterDescriptorIterable;
    class RExtraTypeInfoDescriptorIterable;
+   friend class Experimental::RNTupleAttrSetDescriptorIterable;
 
    /// Modifiers passed to CreateModel()
    struct RCreateModelOptions {
@@ -802,6 +849,8 @@ public:
 
    RExtraTypeInfoDescriptorIterable GetExtraTypeInfoIterable() const;
 
+   ROOT::Experimental::RNTupleAttrSetDescriptorIterable GetAttrSetIterable() const;
+
    const std::string &GetName() const { return fName; }
    const std::string &GetDescription() const { return fDescription; }
 
@@ -812,6 +861,7 @@ public:
    std::size_t GetNClusters() const { return fNClusters; }
    std::size_t GetNActiveClusters() const { return fClusterDescriptors.size(); }
    std::size_t GetNExtraTypeInfos() const { return fExtraTypeInfoDescriptors.size(); }
+   std::size_t GetNAttributeSets() const { return fAttributeSets.size(); }
 
    /// We know the number of entries from adding the cluster summaries
    ROOT::NTupleSize_t GetNEntries() const { return fNEntries; }
@@ -1141,6 +1191,59 @@ public:
    RIterator end() { return RIterator(fNTuple.fExtraTypeInfoDescriptors.cend()); }
 };
 
+namespace Experimental {
+// clang-format off
+/**
+\class ROOT::Experimental::RNTupleAttrSetDescriptorIterable
+\ingroup NTuple
+\brief Used to loop over all the Attribute Sets linked to an RNTuple
+*/
+// clang-format on
+// TODO: move this to RNTupleDescriptor::RNTupleAttrSetDescriptorIterable when it moves out of Experimental.
+class RNTupleAttrSetDescriptorIterable final {
+private:
+   /// The associated RNTuple for this range.
+   const RNTupleDescriptor &fNTuple;
+
+public:
+   class RIterator final {
+   private:
+      using Iter_t = std::vector<RNTupleAttrSetDescriptor>::const_iterator;
+      /// The wrapped vector iterator
+      Iter_t fIter;
+
+   public:
+      using iterator_category = std::forward_iterator_tag;
+      using iterator = RIterator;
+      using value_type = RNTupleAttrSetDescriptor;
+      using difference_type = std::ptrdiff_t;
+      using pointer = const value_type *;
+      using reference = const value_type &;
+
+      RIterator(Iter_t iter) : fIter(iter) {}
+      iterator &operator++() /* prefix */
+      {
+         ++fIter;
+         return *this;
+      }
+      iterator operator++(int) /* postfix */
+      {
+         auto old = *this;
+         operator++();
+         return old;
+      }
+      reference operator*() const { return *fIter; }
+      pointer operator->() const { return &*fIter; }
+      bool operator!=(const iterator &rh) const { return fIter != rh.fIter; }
+      bool operator==(const iterator &rh) const { return fIter == rh.fIter; }
+   };
+
+   RNTupleAttrSetDescriptorIterable(const RNTupleDescriptor &ntuple) : fNTuple(ntuple) {}
+   RIterator begin() { return RIterator(fNTuple.fAttributeSets.cbegin()); }
+   RIterator end() { return RIterator(fNTuple.fAttributeSets.cend()); }
+};
+} // namespace Experimental
+
 // clang-format off
 /**
 \class ROOT::RNTupleDescriptor::RHeaderExtension
@@ -1213,6 +1316,39 @@ public:
              fExtendedColumnRepresentations.end();
    }
 };
+
+namespace Experimental::Internal {
+class RNTupleAttrSetDescriptorBuilder final {
+   ROOT::Experimental::RNTupleAttrSetDescriptor fDesc;
+
+public:
+   RNTupleAttrSetDescriptorBuilder &Name(std::string_view name)
+   {
+      fDesc.fName = name;
+      return *this;
+   }
+   RNTupleAttrSetDescriptorBuilder &SchemaVersion(std::uint16_t major, std::uint16_t minor)
+   {
+      fDesc.fSchemaVersionMajor = major;
+      fDesc.fSchemaVersionMinor = minor;
+      return *this;
+   }
+   RNTupleAttrSetDescriptorBuilder &AnchorLocator(const RNTupleLocator &loc)
+   {
+      fDesc.fAnchorLocator = loc;
+      return *this;
+   }
+   RNTupleAttrSetDescriptorBuilder &AnchorLength(std::uint32_t length)
+   {
+      fDesc.fAnchorLength = length;
+      return *this;
+   }
+
+   /// Attempt to make an AttributeSet descriptor. This may fail if the builder
+   /// was not given enough information to make a proper descriptor.
+   RResult<ROOT::Experimental::RNTupleAttrSetDescriptor> MoveDescriptor();
+};
+} // namespace Experimental::Internal
 
 namespace Internal {
 
@@ -1597,6 +1733,8 @@ public:
    RResult<void> AddExtraTypeInfo(RExtraTypeInfoDescriptor &&extraTypeInfoDesc);
    void ReplaceExtraTypeInfo(RExtraTypeInfoDescriptor &&extraTypeInfoDesc);
 
+   RResult<void> AddAttributeSet(Experimental::RNTupleAttrSetDescriptor &&attrSetDesc);
+
    /// Mark the beginning of the header extension; any fields and columns added after a call to this function are
    /// annotated as begin part of the header extension.
    void BeginHeaderExtension();
@@ -1619,9 +1757,6 @@ public:
    ///   - Logical columns of piece two
    ///   - ...
    void ShiftAliasColumns(std::uint32_t offset);
-
-   /// Get the streamer info records for custom classes. Currently requires the corresponding dictionaries to be loaded.
-   ROOT::Internal::RNTupleSerializer::StreamerInfoMap_t BuildStreamerInfos() const;
 };
 
 inline RNTupleDescriptor CloneDescriptorSchema(const RNTupleDescriptor &desc)
@@ -1629,7 +1764,16 @@ inline RNTupleDescriptor CloneDescriptorSchema(const RNTupleDescriptor &desc)
    return desc.CloneSchema();
 }
 
+/// Tells if the field describes a user-defined enum type.
+/// The dictionary does not need to be available for this method.
+/// Needs the full descriptor to look up sub fields.
+bool IsCustomEnumFieldDesc(const RNTupleDescriptor &desc, const RFieldDescriptor &fieldDesc);
+
+/// Tells if the field describes a std::atomic<T> type
+bool IsStdAtomicFieldDesc(const RFieldDescriptor &fieldDesc);
+
 } // namespace Internal
+
 } // namespace ROOT
 
 #endif // ROOT_RNTupleDescriptor

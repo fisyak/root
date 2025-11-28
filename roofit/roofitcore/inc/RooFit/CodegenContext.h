@@ -109,7 +109,7 @@ public:
 
    std::string getTmpVarName() const;
 
-   std::string buildArg(RooAbsCollection const &x);
+   std::string buildArg(RooAbsCollection const &x, std::string const &arrayType = "double");
 
    std::string buildArg(std::span<const double> arr);
    std::string buildArg(std::span<const int> arr) { return buildArgSpanImpl(arr); }
@@ -117,6 +117,7 @@ public:
    std::vector<double> const &xlArr() { return _xlArr; }
 
    void collectFunction(std::string const &name);
+   std::string const &collectedCode() { return _collectedCode; }
    std::vector<std::string> const &collectedFunctions() { return _collectedFunctions; }
 
    std::string
@@ -207,6 +208,7 @@ private:
    std::unordered_map<RooFit::UniqueId<RooAbsCollection>::Value_t, std::string> _listNames;
    std::vector<double> _xlArr;
    std::vector<std::string> _collectedFunctions;
+   std::string _collectedCode;
 };
 
 template <>

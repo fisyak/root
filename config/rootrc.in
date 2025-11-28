@@ -242,9 +242,9 @@ GeomPainter.Name:            @root_geompainter_type@
 # THttpServer specific settings
 # location of JavaScript ROOT sources
 #HttpServ.JSRootPath:        @jsrootdir@
-# Default setting for enabling or disabling JSROOT. 
+# Default setting for enabling or disabling JSROOT.
 # This can be toggled in the notebook using the `%jsroot on/off` command.
-Jupyter.JSRoot:               on
+Jupyter.JSRoot:               @root_jupyter_jsroot@
 
 # WebGui specific settings (defaults are shown)
 # fixed http port number for server, 0 - not fixed, -1 - disabled completely
@@ -452,6 +452,9 @@ RSA.KeyType:  1
 
 # Control the usage of asynchronous prefetching capabilities irrespective
 # of the TFile implementation. By default it is disabled.
+# In conjunction with a TFileCacheRead (for example the TTreeCache), it
+# will asynchronously grab early the compressed data of the 'next' cluster
+# while the current cluster is being processed (ie is subject of GetEntry)
 #TFile.AsyncPrefetching:   no
 
 # Enable cross-protocol redirects

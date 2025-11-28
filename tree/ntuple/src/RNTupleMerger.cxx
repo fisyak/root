@@ -35,7 +35,7 @@
 
 #include <algorithm>
 #include <deque>
-#include <inttypes.h> // for PRIu64
+#include <cinttypes> // for PRIu64
 #include <initializer_list>
 #include <unordered_map>
 #include <vector>
@@ -485,6 +485,17 @@ CompareDescriptorStructure(const ROOT::RNTupleDescriptor &dst, const ROOT::RNTup
          ss << "Field `" << field.fSrc->GetFieldName()
             << "` has a different type version than previously-seen field with the same name (old: " << dstTyVer
             << ", new: " << srcTyVer << ")";
+         errors.push_back(ss.str());
+      }
+
+      // Require that field versions match
+      const auto srcFldVer = field.fSrc->GetFieldVersion();
+      const auto dstFldVer = field.fDst->GetFieldVersion();
+      if (srcFldVer != dstFldVer) {
+         std::stringstream ss;
+         ss << "Field `" << field.fSrc->GetFieldName()
+            << "` has a different field version than previously-seen field with the same name (old: " << dstFldVer
+            << ", new: " << srcFldVer << ")";
          errors.push_back(ss.str());
       }
 

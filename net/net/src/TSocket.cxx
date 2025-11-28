@@ -62,7 +62,6 @@ Int_t TSocket::fgClientProtocol = 17;  // increase when client protocol changes
 
 TVirtualMutex *gSocketAuthMutex = 0;
 
-ClassImp(TSocket);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a socket. Connect to the named service at address addr.
@@ -430,7 +429,7 @@ Int_t TSocket::GetLocalPort()
 /// The argument 'timeout' specifies a maximum time to wait in millisec.
 /// Default no timeout.
 /// Returns 1 if a change of status of interest has been detected within
-/// timeout; 0 in case of timeout; < 0 if an error occured.
+/// timeout; 0 in case of timeout; < 0 if an error occurred.
 
 Int_t TSocket::Select(Int_t interest, Long_t timeout)
 {

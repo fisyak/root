@@ -40,6 +40,7 @@
 #include "TH2.h" // For Histo actions
 #include "TH3.h" // For Histo actions
 #include "THn.h"
+#include "THnSparse.h"
 #include "TProfile.h"
 #include "TProfile2D.h"
 #include "TStatistic.h"
@@ -1241,22 +1242,11 @@ public:
       return newInterface;
    }
 
-   ////////////////////////////////////////////////////////////////////////////
-   /// \brief Save selected columns to disk, in a new TTree or RNTuple `treename` in file `filename`.
-   /// \deprecated Use other overloads that do not require template arguments.
-   /// \tparam ColumnTypes variadic list of branch/column types.
-   /// \param[in] treename The name of the output TTree or RNTuple.
-   /// \param[in] filename The name of the output TFile.
-   /// \param[in] columnList The list of names of the columns/branches/fields to be written.
-   /// \param[in] options RSnapshotOptions struct with extra options to pass to the output TFile and TTree/RNTuple.
-   /// \return a `RDataFrame` that wraps the snapshotted dataset.
-   ///
    template <typename... ColumnTypes>
-   R__DEPRECATED(
-      6, 40, "Snapshot does not need template arguments anymore, you can safely remove them from this function call.")
-   RResultPtr<RInterface<RLoopManager>> Snapshot(std::string_view treename, std::string_view filename,
-                                                 const ColumnNames_t &columnList,
-                                                 const RSnapshotOptions &options = RSnapshotOptions())
+   [[deprecated("Snapshot is not any more a template. You can safely remove the template parameters.")]]
+   RResultPtr<RInterface<RLoopManager>>
+   Snapshot(std::string_view treename, std::string_view filename, const ColumnNames_t &columnList,
+            const RSnapshotOptions &options = RSnapshotOptions())
    {
       return Snapshot(treename, filename, columnList, options);
    }
@@ -1277,11 +1267,13 @@ public:
    /// When writing a variable size array through Snapshot, it is required that the column indicating its size is also
    /// written out and it appears before the array in the columnList.
    ///
-   /// By default, in case of TTree or TChain inputs, Snapshot will try to write out all top-level branches. For other
-   /// types of inputs, all columns returned by GetColumnNames() will be written out. If friend trees or chains are
-   /// present, by default all friend top-level branches that have names that do not collide with
-   /// names of branches in the main TTree/TChain will be written out. Since v6.24, Snapshot will also write out
-   /// friend branches with the same names of branches in the main TTree/TChain with names of the form
+   /// By default, in case of TTree, TChain or RNTuple inputs, Snapshot will try to write out all top-level branches.
+   /// For other types of inputs, all columns returned by GetColumnNames() will be written out. Systematic variations of
+   /// columns will be included if the corresponding flag is set in RSnapshotOptions. See \ref snapshot-with-variations
+   /// "Snapshot with Variations" for more details. If friend trees or chains are present, by default all friend
+   /// top-level branches that have names that do not collide with names of branches in the main TTree/TChain will be
+   /// written out. Since v6.24, Snapshot will also write out friend branches with the same names of branches in the
+   /// main TTree/TChain with names of the form
    /// `<friendname>_<branchname>` in order to differentiate them from the branches in the main tree/chain.
    ///
    /// ### Writing to a sub-directory
@@ -1326,6 +1318,13 @@ public:
    /// RSnapshotOptions opts;
    /// opts.fOutputFormat = ROOT::RDF::ESnapshotOutputFormat::kRNTuple;
    /// df.Snapshot("outputNTuple", "outputFile.root", {"x"}, opts);
+   /// ~~~
+   ///
+   /// Snapshot systematic variations resulting from a Vary() call (see details \ref snapshot-with-variations "here"):
+   /// ~~~{.cpp}
+   /// RSnapshotOptions opts;
+   /// opts.fIncludeVariations = true;
+   /// df.Snapshot("outputTree", "outputFile.root", {"x"}, opts);
    /// ~~~
    RResultPtr<RInterface<RLoopManager>> Snapshot(std::string_view treename, std::string_view filename,
                                                  const ColumnNames_t &columnList,
@@ -1376,6 +1375,8 @@ public:
          }
       };
 
+      RDFInternal::CheckSnapshotOptionsFormatCompatibility(options);
+
       if (options.fOutputFormat == ESnapshotOutputFormat::kRNTuple) {
          // The data source of the RNTuple resulting from the Snapshot action does not exist yet here, so we create one
          // without a data source for now, and set it once the actual data source can be created (i.e., after
@@ -1384,7 +1385,7 @@ public:
 
          auto snapHelperArgs = std::make_shared<RDFInternal::SnapshotHelperArgs>(RDFInternal::SnapshotHelperArgs{
             std::string(filename), std::string(dirname), std::string(treename), colListWithAliasesAndSizeBranches,
-            options, newRDF->GetLoopManager(), GetLoopManager(), true /* fToNTuple */});
+            options, newRDF->GetLoopManager(), GetLoopManager(), true /* fToNTuple */, /*fIncludeVariations=*/false});
 
          auto &&nColumns = colListNoAliasesWithSizeBranches.size();
          const auto validColumnNames = GetValidatedColumnNames(nColumns, colListNoAliasesWithSizeBranches);
@@ -1422,7 +1423,7 @@ public:
 
          auto snapHelperArgs = std::make_shared<RDFInternal::SnapshotHelperArgs>(RDFInternal::SnapshotHelperArgs{
             std::string(filename), std::string(dirname), std::string(treename), colListWithAliasesAndSizeBranches,
-            options, newRDF->GetLoopManager(), GetLoopManager(), false /* fToRNTuple */});
+            options, newRDF->GetLoopManager(), GetLoopManager(), false /* fToRNTuple */, options.fIncludeVariations});
 
          auto &&nColumns = colListNoAliasesWithSizeBranches.size();
          const auto validColumnNames = GetValidatedColumnNames(nColumns, colListNoAliasesWithSizeBranches);
@@ -1902,11 +1903,10 @@ public:
       {
          ROOT::Internal::RDF::RIgnoreErrorLevelRAII iel(kError);
          h = model.GetHistogram();
-         h->SetDirectory(nullptr);
       }
 
       if (h->GetXaxis()->GetXmax() == h->GetXaxis()->GetXmin())
-         RDFInternal::HistoUtils<::TH1D>::SetCanExtendAllAxes(*h);
+         h->SetCanExtend(::TH1::kAllAxes);
       return CreateAction<RDFInternal::ActionTags::Histo1D, V>(validatedColumns, h, h, fProxiedPtr);
    }
 
@@ -1965,6 +1965,9 @@ public:
          ROOT::Internal::RDF::RIgnoreErrorLevelRAII iel(kError);
          h = model.GetHistogram();
       }
+
+      if (h->GetXaxis()->GetXmax() == h->GetXaxis()->GetXmin())
+         h->SetCanExtend(::TH1::kAllAxes);
       return CreateAction<RDFInternal::ActionTags::Histo1D, V, W>(userColumns, h, h, fProxiedPtr);
    }
 
@@ -2284,6 +2287,80 @@ public:
       }
       return CreateAction<RDFInternal::ActionTags::HistoND, RDFDetail::RInferredType>(columnList, h, h, fProxiedPtr,
                                                                                       columnList.size());
+   }
+
+   ////////////////////////////////////////////////////////////////////////////
+   /// \brief Fill and return a sparse N-dimensional histogram (*lazy action*).
+   /// \tparam FirstColumn The first type of the column the values of which are used to fill the object. Inferred if not
+   /// present.
+   /// \tparam OtherColumns A list of the other types of the columns the values of which are used to fill the
+   /// object.
+   /// \param[in] model The returned histogram will be constructed using this as a model.
+   /// \param[in] columnList
+   /// A list containing the names of the columns that will be passed when calling `Fill`.
+   ///  (N columns for unweighted filling, or N+1 columns for weighted filling)
+   /// \return the N-dimensional histogram wrapped in a RResultPtr.
+   ///
+   /// This action is *lazy*: upon invocation of this method the calculation is
+   /// booked but not executed. See RResultPtr documentation.
+   ///
+   /// ### Example usage:
+   /// ~~~{.cpp}
+   /// auto myFilledObj = myDf.HistoNSparseD<float, float, float, float>({"name","title", 4,
+   ///                                                {40,40,40,40}, {20.,20.,20.,20.}, {60.,60.,60.,60.}},
+   ///                                               {"col0", "col1", "col2", "col3"});
+   /// ~~~
+   ///
+   template <typename FirstColumn, typename... OtherColumns> // need FirstColumn to disambiguate overloads
+   RResultPtr<::THnSparseD> HistoNSparseD(const THnSparseDModel &model, const ColumnNames_t &columnList)
+   {
+      std::shared_ptr<::THnSparseD> h(nullptr);
+      {
+         ROOT::Internal::RDF::RIgnoreErrorLevelRAII iel(kError);
+         h = model.GetHistogram();
+
+         if (int(columnList.size()) == (h->GetNdimensions() + 1)) {
+            h->Sumw2();
+         } else if (int(columnList.size()) != h->GetNdimensions()) {
+            throw std::runtime_error("Wrong number of columns for the specified number of histogram axes.");
+         }
+      }
+      return CreateAction<RDFInternal::ActionTags::HistoNSparseD, FirstColumn, OtherColumns...>(columnList, h, h,
+                                                                                                fProxiedPtr);
+   }
+
+   ////////////////////////////////////////////////////////////////////////////
+   /// \brief Fill and return a sparse N-dimensional histogram (*lazy action*).
+   /// \param[in] model The returned histogram will be constructed using this as a model.
+   /// \param[in] columnList A list containing the names of the columns that will be passed when calling `Fill`
+   ///  (N columns for unweighted filling, or N+1 columns for weighted filling)
+   /// \return the N-dimensional histogram wrapped in a RResultPtr.
+   ///
+   /// This action is *lazy*: upon invocation of this method the calculation is
+   /// booked but not executed. Also see RResultPtr.
+   ///
+   /// ### Example usage:
+   /// ~~~{.cpp}
+   /// auto myFilledObj = myDf.HistoNSparseD({"name","title", 4,
+   ///                                                {40,40,40,40}, {20.,20.,20.,20.}, {60.,60.,60.,60.}},
+   ///                                               {"col0", "col1", "col2", "col3"});
+   /// ~~~
+   ///
+   RResultPtr<::THnSparseD> HistoNSparseD(const THnSparseDModel &model, const ColumnNames_t &columnList)
+   {
+      std::shared_ptr<::THnSparseD> h(nullptr);
+      {
+         ROOT::Internal::RDF::RIgnoreErrorLevelRAII iel(kError);
+         h = model.GetHistogram();
+
+         if (int(columnList.size()) == (h->GetNdimensions() + 1)) {
+            h->Sumw2();
+         } else if (int(columnList.size()) != h->GetNdimensions()) {
+            throw std::runtime_error("Wrong number of columns for the specified number of histogram axes.");
+         }
+      }
+      return CreateAction<RDFInternal::ActionTags::HistoNSparseD, RDFDetail::RInferredType>(
+         columnList, h, h, fProxiedPtr, columnList.size());
    }
 
    ////////////////////////////////////////////////////////////////////////////
@@ -2788,6 +2865,8 @@ public:
    ///
    /// If T is not specified, RDataFrame will infer it from the data and just-in-time compile the correct
    /// template specialization of this method.
+   /// Note that internally, the summations are executed with Kahan sums in double precision, irrespective
+   /// of the type of column that is read.
    ///
    /// This action is *lazy*: upon invocation of this method the calculation is
    /// booked but not executed. Also see RResultPtr.

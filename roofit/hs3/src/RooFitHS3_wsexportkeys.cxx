@@ -62,6 +62,13 @@ auto RooFitHS3_wsexportkeys = R"({
             "sigmaR": "sigma_R"
         }
     },
+    "RooEffProd": {
+        "type": "efficiency_product_pdf_dist",
+        "proxies": {
+            "pdf": "pdf",
+            "eff": "eff"
+        }
+    },
     "RooGamma": {
         "type": "gamma_dist",
         "proxies": {
@@ -77,13 +84,6 @@ auto RooFitHS3_wsexportkeys = R"({
             "x": "x",
             "mean": "mean",
             "sigma": "sigma"
-        }
-    },
-    "ParamHistFunc": {
-        "type": "step",
-        "proxies": {
-            "dataVars": "variables",
-            "paramSet": "parameters"
         }
     },
     "RooLandau": {
@@ -106,6 +106,14 @@ auto RooFitHS3_wsexportkeys = R"({
         "type": "product_dist",
         "proxies": {
             "pdfs": "factors"
+        }
+    },
+    "RooProjectedPdf": {
+        "type": "projected_dist",
+        "proxies": {
+            "IntegratedPdf": "input_pdf",
+            "IntegrationObservables": "observables",
+            "Dependents": ""
         }
     },
     "RooProduct": {

@@ -45,6 +45,13 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR AND NOT ALLOW_IN_SOURCE)
     " Please see README/INSTALL for more information.")
 endif()
 
+set(unsupported_chars " *+")
+foreach(directoryName IN ITEMS ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} ${CMAKE_INSTALL_PREFIX})
+  if(${directoryName} MATCHES "[${unsupported_chars}]+")
+    message(FATAL_ERROR "Unsupported chars in directory \"${directoryName}\". Avoid any of \"${unsupported_chars}\".")
+  endif()
+endforeach()
+
 set(policy_new CMP0072 CMP0076 CMP0077 CMP0079
     CMP0156 CMP0179 #deduplicate static libraries when linker supports it
 )
@@ -388,6 +395,9 @@ unset(artifact_files)
 
 add_custom_target(move_artifacts DEPENDS ${stamp_file} ${all_artifacts})
 
+if(builtin_cling)
+    set(CLING_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/interpreter/cling/include)
+endif()
 
 #---Add the main sources ---------------------------------
 add_subdirectory (interpreter)
@@ -416,7 +426,9 @@ add_subdirectory (io)
 add_subdirectory (net)
 add_subdirectory (graf2d)
 add_subdirectory (graf3d)
-add_subdirectory (gui)
+if(NOT minimal)
+  add_subdirectory (gui)
+endif()
 add_subdirectory (montecarlo)
 if(geom)
   add_subdirectory (geom)
@@ -446,36 +458,14 @@ get_property(__allBuiltins GLOBAL PROPERTY ROOT_BUILTIN_TARGETS)
 add_custom_target(move_headers ALL DEPENDS ${__allHeaders} ${__allBuiltins} gitinfotxt)
 
 #---CXX MODULES-----------------------------------------------------------------------------------
-if(MSVC)
-  set(_os_cat "type")
-else()
-  set(_os_cat "cat")
-endif()
-cmake_path(CONVERT "${CMAKE_BINARY_DIR}/include/module.modulemap.extra" TO_NATIVE_PATH_LIST _from_native)
-cmake_path(CONVERT "${CMAKE_BINARY_DIR}/include/ROOT.modulemap" TO_NATIVE_PATH_LIST _to_native)
-
-add_custom_target(copymodulemap DEPENDS "${CMAKE_BINARY_DIR}/include/ROOT.modulemap")
-add_custom_command(
-		  OUTPUT "${CMAKE_BINARY_DIR}/include/ROOT.modulemap"
-                  DEPENDS cmake/unix/module.modulemap "${CMAKE_BINARY_DIR}/include/module.modulemap.extra"
-		  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/cmake/unix/module.modulemap" "${CMAKE_BINARY_DIR}/include/ROOT.modulemap"
-                  COMMAND ${_os_cat} "${_from_native}" >> "${_to_native}"
-)
-install(FILES "${CMAKE_BINARY_DIR}/include/ROOT.modulemap" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT headers)
-
-add_dependencies(move_headers copymodulemap)
-
 # Take all the modulemap contents we collected from the packages and append them to our modulemap.
 # We have to delay this because the ROOT_CXXMODULES_EXTRA_MODULEMAP_CONTENT is filled in the
 # add_subdirectory calls above.
 get_property(__modulemap_extra_content GLOBAL PROPERTY ROOT_CXXMODULES_EXTRA_MODULEMAP_CONTENT)
-string(REPLACE ";" "" __modulemap_extra_content "${__modulemap_extra_content}")
-# Write module.modulemap.extra to a temporary file first, to not touch module.modulemap.extra
-# if it's unchanged.
-file(WRITE "${CMAKE_BINARY_DIR}/include/module.modulemap.extra.tmp" "${__modulemap_extra_content}")
-configure_file("${CMAKE_BINARY_DIR}/include/module.modulemap.extra.tmp"
-    "${CMAKE_BINARY_DIR}/include/module.modulemap.extra"
-    COPYONLY)
+string(REPLACE ";" "" ROOT_GENERATED_MODULEMAP_CONTENT "${__modulemap_extra_content}")
+# Now append the generated content to the original modulemap
+configure_file(${CMAKE_SOURCE_DIR}/cmake/unix/module.modulemap ${CMAKE_BINARY_DIR}/include/ROOT.modulemap)
+install(FILES "${CMAKE_BINARY_DIR}/include/ROOT.modulemap" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT headers)
 
 # From now on we handled all exposed module and want to make all new modulemaps private to ROOT.
 set(ROOT_CXXMODULES_WRITE_TO_CURRENT_DIR ON)
@@ -558,10 +548,6 @@ install(
    PATTERN "pkgconfig" EXCLUDE
 )
 
-if(Vc_INCLUDE_DIR)
-  set(MODULES_ROOT_INCPATH "ROOT_INCLUDE_PATH=${Vc_INCLUDE_DIR}:${ROOT_INCLUDE_PATH}")
-endif()
-
 # modules.idx
 if(runtime_cxxmodules)
   ROOT_GET_LIBRARY_OUTPUT_DIR(library_output_dir)
@@ -570,7 +556,7 @@ if(runtime_cxxmodules)
     set(modules_idx_cmd COMMAND ${CMAKE_COMMAND} -E env PATH="${library_output_dir}\\\;%PATH%"
                                 ROOTIGNOREPREFIX=1 ROOT_HIST=0 $<TARGET_FILE:root.exe> -l -q -b)
   else()
-    set(modules_idx_cmd COMMAND ${ld_library_path}=${library_output_dir}:$ENV{${ld_library_path}}
+    set(modules_idx_cmd COMMAND ROOT_INCLUDE_PATH=${DEFAULT_ROOT_INCLUDE_PATH}
                                 ROOTIGNOREPREFIX=1 ROOT_HIST=0 $<TARGET_FILE:root.exe> -l -q -b)
   endif()
   add_custom_command(OUTPUT ${library_output_dir}/modules.idx
@@ -592,9 +578,10 @@ add_custom_target(hsimple ALL DEPENDS tutorials/hsimple.root)
 add_dependencies(hsimple onepcm)
 if(WIN32)
   set(hsimple_cmd COMMAND ${CMAKE_COMMAND} -E env PATH="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}\\\;%PATH%"
+                          ROOT_INCLUDE_PATH=${DEFAULT_ROOT_INCLUDE_PATH}
                           ROOTIGNOREPREFIX=1 ROOT_HIST=0 $<TARGET_FILE:root.exe> -l -q -b -n -x ${CMAKE_SOURCE_DIR}/tutorials/hsimple.C -e return)
 else()
-  set(hsimple_cmd COMMAND ${MODULES_ROOT_INCPATH} ${ld_library_path}=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}:$ENV{${ld_library_path}}
+  set(hsimple_cmd COMMAND ROOT_INCLUDE_PATH=${DEFAULT_ROOT_INCLUDE_PATH}
                           ROOTIGNOREPREFIX=1 ROOT_HIST=0 $<TARGET_FILE:root.exe> -l -q -b -n -x ${CMAKE_SOURCE_DIR}/tutorials/hsimple.C -e return)
 endif()
 add_custom_command(OUTPUT tutorials/hsimple.root

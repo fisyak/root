@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <cstdio>
 
-#include <errno.h>
+#include <cerrno>
 #include <string>
 #include <list>
 #include <sstream>
@@ -64,7 +64,7 @@
 #endif // R__FBSD
 
 #if !defined(R__WIN32)
-#include <limits.h>
+#include <climits>
 #include <unistd.h>
 #endif
 
@@ -2011,7 +2011,7 @@ static bool WriteAST(llvm::StringRef fileName, clang::CompilerInstance *compiler
 
    compilerInstance->getFrontendOpts().RelocatablePCH = true;
 
-   writer.WriteAST(compilerInstance->getSema(), fileName.str(), module, iSysRoot);
+   writer.WriteAST(&compilerInstance->getSema(), fileName.str(), module, iSysRoot);
 
    // Write the generated bitstream to "Out".
    out->write(&buffer.front(), buffer.size());
@@ -3477,7 +3477,7 @@ public:
    void InclusionDirective(clang::SourceLocation /*HashLoc*/, const clang::Token & /*IncludeTok*/,
                            llvm::StringRef FileName, bool IsAngled, clang::CharSourceRange /*FilenameRange*/,
                            clang::OptionalFileEntryRef /*File*/, llvm::StringRef /*SearchPath*/,
-                           llvm::StringRef /*RelativePath*/, const clang::Module * /*Imported*/,
+                           llvm::StringRef /*RelativePath*/, const clang::Module * /*Imported*/, bool /*ModuleImported*/,
                            clang::SrcMgr::CharacteristicKind /*FileType*/) override
    {
       if (isLocked) return;
@@ -4463,7 +4463,7 @@ int RootClingMain(int argc,
 
    if (!isGenreflex) { // rootcling
       // ROOTCINT uses to define a few header implicitly, we need to do it explicitly.
-      if (interp.declare("#include <assert.h>\n"
+      if (interp.declare("#include <cassert>\n"
                          "#include \"Rtypes.h\"\n"
                          "#include \"TObject.h\"") != cling::Interpreter::kSuccess
          ) {
@@ -5710,7 +5710,7 @@ int GenReflexMain(int argc, char **argv)
       "      The name influences the name of the created pcm:\n"
       "       1) If it is not specified, the pcm is called libINPUTHEADER_rdict.pcm\n"
       "       2) If it is specified, the pcm is called libTARGETLIBRARY_rdict.pcm\n"
-      "          Any \"liblib\" occurence is transformed in the expected \"lib\".\n"
+      "          Any \"liblib\" occurrence is transformed in the expected \"lib\".\n"
       "       3) If this is specified in conjunction with --multiDict, the output is\n"
       "          libTARGETLIBRARY_DICTIONARY_rdict.pcm\n";
 

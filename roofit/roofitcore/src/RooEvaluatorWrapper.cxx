@@ -25,15 +25,17 @@ Wraps a RooFit::Evaluator that evaluates a RooAbsReal back into a RooAbsReal.
 
 #include <RooAbsData.h>
 #include <RooAbsPdf.h>
-#include <RooConstVar.h>
-#include <RooHelpers.h>
 #include <RooMsgService.h>
 #include <RooRealVar.h>
 #include <RooSimultaneous.h>
 
+#include "RooFit/BatchModeDataHelpers.h"
+
 #include <TInterpreter.h>
 
 #include <fstream>
+
+namespace RooFit::Experimental {
 
 RooEvaluatorWrapper::RooEvaluatorWrapper(RooAbsReal &topNode, RooAbsData *data, bool useGPU,
                                          std::string const &rangeName, RooAbsPdf const *pdf,
@@ -256,12 +258,28 @@ RooFuncWrapper::RooFuncWrapper(RooAbsReal &obj, const RooAbsData *data, RooSimul
       }
    }
 
-   gInterpreter->Declare("#pragma cling optimize(2)");
-
    // Declare the function and create its derivative.
    auto print = [](std::string const &msg) { oocoutI(nullptr, Fitting) << msg << std::endl; };
    ROOT::Math::Util::TimingScope timingScope(print, "Function JIT time:");
    _funcName = ctx.buildFunction(obj, nodeOutputSizes);
+
+   // Make sure the codegen implementations are known to the interpreter
+   gInterpreter->Declare("#include <RooFit/CodegenImpl.h>\n");
+
+   if (!gInterpreter->Declare(ctx.collectedCode().c_str())) {
+      std::stringstream errorMsg;
+      std::string debugFileName = "_codegen_" + _funcName + ".cxx";
+      errorMsg << "Function " << _funcName << " could not be compiled. See above for details. Full code dumped to file "
+               << debugFileName << "for debugging";
+      {
+         std::ofstream outFile;
+         outFile.open(debugFileName.c_str());
+         outFile << ctx.collectedCode();
+      }
+      oocoutE(nullptr, InputArguments) << errorMsg.str() << std::endl;
+      throw std::runtime_error(errorMsg.str().c_str());
+   }
+
    _func = reinterpret_cast<Func>(gInterpreter->ProcessLine((_funcName + ";").c_str()));
 
    _xlArr = ctx.xlArr();
@@ -383,7 +401,6 @@ void RooFuncWrapper::writeDebugMacro(std::string const &filename) const
 #include <RooFit/Detail/MathFuncs.h>
 #include <Math/CladDerivator.h>
 
-#pragma cling optimize(2)
 )" << allCode.str()
            << R"(
 #pragma clad ON
@@ -512,5 +529,13 @@ bool RooEvaluatorWrapper::hasGradient() const
       return false;
    return _funcWrapper->hasGradient();
 }
+
+void RooEvaluatorWrapper::writeDebugMacro(std::string const &filename) const
+{
+   if (_funcWrapper)
+      return _funcWrapper->writeDebugMacro(filename);
+}
+
+} // namespace RooFit::Experimental
 
 /// \endcond

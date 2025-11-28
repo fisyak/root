@@ -531,10 +531,12 @@ if(webgui)
    set(root_canvas_class "TWebCanvas")
    set(root_treeviewer_class "RTreeViewer")
    set(root_geompainter_type "web")
+   set(root_jupyter_jsroot "on")
 else()
    set(root_canvas_class "TRootCanvas")
    set(root_treeviewer_class "TTreeViewer")
    set(root_geompainter_type "root")
+   set(root_jupyter_jsroot "off")
 endif()
 
 if(root7 AND webgui)
@@ -813,13 +815,6 @@ install(FILES ${CMAKE_BINARY_DIR}/etc/root.mimes
               ${CMAKE_BINARY_DIR}/etc/system.rootauthrc
               ${CMAKE_BINARY_DIR}/etc/system.rootdaemonrc
               DESTINATION ${CMAKE_INSTALL_SYSCONFDIR})
-
-if(NOT gnuinstall)
-  install(FILES ${CMAKE_BINARY_DIR}/config/Makefile.comp
-                ${CMAKE_BINARY_DIR}/config/Makefile.config
-                DESTINATION config)
-endif()
-
 
 endfunction()
 RootConfigure()

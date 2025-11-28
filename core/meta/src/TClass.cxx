@@ -1128,7 +1128,6 @@ void TAutoInspector::Inspect(TClass *cl, const char *tit, const char *name,
 //______________________________________________________________________________
 //______________________________________________________________________________
 
-ClassImp(TClass);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Internal, default constructor.
@@ -6944,7 +6943,7 @@ void TClass::StreamerDefault(const TClass* pThis, void *object, TBuffer &b, cons
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Adopt a TClassStreamer object.  Ownership is transfered to this TClass
+/// Adopt a TClassStreamer object.  Ownership is transferred to this TClass
 /// object.
 
 void TClass::AdoptStreamer(TClassStreamer *str)
