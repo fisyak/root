@@ -92,6 +92,7 @@ set(py_sources
   ROOT/_pythonization/_rvec.py
   ROOT/_pythonization/_stl_vector.py
   ROOT/_pythonization/_tarray.py
+  ROOT/_pythonization/_tbrowser.py
   ROOT/_pythonization/_tclass.py
   ROOT/_pythonization/_tclonesarray.py
   ROOT/_pythonization/_tcollection.py
@@ -109,6 +110,7 @@ set(py_sources
   ROOT/_pythonization/_tfile.py
   ROOT/_pythonization/_tfilemerger.py
   ROOT/_pythonization/_tformula.py
+  ROOT/_pythonization/_tcanvas.py
   ROOT/_pythonization/_tgraph.py
   ROOT/_pythonization/_tgraph2d.py
   ROOT/_pythonization/_th1.py
