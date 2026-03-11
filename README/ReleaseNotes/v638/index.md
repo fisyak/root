@@ -578,3 +578,19 @@ Besides the numerous fixes, forty of them, some of the work in preparation for R
   * [[#15872](https://github.com/root-project/root/issues/15872)] - [PyROOT] The cppyy version inside ROOT doesn't support `long long`
   * [[#7167](https://github.com/root-project/root/issues/7167)] - [TTreeProcessorMP] Warn if Process is called from a multi-thread program
   * [[ROOT-8842](https://its.cern.ch/jira/browse/8842)] - TTreeReaderFast crashes reading flat TTree
+
+## Release 6.38.04
+Published on March 11, 2026
+
+This patch release brings a few fixes, that accumulated during the last month.
+
+### Items addressed in this release
+
+  * [[#21541](https://github.com/root-project/root/issues/21541)] - [RF] `createChi2` ignores ranges provided by the Range() option
+  * [[#21507](https://github.com/root-project/root/issues/21507)] - [io] Relatively rare crash of ML Data Loader
+  * [[#21484](https://github.com/root-project/root/issues/21484)] - Last axis title is not set for THn and THnSparseD histograms, affects also HistoND and HistoNSparseD
+  * [[#21379](https://github.com/root-project/root/issues/21379)] - Missing numpy.uint8 pythonisation in SetBranchAddress in ROOT 6.38
+  * [[#21378](https://github.com/root-project/root/issues/21378)] - [Python] NumPy conversion fails for multidimensional arrays (incorrect itemsize in LowLevelView)
+  * [[#21366](https://github.com/root-project/root/issues/21366)] - TGraph2D::Build function may leave the newly created object in inconsistent non-initialised state
+  * [[#19329](https://github.com/root-project/root/issues/19329)] - h2root fragilities
+  * [[#16673](https://github.com/root-project/root/issues/16673)] - [RF] Different behaviour of multi-range fit in RooAddPdf and RooProdPdf
