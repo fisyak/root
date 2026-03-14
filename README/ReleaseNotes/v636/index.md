@@ -698,6 +698,7 @@ Published on March 13, 2026
 This release features a few minor fixes and the changes necessary to run correctly with Apple XCode 26.4.
 
 The list of issues addressed for this release is the following:
+
   * [[#21541](https://github.com/root-project/root/issues/21541)] - [RF] `createChi2` ignores ranges provided by the Range() option
   * [[#21159](https://github.com/root-project/root/issues/21159)] - [RF] Unexpected result with RooFFTConvPDF after ROOT 6.32
   * [[#16673](https://github.com/root-project/root/issues/16673)] - [RF] Different behaviour of multi-range fit in RooAddPdf and RooProdPdf
