@@ -178,7 +178,7 @@ TParticlePDG* TDatabasePDG::AddAntiParticle(const char* Name, Int_t PdgCode)
    TParticlePDG* ap = AddParticle(Name,
                                   Name,
                                   p->Mass(),
-                                  1,
+                                  p->Stable(),
                                   p->Width(),
                                   -p->Charge(),
                                   p->ParticleClass(),
@@ -680,7 +680,7 @@ void TDatabasePDG::ReadPDGTable(const char *FileName)
    while ((p = (TParticlePDG*) it.Next())) {
 
       // define decay channels for antiparticles
-      if (p->PdgCode() < 0) {
+     if (p->PdgCode() < 0 && ! p->DecayList()) {
          ap = GetParticle(-p->PdgCode());
          if (!ap) continue;
          nch = ap->NDecayChannels();
