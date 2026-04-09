@@ -169,7 +169,14 @@ int main( int argc, char **argv )
          outputPlace = a;
       }
    }
-
+#define __STAR__
+#ifdef __STAR__
+   const Char_t *STARLIBS[4] = {"libTable","libStarRoot","libSt_base","libStChain"};
+   for (Int_t i = 0; i < 4; i++) {
+     if (gSystem->DynamicPathName(STARLIBS[i])) gSystem->Load(STARLIBS[i]);
+     else break;
+   }
+#endif /* __STAR__ */
    gSystem->Load("libTreePlayer");
    TClass::GetClass("ROOT::Cintex::Cintex"); // autoload Cintex if it exist.
    if (gInterpreter->IsLoaded("libCintex")) {
