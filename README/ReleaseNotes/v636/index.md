@@ -703,4 +703,15 @@ The list of issues addressed for this release is the following:
   * [[#21159](https://github.com/root-project/root/issues/21159)] - [RF] Unexpected result with RooFFTConvPDF after ROOT 6.32
   * [[#16673](https://github.com/root-project/root/issues/16673)] - [RF] Different behaviour of multi-range fit in RooAddPdf and RooProdPdf
 
+## Release 6.36.12
+
+Published on April 27, 2026
+
+### Items addressed in this release
+
+This release features a few fixes and minor documentation updates, most notably:
+
+  * [[#22015](https://github.com/root-project/root/issues/22015)] - Non uniquess of the UUID inside TFile
+  * [[#21880](https://github.com/root-project/root/issues/21880)] - [asimage] crash with DrawCircle
+
 ## HEAD of the v6-36-00-patches branch
