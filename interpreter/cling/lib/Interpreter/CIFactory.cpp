@@ -1422,6 +1422,11 @@ namespace {
       argvCompile.push_back("-fno-omit-frame-pointer");
     }
 
+    // Promote -Wreturn-type to an error. A missing return in a non-void
+    // function is a warning by default, and cling cannot safely continue and
+    // crashes later.
+    argvCompile.push_back("-Werror=return-type");
+
 #ifdef CLING_WITH_ADAPTIVECPP
     argvCompile.push_back("-D__ACPP_ENABLE_LLVM_SSCP_TARGET__");
     argvCompile.push_back("-Xclang");
@@ -1473,7 +1478,7 @@ namespace {
     }
 
     llvm::Triple TheTriple(llvm::sys::getProcessTriple());
-    clang::driver::Driver Drvr(argv[0], TheTriple.getTriple(), *Diags);
+    clang::driver::Driver Drvr(ClingBin, TheTriple.getTriple(), *Diags);
     //Drvr.setWarnMissingInput(false);
     Drvr.setCheckInputsExist(false); // think foo.C(12)
     llvm::ArrayRef<const char*>RF(&(argvCompile[0]), argvCompile.size());
@@ -1695,7 +1700,7 @@ namespace {
 
     std::vector<std::unique_ptr<ASTConsumer>> Consumers;
 
-    if (!OnlyLex) {
+    if (!OnlyLex && !AutoComplete) {
       assert(customConsumer && "Need to specify a custom consumer"
                                " when not in OnlyLex mode");
       Consumers.push_back(std::move(customConsumer));
@@ -1829,25 +1834,27 @@ namespace {
 
 namespace cling {
 
-  CompilerInstance*
-  CIFactory::createCI(llvm::StringRef Code, const InvocationOptions& Opts,
-                      const char* LLVMDir,
-                      std::unique_ptr<clang::ASTConsumer> consumer,
-                      const ModuleFileExtensions& moduleExtensions,
-                      bool AutoComplete /*false*/) {
+  CompilerInstance* CIFactory::createCI(
+      llvm::StringRef Code, const InvocationOptions& Opts, const char* LLVMDir,
+      std::optional<std::unique_ptr<clang::ASTConsumer>> consumerOpt,
+      const ModuleFileExtensions& moduleExtensions,
+      bool AutoComplete /*false*/) {
     return createCIImpl(llvm::MemoryBuffer::getMemBuffer(Code),
-                        Opts.CompilerOpts, LLVMDir, std::move(consumer),
+                        Opts.CompilerOpts, LLVMDir,
+                        consumerOpt ? std::move(*consumerOpt) : nullptr,
                         moduleExtensions, false /*OnlyLex*/,
                         !Opts.IsInteractive(), AutoComplete);
   }
 
-CompilerInstance* CIFactory::createCI(
-    MemBufPtr_t Buffer, int argc, const char* const* argv, const char* LLVMDir,
-    std::unique_ptr<clang::ASTConsumer> consumer,
-    const ModuleFileExtensions& moduleExtensions, bool OnlyLex /*false*/) {
-  return createCIImpl(std::move(Buffer), CompilerOptions(argc, argv),  LLVMDir,
-                      std::move(consumer), moduleExtensions, OnlyLex);
-}
+  CompilerInstance* CIFactory::createCI(
+      MemBufPtr_t Buffer, int argc, const char* const* argv,
+      const char* LLVMDir,
+      std::optional<std::unique_ptr<clang::ASTConsumer>> consumerOpt,
+      const ModuleFileExtensions& moduleExtensions, bool OnlyLex /*false*/) {
+    return createCIImpl(std::move(Buffer), CompilerOptions(argc, argv), LLVMDir,
+                        consumerOpt ? std::move(*consumerOpt) : nullptr,
+                        moduleExtensions, OnlyLex);
+  }
 
 } // namespace cling
 

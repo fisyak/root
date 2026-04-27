@@ -267,7 +267,7 @@ class TCanvasPainter extends TPadPainter {
 
    /** @summary Function called when canvas menu item Save is called */
    saveCanvasAsFile(fname) {
-      const pnt = fname.indexOf('.');
+      const pnt = fname.lastIndexOf('.');
       this.createImage(fname.slice(pnt + 1))
           .then(res => this.sendWebsocket(`SAVE:${fname}:${res}`));
    }
@@ -934,6 +934,20 @@ class TCanvasPainter extends TPadPainter {
       }
 
       this.getWebsocket()?.resizeWindow(fullW, fullH);
+   }
+
+   /** @summary create three.js object for TCanvas */
+   static async build3d(can, opt, get_painter) {
+      const painter = new TCanvasPainter(null, can, opt, true);
+      painter.checkSpecialsInPrimitives(can, true);
+
+      const fp = new TFramePainter(null, null);
+      // return dummy frame painter as result
+      painter.getFramePainter = () => fp;
+
+      return painter.drawPrimitives().then(() => {
+         return get_painter ? painter : fp.create3DScene(-1, true);
+      });
    }
 
    /** @summary draw TCanvas */

@@ -3846,7 +3846,7 @@ void TTree::Delete(Option_t* option /* = "" */)
       ResetBit(kMustCleanup);
    }
 
-   // Delete object from CINT symbol table so it can not be used anymore.
+   // Delete object from Cling symbol table so it can not be used anymore.
    gCling->DeleteGlobal(this);
 
    // Warning: We have intentional invalidated this object while inside a member function!
@@ -9823,6 +9823,7 @@ void TTree::Streamer(TBuffer& b)
       fDirectory = nullptr;
       fCacheDoAutoInit = true;
       fCacheUserSet = false;
+      fNamesToBranches.clear();
       Version_t R__v = b.ReadVersion(&R__s, &R__c);
       if (R__v > 4) {
          b.ReadClassBuffer(TTree::Class(), this, R__v, R__s, R__c);

@@ -30,6 +30,7 @@
 #include "TEntryList.h"
 #include "TFile.h"
 #include "TFriendElement.h"
+#include "TInterpreter.h"
 #include "TROOT.h" // IsImplicitMTEnabled, gCoreMutex, R__*_LOCKGUARD
 #include "TTreeReader.h"
 #include "TTree.h" // For MaxTreeSizeRAII. Revert when #6640 will be solved.
@@ -90,6 +91,69 @@ std::string &GetCodeToJit()
    return code;
 }
 
+std::string &GetCodeToDeclare()
+{
+   static std::string code;
+   return code;
+}
+
+// Signature of all helper functions that are created by JIT helpers, see
+// Book*Jit and JitBuildAction in RDFInterfaceUtils.cxx
+using JitHelperFunc_t = void (*)(const std::vector<std::string> &, ROOT::Internal::RDF::RColumnRegister &,
+                                 ROOT::Detail::RDF::RLoopManager &, void *, std::shared_ptr<void> *);
+std::unordered_map<std::size_t, JitHelperFunc_t> &GetJitHelperFuncMap()
+{
+   static std::unordered_map<std::size_t, JitHelperFunc_t> map;
+   return map;
+}
+std::unordered_map<std::size_t, std::size_t> &GetJitFuncBodyToFuncIdMap()
+{
+   static std::unordered_map<std::size_t, std::size_t> map;
+   return map;
+}
+
+void DeclareAndRetrieveDeferredJitCalls(const std::string &codeToDeclare)
+{
+   // This function uses the interpreter and writes to the caches.
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
+
+   // Step 1: Declare the DeferredJitCall functions to the interpreter
+   // We use ProcessLine to ensure meta functionality (e.g. autoloading) is
+   // processed when needed.
+   // If instead we used Declare, builds with runtime_cxxmodules=OFF would fail
+   // in jitted actions with custom helpers with errors like:
+   // error: 'MyHelperType' is an incomplete type
+   // return std::make_unique<Action_t>(Helper_t(std::move(*h)), bl, std::move(prevNode), colRegister);
+   //                                   ^
+   gInterpreter->ProcessLine(codeToDeclare.c_str());
+
+   // Step 2: Retrieve the declared functions as function pointers, cache them
+   // for later use in RunDeferredCalls
+   auto &funcIdToFuncPointersMap = GetJitHelperFuncMap();
+   auto &funcBodyToFuncIdMap = GetJitFuncBodyToFuncIdMap();
+   auto clinfo = gInterpreter->ClassInfo_Factory("R_rdf");
+   assert(gInterpreter->ClassInfo_IsValid(clinfo));
+
+   for (auto &codeAndId : funcBodyToFuncIdMap) {
+      if (auto it = funcIdToFuncPointersMap.find(codeAndId.second); it == funcIdToFuncPointersMap.end()) {
+         // fast fetch of the address via gInterpreter
+         // (faster than gInterpreter->Evaluate(function name, ret), ret->GetAsPointer())
+         // Retrieve the JIT helper function we registered via RegisterJitHelperCall
+         auto declid =
+            gInterpreter->GetFunction(clinfo, ("jitNodeRegistrator_" + std::to_string(codeAndId.second)).c_str());
+         assert(declid);
+         auto minfo = gInterpreter->MethodInfo_Factory(declid);
+         assert(gInterpreter->MethodInfo_IsValid(minfo));
+         auto mname = gInterpreter->MethodInfo_GetMangledName(minfo);
+         [[maybe_unused]] auto res = funcIdToFuncPointersMap.insert(
+            {codeAndId.second, reinterpret_cast<JitHelperFunc_t>(gInterpreter->FindSym(mname))});
+         assert(res.second);
+         gInterpreter->MethodInfo_Delete(minfo);
+      }
+   }
+   gInterpreter->ClassInfo_Delete(clinfo);
+}
+
 void ThrowIfNSlotsChanged(unsigned int nSlots)
 {
    const auto currentSlots = RDFInternal::GetNSlots();
@@ -146,6 +210,28 @@ auto MakeDatasetColReadersKey(std::string_view colName, const std::type_info &ti
    //    df.Sum<vector<int>>("stdVectorBranch");
    //    df.Sum<RVecI>("stdVectorBranch");
    return std::string(colName) + ':' + ti.name();
+}
+
+/// \brief Check if object of a certain type is in the directory
+///
+/// Attempts to read an object of the specified type via TDirectory::Get, wraps
+/// it in a std::unique_ptr to avoid leaking the object.
+template <typename T>
+bool IsObjectInDir(std::string_view objName, TDirectory &dir)
+{
+   std::unique_ptr<T> o{dir.Get<T>(objName.data())};
+   return o.get();
+}
+
+/// \brief Check if a generic object is in the directory
+///
+/// Checks if a generic object is in the directory, uses TDirectory::GetKey
+/// to avoid having to deal with memory management of the object being read
+/// without having its type.
+template <>
+bool IsObjectInDir<void>(std::string_view objName, TDirectory &dir)
+{
+   return dir.GetKey(objName.data());
 }
 } // anonymous namespace
 
@@ -327,8 +413,8 @@ void RLoopManager::ChangeSpec(ROOT::RDF::Experimental::RDatasetSpec &&spec)
    fSamples = spec.MoveOutSamples();
    fSampleMap.clear();
 
-   const bool isTTree = inFile->Get<TTree>(datasetName[0].data());
-   const bool isRNTuple = inFile->Get<ROOT::RNTuple>(datasetName[0].data());
+   const bool isTTree = IsObjectInDir<TTree>(datasetName[0], *inFile);
+   const bool isRNTuple = IsObjectInDir<ROOT::RNTuple>(datasetName[0], *inFile);
 
    if (isTTree || isRNTuple) {
 
@@ -394,8 +480,10 @@ void RLoopManager::ChangeSpec(ROOT::RDF::Experimental::RDatasetSpec &&spec)
             v.second.reset();
       }
    } else {
-      throw std::invalid_argument(
-         "RDataFrame: unsupported data format for dataset. Make sure you use TTree or RNTuple.");
+      std::string errMsg =
+         IsObjectInDir<void>(datasetName[0].data(), *inFile) ? "unsupported data format for" : "cannot find";
+      throw std::invalid_argument("RDataFrame: " + errMsg + " dataset \"" + std::string(datasetName[0]) + "\" in file \"" +
+                                  inFile->GetName() + "\".");
    }
 }
 
@@ -675,11 +763,11 @@ void RLoopManager::UpdateSampleInfo(unsigned int slot, TTreeReader &r) {
    // If the tree is stored in a subdirectory, treename will be the full path to it starting with the root directory '/'
    const std::string &id = fname + (treename.rfind('/', 0) == 0 ? "" : "/") + treename;
    if (fSampleMap.empty()) {
-      fSampleInfos[slot] = RSampleInfo(id, range);
+      fSampleInfos[slot] = RSampleInfo(id, range, nullptr, tree->GetEntries());
    } else {
       if (fSampleMap.find(id) == fSampleMap.end())
          throw std::runtime_error("Full sample identifier '" + id + "' cannot be found in the available samples.");
-      fSampleInfos[slot] = RSampleInfo(id, range, fSampleMap[id]);
+      fSampleInfos[slot] = RSampleInfo(id, range, fSampleMap[id], tree->GetEntries());
    }
 }
 
@@ -766,24 +854,57 @@ void RLoopManager::Jit()
 {
    {
       R__READ_LOCKGUARD(ROOT::gCoreMutex);
-      if (GetCodeToJit().empty()) {
+      if (GetCodeToJit().empty() && GetCodeToDeclare().empty()) {
+         RunDeferredCalls();
          R__LOG_INFO(RDFLogChannel()) << "Nothing to jit and execute.";
          return;
       }
    }
 
-   const std::string code = []() {
+   std::string codeToDeclare, code;
+   {
       R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
-      return std::move(GetCodeToJit());
-   }();
+      codeToDeclare.swap(GetCodeToDeclare());
+      code.swap(GetCodeToJit());
+   };
 
    TStopwatch s;
    s.Start();
-   RDFInternal::InterpreterCalc(code, "RLoopManager::Run");
+   if (!codeToDeclare.empty()) {
+      DeclareAndRetrieveDeferredJitCalls(codeToDeclare);
+   }
+   if (!code.empty()) {
+      RDFInternal::InterpreterCalc(code, "RLoopManager::Run");
+   }
    s.Stop();
    R__LOG_INFO(RDFLogChannel()) << "Just-in-time compilation phase completed"
                                 << (s.RealTime() > 1e-3 ? " in " + std::to_string(s.RealTime()) + " seconds."
                                                         : " in less than 1ms.");
+
+   RunDeferredCalls();
+}
+
+void RLoopManager::RunDeferredCalls()
+{
+   if (!fJitHelperCalls.empty()) {
+      // funcMap is not thread-safe
+      R__READ_LOCKGUARD(ROOT::gCoreMutex);
+      TStopwatch s;
+      s.Start();
+      const auto &funcMap = GetJitHelperFuncMap();
+      for (auto &call : fJitHelperCalls) {
+         funcMap.at(call.fFunctionId)(call.fColNames, *call.fColRegister, *this, call.fJittedNode.get(),
+                                      &call.fExtraArgs);
+      }
+      s.Stop();
+      const auto realTime = s.RealTime();
+      R__LOG_INFO(RDFLogChannel()) << fJitHelperCalls.size() << " deferred calls completed"
+                                   << (realTime > 1e-3 ? " in " + std::to_string(realTime) + " seconds."
+                                                       : " in less than 1ms.");
+      // Promoting to write lock to clear the vector
+      R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
+      fJitHelperCalls.clear();
+   }
 }
 
 /// Trigger counting of number of children nodes for each node of the functional graph.
@@ -814,6 +935,10 @@ void RLoopManager::Run(bool jit)
 
    if (jit)
       Jit();
+
+   // Called here since in a RunGraphs run, multiple RLoopManager runs could be
+   // triggered from different threads.
+   RunDeferredCalls();
 
    InitNodes();
 
@@ -932,6 +1057,40 @@ void RLoopManager::ToJitExec(const std::string &code) const
 {
    R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
    GetCodeToJit().append(code);
+}
+
+void RLoopManager::RegisterJitHelperCall(const std::string &funcBody,
+                                         std::unique_ptr<ROOT::Internal::RDF::RColumnRegister> colRegister,
+                                         const std::vector<std::string> &colNames, std::shared_ptr<void> jittedNode,
+                                         std::shared_ptr<void> argument)
+{
+   auto &funcBodyToFuncIdMap = GetJitFuncBodyToFuncIdMap();
+   {
+      R__READ_LOCKGUARD(ROOT::gCoreMutex);
+      auto match = funcBodyToFuncIdMap.find(fStringHasher(funcBody));
+      if (match != funcBodyToFuncIdMap.end()) {
+         R__WRITE_LOCKGUARD(ROOT::gCoreMutex); // modifying fJitHelperCalls
+         std::string funcName = "jitNodeRegistrator_" + std::to_string(match->second);
+         R__LOG_DEBUG(0, RDFLogChannel()) << "JIT helper " << funcName << " was already registered.";
+         fJitHelperCalls.emplace_back(match->second, std::move(colRegister), colNames, jittedNode, argument);
+         return;
+      }
+   }
+
+   {
+      // Register lazily a JIT helper
+      R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
+      auto registratorId = funcBodyToFuncIdMap.size();
+      std::string funcName = "jitNodeRegistrator_" + std::to_string(registratorId);
+      [[maybe_unused]] auto res = funcBodyToFuncIdMap.insert({fStringHasher(funcBody), registratorId});
+      assert(res.second);
+
+      std::string toDeclare = "namespace R_rdf {\n  void " + funcName + funcBody + "\n}\n";
+      R__LOG_DEBUG(0, RDFLogChannel()) << "Registering deferred JIT helper:\n" << toDeclare;
+
+      GetCodeToDeclare().append(toDeclare);
+      fJitHelperCalls.emplace_back(registratorId, std::move(colRegister), colNames, jittedNode, argument);
+   }
 }
 
 void RLoopManager::RegisterCallback(ULong64_t everyNEvents, std::function<void(unsigned int)> &&f)
@@ -1116,14 +1275,16 @@ ROOT::Detail::RDF::CreateLMFromFile(std::string_view datasetName, std::string_vi
 
    auto inFile = OpenFileWithSanityChecks(fileNameGlob);
 
-   if (inFile->Get<TTree>(datasetName.data())) {
+   if (IsObjectInDir<TTree>(datasetName, *inFile)) {
       return CreateLMFromTTree(datasetName, fileNameGlob, defaultColumns, /*checkFile=*/false);
-   } else if (inFile->Get<ROOT::RNTuple>(datasetName.data())) {
+   } else if (IsObjectInDir<ROOT::RNTuple>(datasetName, *inFile)) {
       return CreateLMFromRNTuple(datasetName, fileNameGlob, defaultColumns);
    }
 
-   throw std::invalid_argument("RDataFrame: unsupported data format for dataset \"" + std::string(datasetName) +
-                               "\" in file \"" + inFile->GetName() + "\".");
+   std::string errMsg = IsObjectInDir<void>(datasetName, *inFile) ? "unsupported data format for" : "cannot find";
+
+   throw std::invalid_argument("RDataFrame: " + errMsg + " dataset \"" + std::string(datasetName) + "\" in file \"" +
+                               inFile->GetName() + "\".");
 }
 
 std::shared_ptr<ROOT::Detail::RDF::RLoopManager>
@@ -1136,14 +1297,16 @@ ROOT::Detail::RDF::CreateLMFromFile(std::string_view datasetName, const std::vec
 
    auto inFile = OpenFileWithSanityChecks(fileNameGlobs[0]);
 
-   if (inFile->Get<TTree>(datasetName.data())) {
+   if (IsObjectInDir<TTree>(datasetName, *inFile)) {
       return CreateLMFromTTree(datasetName, fileNameGlobs, defaultColumns, /*checkFile=*/false);
-   } else if (inFile->Get<ROOT::RNTuple>(datasetName.data())) {
+   } else if (IsObjectInDir<ROOT::RNTuple>(datasetName, *inFile)) {
       return CreateLMFromRNTuple(datasetName, fileNameGlobs, defaultColumns);
    }
 
-   throw std::invalid_argument("RDataFrame: unsupported data format for dataset \"" + std::string(datasetName) +
-                               "\" in file \"" + inFile->GetName() + "\".");
+   std::string errMsg = IsObjectInDir<void>(datasetName, *inFile) ? "unsupported data format for" : "cannot find";
+
+   throw std::invalid_argument("RDataFrame: " + errMsg + " dataset \"" + std::string(datasetName) + "\" in file \"" +
+                               inFile->GetName() + "\".");
 }
 
 // outlined to pin virtual table
@@ -1236,4 +1399,24 @@ void ROOT::Detail::RDF::RLoopManager::TTreeThreadTask(TTreeReader &treeReader, R
    (void)slotStack;
    (void)entryCount;
 #endif
+}
+
+ROOT::Detail::RDF::RLoopManager::DeferredJitCall::DeferredJitCall(
+   ROOT::Detail::RDF::RLoopManager::DeferredJitCall &&) noexcept = default;
+
+ROOT::Detail::RDF::RLoopManager::DeferredJitCall &ROOT::Detail::RDF::RLoopManager::DeferredJitCall::operator=(
+   ROOT::Detail::RDF::RLoopManager::DeferredJitCall &&) noexcept = default;
+
+ROOT::Detail::RDF::RLoopManager::DeferredJitCall::~DeferredJitCall() = default;
+
+ROOT::Detail::RDF::RLoopManager::DeferredJitCall::DeferredJitCall(
+   std::size_t id, std::unique_ptr<ROOT::Internal::RDF::RColumnRegister> colRegisterPtr,
+   const std::vector<std::string> &colNamesArg, std::shared_ptr<void> jittedNode, std::shared_ptr<void> argPtr)
+   : fFunctionId(id),
+     fColRegister(std::move(colRegisterPtr)),
+     fColNames(colNamesArg),
+     fJittedNode(jittedNode),
+     fExtraArgs(argPtr)
+{
+   assert(fJittedNode != nullptr);
 }

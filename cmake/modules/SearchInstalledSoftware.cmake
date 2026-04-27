@@ -78,11 +78,59 @@ include(CheckIncludeFileCXX)
 include(ExternalProject)
 include(FindPackageHandleStandardArgs)
 
-set(lcgpackages http://lcgpackages.web.cern.ch/lcgpackages/tarFiles/sources)
+set(lcgpackages https://lcgpackages.web.cern.ch/lcgpackages/tarFiles/sources)
 string(REPLACE "-Werror " "" ROOT_EXTERNAL_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
 
+#--- Search for packages that are absolutely necessary--------------------------
+
+#----------------------------------------------------------------------------
+# ROOT_FIND_REQUIRED_DEP(PACKAGE_NAME BUILTIN_CONFIG_OPTION)
+# Search for a required dependency, unless it's meant to be a built-in.
+# A list of all missing required packages will be printed in case they could
+# not be found.
+macro(ROOT_FIND_REQUIRED_DEP PACKAGE_NAME BUILTIN_CONFIG_OPTION)
+  if(NOT ${BUILTIN_CONFIG_OPTION})
+    find_package(${PACKAGE_NAME})
+    if(NOT ${PACKAGE_NAME}_FOUND)
+      message(SEND_ERROR "The required package ${PACKAGE_NAME} was not found. "
+      "Please install it in the system (preferred), set the corresponding CMake search variable, "
+      "or opt in to downloading it using '-D${BUILTIN_CONFIG_OPTION}=ON'.")
+      list(APPEND MISSING_PACKAGES ${PACKAGE_NAME})
+    endif()
+  endif()
+endmacro()
+
+# Clear cache variables, or LLVM may use old values for ZLIB
+# TODO: Still needed? This was ported here during a refactoring.
+# When (re-)configuring cleanly (cmake --fresh), this is should be unnecessary.
+foreach(suffix FOUND INCLUDE_DIR LIBRARY LIBRARY_DEBUG LIBRARY_RELEASE LIBRARIES CF)
+  unset(ZLIB_${suffix} CACHE)
+  unset(ZSTD_${suffix} CACHE)
+endforeach()
+
+# Request explicit user opt-in for required dependencies
+if(asimage)
+  ROOT_FIND_REQUIRED_DEP(GIF builtin_gif)
+  ROOT_FIND_REQUIRED_DEP(JPEG builtin_jpeg)
+  # We cannot PNG here because while searching PNG, CMake will also find ZLIB.
+  # If found, CMake will define the default variables and target:
+  # see https://cmake.org/cmake/help/latest/module/FindZLIB.html).
+  # For this reason, the check has to be put below, after ZLIB is searched for.
+  #ROOT_FIND_REQUIRED_DEP(PNG builtin_png)
+endif()
+ROOT_FIND_REQUIRED_DEP(LZ4 builtin_lz4)
+ROOT_FIND_REQUIRED_DEP(LibLZMA builtin_lzma)
+ROOT_FIND_REQUIRED_DEP(ZLIB builtin_zlib)
+ROOT_FIND_REQUIRED_DEP(ZSTD builtin_zstd)
+
+if(NOT "${MISSING_PACKAGES}" STREQUAL "")
+  message(FATAL_ERROR "The following packages need to be installed or enabled to build ROOT: ${MISSING_PACKAGES}")
+endif()
+
+#--- Redefine find_package for LLVM to pick up ROOT's builtins ----------------------
+# TODO: Make this only local to LLVM?
 macro(find_package)
-  if(NOT "${ARGV0}" IN_LIST ROOT_BUILTINS)
+  if(NOT "${ARGV0}" IN_LIST ROOT_BUILTINS) # ROOT_BUILTINS are the variable names, not the same as ROOT_BUILTIN_TARGETS used for move-header dependency
     _find_package(${ARGV})
   endif()
 endmacro()
@@ -100,39 +148,33 @@ if(NOT shared)
   endif()
 endif()
 
-
-#---Check for Cocoa/Quartz graphics backend (MacOS X only)---------------------------
-if(cocoa)
-  if(APPLE)
-    set(x11 OFF CACHE BOOL "Disabled because cocoa requested (${x11_description})" FORCE)
-    set(builtin_freetype ON CACHE BOOL "Enabled because needed for Cocoa graphics (${builtin_freetype_description})" FORCE)
-  else()
-    message(STATUS "Cocoa option can only be enabled on MacOSX platform")
-    set(cocoa OFF CACHE BOOL "Disabled because only available on MacOSX (${cocoa_description})" FORCE)
-  endif()
-endif()
-
 #---Check for Zlib ------------------------------------------------------------------
-if(NOT builtin_zlib)
-  message(STATUS "Looking for ZLib")
-  # Clear cache variables, or LLVM may use old values for ZLIB
-  foreach(suffix FOUND INCLUDE_DIR LIBRARY LIBRARY_DEBUG LIBRARY_RELEASE CF)
-    unset(ZLIB_${suffix} CACHE)
-  endforeach()
-  if(fail-on-missing)
-    find_package(ZLIB REQUIRED)
-  else()
-    find_package(ZLIB)
-    if(NOT ZLIB_FOUND)
-      message(STATUS "Zlib not found. Switching on builtin_zlib option")
-      set(builtin_zlib ON CACHE BOOL "Enabled because Zlib not found (${builtin_zlib_description})" FORCE)
-    endif()
-  endif()
-endif()
-
 if(builtin_zlib)
   list(APPEND ROOT_BUILTINS ZLIB)
   add_subdirectory(builtins/zlib)
+else()
+  # If not built-in, check if this is zlib-ng
+  set(CMAKE_REQUIRED_INCLUDES ${ZLIB_INCLUDE_DIRS})
+  message(STATUS "Checking whether zlib-ng is provided")
+  check_c_source_compiles("
+      #include <zlib.h>
+      #ifndef ZLIBNG_VERNUM
+      #error Not zlib-ng
+      #endif
+      int main() { return 0; }
+  " ZLIB_NG)
+endif()
+
+if(ZLIB_NG)
+  message(STATUS "Zlib-ng detected")
+else()
+  message(STATUS "Zlib detected")
+endif()
+
+if(asimage)
+  # This check can be added only now because of the reasons explained above, where all
+  # other required dependencies are checked.
+  ROOT_FIND_REQUIRED_DEP(PNG builtin_png)
 endif()
 
 #---Check for nlohmann/json.hpp---------------------------------------------------------
@@ -163,6 +205,7 @@ if(NOT builtin_nlohmannjson)
 endif()
 
 if(builtin_nlohmannjson)
+  list(APPEND ROOT_BUILTINS BUILTIN_NLOHMANN)
   add_subdirectory(builtins/nlohmann)
 endif()
 
@@ -203,86 +246,22 @@ if(unuran AND NOT builtin_unuran)
 endif()
 
 #---Check for Freetype---------------------------------------------------------------
-if(NOT builtin_freetype)
-  message(STATUS "Looking for Freetype")
-  if(fail-on-missing)
-    find_package(Freetype REQUIRED)
-  else()
-    find_package(Freetype)
-    if(FREETYPE_FOUND)
-      set(FREETYPE_INCLUDE_DIR ${FREETYPE_INCLUDE_DIR_freetype2})
-    else()
-      message(STATUS "FreeType not found. Switching on builtin_freetype option")
-      set(builtin_freetype ON CACHE BOOL "Enabled because FreeType not found (${builtin_freetype_description})" FORCE)
-    endif()
-  endif()
+ROOT_FIND_REQUIRED_DEP(Freetype builtin_freetype) # needed for asimage, but also outside of it (for "graf" target)
+if(builtin_freetype)
+  list(APPEND ROOT_BUILTINS BUILTIN_FREETYPE)
+  add_subdirectory(builtins/freetype)
 endif()
 
-if(builtin_freetype)
-  set(freetype_version 2.12.1)
-  message(STATUS "Building freetype version ${freetype_version} included in ROOT itself")
-  set(FREETYPE_LIBRARY ${CMAKE_BINARY_DIR}/FREETYPE-prefix/src/FREETYPE/objs/.libs/${CMAKE_STATIC_LIBRARY_PREFIX}freetype${CMAKE_STATIC_LIBRARY_SUFFIX})
-  if(WIN32)
-    set(FREETYPE_LIB_DIR ".")
-    if(CMAKE_GENERATOR MATCHES Ninja)
-      set(freetypelib freetype.lib)
-      if (CMAKE_BUILD_TYPE MATCHES Debug)
-        set(freetypelib freetyped.lib)
-      endif()
-    else()
-      set(freetypebuild Release)
-      set(freetypelib freetype.lib)
-      if(winrtdebug)
-        set(freetypebuild Debug)
-        set(freetypelib freetyped.lib)
-      endif()
-      set(FREETYPE_LIB_DIR "${freetypebuild}")
-      set(FREETYPE_EXTRA_BUILD_ARGS --config ${freetypebuild})
-    endif()
-    ExternalProject_Add(
-      FREETYPE
-      URL ${CMAKE_SOURCE_DIR}/graf2d/freetype/src/freetype-${freetype_version}.tar.gz
-      URL_HASH SHA256=efe71fd4b8246f1b0b1b9bfca13cfff1c9ad85930340c27df469733bbb620938
-      INSTALL_DIR ${CMAKE_BINARY_DIR}
-      CMAKE_ARGS -G ${CMAKE_GENERATOR} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-                 -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX} -DFT_DISABLE_BZIP2=TRUE
-                 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-      BUILD_COMMAND ${CMAKE_COMMAND} --build . ${FREETYPE_EXTRA_BUILD_ARGS}
-      INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FREETYPE_LIB_DIR}/${freetypelib} ${FREETYPE_LIBRARY}
-      LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
-      BUILD_IN_SOURCE 0
-      BUILD_BYPRODUCTS ${FREETYPE_LIBRARY}
-      TIMEOUT 600
-    )
+#---Check for Cocoa/Quartz graphics backend (MacOS X only)---------------------------
+# Note that this check happens *after* the above check for FreeType because that
+# library is needed for builds on Apple with Cocoa graphics
+if(cocoa)
+  if(APPLE)
+    set(x11 OFF CACHE BOOL "Disabled because cocoa requested (${x11_description})" FORCE)
   else()
-    set(_freetype_cflags -O)
-    set(_freetype_cc ${CMAKE_C_COMPILER})
-    if(CMAKE_SYSTEM_NAME STREQUAL AIX)
-      set(_freetype_zlib --without-zlib)
-    endif()
-    set(_freetype_brotli "--with-brotli=no")
-    if(CMAKE_OSX_SYSROOT)
-      set(_freetype_cc "${_freetype_cc} -isysroot ${CMAKE_OSX_SYSROOT}")
-    endif()
-    ExternalProject_Add(
-      FREETYPE
-      URL ${CMAKE_SOURCE_DIR}/graf2d/freetype/src/freetype-${freetype_version}.tar.gz
-      URL_HASH SHA256=efe71fd4b8246f1b0b1b9bfca13cfff1c9ad85930340c27df469733bbb620938
-      CONFIGURE_COMMAND ./configure --prefix <INSTALL_DIR> --with-pic
-                         --disable-shared --with-png=no --with-bzip2=no
-                         --with-harfbuzz=no ${_freetype_brotli} ${_freetype_zlib}
-                          "CC=${_freetype_cc}" CFLAGS=${_freetype_cflags}
-      INSTALL_COMMAND ""
-      LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
-      BUILD_IN_SOURCE 1
-      BUILD_BYPRODUCTS ${FREETYPE_LIBRARY}
-      TIMEOUT 600
-    )
+    message(STATUS "Cocoa option can only be enabled on MacOSX platform")
+    set(cocoa OFF CACHE BOOL "Disabled because only available on MacOSX (${cocoa_description})" FORCE)
   endif()
-  set(FREETYPE_INCLUDE_DIR ${CMAKE_BINARY_DIR}/FREETYPE-prefix/src/FREETYPE/include)
-  set(FREETYPE_INCLUDE_DIRS ${FREETYPE_INCLUDE_DIR})
-  set(FREETYPE_LIBRARIES ${FREETYPE_LIBRARY})
-  set(FREETYPE_TARGET FREETYPE)
 endif()
 
 #---Check for PCRE-------------------------------------------------------------------
@@ -314,76 +293,9 @@ if(builtin_pcre)
 endif()
 
 #---Check for LZMA-------------------------------------------------------------------
-if(NOT builtin_lzma)
-  message(STATUS "Looking for LZMA")
-  if(fail-on-missing)
-    find_package(LibLZMA REQUIRED)
-  else()
-    find_package(LibLZMA)
-    if(NOT LIBLZMA_FOUND)
-      message(STATUS "LZMA not found. Switching on builtin_lzma option")
-      set(builtin_lzma ON CACHE BOOL "Enabled because LZMA not found (${builtin_lzma_description})" FORCE)
-    endif()
-  endif()
-endif()
-
 if(builtin_lzma)
-  set(lzma_version 5.2.4)
-  set(LZMA_TARGET LZMA)
-  message(STATUS "Building LZMA version ${lzma_version} included in ROOT itself")
-  if(WIN32)
-    set(lzma_version 5.6.3)
-    set(LIBLZMA_LIBRARIES ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}lzma${CMAKE_STATIC_LIBRARY_SUFFIX})
-    ExternalProject_Add(
-      LZMA
-      URL ${CMAKE_SOURCE_DIR}/core/lzma/src/xz-${lzma_version}.tar.gz
-      URL_HASH SHA256=b1d45295d3f71f25a4c9101bd7c8d16cb56348bbef3bbc738da0351e17c73317
-      INSTALL_DIR ${CMAKE_BINARY_DIR}
-      CMAKE_ARGS -G ${CMAKE_GENERATOR} -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
-                 -DCMAKE_CXX_FLAGS_RELWITHDEBINFO=${CMAKE_CXX_FLAGS_RELWITHDEBINFO}
-                 -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
-                 -DCMAKE_CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}
-      BUILD_COMMAND ${CMAKE_COMMAND} --build . --config $<CONFIG> --target liblzma
-      INSTALL_COMMAND ${CMAKE_COMMAND} --install . --config $<CONFIG> --component liblzma_Development
-      LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
-      BUILD_IN_SOURCE 1
-      BUILD_BYPRODUCTS ${LIBLZMA_LIBRARIES}
-      TIMEOUT 600
-    )
-    set(LIBLZMA_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include)
-  else()
-    if(CMAKE_CXX_COMPILER_ID MATCHES Clang)
-      set(LIBLZMA_CFLAGS "-Wno-format-nonliteral")
-      set(LIBLZMA_LDFLAGS "-Qunused-arguments")
-    elseif( CMAKE_CXX_COMPILER_ID STREQUAL Intel)
-      set(LIBLZMA_CFLAGS "-wd188 -wd181 -wd1292 -wd10006 -wd10156 -wd2259 -wd981 -wd128 -wd3179 -wd2102")
-    endif()
-    if(CMAKE_OSX_SYSROOT)
-      set(LIBLZMA_CFLAGS "${LIBLZMA_CFLAGS} -isysroot ${CMAKE_OSX_SYSROOT}")
-    endif()
-    set(LIBLZMA_LIBRARIES ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}lzma${CMAKE_STATIC_LIBRARY_SUFFIX})
-    set(LIBLZMA_CFLAGS "${LIBLZMA_CFLAGS} -O3")
-    ExternalProject_Add(
-      LZMA
-      URL ${CMAKE_SOURCE_DIR}/core/lzma/src/xz-${lzma_version}.tar.gz
-      URL_HASH SHA256=b512f3b726d3b37b6dc4c8570e137b9311e7552e8ccbab4d39d47ce5f4177145
-      INSTALL_DIR ${CMAKE_BINARY_DIR}
-      CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix <INSTALL_DIR> --libdir <INSTALL_DIR>/lib
-                        --with-pic --disable-shared --quiet
-                        --disable-scripts --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-lzma-links
-                        CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} CFLAGS=${LIBLZMA_CFLAGS} LDFLAGS=${LIBLZMA_LDFLAGS}
-      LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
-      BUILD_IN_SOURCE 1
-      BUILD_BYPRODUCTS ${LIBLZMA_LIBRARIES}
-      TIMEOUT 600
-    )
-    set(LIBLZMA_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include)
-  endif()
-
-  add_library(LibLZMA STATIC IMPORTED GLOBAL)
-  add_library(LibLZMA::LibLZMA ALIAS LibLZMA)
-  target_include_directories(LibLZMA INTERFACE ${LIBLZMA_INCLUDE_DIR})
-  set_target_properties(LibLZMA PROPERTIES IMPORTED_LOCATION ${LIBLZMA_LIBRARIES})
+  list(APPEND ROOT_BUILTINS LZMA)
+  add_subdirectory(builtins/lzma)
 endif()
 
 #---Check for xxHash-----------------------------------------------------------------
@@ -406,26 +318,8 @@ if(builtin_xxhash)
 endif()
 
 #---Check for ZSTD-------------------------------------------------------------------
-if(NOT builtin_zstd)
-  message(STATUS "Looking for ZSTD")
-  foreach(suffix FOUND INCLUDE_DIR LIBRARY LIBRARIES LIBRARY_DEBUG LIBRARY_RELEASE)
-    unset(ZSTD_${suffix} CACHE)
-  endforeach()
-  if(fail-on-missing)
-    find_package(ZSTD REQUIRED)
-    if(ZSTD_VERSION VERSION_LESS 1.0.0)
-      message(FATAL "Version of installed ZSTD is too old: ${ZSTD_VERSION}. Please install newer version (>1.0.0)")
-    endif()
-  else()
-    find_package(ZSTD)
-    if(NOT ZSTD_FOUND)
-      message(STATUS "ZSTD not found. Switching on builtin_zstd option")
-      set(builtin_zstd ON CACHE BOOL "Enabled because ZSTD not found (${builtin_zstd_description})" FORCE)
-    elseif(ZSTD_FOUND AND ZSTD_VERSION VERSION_LESS 1.0.0)
-      message(STATUS "Version of installed ZSTD is too old: ${ZSTD_VERSION}. Switching on builtin_zstd option")
-      set(builtin_zstd ON CACHE BOOL "Enabled because ZSTD not found (${builtin_zstd_description})" FORCE)
-    endif()
-  endif()
+if(ZSTD_FOUND AND ZSTD_VERSION VERSION_LESS 1.0.0)
+  message(FATAL "Version of installed ZSTD is too old: ${ZSTD_VERSION}. Please install newer version (>1.0.0)")
 endif()
 
 if(builtin_zstd)
@@ -435,22 +329,6 @@ if(builtin_zstd)
 endif()
 
 #---Check for LZ4--------------------------------------------------------------------
-if(NOT builtin_lz4)
-  message(STATUS "Looking for LZ4")
-  foreach(suffix FOUND INCLUDE_DIR LIBRARY LIBRARY_DEBUG LIBRARY_RELEASE)
-    unset(LZ4_${suffix} CACHE)
-  endforeach()
-  if(fail-on-missing)
-    find_package(LZ4 REQUIRED)
-  else()
-    find_package(LZ4)
-    if(NOT LZ4_FOUND)
-      message(STATUS "LZ4 not found. Switching on builtin_lz4 option")
-      set(builtin_lz4 ON CACHE BOOL "Enabled because LZ4 not found (${builtin_lz4_description})" FORCE)
-    endif()
-  endif()
-endif()
-
 if(builtin_lz4)
   list(APPEND ROOT_BUILTINS LZ4)
   add_subdirectory(builtins/lz4)
@@ -485,207 +363,38 @@ if(asimage)
 endif()
 if(asimage)
 
-  if(NOT builtin_gif)
-    find_Package(GIF)
-    if(GIF_FOUND)
-      list(APPEND ASEXTRA_LIBRARIES GIF::GIF)
-    else()
-      if(fail-on-missing)
-          message(SEND_ERROR "Dependency libgif not found. Please make sure it's installed on the system, or force the builtin libgif with '-Dbuiltin_gif=ON', or set '-Dfail-on-missing=OFF' to fall back to builtins if a dependency is not found.")
-      else()
-        set(builtin_gif ON CACHE BOOL "Enabled because needed for asimage" FORCE)
-      endif()
-    endif()
+  if(builtin_gif)
+    add_subdirectory(builtins/libgif)
+    get_target_property(GIF_INCLUDE_DIR GIF::GIF INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(GIF_LIBRARY_LOCATION GIF::GIF IMPORTED_LOCATION)
   endif()
+  list(APPEND ASEXTRA_LIBRARIES GIF::GIF)
 
-  if(NOT builtin_png)
-    find_Package(PNG)
-    if(PNG_FOUND)
-      list(APPEND ASEXTRA_LIBRARIES PNG::PNG)
-      # apparently there will be two set of includes here (needs to be selected only last that was passed: PNG_INCLUDE_DIR)
-      list(GET PNG_INCLUDE_DIRS 0 PNG_INCLUDE_DIR)
-    else()
-      if(fail-on-missing)
-          message(SEND_ERROR "Dependency libpng not found. Please make sure it's installed on the system, or force the builtin libpng with '-Dbuiltin_png=ON', or set '-Dfail-on-missing=OFF' to fall back to builtins if a dependency is not found.")
-      else()
-        set(builtin_png ON CACHE BOOL "Enabled because needed for asimage" FORCE)
-      endif()
-    endif()
+  if(builtin_png)
+    add_subdirectory(builtins/libpng)
+    get_target_property(PNG_INCLUDE_DIR PNG::PNG INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(PNG_LIBRARY_LOCATION PNG::PNG IMPORTED_LOCATION)
   endif()
+  list(APPEND ASEXTRA_LIBRARIES PNG::PNG)
 
-  if(NOT builtin_jpeg)
-    find_Package(JPEG)
-    if(JPEG_FOUND)
-      list(APPEND ASEXTRA_LIBRARIES JPEG::JPEG)
-    else()
-      if(fail-on-missing)
-          message(SEND_ERROR "Dependency libjpeg not found. Please make sure it's installed on the system, or force the builtin libjpeg with '-Dbuiltin_jpeg=ON', or set '-Dfail-on-missing=OFF' to fall back to builtins if a dependency is not found.")
-      else()
-        set(builtin_jpeg ON CACHE BOOL "Enabled because needed for asimage" FORCE)
-      endif()
-    endif()
+  if(builtin_jpeg)
+    add_subdirectory(builtins/libjpeg)
+    get_target_property(JPEG_INCLUDE_DIR JPEG::JPEG INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(JPEG_LIBRARY_LOCATION JPEG::JPEG IMPORTED_LOCATION)
   endif()
-
+  list(APPEND ASEXTRA_LIBRARIES JPEG::JPEG)
+  
   if(asimage_tiff)
     find_Package(TIFF)
     if(TIFF_FOUND)
       list(APPEND ASEXTRA_LIBRARIES TIFF::TIFF)
     else()
       if(fail-on-missing)
-          message(SEND_ERROR "Dependency libtiff not found. Please make sure it's installed on the system, or disable TIFF support with '-Dasimage_tiff=OFF', or set '-Dfail-on-missing=OFF' to automatically disable features")
+          message(SEND_ERROR "libtiff required but not found. Please make sure it's installed on the system, or disable TIFF support with '-Dasimage_tiff=OFF', or set '-Dfail-on-missing=OFF' to automatically disable features")
       else()
         set(asimage_tiff OFF CACHE BOOL "Disabled because libtiff was not found" FORCE)
       endif()
     endif()
-  endif()
-
-  #---AfterImage---------------------------------------------------------------
-  set(AFTERIMAGE_LIBRARIES ${CMAKE_BINARY_DIR}/lib/libAfterImage${CMAKE_STATIC_LIBRARY_SUFFIX})
-  if(WIN32)
-    set(ASTEP_LIB_DIR ".")
-    if(NOT CMAKE_GENERATOR MATCHES Ninja)
-      if(winrtdebug)
-        set(astepbld Debug)
-      else()
-        set(astepbld Release)
-      endif()
-      set(ASTEP_LIB_DIR "${astepbld}")
-      set(ASTEP_EXTRA_BUILD_ARGS --config ${astepbld})
-    endif()
-    ExternalProject_Add(
-      AFTERIMAGE
-      DOWNLOAD_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/graf2d/asimage/src/libAfterImage AFTERIMAGE
-      INSTALL_DIR ${CMAKE_BINARY_DIR}
-      CMAKE_ARGS -G ${CMAKE_GENERATOR} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-                 -DFREETYPE_INCLUDE_DIR=${FREETYPE_INCLUDE_DIR} -DZLIB_INCLUDE_DIR=${ZLIB_INCLUDE_DIR}
-      BUILD_COMMAND ${CMAKE_COMMAND} --build . ${ASTEP_EXTRA_BUILD_ARGS}
-      INSTALL_COMMAND  ${CMAKE_COMMAND} -E copy_if_different ${ASTEP_LIB_DIR}/libAfterImage.lib <INSTALL_DIR>/lib/
-      LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
-      BUILD_IN_SOURCE 0
-      BUILD_BYPRODUCTS ${AFTERIMAGE_LIBRARIES}
-      TIMEOUT 600
-    )
-    set(AFTERIMAGE_INCLUDE_DIR ${CMAKE_BINARY_DIR}/AFTERIMAGE-prefix/src/AFTERIMAGE)
-  else()
-    if(NOT builtin_jpeg)
-      list(APPEND afterimage_extra_args --with-jpeg-includes=${JPEG_INCLUDE_DIR})
-    else()
-      list(APPEND afterimage_extra_args --with-builtin-jpeg)
-    endif()
-    if(NOT builtin_gif)
-      list(APPEND afterimage_extra_args --with-gif --with-gif-includes=${GIF_INCLUDE_DIR} --without-builtin-gif)
-    else()
-      list(APPEND afterimage_extra_args --with-builtin-ungif)
-    endif()
-    if(NOT builtin_png)
-      list(APPEND afterimage_extra_args --with-png-includes=${PNG_INCLUDE_DIR})
-    else()
-      list(APPEND afterimage_extra_args --with-builtin-png)
-    endif()
-    if(asimage_tiff)
-      list(APPEND afterimage_extra_args --with-tiff-includes=${TIFF_INCLUDE_DIR})
-    else()
-      list(APPEND afterimage_extra_args --with-tiff=no)
-    endif()
-    if(x11)
-      list(APPEND afterimage_extra_args --with-x)
-    else()
-      list(APPEND afterimage_extra_args --without-x)
-    endif()
-    if(builtin_freetype)
-      list(APPEND afterimage_extra_args --with-ttf-includes=-I${FREETYPE_INCLUDE_DIR})
-      set(_after_cflags "${_after_cflags} -DHAVE_FREETYPE_FREETYPE -DPNG_ARM_NEON_OPT=0")
-    endif()
-    if(CMAKE_OSX_SYSROOT)
-      set(_after_cflags "${_after_cflags} -isysroot ${CMAKE_OSX_SYSROOT}")
-    endif()
-    if(builtin_zlib)
-      set(_after_cflags "${_after_cflags} -I${ZLIB_INCLUDE_DIR}")
-    endif()
-    if(CMAKE_SYSTEM_NAME MATCHES FreeBSD)
-      set(AFTERIMAGE_LIBRARIES ${CMAKE_BINARY_DIR}/AFTERIMAGE-prefix/src/AFTERIMAGE/libAfterImage${CMAKE_STATIC_LIBRARY_SUFFIX})
-    endif()
-    ExternalProject_Add(
-      AFTERIMAGE
-      DOWNLOAD_COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/graf2d/asimage/src/libAfterImage AFTERIMAGE
-      INSTALL_DIR ${CMAKE_BINARY_DIR}
-      CONFIGURE_COMMAND ./configure --prefix <INSTALL_DIR>
-                        --libdir=<INSTALL_DIR>/lib
-                        --with-ttf --with-afterbase=no
-                        --without-svg --disable-glx
-                        --with-jpeg
-                        --with-png
-                        ${afterimage_extra_args}
-                        CC=${CMAKE_C_COMPILER} CFLAGS=${_after_cflags}
-      LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
-      BUILD_IN_SOURCE 1
-      BUILD_BYPRODUCTS ${AFTERIMAGE_LIBRARIES}
-      TIMEOUT 600
-    )
-    set(AFTERIMAGE_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include/libAfterImage)
-    if(CMAKE_SYSTEM_NAME MATCHES FreeBSD)
-      set(AFTERIMAGE_INCLUDE_DIR ${CMAKE_BINARY_DIR}/AFTERIMAGE-prefix/src/AFTERIMAGE)
-    endif()
-  endif()
-  if(builtin_freetype)
-    add_dependencies(AFTERIMAGE FREETYPE)
-  endif()
-  set(AFTERIMAGE_TARGET AFTERIMAGE)
-endif()
-
-#---Check for GSL library---------------------------------------------------------------
-if(mathmore OR builtin_gsl OR (tmva-cpu AND use_gsl_cblas))
-  if(builtin_gsl)
-    ROOT_CHECK_CONNECTION_AND_DISABLE_OPTION("builtin_gsl")
-  endif()
-  message(STATUS "Looking for GSL")
-  if(NOT builtin_gsl)
-    find_package(GSL 1.10)
-    if(NOT GSL_FOUND)
-      if(fail-on-missing)
-        message(SEND_ERROR "GSL package not found and 'mathmore' component if required ('fail-on-missing' enabled). "
-                            "Alternatively, you can enable the option 'builtin_gsl' to build the GSL libraries internally.")
-      else()
-        message(STATUS "GSL not found. Set variable GSL_ROOT_DIR to point to your GSL installation")
-        message(STATUS "               Alternatively, you can also enable the option 'builtin_gsl' to build the GSL libraries internally'")
-        message(STATUS "               For the time being switching OFF 'mathmore' option")
-        set(mathmore OFF CACHE BOOL "Disable because builtin_gsl disabled and external GSL not found (${mathmore_description})" FORCE)
-      endif()
-    endif()
-  else()
-    set(gsl_version 2.5)
-    message(STATUS "Downloading and building GSL version ${gsl_version}")
-    foreach(l gsl gslcblas)
-      list(APPEND GSL_LIBRARIES ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${l}${CMAKE_STATIC_LIBRARY_SUFFIX})
-    endforeach()
-    set(GSL_CBLAS_LIBRARY ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}gslcblas${CMAKE_STATIC_LIBRARY_SUFFIX})
-    if(CMAKE_OSX_SYSROOT)
-      set(_gsl_cppflags "-isysroot ${CMAKE_OSX_SYSROOT}")
-      set(_gsl_ldflags  "-isysroot ${CMAKE_OSX_SYSROOT}")
-    endif()
-    ExternalProject_Add(
-      GSL
-      # http://mirror.switch.ch/ftp/mirror/gnu/gsl/gsl-${gsl_version}.tar.gz
-      URL ${lcgpackages}/gsl-${gsl_version}.tar.gz
-      URL_HASH SHA256=0460ad7c2542caaddc6729762952d345374784100223995eb14d614861f2258d
-      SOURCE_DIR GSL-src # prevent "<gsl/...>" vs GSL/ macOS warning
-      INSTALL_DIR ${CMAKE_BINARY_DIR}
-      CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix <INSTALL_DIR>
-                        --libdir=<INSTALL_DIR>/lib
-                        --enable-shared=no --with-pic
-                        CC=${CMAKE_C_COMPILER}
-                        CFLAGS=${CMAKE_C_FLAGS}
-                        CPPFLAGS=${_gsl_cppflags}
-                        LDFLAGS=${_gsl_ldflags}
-      LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
-      BUILD_BYPRODUCTS ${GSL_LIBRARIES}
-      TIMEOUT 600
-    )
-    set(GSL_TARGET GSL)
-    # FIXME: one need to find better way to extract path with GSL include files
-    set(GSL_INCLUDE_DIR ${CMAKE_BINARY_DIR}/GSL-prefix/src/GSL-build)
-    set(GSL_FOUND ON)
-    set(mathmore ON CACHE BOOL "Enabled because builtin_gsl requested (${mathmore_description})" FORCE)
   endif()
 endif()
 
@@ -708,7 +417,7 @@ endif()
 if(tmva-pymva OR tmva-sofie)
   list(APPEND python_components NumPy)
 endif()
-find_package(Python3 3.9 COMPONENTS ${python_components})
+find_package(Python3 3.10 COMPONENTS ${python_components})
 
 #---Check for OpenGL installation-------------------------------------------------------
 # OpenGL is required by various graf3d features that are enabled with opengl=ON,
@@ -745,55 +454,18 @@ endif()
 # features also depend on asimage. Therefore, the configuration will fail if
 # asimage is off. See also: https://github.com/root-project/root/issues/16250
 if(opengl AND NOT asimage)
-  message(FATAL_ERROR "OpenGL features enabled with \"opengl=ON\" require \"asimage=ON\"")
-endif()
-
-#---Check for GLEW -------------------------------------------------------------------
-# Glew is required by various graf3d features that are enabled with opengl=ON,
-# or by the Cocoa-related code that always requires it.
-if((opengl OR cocoa) AND NOT builtin_glew)
-  message(STATUS "Looking for GLEW")
-  if(fail-on-missing)
-    find_package(GLEW REQUIRED)
-  else()
-    find_package(GLEW)
-    if(GLEW_FOUND AND APPLE AND CMAKE_VERSION VERSION_GREATER 3.15 AND CMAKE_VERSION VERSION_LESS 3.25)
-      # Bug in CMake on Mac OS X until 3.25:
-      # https://gitlab.kitware.com/cmake/cmake/-/issues/19662
-      # https://github.com/microsoft/vcpkg/pull/7967
-      message(FATAL_ERROR "Please enable builtin Glew due a bug in CMake's FindGlew < v3.25 (use cmake option -Dbuiltin_glew=ON).")
-      unset(GLEW_FOUND)
-    elseif(GLEW_FOUND AND NOT TARGET GLEW::GLEW)
-      add_library(GLEW::GLEW UNKNOWN IMPORTED)
-      set_target_properties(GLEW::GLEW PROPERTIES
-      IMPORTED_LOCATION "${GLEW_LIBRARIES}"
-      INTERFACE_INCLUDE_DIRECTORIES "${GLEW_INCLUDE_DIRS}")
-    endif()
-    if(NOT GLEW_FOUND)
-      message(STATUS "GLEW not found. Switching on builtin_glew option")
-      set(builtin_glew ON CACHE BOOL "Enabled because opengl requested and GLEW not found (${builtin_glew_description})" FORCE)
-    endif()
-  endif()
-endif()
-
-if(builtin_glew)
-  list(APPEND ROOT_BUILTINS GLEW)
-  add_library(GLEW::GLEW INTERFACE IMPORTED GLOBAL)
-  add_subdirectory(builtins/glew)
+  message(SEND_ERROR "OpenGL features enabled with \"opengl=ON\" require \"asimage=ON\"")
 endif()
 
 #---Check for gl2ps ------------------------------------------------------------------
-if(opengl AND NOT builtin_gl2ps)
-  message(STATUS "Looking for gl2ps")
-  if(fail-on-missing)
-    find_Package(gl2ps REQUIRED)
-  else()
-    find_Package(gl2ps)
-    if(NOT GL2PS_FOUND)
-      message(STATUS "gl2ps not found. Switching on builtin_gl2ps option")
-      set(builtin_gl2ps ON CACHE BOOL "Enabled because opengl requested and gl2ps not found (${builtin_gl2ps_description})" FORCE)
-    endif()
+if(opengl)
+  ROOT_FIND_REQUIRED_DEP(gl2ps builtin_gl2ps)
+  if (builtin_gl2ps)
+    add_subdirectory(builtins/gl2ps)
+    list(APPEND ROOT_BUILTINS BUILTIN_GL2PS)
   endif()
+elseif(builtin_gl2ps)
+  message(SEND_ERROR "gl2ps features enabled with \"builtin_gl2ps=ON\" require \"opengl=ON\"")
 endif()
 
 #---Check for Graphviz installation-------------------------------------------------------
@@ -844,8 +516,7 @@ if(ssl AND NOT builtin_openssl)
           message(STATUS "OpenSSL not found, and no internet connection. Disabling the 'ssl' option.")
           set(ssl OFF CACHE BOOL "Disabled because ssl requested and OpenSSL not found (${builtin_openssl_description}) and there is no internet connection" FORCE)
         else()
-          message(STATUS "OpenSSL not found, switching ON 'builtin_openssl' option.")
-          set(builtin_openssl ON CACHE BOOL "Enabled because ssl requested and OpenSSL not found (${builtin_openssl_description})" FORCE)
+          message(SEND_ERROR "OpenSSL required but not found. Install it on the system (preferred), or explicitly request the builtin version.")
         endif()
       endif()
     endif()
@@ -943,13 +614,13 @@ if(fftw3)
   endif()
 endif()
 if(builtin_fftw3)
-  set(FFTW_VERSION 3.3.8)
+  set(FFTW_VERSION 3.3.10)
   message(STATUS "Downloading and building FFTW version ${FFTW_VERSION}")
   set(FFTW_LIBRARIES ${CMAKE_BINARY_DIR}/lib/libfftw3.a)
   ExternalProject_Add(
     FFTW3
     URL ${lcgpackages}/fftw-${FFTW_VERSION}.tar.gz
-    URL_HASH SHA256=6113262f6e92c5bd474f2875fa1b01054c4ad5040f6b0da7c03c98821d9ae303
+    URL_HASH SHA256=56c932549852cddcfafdab3820b0200c7742675be92179e59e6215b340e26467
     INSTALL_DIR ${CMAKE_BINARY_DIR}
     CONFIGURE_COMMAND ./configure --prefix=<INSTALL_DIR>
     BUILD_COMMAND make CFLAGS=-fPIC
@@ -1021,6 +692,14 @@ if(xrootd AND NOT builtin_xrootd)
         set(builtin_xrootd ON CACHE BOOL "Enabled because xrootd is enabled, but external xrootd was not found (${xrootd_description})" FORCE)
       endif()
     endif()
+  else()
+    # XROOTD was found. Check now for required components
+    foreach (component CLIENT UTILS) # ROOT requires XrdCl and XrdUtils
+      if("${XROOTD_${component}_LIBRARIES}" STREQUAL "XROOTD_${component}_LIBRARIES-NOTFOUND")
+        message(SEND_ERROR "XROOTD found but missing component ${component}. Install missing package on your system (preferred). "
+                           "Alternatively, you can also enable the option 'builtin_xrootd' to build XROOTD internally")
+      endif()
+    endforeach()
   endif()
 
   if(XRootD_VERSION VERSION_LESS 5.8.4)
@@ -1063,11 +742,6 @@ if(xrootd AND NOT TARGET XRootD::XrdCl)
 
   add_library(XRootD::XrdUtils SHARED IMPORTED)
   set_target_properties(XRootD::XrdUtils PROPERTIES IMPORTED_LOCATION ${XROOTD_UTILS_LIBRARIES})
-endif()
-
-#---check if netxng can be built-------------------------------
-if(xrootd)
-  set(netxng ON)
 endif()
 
 #---make sure non-builtin xrootd is not using builtin_openssl-----------
@@ -1159,7 +833,7 @@ foreach(suffix FOUND INCLUDE_DIR INCLUDE_DIRS LIBRARY LIBRARIES)
   unset(DAVIX_${suffix} CACHE)
 endforeach()
 
-if(davix AND NOT builtin_davix)
+if(davix)
   if(MSVC)
     message(FATAL_ERROR "Davix is not supported on Windows")
   endif()
@@ -1172,38 +846,35 @@ if(davix AND NOT builtin_davix)
   else()
     find_package(Davix 0.6.4)
     if(NOT DAVIX_FOUND)
-      find_package(libuuid)
-      if(NOT libuuid_FOUND)
-        message(STATUS "Davix dependency libuuid not found, switching OFF 'davix' option.")
-      endif()
-      find_package(LibXml2)
-      if(NOT LIBXML2_FOUND)
-        message(STATUS "Davix dependency libxml2 not found, switching OFF 'davix' option.")
-      endif()
-      find_package(OpenSSL)
-      if(NOT (OPENSSL_FOUND OR builtin_openssl))
-        message(STATUS "Davix dependency openssl not found, switching OFF 'davix' option.")
-      endif()
-      if(libuuid_FOUND AND LIBXML2_FOUND AND (OPENSSL_FOUND OR builtin_openssl))
-        message(STATUS "Davix not found, switching ON 'builtin_davix' option.")
-        set(builtin_davix ON CACHE BOOL "Enabled because external Davix not found but davix requested (${builtin_davix_description})" FORCE)
-      else()
-        set(davix OFF CACHE BOOL "Disabled because dependencies not found (${davix_description})" FORCE)
-      endif()
+      message(STATUS "Davix not found. Switching off davix option")
+      set(davix OFF CACHE BOOL "Disabled because dependencies not found (${davix_description})" FORCE)
     endif()
   endif()
 endif()
 
-if(builtin_davix)
-  ROOT_CHECK_CONNECTION("builtin_davix=OFF")
-  if(NO_CONNECTION)
-    message(STATUS "No internet connection, disabling the 'davix' and 'builtin_davix' options")
-    set(builtin_davix OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
-    set(davix OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
+#---Check for curl library-----------------------------------------------------------
+foreach(suffix FOUND INCLUDE_DIR INCLUDE_DIRS LIBRARY LIBRARIES)
+  unset(CURL_${suffix} CACHE)
+endforeach()
+
+if(curl)
+  message(STATUS "Looking for libcurl")
+  if(MSVC)
+    # On Windows, we must initialize libcurl lazily (not in a static [DLL] initializer), and this
+    # works only safely as of 7.84 with the threadsafe option
+    find_package(CURL 7.84 COMPONENTS HTTP HTTPS threadsafe)
   else()
-    list(APPEND ROOT_BUILTINS Davix)
-    add_subdirectory(builtins/davix)
-    set(davix ON CACHE BOOL "Enabled because builtin_davix is enabled)" FORCE)
+    # Matches the libcurl version on EL9/10
+    find_package(CURL 7.76 COMPONENTS HTTP HTTPS)
+  endif()
+
+  if(NOT CURL_FOUND)
+    if(fail-on-missing)
+      message(SEND_ERROR "libcurl not found and curl option required")
+    else()
+      message(STATUS "libcurl not found. Switching off curl option")
+      set(curl OFF CACHE BOOL "Disabled because libcurl was not found (${curl_description})" FORCE)
+    endif()
   endif()
 endif()
 
@@ -1380,194 +1051,6 @@ if(builtin_tbb)
   set(TBB_TARGET TBB)
 endif()
 
-#---Check for Vc---------------------------------------------------------------------
-if(builtin_vc)
-  unset(Vc_FOUND)
-  unset(Vc_FOUND CACHE)
-  set(vc ON CACHE BOOL "Enabled because builtin_vc requested (${vc_description})" FORCE)
-elseif(vc)
-  if(fail-on-missing)
-    find_package(Vc 1.4.4 CONFIG QUIET REQUIRED)
-  else()
-    find_package(Vc 1.4.4 CONFIG QUIET)
-    if(NOT Vc_FOUND)
-      message(STATUS "Vc library not found, support for it disabled.")
-      message(STATUS "Please enable the option 'builtin_vc' to build Vc internally.")
-      set(vc OFF CACHE BOOL "Disabled because Vc not found (${vc_description})" FORCE)
-    endif()
-  endif()
-  if(Vc_FOUND)
-    set_property(DIRECTORY APPEND PROPERTY INCLUDE_DIRECTORIES ${Vc_INCLUDE_DIR})
-    BUILD_ROOT_INCLUDE_PATH("${Vc_INCLUDE_DIR}")
-  endif()
-endif()
-
-if(vc AND NOT Vc_FOUND)
-  ROOT_CHECK_CONNECTION_AND_DISABLE_OPTION("vc")
-endif()
-
-if(vc AND NOT Vc_FOUND)
-  set(Vc_VERSION "1.4.4")
-  set(Vc_PROJECT "Vc-${Vc_VERSION}")
-  set(Vc_SRC_URI "${lcgpackages}/${Vc_PROJECT}.tar.gz")
-  set(Vc_DESTDIR "${CMAKE_BINARY_DIR}/externals")
-  set(Vc_ROOTDIR "${Vc_DESTDIR}/${CMAKE_INSTALL_PREFIX}")
-  set(Vc_LIBNAME "${CMAKE_STATIC_LIBRARY_PREFIX}Vc${CMAKE_STATIC_LIBRARY_SUFFIX}")
-  set(Vc_LIBRARY "${Vc_ROOTDIR}/lib/${Vc_LIBNAME}")
-
-  ExternalProject_Add(VC
-    URL     ${Vc_SRC_URI}
-    URL_HASH SHA256=5933108196be44c41613884cd56305df320263981fe6a49e648aebb3354d57f3
-    BUILD_IN_SOURCE 0
-    BUILD_BYPRODUCTS ${Vc_LIBRARY}
-    LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
-    CMAKE_ARGS -G ${CMAKE_GENERATOR}
-               -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-               -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-               -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-               -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
-               -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-               -DCMAKE_CXX_FLAGS=${ROOT_EXTERNAL_CXX_FLAGS}
-               -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
-    INSTALL_COMMAND env DESTDIR=${Vc_DESTDIR} ${CMAKE_COMMAND} --build . --target install
-    TIMEOUT 600
-  )
-
-  set(VC_TARGET Vc)
-  set(Vc_LIBRARIES Vc)
-  set(Vc_INCLUDE_DIR ${Vc_ROOTDIR}/include)
-  set(Vc_CMAKE_MODULES_DIR ${Vc_ROOTDIR}/lib/cmake/Vc)
-
-  add_library(VcExt STATIC IMPORTED)
-  set_property(TARGET VcExt PROPERTY IMPORTED_LOCATION ${Vc_LIBRARY})
-  add_dependencies(VcExt VC)
-
-  add_library(Vc INTERFACE)
-  target_include_directories(Vc SYSTEM BEFORE INTERFACE $<BUILD_INTERFACE:${Vc_INCLUDE_DIR}>)
-  target_link_libraries(Vc INTERFACE VcExt)
-
-  find_package_handle_standard_args(Vc
-    FOUND_VAR Vc_FOUND
-    REQUIRED_VARS Vc_INCLUDE_DIR Vc_LIBRARIES Vc_CMAKE_MODULES_DIR
-    VERSION_VAR Vc_VERSION)
-
-  # FIXME: This is a workaround to let ROOT find the headers at runtime if
-  # they are in the build directory. This is necessary until we decide how to
-  # treat externals with headers used by ROOT
-  if(NOT EXISTS ${CMAKE_BINARY_DIR}/include/Vc)
-    if (NOT EXISTS ${CMAKE_BINARY_DIR}/include)
-      execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/include)
-    endif()
-    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-      ${Vc_INCLUDE_DIR}/Vc ${CMAKE_BINARY_DIR}/include/Vc)
-  endif()
-  # end of workaround
-
-  install(DIRECTORY ${Vc_ROOTDIR}/ DESTINATION ".")
-endif()
-
-if(Vc_FOUND)
-  # Missing from VcConfig.cmake
-  set(Vc_INCLUDE_DIRS ${Vc_INCLUDE_DIR})
-endif()
-
-#---Check for VecCore--------------------------------------------------------------------
-if(builtin_veccore)
-  unset(VecCore_FOUND)
-  unset(VecCore_FOUND CACHE)
-  set(veccore ON CACHE BOOL "Enabled because builtin_veccore requested (${veccore_description})" FORCE)
-elseif(veccore)
-  if(vc)
-    set(VecCore_COMPONENTS Vc)
-  endif()
-  if(fail-on-missing)
-    find_package(VecCore 0.4.2 CONFIG QUIET REQUIRED COMPONENTS ${VecCore_COMPONENTS})
-  else()
-    find_package(VecCore 0.4.2 CONFIG QUIET COMPONENTS ${VecCore_COMPONENTS})
-    if(NOT VecCore_FOUND)
-      ROOT_CHECK_CONNECTION("veccore=OFF")
-      if(NO_CONNECTION)
-        message(STATUS "VecCore not found and no internet connection, disabling the 'veccore' option")
-        set(veccore OFF CACHE BOOL "Disabled because not found and No internet connection" FORCE)
-      else()
-        message(STATUS "VecCore not found, switching on 'builtin_veccore' option.")
-        set(builtin_veccore ON CACHE BOOL "Enabled because veccore requested and not found externally (${builtin_veccore_description})" FORCE)
-      endif()
-    endif()
-  endif()
-  if(VecCore_FOUND)
-      set_property(DIRECTORY APPEND PROPERTY INCLUDE_DIRECTORIES ${VecCore_INCLUDE_DIRS})
-  endif()
-endif()
-
-if(builtin_veccore)
-  ROOT_CHECK_CONNECTION_AND_DISABLE_OPTION("builtin_veccore")
-endif()
-
-if(builtin_veccore)
-  set(VecCore_VERSION "0.8.2")
-  set(VecCore_PROJECT "VecCore-${VecCore_VERSION}")
-  set(VecCore_SRC_URI "${lcgpackages}/${VecCore_PROJECT}.tar.gz")
-  set(VecCore_DESTDIR "${CMAKE_BINARY_DIR}/externals")
-  set(VecCore_ROOTDIR "${VecCore_DESTDIR}/${CMAKE_INSTALL_PREFIX}")
-
-  ExternalProject_Add(VECCORE
-    URL     ${VecCore_SRC_URI}
-    URL_HASH SHA256=1268bca92acf00acd9775f1e79a2da7b1d902733d17e283e0dd5e02c41ac9666
-    BUILD_IN_SOURCE 0
-    LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
-    CMAKE_ARGS -G ${CMAKE_GENERATOR}
-               -DBUILD_TESTING=OFF
-               -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-               -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-               -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
-               -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-               -DCMAKE_CXX_FLAGS=${ROOT_EXTERNAL_CXX_FLAGS}
-               -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
-    INSTALL_COMMAND env DESTDIR=${VecCore_DESTDIR} ${CMAKE_COMMAND} --build . --target install
-    TIMEOUT 600
-  )
-
-  set(VECCORE_TARGET VecCore)
-  set(VecCore_LIBRARIES VecCore)
-  list(APPEND VecCore_INCLUDE_DIRS ${VecCore_ROOTDIR}/include)
-
-  add_library(VecCore INTERFACE)
-  target_include_directories(VecCore SYSTEM INTERFACE $<BUILD_INTERFACE:${VecCore_ROOTDIR}/include>)
-  add_dependencies(VecCore VECCORE)
-
-  if (Vc_FOUND)
-    set(VecCore_Vc_FOUND True)
-    set(VecCore_Vc_DEFINITIONS -DVECCORE_ENABLE_VC)
-    set(VecCore_Vc_INCLUDE_DIR ${Vc_INCLUDE_DIR})
-    set(VecCore_Vc_LIBRARIES ${Vc_LIBRARIES})
-
-    set(VecCore_DEFINITIONS ${VecCore_Vc_DEFINITIONS})
-    list(APPEND VecCore_INCLUDE_DIRS ${VecCore_Vc_INCLUDE_DIR})
-    set(VecCore_LIBRARIES ${VecCore_LIBRARIES} ${Vc_LIBRARIES})
-    target_link_libraries(VecCore INTERFACE ${Vc_LIBRARIES})
-  endif()
-
-  find_package_handle_standard_args(VecCore
-    FOUND_VAR VecCore_FOUND
-    REQUIRED_VARS VecCore_INCLUDE_DIRS VecCore_LIBRARIES
-    VERSION_VAR VecCore_VERSION)
-
-  # FIXME: This is a workaround to let ROOT find the headers at runtime if
-  # they are in the build directory. This is necessary until we decide how to
-  # treat externals with headers used by ROOT
-  if(NOT EXISTS ${CMAKE_BINARY_DIR}/include/VecCore)
-    if (NOT EXISTS ${CMAKE_BINARY_DIR}/include)
-      execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/include)
-    endif()
-    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-      ${VecCore_ROOTDIR}/include/VecCore ${CMAKE_BINARY_DIR}/include/VecCore)
-  endif()
-  # end of workaround
-
-  install(DIRECTORY ${VecCore_ROOTDIR}/ DESTINATION ".")
-endif()
-
 if(builtin_vdt)
   ROOT_CHECK_CONNECTION_AND_DISABLE_OPTION("builtin_vdt")
 endif()
@@ -1641,12 +1124,6 @@ endif()
 if (vecgeom)
   message(STATUS "Looking for VecGeom")
   find_package(VecGeom 1.2 CONFIG)
-  if(builtin_veccore)
-    message(WARNING "ROOT must be built against the VecCore installation that was used to build VecGeom; builtin_veccore cannot be used. Option VecGeom will be disabled.")
-    set(vecgeom OFF CACHE BOOL "Disabled because non-builtin VecGeom specified but its VecCore cannot be found" FORCE)
-  elseif(builtin_veccore AND fail-on-missing)
-    message(SEND_ERROR "ROOT must be built against the VecCore installation that was used to build VecGeom; builtin_veccore cannot be used. Ensure that builtin_veccore option is OFF.")
-  endif()
   if(NOT VecGeom_FOUND )
     if(fail-on-missing)
       message(SEND_ERROR "VecGeom not found. Ensure that the installation of VecGeom is in the CMAKE_PREFIX_PATH")
@@ -1747,42 +1224,120 @@ if(tmva-sofie)
   endif()
 endif()
 
-#---TMVA and its dependencies------------------------------------------------------------
-if(tmva)
-  if(tmva-cpu AND imt)
-    message(STATUS "Looking for BLAS for optional parts of TMVA")
-    # ROOT internal BLAS target
-    add_library(Blas INTERFACE)
-    add_library(ROOT::BLAS ALIAS Blas)
-    if(use_gsl_cblas)
-      message(STATUS "Using GSL CBLAS for optional parts of TMVA")
-      if(builtin_gsl)
-        add_dependencies(Blas GSL)
-        target_include_directories(Blas INTERFACE ${GSL_INCLUDE_DIR})
-        target_link_libraries(Blas INTERFACE ${GSL_CBLAS_LIBRARY})
+#---Figure out if TMVA CPU should be built and which BLAS we will use ------------------
+if(tmva-cpu)
+  if (NOT tmva)
+    set(tmva-cpu   OFF CACHE BOOL "Disabled because 'tmva' is disabled (${tmva-cpu_description})" FORCE)
+  elseif(NOT imt)
+    set(tmva-cpu OFF CACHE BOOL "Disabled because 'imt' is disabled (${tmva-cpu_description})" FORCE)
+  endif()
+endif()
+if(tmva-cpu)
+  if (NOT use_gsl_cblas)
+    find_package(BLAS)
+    if(NOT BLAS_FOUND)
+      # If no optimized BLAS library was found, we fall back to attempting to
+      # use the GSL CBLAS. If ROOT is built with fail-on-missing=ON, this
+      # usually means that the user does not want us to change build flags
+      # automatically, so we send an error.
+      if(fail-on-missing)
+        message(SEND_ERROR "Option tmva-cpu requires a BLAS library, but none could be found on the system. Either install a BLAS library like OpenBLAS (preferred), or set use_gsl_cblas=ON (possibly also builtin_gsl=ON if GSL not installed on the system).")
       else()
-        if(GSL_FOUND)
-          target_link_libraries(Blas INTERFACE GSL::gslcblas)
-        endif()
-      endif()
-      target_compile_definitions(Blas INTERFACE -DR__USE_CBLAS)
-    else()
-      find_package(BLAS)
-      if(BLAS_FOUND)
-        target_link_libraries(Blas INTERFACE BLAS::BLAS)
+        set(use_gsl_cblas ON CACHE BOOL "Auto-enabling GSL CBLAS for TMVA [GPL]" FORCE)
       endif()
     endif()
-    if(NOT BLAS_FOUND AND NOT GSL_FOUND)
+  endif()
+endif()
+
+#---Check for GSL library---------------------------------------------------------------
+if(mathmore OR builtin_gsl OR (tmva-cpu AND use_gsl_cblas))
+  if(builtin_gsl)
+    ROOT_CHECK_CONNECTION_AND_DISABLE_OPTION("builtin_gsl")
+  endif()
+  message(STATUS "Looking for GSL")
+  if(NOT builtin_gsl)
+    find_package(GSL 1.10)
+    if(NOT GSL_FOUND)
       if(fail-on-missing)
-        message(SEND_ERROR "tmva-cpu can't be built because BLAS was not found!")
+        message(SEND_ERROR "GSL package not found and 'mathmore' component is required ('fail-on-missing' enabled). "
+                            "Alternatively, you can enable the option 'builtin_gsl' to build the GSL libraries internally.")
       else()
-        message(STATUS "tmva-cpu disabled because BLAS was not found")
-        set(tmva-cpu OFF CACHE BOOL "Disabled because BLAS was not found (${tmva-cpu_description})" FORCE)
+        message(STATUS "GSL not found. Set variable GSL_ROOT_DIR to point to your GSL installation")
+        message(STATUS "               Alternatively, you can also enable the option 'builtin_gsl' to build the GSL libraries internally'")
+        if (mathmore)
+          message(STATUS "               For the time being switching OFF 'mathmore' option")
+          set(mathmore OFF CACHE BOOL "Disable because builtin_gsl disabled and external GSL not found (${mathmore_description})" FORCE)
+        endif()
+        if (tmva-cpu AND use_gsl_cblas)
+          message(STATUS "               For the time being switching OFF 'tmva-cpu' option")
+          set(tmva-cpu OFF CACHE BOOL "Disable because use_gsl_cblas enabled, builtin_gsl disabled and external GSL not found (${tmva-cpu_description})" FORCE)
+        endif()
       endif()
     endif()
   else()
-    set(tmva-cpu OFF CACHE BOOL "Disabled because 'imt' is disabled (${tmva-cpu_description})" FORCE)
+    set(gsl_version 2.8)
+    message(STATUS "Downloading and building GSL version ${gsl_version}")
+    foreach(l gsl gslcblas)
+      list(APPEND GSL_LIBRARIES ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${l}${CMAKE_STATIC_LIBRARY_SUFFIX})
+    endforeach()
+    set(GSL_CBLAS_LIBRARY ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}gslcblas${CMAKE_STATIC_LIBRARY_SUFFIX})
+    if(CMAKE_OSX_SYSROOT)
+      set(_gsl_cppflags "-isysroot ${CMAKE_OSX_SYSROOT}")
+      set(_gsl_ldflags  "-isysroot ${CMAKE_OSX_SYSROOT}")
+    endif()
+    ExternalProject_Add(
+      GSL
+      # http://mirror.switch.ch/ftp/mirror/gnu/gsl/gsl-${gsl_version}.tar.gz
+      URL ${lcgpackages}/gsl-${gsl_version}.tar.gz
+      URL_HASH SHA256=6a99eeed15632c6354895b1dd542ed5a855c0f15d9ad1326c6fe2b2c9e423190
+      SOURCE_DIR GSL-src # prevent "<gsl/...>" vs GSL/ macOS warning
+      INSTALL_DIR ${CMAKE_BINARY_DIR}
+      CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix <INSTALL_DIR>
+                        --libdir=<INSTALL_DIR>/lib
+                        --enable-shared=no --with-pic
+                        CC=${CMAKE_C_COMPILER}
+                        CFLAGS=${CMAKE_C_FLAGS}
+                        CPPFLAGS=${_gsl_cppflags}
+                        LDFLAGS=${_gsl_ldflags}
+      LOG_DOWNLOAD 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1 LOG_OUTPUT_ON_FAILURE 1
+      BUILD_BYPRODUCTS ${GSL_LIBRARIES}
+      TIMEOUT 600
+    )
+    set(GSL_TARGET GSL)
+    # FIXME: one need to find better way to extract path with GSL include files
+    set(GSL_INCLUDE_DIR ${CMAKE_BINARY_DIR}/GSL-prefix/src/GSL-build)
+    set(GSL_FOUND ON)
+    set(mathmore ON CACHE BOOL "Enabled because builtin_gsl requested (${mathmore_description})" FORCE)
   endif()
+endif()
+
+#---TMVA and its dependencies------------------------------------------------------------
+if(tmva-cpu)
+  # ROOT internal BLAS target for TMVA
+  add_library(Blas INTERFACE)
+  add_library(ROOT::BLAS ALIAS Blas)
+  if (NOT use_gsl_cblas AND BLAS_FOUND)
+    target_link_libraries(Blas INTERFACE BLAS::BLAS)
+  elseif(use_gsl_cblas AND builtin_gsl)
+    message(STATUS "Using builtin GSL CBLAS for optional parts of TMVA")
+    add_dependencies(Blas GSL)
+    target_include_directories(Blas INTERFACE ${GSL_INCLUDE_DIR})
+    target_link_libraries(Blas INTERFACE ${GSL_CBLAS_LIBRARY})
+    target_compile_definitions(Blas INTERFACE -DR__USE_CBLAS)
+  elseif(use_gsl_cblas AND GSL_FOUND)
+    message(STATUS "Using GSL CBLAS for optional parts of TMVA")
+    target_link_libraries(Blas INTERFACE GSL::gslcblas)
+    target_compile_definitions(Blas INTERFACE -DR__USE_CBLAS)
+  else()
+    if(fail-on-missing)
+      message(SEND_ERROR "tmva-cpu can't be built because BLAS was not found!")
+    else()
+      message(STATUS "tmva-cpu disabled because BLAS was not found")
+      set(tmva-cpu OFF CACHE BOOL "Disabled because BLAS was not found (${tmva-cpu_description})" FORCE)
+    endif()
+  endif()
+endif()
+if(tmva)
   if(tmva-gpu AND NOT CMAKE_CUDA_COMPILER)
     set(tmva-gpu OFF CACHE BOOL "Disabled because cuda not found" FORCE)
   endif()
@@ -1819,13 +1374,6 @@ if(tmva)
       message(STATUS "TMVA: Numpy or Python development package not found for python ${Python3_EXECUTABLE}. Switching off tmva-pymva option")
       set(tmva-pymva OFF CACHE BOOL "Disabled because Numpy or Python development package were not found (${tmva-pymva_description})" FORCE)
     endif()
-    if(testing)
-      message(STATUS "Looking for BLAS as an optional testing dependency of PyMVA")
-      find_package(BLAS)
-      if(NOT BLAS_FOUND)
-        message(WARNING "BLAS not found: PyMVA will not be fully tested")
-      endif()
-    endif()
   endif()
   if (R_FOUND)
     #Rmva is enable when r is found and tmva is on
@@ -1835,7 +1383,6 @@ if(tmva)
     set(tmva-rmva  OFF CACHE BOOL "Disabled because R was not found (${tmva-rmva_description})"  FORCE)
   endif()
 else()
-  set(tmva-cpu   OFF CACHE BOOL "Disabled because 'tmva' is disabled (${tmva-cpu_description})"   FORCE)
   set(tmva-gpu   OFF CACHE BOOL "Disabled because 'tmva' is disabled (${tmva-gpu_description})"   FORCE)
   set(tmva-cudnn OFF CACHE BOOL "Disabled because 'tmva' is disabled (${tmva-rmva_description})"  FORCE)
   set(tmva-pymva OFF CACHE BOOL "Disabled because 'tmva' is disabled (${tmva-pymva_description})" FORCE)
@@ -1894,14 +1441,7 @@ endif()
 #---Check for ZeroMQ when building RooFit::MultiProcess--------------------------------------------
 
 if (roofit_multiprocess)
-  if(NOT builtin_zeromq)
     message(STATUS "Looking for ZeroMQ (libzmq)")
-    # Clear cache before calling find_package(ZeroMQ),
-    # necessary to be able to toggle builtin_zeromq and
-    # not have find_package(ZeroMQ) find builtin ZeroMQ.
-    foreach(suffix FOUND INCLUDE_DIR INCLUDE_DIRS LIBRARY LIBRARIES)
-      unset(ZeroMQ_${suffix} CACHE)
-    endforeach()
 
     # Temporarily prefer config mode over module mode, so that a CMake-installed system version
     # gets detected before looking for an autotools-installed system version (which the
@@ -1909,67 +1449,14 @@ if (roofit_multiprocess)
     set(CMAKE_FIND_PACKAGE_PREFER_CONFIG_ORIGINAL_VALUE ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})
     set(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)
 
-    if(fail-on-missing)
-      find_package(ZeroMQ 4.3.5 REQUIRED)
-    else()
-      find_package(ZeroMQ 4.3.5)
-      if(NOT ZeroMQ_FOUND)
-        message(STATUS "ZeroMQ not found. Switching on builtin_zeromq option")
-        set(builtin_zeromq ON CACHE BOOL "Enabled because ZeroMQ not found (${builtin_zeromq_description})" FORCE)
-        # If the ZeroMQ system version is too old, we can't use the system C++
-        # headers either (note that find_package(ZeroMQ) not only checks if the
-        # library exists, but also if it's a recent version with zmq_ppoll).
-        set(builtin_cppzmq ON CACHE BOOL "Enabled because ZeroMQ not found (${builtin_cppzmq_description})" FORCE)
-      endif()
-    endif()
+    find_package(ZeroMQ 4.3.5 REQUIRED)
 
     # Reset default find_package mode
     set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${CMAKE_FIND_PACKAGE_PREFER_CONFIG_ORIGINAL_VALUE})
     unset(CMAKE_FIND_PACKAGE_PREFER_CONFIG_ORIGINAL_VALUE)
-  endif()
 
-  if(builtin_zeromq)
-    ROOT_CHECK_CONNECTION("builtin_zeromq=OFF")
-    if(NO_CONNECTION)
-      message(STATUS "No internet connection, disabling the `builtin_zeromq` and `roofit_multiprocess` options")
-      set(builtin_zeromq OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
-      set(roofit_multiprocess OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
-    else()
-      list(APPEND ROOT_BUILTINS ZeroMQ)
-      add_subdirectory(builtins/zeromq/libzmq)
-    endif()
-  endif()
-
-  if(NOT builtin_cppzmq)
     message(STATUS "Looking for ZeroMQ C++ bindings (cppzmq)")
-    # Clear cache before calling find_package(cppzmq),
-    # necessary to be able to toggle builtin_cppzmq and
-    # not have find_package(cppzmq) find builtin cppzmq.
-    foreach(suffix FOUND INCLUDE_DIR INCLUDE_DIRS)
-      unset(cppzmq_${suffix} CACHE)
-    endforeach()
-    if(fail-on-missing)
-      find_package(cppzmq REQUIRED)
-    else()
-      find_package(cppzmq QUIET)
-      if(NOT cppzmq_FOUND)
-        message(STATUS "ZeroMQ C++ bindings not found. Switching on builtin_cppzmq option")
-        set(builtin_cppzmq ON CACHE BOOL "Enabled because ZeroMQ C++ bindings not found (${builtin_cppzmq_description})" FORCE)
-      endif()
-    endif()
-  endif()
-
-  if(builtin_cppzmq)
-    ROOT_CHECK_CONNECTION("builtin_cppzmq=OFF")
-    if(NO_CONNECTION)
-      message(STATUS "No internet connection, disabling the `builtin_cppzmq` and `roofit_multiprocess` options")
-      set(builtin_cppzmq OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
-      set(roofit_multiprocess OFF CACHE BOOL "Disabled because there is no internet connection" FORCE)
-    else()
-      list(APPEND ROOT_BUILTINS cppzmq)
-      add_subdirectory(builtins/zeromq/cppzmq)
-    endif()
-  endif()
+    find_package(cppzmq REQUIRED)
 endif (roofit_multiprocess)
 
 #---Check for googletest---------------------------------------------------------------
@@ -2054,12 +1541,15 @@ if (builtin_gtest)
     set(EXTRA_GTEST_OPTS
       -DCMAKE_OSX_SYSROOT=${CMAKE_OSX_SYSROOT})
   endif()
-
+  set(ROOT_GOOGLETEST_VERSION 1.17.0) # https://github.com/google/googletest/releases/tag/v1.17.0 Date: Apr 30, 2025
+  set(ROOT_GOOGLETEST_HASH "65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c")
   ExternalProject_Add(
     googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_SHALLOW 1
-    GIT_TAG release-1.12.1
+    # GIT_REPOSITORY https://github.com/google/googletest.git
+    # GIT_SHALLOW 1
+    # GIT_TAG v1.17.0
+    URL ${lcgpackages}/googletest-${ROOT_GOOGLETEST_VERSION}.tar.gz
+    URL_HASH SHA256=${ROOT_GOOGLETEST_HASH}
     UPDATE_COMMAND ""
     # # Force separate output paths for debug and release builds to allow easy
     # # identification of correct lib in subsequent TARGET_LINK_LIBRARIES commands
@@ -2172,8 +1662,8 @@ if(webgui)
   endif()
   ExternalProject_Add(
     RENDERCORE
-    URL ${CMAKE_SOURCE_DIR}/builtins/rendercore/RenderCore-1.7.tar.gz
-    URL_HASH SHA256=46cf6171ae0e16ba2f99789daaeb202146072af874ea530f06a0099c66c3e9b1
+    URL ${CMAKE_SOURCE_DIR}/builtins/rendercore/RenderCore-1.9.tar.gz
+    URL_HASH SHA256=7728f00ee5e907c36b25aad56fbc73881c7c9faf47a36bee5efd2054bc4ecc6c
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     INSTALL_COMMAND ""
@@ -2239,6 +1729,22 @@ if(NOT ROOT_HAVE_NATIVE_CXX_FILESYSTEM)
   if(NOT ROOT_NEED_STDCXXFS)
     message(FATAL_ERROR "Could not determine how to use C++17 <filesystem>")
   endif()
+endif()
+
+#------------------------------------------------------------------------------------
+# Check if std::experimental::simd is available for vectorized TFormula and
+# TMath features.
+if(WIN32 OR APPLE OR CMAKE_CXX_STANDARD LESS 20)
+  # Missing value means not available.
+  set(ROOT_HAVE_EXPERIMENTAL_SIMD CACHE INTERNAL "Test ROOT_HAVE_EXPERIMENTAL_SIMD")
+else()
+  check_cxx_source_compiles("
+      #include <experimental/simd>
+      int main() {
+          std::experimental::native_simd<int> v;
+          return 0;
+      }
+  " ROOT_HAVE_EXPERIMENTAL_SIMD)
 endif()
 
 #------------------------------------------------------------------------------------

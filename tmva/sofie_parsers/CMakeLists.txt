@@ -27,6 +27,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTTMVASofieParser
     src/RModelParser_ONNX.cxx
     src/ParseBasicUnary.cxx
     src/ParseBasicBinary.cxx
+    src/ParseBasicIs.cxx
     src/ParseBatchNormalization.cxx
     src/ParseCast.cxx
     src/ParseConcat.cxx
@@ -55,6 +56,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTTMVASofieParser
     src/ParseLayerNormalization.cxx
     src/ParseExpand.cxx
     src/ParseGather.cxx
+    src/ParseGatherND.cxx
     src/ParseElu.cxx
     src/ParseFuseConvAdd.cxx
     src/ParseFuseConvTransposeAdd.cxx
@@ -74,6 +76,11 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ROOTTMVASofieParser
     src/ParseEinsum.cxx
     src/ParseRandom.cxx
     src/ParseScatterElements.cxx
+    src/ParseScatterND.cxx
+    src/ParseNonZero.cxx
+    src/ParseNot.cxx
+    src/ParseClip.cxx
+    src/ParseGelu.cxx
     ${PROTO_SRCS}
   LIBRARIES PUBLIC
     protobuf::libprotobuf

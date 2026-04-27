@@ -18,6 +18,8 @@
 
 #include "gtest/gtest.h"
 
+#include <ROOT/TestSupport.hxx>
+
 static void CreateATuple(TMemFile &file, const char *name, double value)
 {
    auto mytree = new TTree(name, "A tree");
@@ -91,6 +93,8 @@ TEST(TFileMerger, MergeSingleOnlyListed)
    auto hist2 = new TH1F("hist2", "hist2", 1 , 0 , 2);
    auto hist3 = new TH1F("hist3", "hist3", 1 , 0 , 2);
    auto hist4 = new TH1F("hist4", "hist4", 1 , 0 , 2);
+   for (auto hist : {hist1, hist2, hist3, hist4})
+      hist->SetDirectory(&a);
    hist1->Fill(1);
    hist2->Fill(1);   hist2->Fill(2);
    hist3->Fill(1);   hist3->Fill(1);   hist3->Fill(1);
@@ -392,5 +396,47 @@ TEST(TFileMerger, MergeSelectiveTutorial)
       EXPECT_NE(file.Get("hpx"), nullptr);
       EXPECT_NE(file.Get("hpxpy"), nullptr);
       EXPECT_NE(file.Get<TNtuple>("ntuple"), nullptr);
+   }
+}
+
+TEST(TFileMerger, TypeMismatchErrorTObjectWithNonTObject)
+{
+   struct PathRAII {
+      std::string fPath;
+      PathRAII(const char *path) : fPath(path) {}
+      ~PathRAII() { std::remove(fPath.c_str()); }
+   };
+
+   PathRAII input1("ErrorIfTypeMismatch_input1.root");
+   const auto objname{"myobj"};
+   PathRAII input2("ErrorIfTypeMismatch_input2.root");
+   PathRAII outputfile("ErrorIfTypeMismatch_output.root");
+
+   // Create two files with objects of different types, one must be a TObject-derived type and other a
+   // non-TObject-derived type
+   {
+      auto f = std::make_unique<TFile>(input1.fPath.c_str(), "RECREATE");
+      auto t = std::make_unique<TTree>(objname, objname);
+      f->Write();
+   }
+
+   {
+      auto f = std::make_unique<TFile>(input2.fPath.c_str(), "RECREATE");
+      std::vector<int> v{1, 2, 3};
+      f->WriteObject(&v, objname);
+   }
+
+   // Ensure that TFileMerger detects the type mismatch and errors out.
+   {
+      ROOT::TestSupport::CheckDiagsRAII diagRAII;
+      diagRAII.requiredDiag(kError, "TFileMerger::MergeRecursive", "expected 'TTree' but found 'vector<int>'",
+                            /*matchFullMessage*/ false);
+      diagRAII.requiredDiag(kError, "TFileMerger::Merge", "error during merge of your ROOT files");
+
+      TFileMerger fm;
+      fm.OutputFile(outputfile.fPath.c_str());
+      fm.AddFile(input1.fPath.c_str(), /*cpProgress*/ false);
+      fm.AddFile(input2.fPath.c_str(), /*cpProgress*/ false);
+      fm.PartialMerge();
    }
 }

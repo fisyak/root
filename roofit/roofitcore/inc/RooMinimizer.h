@@ -82,6 +82,7 @@ public:
       Config() {}
 
       bool useGradient = true; // Use the gradient provided by the RooAbsReal, if there is one.
+      bool useHessian = false; // Use the Hessian provided by the RooAbsReal, if there is one.
 
       double recoverFromNaN = 10.; // RooAbsMinimizerFcn config
       int printEvalErrors = 10;    // RooAbsMinimizerFcn config
@@ -229,6 +230,7 @@ private:
    void fillCorrMatrix(RooFitResult &fitRes);
    void updateErrors();
 
+   RooAbsReal &_function;
    ROOT::Fit::FitConfig _config;                      ///< fitter configuration (options and parameter settings)
    std::unique_ptr<FitResult> _result;                ///<! pointer to the object containing the result of the fit
    std::unique_ptr<ROOT::Math::Minimizer> _minimizer; ///<! pointer to used minimizer

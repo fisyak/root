@@ -355,6 +355,7 @@ using `TH1::GetOption`:
 | "NOSTACK"  | Histograms in the stack are all paint in the same pad as if the option `SAME` had been specified.|
 | "NOSTACKB" | Histograms are  drawn next to each other as bar charts.|
 | "PADS"     | The current pad/canvas is subdivided into a number of pads equal to the number of histograms in the stack and each histogram is paint into a separate pad.|
+| "PADSn"    | Like PADS but the current pad/canvas is subdivided into a `n` columns, automatically calculating the number of rows.|
 | "PFC"      | Palette Fill Color: stack's fill color is taken in the current palette. |
 | "PLC"      | Palette Line Color: stack's line color is taken in the current palette. |
 | "PMC"      | Palette Marker Color: stack's marker color is taken in the current palette. |
@@ -2751,9 +2752,10 @@ the same pad as if the option `SAME` had been specified. This allows to
 compute X and Y scales common to all the histograms, like
 `TMultiGraph` does for graphs.
 
-If the option `PADS` is specified, the current pad/canvas is
-subdivided into a number of pads equal to the number of histograms and each
-histogram is paint into a separate pad.
+If the option `PADS` is specified, the current pad/canvas is subdivided into
+a number of pads equal to the number of histograms and each histogram is paint
+into a separate pad. With `PADSn`, the current pad/canvas is subdivided into
+`n` columns, automatically calculating the number of rows.
 
 The following example shows various types of stacks (hist023_THStack_simple.C).
 
@@ -6043,7 +6045,7 @@ void THistPainter::PaintContour(Option_t *option)
    TList *list = nullptr;
    TGraph *graph = nullptr;
    std::vector<Int_t> np;
-   if (Hoption.Contour == 1) {
+   if (Hoption.Contour == 1 || (Hoption.List && (Hoption.Contour == 11 || Hoption.Contour == 12 || Hoption.Contour == 13))) {
       np.resize(ncontour);
       for (i=0;i<ncontour;i++)
          np[i] = 0;
@@ -6168,7 +6170,8 @@ void THistPainter::PaintContour(Option_t *option)
                if (Hoption.Contour != 1) {
                   fH->TAttLine::Modify();
                   gPad->PaintPolyLine(2,xarr.data()+ix-1,yarr.data()+ix-1);
-                  continue;
+                  if ((Hoption.Contour != 11 && Hoption.Contour != 12 && Hoption.Contour != 13) || !Hoption.List)
+                     continue;
                }
 
                ipoly = itarr[ix-1];
@@ -6190,7 +6193,10 @@ void THistPainter::PaintContour(Option_t *option)
    Int_t first = ncontour;
    std::vector<Int_t> polysort;
    Int_t contListNb;
-   if (Hoption.Contour != 1) goto theEND;
+   if (Hoption.Contour != 1) {
+       if (!Hoption.List || (Hoption.Contour != 11 && Hoption.Contour != 12 && Hoption.Contour != 13))
+          goto theEND;
+   }
 
    //The 2 points line generated above are now sorted/merged to generate
    //a list of consecutive points.
@@ -6209,14 +6215,15 @@ void THistPainter::PaintContour(Option_t *option)
    k = 0;
    for (ipoly=first-1;ipoly>=0;ipoly--) {polysort[k] = ipoly; k++;}
    for (ipoly=first;ipoly<ncontour;ipoly++) {polysort[k] = ipoly; k++;}
-   // we can now draw sorted contours
+   // if Contour==1 we can now draw sorted contours, otherwise (11,12,13) just store
    contListNb = 0;
-   fH->SetFillStyle(1001);
+   if (Hoption.Contour == 1) fH->SetFillStyle(1001);
    for (k=0;k<ncontour;k++) {
       ipoly = polysort[k];
-      if (np[ipoly] == 0) continue;
       if (Hoption.List) list = (TList*)contours->At(contListNb);
       contListNb++;
+      if (np[ipoly] == 0)
+         continue;
       Double_t *xx = polys[ipoly]->GetX();
       Double_t *yy = polys[ipoly]->GetY();
       istart = 0;
@@ -6249,12 +6256,22 @@ void THistPainter::PaintContour(Option_t *option)
          }
          theColor = Int_t((ipoly+0.99)*Float_t(ncolors)/Float_t(ndivz));
          icol = gStyle->GetColorPalette(theColor);
-         if (ndivz > 1) fH->SetFillColor(icol);
-         fH->TAttFill::Modify();
-         gPad->PaintFillArea(iplus-iminus+1,xp.data()+iminus,yp.data()+iminus);
+         if (Hoption.Contour == 1) {
+            if (ndivz > 1) fH->SetFillColor(icol);
+            fH->TAttFill::Modify();
+            gPad->PaintFillArea(iplus-iminus+1,xp.data()+iminus,yp.data()+iminus);
+         }
          if (Hoption.List) {
             graph = new TGraph(iplus-iminus+1,xp.data()+iminus,yp.data()+iminus);
-            graph->SetFillColor(icol);
+            if (Hoption.Contour == 1)
+                graph->SetFillColor(icol);
+            else if (Hoption.Contour == 11)
+                graph->SetLineColor(icol);
+            else if (Hoption.Contour == 12) {
+                mode = icol%5;
+                if (mode == 0) mode = 5;
+                graph->SetLineStyle(mode);
+            }
             graph->SetLineWidth(fH->GetLineWidth());
             list->Add(graph);
          }
@@ -6359,12 +6376,13 @@ void THistPainter::PaintErrors(Option_t *)
    Int_t i, k, npoints, first, last, fixbin;
    Int_t if1 = 0;
    Int_t if2 = 0;
-   Int_t drawmarker, errormarker;
+   Bool_t drawmarker;
+   Int_t errormarker;
    Int_t option0, option1, option2, option3, option4, optionE, optionEX0, optionI0;
    static Float_t cxx[30] = {1.0,1.0,0.5,0.5,1.0,1.0,0.5,0.6,1.0,0.5,0.5,1.0,0.5,0.6,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0.0,1.0,1.0,1.0,1.0,0.5,0.5,0.5,1.0};
    static Float_t cyy[30] = {1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.5,0.5,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0.0,1.0,1.0,1.0,1.0,0.5,0.5,0.5,1.0};
 
-   std::vector<Double_t> xline, yline;
+   std::vector<Double_t> xline, yline, xsegm, ysegm, xmarker, ymarker;
    option0 = option1 = option2 = option3 = option4 = optionE = optionEX0 = optionI0 = 0;
    if (Hoption.Error >= 40) {Hoption.Error -=40; option0 = 1;}
    if (Int_t(Hoption.Error/10) == 2) {optionEX0 = 1; Hoption.Error -= 10;}
@@ -6412,6 +6430,52 @@ void THistPainter::PaintErrors(Option_t *)
    xmax       = gPad->GetUxmax();
    ymin       = gPad->GetUymin();
    ymax       = gPad->GetUymax();
+
+   xsegm.reserve(1024);
+   ysegm.reserve(1024);
+   if (!xsegm.capacity() || !ysegm.capacity()) {
+      Error("PaintErrors", "out of memory for lines painting");
+      return;
+   }
+
+   auto flush_segmentes = [&]() {
+      if (xsegm.size() > 0) {
+         gPad->PaintSegments(xsegm.size()/2, xsegm.data(), ysegm.data());
+         xsegm.clear();
+         ysegm.clear();
+      }
+   };
+
+   auto add_segment = [&](Double_t x1, Double_t y1, Double_t x2, Double_t y2) {
+      xsegm.emplace_back(x1);
+      xsegm.emplace_back(x2);
+      ysegm.emplace_back(y1);
+      ysegm.emplace_back(y2);
+      if (xsegm.size() == xsegm.capacity())
+         flush_segmentes();
+   };
+
+   auto flush_markers = [&]() {
+      if (xmarker.size() > 0) {
+         gPad->PaintPolyMarker(xmarker.size(), xmarker.data(), ymarker.data());
+         xmarker.clear();
+         ymarker.clear();
+      }
+   };
+
+   auto add_marker = [&](Double_t x, Double_t y) {
+      if (xmarker.capacity() == 0) {
+         xmarker.reserve(256);
+         ymarker.reserve(256);
+      }
+
+      xmarker.emplace_back(x);
+      ymarker.emplace_back(y);
+      if (xmarker.size() == xmarker.capacity()) {
+         flush_segmentes();
+         flush_markers();
+      }
+   };
 
 
    if (option3) {
@@ -6541,8 +6605,8 @@ void THistPainter::PaintErrors(Option_t *)
 
       //  draw the error rectangles
       if (option2) {
-         if (yi3 >= ymax) goto L30;
-         if (yi4 <= ymin) goto L30;
+         if ((yi3 >= ymax) || (yi4 <= ymin))
+            goto L30;
          gPad->PaintBox(xi1,yi3,xi2,yi4);
       }
 
@@ -6557,26 +6621,35 @@ void THistPainter::PaintErrors(Option_t *)
       }
 
       //          draw the error bars
-      if (Hoption.Logy && yp < logymin) drawmarker = kFALSE;
+      if (Hoption.Logy && yp < logymin)
+         drawmarker = kFALSE;
       if (optionE && drawmarker) {
-         if ((yi3 < yi1 - s2y) && (yi3 < ymax)) gPad->PaintLine(xi3,yi3,xi4,TMath::Min(yi1 - s2y,ymax));
-         if ((yi1 + s2y < yi4) && (yi4 > ymin)) gPad->PaintLine(xi3,TMath::Max(yi1 + s2y, ymin),xi4,yi4);
+         if ((yi3 < yi1 - s2y) && (yi3 < ymax))
+            add_segment(xi3,yi3,xi4,TMath::Min(yi1 - s2y,ymax));
+         if ((yi1 + s2y < yi4) && (yi4 > ymin))
+            add_segment(xi3,TMath::Max(yi1 + s2y, ymin),xi4,yi4);
          // don't duplicate the horizontal line
          if (Hoption.Hist != 2) {
             if (yi1<ymax && yi1>ymin) {
-              if (xi1 < xi3 - s2x) gPad->PaintLine(xi1,yi1,xi3 - s2x,yi2);
-              if (xi3 + s2x < xi2) gPad->PaintLine(xi3 + s2x,yi1,xi2,yi2);
+              if (xi1 < xi3 - s2x)
+                 add_segment(xi1,yi1,xi3 - s2x,yi2);
+              if (xi3 + s2x < xi2)
+                 add_segment(xi3 + s2x,yi1,xi2,yi2);
             }
          }
       }
       if (optionE && !drawmarker && (ey1 != 0 || ey2 !=0)) {
-         if ((yi3 < yi1) && (yi3 < ymax)) gPad->PaintLine(xi3,yi3,xi4,TMath::Min(yi1,ymax));
-         if ((yi1 < yi4) && (yi4 > ymin)) gPad->PaintLine(xi3,TMath::Max(yi1,ymin),xi4,yi4);
+         if ((yi3 < yi1) && (yi3 < ymax))
+            add_segment(xi3,yi3,xi4,TMath::Min(yi1,ymax));
+         if ((yi1 < yi4) && (yi4 > ymin))
+            add_segment(xi3,TMath::Max(yi1,ymin),xi4,yi4);
          // don't duplicate the horizontal line
          if (Hoption.Hist != 2) {
             if (yi1<ymax && yi1>ymin) {
-               if (xi1 < xi3) gPad->PaintLine(xi1,yi1,xi3,yi2);
-               if (xi3 < xi2) gPad->PaintLine(xi3,yi1,xi2,yi2);
+               if (xi1 < xi3)
+                  add_segment(xi1,yi1,xi3,yi2);
+               if (xi3 < xi2)
+                  add_segment(xi3,yi1,xi2,yi2);
             }
          }
       }
@@ -6585,17 +6658,22 @@ void THistPainter::PaintErrors(Option_t *)
 
       if (option1 && drawmarker) {
 
-         if (yi3 < yi1-s2y && yi3 < ymax && yi3 > ymin) gPad->PaintLine(xi3 - bxsize, yi3         , xi3 + bxsize, yi3);
-         if (yi4 > yi1+s2y && yi4 < ymax && yi4 > ymin) gPad->PaintLine(xi3 - bxsize, yi4         , xi3 + bxsize, yi4);
+         if (yi3 < yi1-s2y && yi3 < ymax && yi3 > ymin)
+            add_segment(xi3 - bxsize, yi3, xi3 + bxsize, yi3);
+         if (yi4 > yi1+s2y && yi4 < ymax && yi4 > ymin)
+            add_segment(xi3 - bxsize, yi4, xi3 + bxsize, yi4);
          if (yi1 <= ymax && yi1 >= ymin) {
-            if (xi1 < xi3-s2x) gPad->PaintLine(xi1         , yi1 - bysize, xi1         , yi1 + bysize);
-            if (xi2 > xi3+s2x) gPad->PaintLine(xi2         , yi1 - bysize, xi2         , yi1 + bysize);
+            if (xi1 < xi3-s2x)
+               add_segment(xi1, yi1 - bysize, xi1, yi1 + bysize);
+            if (xi2 > xi3+s2x)
+               add_segment(xi2, yi1 - bysize, xi2, yi1 + bysize);
          }
       }
 
       //          draw the marker
 
-      if (drawmarker) gPad->PaintPolyMarker(1, &xi3, &yi1);
+      if (drawmarker)
+         add_marker(xi3, yi1);
 
 L30:
       if (fixbin) xp += Hparam.xbinsize;
@@ -6606,6 +6684,11 @@ L30:
          }
       }
    }  //end of for loop
+
+   flush_segmentes();
+
+   flush_markers();
+
 
    //          draw the filled area
 
@@ -8603,8 +8686,7 @@ void THistPainter::PaintSpecialObjects(const TObject *obj, Option_t *option)
 {
 
    if (!obj) return;
-   Bool_t status = TH1::AddDirectoryStatus();
-   TH1::AddDirectory(kFALSE);
+   TDirectory::TContext ctx{nullptr}; // No self-registration to directories
 
    if (obj->InheritsFrom(TMatrixFBase::Class())) {
       // case TMatrixF
@@ -8630,8 +8712,6 @@ void THistPainter::PaintSpecialObjects(const TObject *obj, Option_t *option)
       R__TVectorD->SetBit(kCanDelete);
       R__TVectorD->Draw(option);
    }
-
-   TH1::AddDirectory(status);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -127,7 +127,7 @@ protected:
    /// Object to be notified when loading a Tree.
    /// TTree::LoadTree() and TChain::LoadTree() will call fNotify->Notify().
    /// Usually points to a TNotifyLink if this is a TChain.
-   TObject       *fNotify;                //!
+   TObject       *fNotify;                ///<!
    TDirectory    *fDirectory;             ///<! Pointer to directory holding this tree
    TObjArray      fBranches;              ///<  List of Branches
    TObjArray      fLeaves;                ///<  Direct pointers to individual branch leaves
@@ -252,7 +252,15 @@ protected:
       kGetFriendAlias       = BIT(7),
       kGetLeaf              = BIT(8),
       kLoadTree             = BIT(9),
+// clang++ <v20 (-Wshadow) complains about shadowing TError.h global variable kPrint. Let's silence warning:
+#if defined(__clang__) && __clang_major__ < 20
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshadow"
+#endif
       kPrint                = BIT(10),
+#if defined(__clang__) && __clang_major__ < 20
+#pragma clang diagnostic pop
+#endif
       kRemoveFriend         = BIT(11),
       kSetBranchStatus      = BIT(12),
       kResetBranchAddresses = BIT(13)

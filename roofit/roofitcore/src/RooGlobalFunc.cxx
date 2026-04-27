@@ -563,9 +563,9 @@ RooCmdArg EventRange(Int_t nStart, Int_t nStop)
 EvalBackend::EvalBackend(EvalBackend::Value value) : RooCmdArg{"EvalBackend", static_cast<int>(value)}
 {
 #ifndef ROOFIT_CLAD
-   if (value == Value::Codegen || value == Value::CodegenNoGrad) {
+   if (value == Value::Codegen) {
       oocoutE(nullptr, InputArguments)
-         << "RooFit was built without clad. Codegen backends are unavailable. Falling back to default.\n";
+         << "RooFit was built without clad. The \"codegen\" backend is unavailable. Falling back to default.\n";
       setInt(0, static_cast<int>(defaultValue()));
    }
 #endif
@@ -636,9 +636,13 @@ RooCmdArg PrefitDataFraction(double data_ratio)
 {
    return RooCmdArg("Prefit", 0, 0, data_ratio, 0, nullptr, nullptr, nullptr, nullptr);
 }
-RooCmdArg Optimize(Int_t flag)
+
+/// \deprecated Has no effect anymore. Functionality was removed in ROOT 6.42,
+/// and this function is kept as an empty shell that does nothing (for API
+/// compatibility between different ROOT versions).
+RooCmdArg Optimize(Int_t /*flag*/)
 {
-   return RooCmdArg("Optimize", flag);
+   return RooCmdArg{};
 }
 RooCmdArg Verbose(bool flag)
 {
@@ -807,7 +811,7 @@ RooCmdArg Conditional(const RooArgSet &pdfSet, const RooArgSet &depSet, bool dep
 };
 
 // RooAbsPdf::generate arguments
-RooCmdArg ProtoData(const RooDataSet &protoData, bool randomizeOrder, bool resample)
+RooCmdArg ProtoData(const RooAbsData &protoData, bool randomizeOrder, bool resample)
 {
    return RooCmdArg("PrototypeData", randomizeOrder, resample, 0, 0, nullptr, nullptr, &protoData, nullptr);
 }

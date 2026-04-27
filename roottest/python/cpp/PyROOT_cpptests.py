@@ -166,7 +166,7 @@ class Cpp1LanguageFeatureTestCase( MyTestCase ):
 
       c2 = gROOT.Class()
 
-      self.assertEqual( c1, c2 )
+      self.assertIs( c1, c2 )
 
       old = gROOT.GetDirLevel()
       TROOT.SetDirLevel( 2 )
@@ -228,9 +228,8 @@ class Cpp1LanguageFeatureTestCase( MyTestCase ):
       self.assertEqual( oaddr, Z.GimeAddressPtr( o ) )
       self.assertEqual( oaddr, Z.GimeAddressPtrRef( o ) )
       
-      pZ = Z.getZ(0)
-      self.assertEqual( Z.checkAddressOfZ( pZ ), True )
-      self.assertEqual( pZ , Z.getZ(1) )
+      pZ = Z.getZ(1)
+      self.assertIs( pZ , Z.getZ(1) )
 
       import array
       # Not supported in p2.2

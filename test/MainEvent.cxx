@@ -106,11 +106,7 @@
 
 #include "Event.h"
 
-#ifdef R__HAS_DEFAULT_LZ4
-constexpr int defaultComp = 4;
-#else
 constexpr int defaultComp = 1;
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -176,7 +172,7 @@ int MainEvent(int nevent, int comp, int split, int arg4, int arg5, int enable_im
 //         Read case
    if (read) {
       if (netf) {
-         hfile = new TNetFile("root://localhost/root/test/EventNet.root");
+         hfile = new ROOT::Deprecated::TNetFile("root://localhost/root/test/EventNet.root");
       } else
          hfile = new TFile(outFiles.back().c_str());
       tree = (TTree*)hfile->Get("T");
@@ -220,7 +216,8 @@ int MainEvent(int nevent, int comp, int split, int arg4, int arg5, int enable_im
       // pictures, graphics objects, detector geometries, tracks, events, etc..
       // This file is now becoming the current directory.
       if (netf) {
-         hfile = new TNetFile("root://localhost/root/test/EventNet.root","RECREATE","TTree benchmark ROOT file");
+         hfile = new ROOT::Deprecated::TNetFile("root://localhost/root/test/EventNet.root","RECREATE",
+                                                "TTree benchmark ROOT file");
       } else
          hfile = new TFile(outFiles.back().c_str(),"RECREATE","TTree benchmark ROOT file");
       hfile->SetCompressionLevel(comp);

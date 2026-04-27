@@ -1,10 +1,9 @@
-import py, sys, pytest, os
+import sys, pytest, os
 from pytest import mark, raises
-from support import setup_make, ispypy, IS_MAC_ARM
+from support import setup_make, ispypy, IS_MAC_ARM, IS_WINDOWS
 
 
-currpath = os.getcwd()
-test_dct = currpath + "/libcpp11featuresDict"
+test_dct = "cpp11features_cxx"
 
 
 class TestCPP11FEATURES:
@@ -301,7 +300,7 @@ class TestCPP11FEATURES:
         for l in (['x'], ['x', 'y', 'z']):
             assert ns.foo(l) == std.vector['std::string'](l)
 
-    @mark.xfail()
+    @mark.xfail(strict=True)
     def test09_lambda_calls(self):
         """Call (global) lambdas"""
 
@@ -347,7 +346,7 @@ class TestCPP11FEATURES:
         c = cppyy.gbl.std.nullopt
         assert cppyy.gbl.callopt(c)
 
-    @mark.xfail(run = False, reason = "Crashes")
+    @mark.xfail(run=False, reason = "Crashes")
     def test11_chrono(self):
         """Use of chrono and overloaded operator+"""
 
@@ -358,7 +357,7 @@ class TestCPP11FEATURES:
         # following used to fail with compilation error
         t = std.chrono.system_clock.now() + std.chrono.seconds(1)
 
-    @mark.xfail()
+    @mark.xfail(strict=True)
     def test12_stdfunction(self):
         """Use of std::function with arguments in a namespace"""
 
@@ -389,6 +388,19 @@ class TestCPP11FEATURES:
         """Use of std::hash"""
 
         import cppyy
+
+        cppyy.cppdef("""
+        struct StructWithHash {};    // for std::hash<> testing
+        struct StructWithoutHash {};
+
+        namespace std {
+            template<>
+            struct hash<StructWithHash> {
+                size_t operator()(const StructWithHash&) const { return 17; }
+            };
+        } // namespace std
+        """)
+
         from cppyy.gbl import StructWithHash, StructWithoutHash
 
         for i in range(3):   # to test effect of caching
@@ -400,7 +412,7 @@ class TestCPP11FEATURES:
             assert hash(sw)  == 17
             assert hash(sw)  == 17
 
-    @mark.xfail()
+    @mark.xfail(strict=True)
     def test14_shared_ptr_passing(self):
         """Ability to pass normal pointers through shared_ptr by value"""
 
@@ -426,6 +438,7 @@ class TestCPP11FEATURES:
             gc.collect()
             assert TestSmartPtr.s_counter == 0
 
+    @mark.xfail(strict=True, condition=IS_WINDOWS | IS_MAC_ARM, reason='ValueError: Could not find "make_unique<int>"')
     def test15_unique_ptr_template_deduction(self):
         """Argument type deduction with std::unique_ptr"""
 
@@ -445,6 +458,7 @@ class TestCPP11FEATURES:
         with raises(ValueError):  # not an RValue
             cppyy.gbl.UniqueTempl.returnptr[int](uptr_in)
 
+    @mark.xfail(strict=True, condition=IS_WINDOWS | IS_MAC_ARM, reason='TypeError: Could not find "make_unique<int>"')
     def test16_unique_ptr_moves(self):
         """std::unique_ptr requires moves"""
 
@@ -531,7 +545,7 @@ class TestCPP11FEATURES:
         p2 = c.pget()
         assert p1 is p2
 
-    @mark.xfail()
+    @mark.xfail(strict=True)
     def test19_smartptr_from_callback(self):
         """Return a smart pointer from a callback"""
 
@@ -560,6 +574,24 @@ class TestCPP11FEATURES:
              return ns.dummy_create()
 
         assert ns.call_creator(pyfunc)
+
+    def test20_tuple_element(self):
+        """
+        Check that std::tuple_element works.
+
+        See: https://github.com/root-project/root/issues/14232.
+        """
+
+        import cppyy
+
+        cppyy.cppdef("""
+        #include <tuple>
+        #include <string>
+        using ATuple = std::tuple<int, float, std::string, double>;
+        """)
+        from cppyy.gbl import ATuple
+
+        cppyy.gbl.std.tuple_element[1, ATuple].type
 
 
 if __name__ == "__main__":

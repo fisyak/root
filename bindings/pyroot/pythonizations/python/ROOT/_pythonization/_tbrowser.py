@@ -16,7 +16,6 @@ work in the python scripts. If extra block parameter is True, script execution
 will be suspended until <space> key pressed by user. Simple example:
 
 \code{.py}
-\endcode
 import ROOT
 
 # block until space is pressed
@@ -28,10 +27,11 @@ br = ROOT.TBrowser(block = True)
 br.Draw(block = True)
 
 # continues after <space> is pressed
+\endcode
 \endpythondoc
 '''
 
-from . import pythonization, _run_root_event_loop
+from . import _run_root_event_loop, pythonization
 
 
 def _TBrowser_constructor(self, *args, block: bool = False):

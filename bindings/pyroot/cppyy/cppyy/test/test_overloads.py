@@ -1,10 +1,9 @@
-import py, pytest, os
+import pytest, os
 from pytest import raises, skip, mark
 from support import setup_make, ispypy, IS_WINDOWS, IS_MAC_ARM
 
 
-currpath = os.getcwd()
-test_dct = currpath + "/liboverloadsDict"
+test_dct = "overloads_cxx"
 
 
 class TestOVERLOADS:
@@ -199,8 +198,6 @@ class TestOVERLOADS:
         with raises(ValueError):
             cpp.BoolInt4.fff(2)
 
-    @mark.xfail(run=False, condition=IS_MAC_ARM, reason = "Crashes on OS X ARM with" \
-    "libc++abi: terminating due to uncaught exception")
     def test10_overload_and_exceptions(self):
         """Prioritize reporting C++ exceptions from callee"""
 
@@ -404,6 +401,71 @@ class TestOVERLOADS:
         result_instance = d.StaticMethod()
 
         assert result_instance == result_direct
+
+
+    def test14_disallow_functor_to_function_pointer(self):
+        """Make sure we're no allowing to convert C++ functors to function
+        pointers, extending the C++ language in an unnatural way that can lead
+        to wrong overload resolutions."""
+
+        import cppyy
+
+        cppyy.cppdef("""
+        class Test14Functor {
+        public:
+            double operator () (double* args, double*) {
+                return 4.0 * args[0];
+            }
+        };
+
+        int test14_foo(double (*fcn)(double*, double*)) {
+            return 0;
+        }
+
+        template<class T>
+        int test14_foo(T fcn) {
+            return 1;
+        }
+
+        int test14_bar(double (*fcn)(double*, double*)) {
+            return 0;
+        }
+
+        int test14_baz(double (*fcn)(double*, double*)) {
+            return 0;
+        }
+
+        int test14_baz(std::function<double(double*, double*)> const &fcn) {
+            return 2;
+        }
+        """)
+
+        functor = cppyy.gbl.Test14Functor()
+        assert cppyy.gbl.test14_foo(functor) == 1 # should resolve to foo(T fcn)
+        # not allowed, because there is only an overload taking a function pointer
+        raises(TypeError, cppyy.gbl.test14_bar, functor)
+        # The "baz" function has a std::function overload, which should be selected
+        assert cppyy.gbl.test14_baz(functor) == 2 # should resolve to baz(std::function)
+
+
+    def test15_disallow_mutable_pointer_references(self):
+        """Verify that mutable pointer references (T*&) are not allowed as arguments.
+        """
+
+        import cppyy
+
+        cppyy.cppdef("""
+        struct MyClass {
+           int val = 0;
+        };
+
+        void changePtr(MyClass *& ptr) {}
+        """)
+
+        ptr = cppyy.gbl.MyClass()
+
+        raises(TypeError, cppyy.gbl.changePtr, ptr)
+
 
 if __name__ == "__main__":
     exit(pytest.main(args=['-sv', '-ra', __file__]))

@@ -156,6 +156,8 @@ private:
    /// For custom classes, we store the ROOT TClass reported checksum to facilitate the use of I/O rules that
    /// identify types by their checksum
    std::optional<std::uint32_t> fTypeChecksum;
+   /// Indicates if this is a collection that should be represented in memory by a SoA layout.
+   bool fIsSoACollection = false;
 
 public:
    RFieldDescriptor() = default;
@@ -189,6 +191,7 @@ public:
    std::uint32_t GetColumnCardinality() const { return fColumnCardinality; }
    std::optional<std::uint32_t> GetTypeChecksum() const { return fTypeChecksum; }
    bool IsProjectedField() const { return fProjectionSourceId != ROOT::kInvalidDescriptorId; }
+   bool IsSoACollection() const { return fIsSoACollection; }
 
    bool IsCustomClass() const R__DEPRECATED(6, 42, "removed from public interface");
    bool IsCustomEnum(const RNTupleDescriptor &desc) const R__DEPRECATED(6, 42, "removed from public interface");
@@ -363,31 +366,31 @@ public:
    // the page belongs
    struct RPageInfo {
    private:
-      /// The sum of the elements of all the pages must match the corresponding `fNElements` field in `fColumnRanges`
-      std::uint32_t fNElements = std::uint32_t(-1);
       /// The meaning of `fLocator` depends on the storage backend.
       RNTupleLocator fLocator;
+      /// The sum of the elements of all the pages must match the corresponding `fNElements` field in `fColumnRanges`
+      std::uint32_t fNElements = std::uint32_t(-1);
       /// If true, the 8 bytes following the serialized page are an xxhash of the on-disk page data
       bool fHasChecksum = false;
 
    public:
       RPageInfo() = default;
       RPageInfo(std::uint32_t nElements, const RNTupleLocator &locator, bool hasChecksum)
-         : fNElements(nElements), fLocator(locator), fHasChecksum(hasChecksum)
+         : fLocator(locator), fNElements(nElements), fHasChecksum(hasChecksum)
       {
       }
 
       bool operator==(const RPageInfo &other) const
       {
-         return fNElements == other.fNElements && fLocator == other.fLocator;
+         return fLocator == other.fLocator && fNElements == other.fNElements;
       }
-
-      std::uint32_t GetNElements() const { return fNElements; }
-      void SetNElements(std::uint32_t n) { fNElements = n; }
 
       const RNTupleLocator &GetLocator() const { return fLocator; }
       RNTupleLocator &GetLocator() { return fLocator; }
       void SetLocator(const RNTupleLocator &locator) { fLocator = locator; }
+
+      std::uint32_t GetNElements() const { return fNElements; }
+      void SetNElements(std::uint32_t n) { fNElements = n; }
 
       bool HasChecksum() const { return fHasChecksum; }
       void SetHasChecksum(bool hasChecksum) { fHasChecksum = hasChecksum; }
@@ -445,14 +448,19 @@ public:
       std::size_t ExtendToFitColumnRange(const RColumnRange &columnRange,
                                          const ROOT::Internal::RColumnElementBase &element, std::size_t pageSize);
 
-      /// Has the same length than fPageInfos and stores the sum of the number of elements of all the pages
-      /// up to and including a given index. Used for binary search in Find().
-      std::vector<ROOT::NTupleSize_t> fCumulativeNElements;
-
-      ROOT::DescriptorId_t fPhysicalColumnId = ROOT::kInvalidDescriptorId;
       std::vector<RPageInfo> fPageInfos;
 
+      /// Has the same length than fPageInfos and stores the sum of the number of elements of all the pages
+      /// up to and including a given index. Used for binary search in Find().
+      /// This vector is only created if fPageInfos has at least kLargeRangeThreshold elements.
+      std::unique_ptr<std::vector<ROOT::NTupleSize_t>> fCumulativeNElements;
+
+      ROOT::DescriptorId_t fPhysicalColumnId = ROOT::kInvalidDescriptorId;
+
    public:
+      /// Create the fCumulativeNElements only when its needed, i.e. when there are many pages to search through.
+      static constexpr std::size_t kLargeRangeThreshold = 10;
+
       RPageRange() = default;
       RPageRange(const RPageRange &other) = delete;
       RPageRange &operator=(const RPageRange &other) = delete;
@@ -464,7 +472,9 @@ public:
          RPageRange clone;
          clone.fPhysicalColumnId = fPhysicalColumnId;
          clone.fPageInfos = fPageInfos;
-         clone.fCumulativeNElements = fCumulativeNElements;
+         if (fCumulativeNElements) {
+            clone.fCumulativeNElements = std::make_unique<std::vector<ROOT::NTupleSize_t>>(*fCumulativeNElements);
+         }
          return clone;
       }
 
@@ -663,6 +673,11 @@ public:
    const std::string &GetContent() const { return fContent; }
 };
 
+namespace Internal {
+// Used by the RNTupleReader to activate/deactivate entries. Needs to adapt when we have sharded clusters.
+ROOT::DescriptorId_t CallFindClusterIdOn(const ROOT::RNTupleDescriptor &desc, ROOT::NTupleSize_t entryIdx);
+} // namespace Internal
+
 // clang-format off
 /**
 \class ROOT::RNTupleDescriptor
@@ -689,6 +704,7 @@ and backward compatibility when the metadata evolves.
 class RNTupleDescriptor final {
    friend class Internal::RNTupleDescriptorBuilder;
    friend RNTupleDescriptor Internal::CloneDescriptorSchema(const RNTupleDescriptor &desc);
+   friend DescriptorId_t Internal::CallFindClusterIdOn(const RNTupleDescriptor &desc, NTupleSize_t entryIdx);
 
 public:
    class RHeaderExtension;
@@ -808,6 +824,12 @@ public:
    std::uint64_t GetOnDiskHeaderXxHash3() const { return fOnDiskHeaderXxHash3; }
    std::uint64_t GetOnDiskHeaderSize() const { return fOnDiskHeaderSize; }
    std::uint64_t GetOnDiskFooterSize() const { return fOnDiskFooterSize; }
+   /// \see ROOT::RNTuple::GetCurrentVersion()
+   std::uint64_t GetVersion() const
+   {
+      return (static_cast<std::uint64_t>(fVersionEpoch) << 48) | (static_cast<std::uint64_t>(fVersionMajor) << 32) |
+             (static_cast<std::uint64_t>(fVersionMinor) << 16) | (static_cast<std::uint64_t>(fVersionPatch));
+   }
 
    const RFieldDescriptor &GetFieldDescriptor(ROOT::DescriptorId_t fieldId) const
    {
@@ -1301,10 +1323,11 @@ public:
       return fExtendedColumnRepresentations;
    }
    /// Return a vector containing the IDs of the top-level fields defined in the extension header, in the order
-   /// of their addition.
+   /// of their addition. Note that these fields are not necessarily top-level fields in the overall schema.
+   /// If a nested field is extended, it will return the top-most field of the extended subtree.
    /// We cannot create this vector when building the fFields because at the time when AddExtendedField is called,
    /// the field is not yet linked into the schema tree.
-   std::vector<ROOT::DescriptorId_t> GetTopLevelFields(const RNTupleDescriptor &desc) const;
+   std::vector<ROOT::DescriptorId_t> GetTopMostFields(const RNTupleDescriptor &desc) const;
 
    bool ContainsField(ROOT::DescriptorId_t fieldId) const
    {
@@ -1517,6 +1540,11 @@ public:
    RFieldDescriptorBuilder &TypeChecksum(const std::optional<std::uint32_t> typeChecksum)
    {
       fField.fTypeChecksum = typeChecksum;
+      return *this;
+   }
+   RFieldDescriptorBuilder &IsSoACollection(bool val)
+   {
+      fField.fIsSoACollection = val;
       return *this;
    }
    ROOT::DescriptorId_t GetParentId() const { return fField.fParentId; }

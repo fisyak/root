@@ -17,7 +17,6 @@ foreach(v 0 OFF NO FALSE N IGNORE off no false n ignore)
   set(value${v} no)
 endforeach()
 
-set(ROOT_DICTTYPE cint)
 #set(ROOT_CONFIGARGS "")
 set(top_srcdir ${CMAKE_SOURCE_DIR})
 set(top_builddir ${CMAKE_BINARY_DIR})
@@ -105,11 +104,6 @@ if(IS_ABSOLUTE ${CMAKE_INSTALL_ICONDIR})
 else()
   set(iconpath ${prefix}/${CMAKE_INSTALL_ICONDIR})
 endif()
-if(IS_ABSOLUTE ${CMAKE_INSTALL_CINTINCDIR})
-  set(cintincdir ${CMAKE_INSTALL_CINTINCDIR})
-else()
-  set(cintincdir ${prefix}/${CMAKE_INSTALL_CINTINCDIR})
-endif()
 if(IS_ABSOLUTE ${CMAKE_INSTALL_DOCDIR})
   set(docdir ${CMAKE_INSTALL_DOCDIR})
 else()
@@ -173,7 +167,17 @@ else()
   set(useoldwebfile yes)
 endif()
 
-set(buildnetxng ${value${netxng}})
+set(buildnetxng ${value${xrootd}})
+
+set(buildcurl ${value${curl}})
+set(curllibdir ${CURL_LIBRARY_DIR})
+set(curllib ${CURL_LIBRARY})
+set(curlincdir ${CURL_INCLUDE_DIR})
+if(curl)
+  set(hascurl define)
+else()
+  set(hascurl undef)
+endif()
 
 set(builddcap ${value${dcap}})
 set(dcaplibdir ${DCAP_LIBRARY_DIR})
@@ -184,11 +188,6 @@ set(buildftgl ${value${builtin_ftgl}})
 set(ftgllibdir ${FTGL_LIBRARY_DIR})
 set(ftgllibs ${FTGL_LIBRARIES})
 set(ftglincdir ${FTGL_INCLUDE_DIR})
-
-set(buildglew ${value${builtin_glew}})
-set(glewlibdir ${GLEW_LIBRARY_DIR})
-set(glewlibs ${GLEW_LIBRARIES})
-set(glewincdir ${GLEW_INCLUDE_DIR})
 
 set(buildarrow ${value${arrow}})
 set(arrowlibdir ${ARROW_LIBRARY_DIR})
@@ -285,7 +284,6 @@ set(curseslib ${CURSES_LIBRARIES})
 set(curseshdr ${CURSES_HEADER_FILE})
 set(buildeditline ${value${editline}})
 set(cppunit)
-set(dicttype ${ROOT_DICTTYPE})
 
 
 find_program(PERL_EXECUTABLE perl)
@@ -367,25 +365,25 @@ if(lz4)
 else()
   set(haslz4compression undef)
 endif()
+if(clad)
+  set(hasclad define)
+else()
+  set(hasclad undef)
+endif()
 if(cocoa)
   set(hascocoa define)
 else()
   set(hascocoa undef)
-endif()
-if(vc)
-  set(hasvc define)
-else()
-  set(hasvc undef)
 endif()
 if(vdt)
   set(hasvdt define)
 else()
   set(hasvdt undef)
 endif()
-if(veccore)
-  set(hasveccore define)
+if(ROOT_HAVE_EXPERIMENTAL_SIMD)
+  set(hasstdexperimentalsimd define)
 else()
-  set(hasveccore undef)
+  set(hasstdexperimentalsimd undef)
 endif()
 if(dataframe)
   set(hasdataframe define)
@@ -403,18 +401,10 @@ else()
   set(hasroot7 undef)
 endif()
 
-set(uselz4 undef)
-set(usezlib undef)
-set(uselzma undef)
-set(usezstd undef)
-set(use${compression_default} define)
-
-# cloudflare zlib is available only on x86 and aarch64 platforms with Linux
-# for other platforms we have available builtin zlib 1.2.8
-if(builtin_zlib AND ZLIB_CF)
-  set(usecloudflarezlib define)
+if(ZLIB_NG)
+  set(usezlibng define)
 else()
-  set(usecloudflarezlib undef)
+  set(usezlibng undef)
 endif()
 if(runtime_cxxmodules)
   set(usecxxmodules define)
@@ -504,7 +494,8 @@ endif()
 # The hardware interference size must be stable across all TUs in a ROOT build, so we need to save it in RConfigure.hxx
 # Since it can vary for different compilers or tune settings, we cannot base the ABI on a value that might change,
 # even be different between compiler and interpreter, or when ROOT is compiled on a different machine.
-if(CMAKE_VERSION VERSION_GREATER 3.24) # For older CMake, we simply fall back to 64
+# For older CMake and when cross compiling, we simply fall back to 64
+if(CMAKE_VERSION VERSION_GREATER 3.24 AND NOT CMAKE_CROSSCOMPILING)
 set(test_interference_size "
 #include <new>
 #include <iostream>
@@ -564,6 +555,19 @@ else()
 endif()
 string(REGEX MATCH "__cplusplus[=| ]([0-9]+)" __cplusplus "${__cplusplus_PPout}")
 set(__cplusplus ${CMAKE_MATCH_1}L)
+
+# To mark the build tree. Important for automatic resolution of relative paths,
+# for example to the include directory. Use custom target to ensure re-creation
+# when someone deletes the marker.
+set(build_tree_marker "${localruntimedir}/root-build-tree-marker")
+add_custom_command(
+  OUTPUT "${build_tree_marker}"
+  COMMAND ${CMAKE_COMMAND} -E touch "${build_tree_marker}"
+  COMMENT "Ensuring that \"${build_tree_marker}\" exists"
+)
+add_custom_target(ensure_build_tree_marker ALL
+  DEPENDS "${build_tree_marker}"
+)
 
 configure_file(${PROJECT_SOURCE_DIR}/config/RConfigure.in ginclude/RConfigure.h NEWLINE_STYLE UNIX)
 install(FILES ${CMAKE_BINARY_DIR}/ginclude/RConfigure.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
@@ -730,7 +734,7 @@ else()
     ${CMAKE_BINARY_DIR}/ginclude/compiledata.h "${CMAKE_CXX_COMPILER}"
         "${CMAKE_CXX_FLAGS_RELEASE}" "${CMAKE_CXX_FLAGS_DEBUG}" "${CMAKE_CXX_ACLIC_FLAGS}"
         "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS}" "${CMAKE_EXE_LINKER_FLAGS}" "so"
-        "${libdir}" "-lCore" "-lRint" "${incdir}" "" "" "${ROOT_ARCHITECTURE}" "${ROOTBUILD}"
+        "${libdir}" "-lCore" "-lRint" "" "" "${ROOT_ARCHITECTURE}" "${ROOTBUILD}"
         "${local_ROOT_COMPILEDATA_IGNORE_BUILD_NODE_CHANGES}")
 endif()
 

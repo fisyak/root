@@ -13,15 +13,35 @@
 \file TFile.cxx
 \class TFile
 \ingroup IO
-\brief A ROOT file is an on-disk file, usually with extension .root, that stores objects in a file-system-like logical structure, possibly including subdirectory hierarchies.
+\brief A file, usually with extension .root, that stores data and code in the form of serialized objects in a
+file-system-like logical structure, possibly including subdirectory hierarchies.
+\note ROOT files contain data, and executable code, for example through TExec, TMacro, and TFormula instances. As for all files, **do not open ROOT files from an unknown origin!**
 \note See also \ref IO
 \note See also \ref rootio (or `io/doc/TFile` folder in your codebase)
+
+ROOT files a are an efficient mean to store C++ class instances, e.g. data, 
+both as individual objects, in a so called *row-wise fashion*, and in a 
+*so-called columnar fashion*. Also executable code can be stored in ROOT files,
+for example in the form of TMacro, TExec or TFormula instances, and the 
+related federation of classes.
+
+For example, a TCanvas or TPad instance may rely on TExec instances stored in
+their *list of executables* to obtain certain graphics effects: in this case,
+code will be executed upon drawing. A TH1 or a TGraph instance, as well as
+their multidimensional counterparts and derived classes, may also execute code
+upon drawing through TExec instances stored in their *list of functions*.
+Another example of code which is executable is represented by TFormula
+instances, that are the "computational workhorse" of function classes such as
+TF1, its multidimensional counterparts, and related classes. There, jitted C++
+code is executed for example upon evaluation, for example during fits or
+drawing operations, to obtain maximum runtime performance.
+
 
 <details>
 <summary>ROOT file data format specification</summary>
 
 A ROOT file is composed of a header, followed by consecutive data records
-(`TKey` instances) with a well defined format.
+(TKey instances) with a well defined format.
 
 The first data record starts at byte fBEGIN (currently set to kBEGIN).
 Bytes 1->kBEGIN contain the file description, when fVersion >= 1000000
@@ -225,18 +245,18 @@ TFile::TFile() : TDirectoryFile(), fCompress(ROOT::RCompressionSetting::EAlgorit
 ///
 /// Option | Description
 /// -------|------------
-/// NEW or CREATE                     | Create a new file and open it for writing, if the file already exists the file is not opened.
-/// RECREATE                          | Create a new file, if the file already exists it will be overwritten.
-/// UPDATE                            | Open an existing file for writing. If no file exists, it is created.
-/// READ                              | Open an existing file for reading (default).
-/// NET                               | Used by derived remote file access classes, not a user callable option.
-/// WEB                               | Used by derived remote http access class, not a user callable option.
-/// READ_WITHOUT_GLOBALREGISTRATION   | Used by TTreeProcessorMT, not a user callable option.
+/// NEW or CREATE                     | Create a new file and open it for writing, if the file already exists the file
+/// is not opened. RECREATE                          | Create a new file, if the file already exists it will be
+/// overwritten. UPDATE                            | Open an existing file for writing. If no file exists, it is
+/// created. READ                              | Open an existing file for reading (default). NET | Used by derived
+/// remote file access classes, not a user callable option. WEB                               | Used by derived remote
+/// http access class, not a user callable option. READ_WITHOUT_GLOBALREGISTRATION   | Used by TTreeProcessorMT, not a
+/// user callable option.
 ///
 /// If option = "" (default), READ is assumed.
-/// \note Even in READ mode, if the file is the current directory `cd()`, and you create e.g. a new histogram in your code,
-/// the histogram will be appended (but not written) to this directory, and automatically deleted when closing the file.
-/// To avoid this behavior, call hist->SetDirectory(nullptr); after creating it.
+/// \note Even in READ mode, if the file is the current directory `cd()`, and you create e.g. a new histogram in your
+/// code, the histogram will be appended (but not written) to this directory, and automatically deleted when closing the
+/// file. To avoid this behavior, call hist->SetDirectory(nullptr); after creating it.
 ///
 /// The file can be specified as a URL of the form:
 ///
@@ -255,12 +275,12 @@ TFile::TFile() : TDirectoryFile(), fCompress(ROOT::RCompressionSetting::EAlgorit
 ///
 ///     file.tar?filetype=raw
 ///
-/// This is convenient because the many remote file access plugins allow
-/// easy access to/from the many different mass storage systems.
+/// This can be convenient because the many file access plugins allow
+/// easy access to remote endpoints, e.g. mass storage pools.
 /// The title of the file (ftitle) will be shown by the ROOT browsers.
 /// A ROOT file (like a Unix file system) may contain objects and
-/// directories. There are no restrictions for the number of levels
-/// of directories.
+/// directories, as well as executable code. There are no restrictions
+/// for the number of levels of directories.
 /// A ROOT file is designed such that one can write in the file in pure
 /// sequential mode (case of BATCH jobs). In this case, the file may be
 /// read sequentially again without using the file index written
@@ -288,7 +308,9 @@ TFile::TFile() : TDirectoryFile(), fCompress(ROOT::RCompressionSetting::EAlgorit
 /// The enumeration ROOT::RCompressionSetting::EAlgorithm associates each
 /// algorithm with a number. There is a utility function to help
 /// to set the value of compress. For example,
+///
 ///     ROOT::CompressionSettings(ROOT::kLZMA, 1)
+///
 /// will build an integer which will set the compression to use
 /// the LZMA algorithm and compression level 1.  These are defined
 /// in the header file <em>Compression.h</em>.
@@ -315,7 +337,7 @@ TFile::TFile() : TDirectoryFile(), fCompress(ROOT::RCompressionSetting::EAlgorit
 /// }
 /// ~~~
 /// When opening the file, the system checks the validity of this directory.
-/// If something wrong is detected, an automatic Recovery is performed. In
+/// If something wrong is detected, an automatic recovery is performed. In
 /// this case, the file is scanned sequentially reading all logical blocks
 /// and attempting to rebuild a correct directory (see TFile::Recover).
 /// One can disable the automatic recovery procedure when reading one
@@ -533,7 +555,7 @@ TFile::TFile(const char *fname1, Option_t *option, const char *ftitle, Int_t com
    // Connect to file system stream
    if (create || update) {
 #ifndef WIN32
-      fD = TFile::SysOpen(fname.Data(), O_RDWR | O_CREAT, 0644);
+      fD = TFile::SysOpen(fname.Data(), O_RDWR | O_CREAT, 0666);
 #else
       fD = TFile::SysOpen(fname.Data(), O_RDWR | O_CREAT | O_BINARY, S_IREAD | S_IWRITE);
 #endif
@@ -545,7 +567,7 @@ TFile::TFile(const char *fname1, Option_t *option, const char *ftitle, Int_t com
       fWritable = kTRUE;
    } else {
 #ifndef WIN32
-      fD = TFile::SysOpen(fname.Data(), O_RDONLY, 0644);
+      fD = TFile::SysOpen(fname.Data(), O_RDONLY, 0666);
 #else
       fD = TFile::SysOpen(fname.Data(), O_RDONLY | O_BINARY, S_IREAD | S_IWRITE);
 #endif
@@ -596,8 +618,8 @@ TFile::~TFile()
    }
 
    if (IsOnHeap()) {
-      // Delete object from CINT symbol table so it can not be used anymore.
-      // CINT object are always on the heap.
+      // Delete object from Cling symbol table so it can not be used anymore.
+      // Cling objects are always on the heap.
       gInterpreter->ResetGlobalVar(this);
    }
 
@@ -2097,7 +2119,6 @@ Int_t TFile::Recover()
 
    if (fWritable && !fFree) fFree  = new TList;
 
-   TKey *key;
    Int_t nrecov = 0;
    nwheader = 1024;
    Int_t nread = nwheader;
@@ -2149,14 +2170,15 @@ Int_t TFile::Recover()
       TClass *tclass = TClass::GetClass(classname);
       if (seekpdir == fSeekDir && tclass && !tclass->InheritsFrom(TFile::Class())
                                && strcmp(classname,"TBasket")) {
-         key = new TKey(this);
+         TKey *key = new TKey(this);
          key->ReadKeyBuffer(bufread);
          if (!strcmp(key->GetName(),"StreamerInfo")) {
             fSeekInfo = seekkey;
             SafeDelete(fInfoCache);
             fNbytesInfo = nbytes;
+            delete key;
          } else {
-            AppendKey(key);
+            AppendKey(key); // ownership transferred, do not to delete key here
             nrecov++;
             SetBit(kRecovered);
             Info("Recover", "%s, recovered key %s:%s at address %lld",GetName(),key->GetClassName(),key->GetName(),idcur);
@@ -2236,7 +2258,7 @@ Int_t TFile::ReOpen(Option_t *mode)
       // open in READ mode
       fOption = opt;    // set fOption before SysOpen() for TNetFile
 #ifndef WIN32
-      fD = SysOpen(fRealName, O_RDONLY, 0644);
+      fD = SysOpen(fRealName, O_RDONLY, 0666);
 #else
       fD = SysOpen(fRealName, O_RDONLY | O_BINARY, S_IREAD | S_IWRITE);
 #endif
@@ -2258,7 +2280,7 @@ Int_t TFile::ReOpen(Option_t *mode)
       // open in UPDATE mode
       fOption = opt;    // set fOption before SysOpen() for TNetFile
 #ifndef WIN32
-      fD = SysOpen(fRealName, O_RDWR | O_CREAT, 0644);
+      fD = SysOpen(fRealName, O_RDWR | O_CREAT, 0666);
 #else
       fD = SysOpen(fRealName, O_RDWR | O_CREAT | O_BINARY, S_IREAD | S_IWRITE);
 #endif
@@ -2716,14 +2738,14 @@ void TFile::WriteHeader()
 /// new (default) | A new directory dirname is created. If dirname already exist, an error message is printed and the function returns.
 /// recreate      | If dirname does not exist, it is created (like in "new"). If dirname already exist, all existing files in dirname are deleted before creating the new files.
 /// update        | New classes are added to the existing directory. Existing classes with the same name are replaced by the new definition. If the directory dirname doest not exist, same effect as "new".
-/// genreflex     | Use genreflex rather than rootcint to generate the dictionary.
+/// genreflex     | Use genreflex rather than rootcling to generate the dictionary.
 /// par           | Create a PAR file with the minimal set of code needed to read the content of the ROOT file. The name of the PAR file is basename(dirname), with extension '.par' enforced; the PAR file will be created at dirname(dirname).
 ///
 /// If, in addition to one of the 3 above options, the option "+" is specified,
 /// the function will generate:
 ///   - a script called MAKEP to build the shared lib
 ///   - a dirnameLinkDef.h file
-///   - rootcint will be run to generate a dirnameProjectDict.cxx file
+///   - rootcling will be run to generate a dirnameProjectDict.cxx file
 ///   - dirnameProjectDict.cxx will be compiled with the current options in compiledata.h
 ///   - a shared lib dirname.so will be created.
 /// If the option "++" is specified, the generated shared lib is dynamically
@@ -2735,10 +2757,10 @@ void TFile::WriteHeader()
 ///   - creates a new directory demo unless it already exist
 ///   - clear the previous directory content
 ///   - generate the xxx.h files for all classes xxx found in this file
-///    and not yet known to the CINT dictionary.
+///    and not yet known to the Cling dictionary.
 ///   - creates the build script MAKEP
 ///   - creates a LinkDef.h file
-///   - runs rootcint generating demoProjectDict.cxx
+///   - runs rootcling generating demoProjectDict.cxx
 ///   - compiles demoProjectDict.cxx into demoProjectDict.o
 ///   - generates a shared lib demo.so
 ///   - dynamically links the shared lib demo.so to the executable
@@ -3005,7 +3027,7 @@ void TFile::MakeProject(const char *dirname, const char * /*classes*/,
       return;
    }
 
-   // Add rootcint/genreflex statement generating ProjectDict.cxx
+   // Add rootcling/genreflex statement generating ProjectDict.cxx
    FILE *ifp = nullptr;
    path.Form("%s/%sProjectInstances.h",clean_dirname.Data(),subdirname.Data());
 #ifdef R__WINGCC
@@ -3026,7 +3048,7 @@ void TFile::MakeProject(const char *dirname, const char * /*classes*/,
       fprintf(fpMAKE,"genreflex %sProjectHeaders.h -o %sProjectDict.cxx --comments --iocomments %s ",subdirname.Data(),subdirname.Data(),gSystem->GetIncludePath());
       path.Form("%s/%sSelection.xml",clean_dirname.Data(),subdirname.Data());
    } else {
-      fprintf(fpMAKE,"rootcint -v1 -f %sProjectDict.cxx %s ", subdirname.Data(), gSystem->GetIncludePath());
+      fprintf(fpMAKE,"rootcling -v1 -f %sProjectDict.cxx %s ", subdirname.Data(), gSystem->GetIncludePath());
       path.Form("%s/%sLinkDef.h",clean_dirname.Data(),subdirname.Data());
    }
 
@@ -3050,7 +3072,7 @@ void TFile::MakeProject(const char *dirname, const char * /*classes*/,
       fprintf(fp,"<lcgdict>\n");
       fprintf(fp,"\n");
    } else {
-      fprintf(fp,"#ifdef __CINT__\n");
+      fprintf(fp,"#ifdef __CLING__\n");
       fprintf(fp,"\n");
    }
 
@@ -3214,6 +3236,7 @@ void TFile::MakeProject(const char *dirname, const char * /*classes*/,
    cmd.ReplaceAll("$LinkedLibs",gSystem->GetLibraries("","SDL"));
    cmd.ReplaceAll("$LibName",sdirname);
    cmd.ReplaceAll("$BuildDir",".");
+   cmd.ReplaceAll("$RPath", "-Wl,-rpath," + gROOT->GetSharedLibDir());
    TString sOpt;
    TString rootbuild = ROOTBUILD;
    if (rootbuild.Index("debug",0,TString::kIgnoreCase)==kNPOS) {
@@ -3962,7 +3985,7 @@ TFile *TFile::Open(const char *url, Option_t *options, const char *ftitle,
                if (h->LoadPlugin() == -1)
                   return nullptr;
                TClass *cl = TClass::GetClass(h->GetClass());
-               if (cl && cl->InheritsFrom("TNetFile"))
+               if (cl && cl->InheritsFrom("ROOT::Deprecated::TNetFile"))
                   f = (TFile*) h->ExecPlugin(5, name.Data(), option, ftitle, compress, netopt);
                else
                   f = (TFile*) h->ExecPlugin(4, name.Data(), option, ftitle, compress);

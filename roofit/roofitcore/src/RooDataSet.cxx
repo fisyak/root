@@ -374,8 +374,6 @@ RooDataSet::RooDataSet(RooStringView name, RooStringView title, const RooArgSet&
       }
     }
 
-    appendToDir(this,true) ;
-
     // Initialize RooDataSet with optional weight variable
     initialize(nullptr) ;
 
@@ -429,6 +427,17 @@ RooDataSet::RooDataSet(RooStringView name, RooStringView title, const RooArgSet&
     if (indexCat) {
       auto hiter = impSliceData.begin() ;
       for (const auto& token : ROOT::Split(impSliceNames, ",")) {
+
+        if (!indexCat->hasLabel(token)) {
+           std::stringstream errorMsgStream;
+           errorMsgStream << "RooDataSet::RooDataSet(\"" << GetName() << "\") "
+                          << "you are providing import data for the category state \"" << token
+                          << "\", but the index category \"" << indexCat->GetName() << "\" has no such state!";
+           const std::string errorMsg = errorMsgStream.str();
+           coutE(InputArguments) << errorMsg << std::endl;
+           throw std::invalid_argument(errorMsg);
+        }
+
         hmap[token] = static_cast<RooDataSet*>(*hiter);
         ++hiter;
       }
@@ -449,8 +458,6 @@ RooDataSet::RooDataSet(RooStringView name, RooStringView title, const RooArgSet&
         arg->attachToStore(*_dstore) ;
       }
     }
-
-    appendToDir(this,true) ;
 
     // Initialize RooDataSet with optional weight variable
     initialize(wgtVarName);
@@ -523,11 +530,9 @@ RooDataSet::RooDataSet(RooStringView name, RooStringView title, const RooArgSet&
 RooDataSet::RooDataSet(RooDataSet const & other, const char* newname) :
   RooAbsData(other,newname), RooDirItem()
 {
-  appendToDir(this,true) ;
-  initialize(other._wgtVar?other._wgtVar->GetName():nullptr);
-  TRACE_CREATE;
+   initialize(other._wgtVar ? other._wgtVar->GetName() : nullptr);
+   TRACE_CREATE;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return an empty clone of this dataset. If vars is not null, only the variables in vars

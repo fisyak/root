@@ -30,7 +30,6 @@ if(roofit_legacy_eval_backend)
     src/RooChi2Var.cxx
     src/RooNLLVar.cxx
     src/RooRealMPFE.cxx
-    src/RooXYChi2Var.cxx
   )
 endif()
 
@@ -385,7 +384,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     src/RooNumIntConfig.cxx
     src/RooNumIntFactory.cxx
     src/RooNumRunningInt.cxx
-    src/RooNumber.cxx
     src/RooObjCacheManager.cxx
     src/RooParamBinning.cxx
     src/RooPlot.cxx
@@ -454,7 +452,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
   DICTIONARY_OPTIONS
     "-writeEmptyRootPCM"
   LIBRARIES
-    RooBatchCompute
     ${EXTRA_LIBRARIES}
   DEPENDENCIES
     Core
@@ -465,6 +462,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(RooFitCore
     RIO
     MathCore
     Foam
+    RooBatchCompute
     ${EXTRA_DEPENDENCIES}
   LINKDEF
     inc/LinkDef.h

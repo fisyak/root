@@ -4,31 +4,178 @@
 #include "clang-c/CXCppInterOp.h"
 
 #include "clang/AST/ASTContext.h"
-#include "clang/Basic/Version.h"
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/Sema/Sema.h"
-
 #include "clang/AST/ASTDumper.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/GlobalDecl.h"
+#include "clang/AST/Type.h"
+#include "clang/Basic/Version.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Sema/Sema.h"
 
 #include "llvm/Support/Valgrind.h"
 
-#include "clang-c/CXCppInterOp.h"
-
 #include "gtest/gtest.h"
 
+#include <memory>
 #include <string>
 
 using namespace TestUtils;
 using namespace llvm;
 using namespace clang;
 
-TEST(ScopeReflectionTest, Demangle) {
-  if (llvm::sys::RunningOnValgrind())
-    GTEST_SKIP() << "XFAIL due to Valgrind report";
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetTypeOfBuiltins) {
+  // Structural check: Ensure every valid BuiltinType kind can be resolved
+  TestFixture::CreateInterpreter();
+  ASTContext& C = Interp->getCI()->getASTContext(); // for brevity
 
+#define BUILTIN_TYPE(Id, SingletonId)                                          \
+  {                                                                            \
+    QualType QT = C.SingletonId;                                               \
+    if (!QT.isNull()) {                                                        \
+      std::string name = QT.getAsString(C.getPrintingPolicy());                \
+      if (name[0] != '<' && !QT->isPlaceholderType()) {                        \
+        const auto* FoundTy = Cpp::GetType(name);                              \
+        EXPECT_TRUE(FoundTy) << "Failed to find builtin: '" << name << "'";    \
+        if (FoundTy) {                                                         \
+          EXPECT_EQ(FoundTy, QT.getAsOpaquePtr())                              \
+              << "Type mismatch for '" << name << "'";                         \
+          EXPECT_TRUE(Cpp::IsBuiltin(FoundTy));                                \
+        }                                                                      \
+      }                                                                        \
+    }                                                                          \
+  }
+#include "clang/AST/BuiltinTypes.def"
+#undef BUILTIN_TYPE
+
+  auto Verify = [&](const char* Name, QualType Expected) {
+    void* Found = Cpp::GetType(Name);
+    EXPECT_EQ(Found, Expected.getAsOpaquePtr()) << "Failed for: " << Name;
+  };
+
+  // --- Integer Variations ---
+  Verify("int", C.IntTy);
+  Verify("signed int", C.IntTy);
+  Verify("signed", C.IntTy);
+  Verify("int signed", C.IntTy);
+
+  // --- Short Variations ---
+  Verify("short", C.ShortTy);
+  Verify("short int", C.ShortTy);
+  Verify("signed short", C.ShortTy);
+  Verify("signed short int", C.ShortTy);
+  Verify("int short signed", C.ShortTy);
+
+  // --- Long Variations ---
+  Verify("long", C.LongTy);
+  Verify("long int", C.LongTy);
+  Verify("signed long", C.LongTy);
+  Verify("signed long int", C.LongTy);
+  Verify("int long", C.LongTy);
+
+  // --- Long Long Variations ---
+  Verify("long long", C.LongLongTy);
+  Verify("long long int", C.LongLongTy);
+  Verify("signed long long", C.LongLongTy);
+  Verify("signed long long int", C.LongLongTy);
+  Verify("int long long signed", C.LongLongTy);
+
+  // --- Unsigned Variations ---
+  Verify("unsigned", C.UnsignedIntTy);
+  Verify("unsigned int", C.UnsignedIntTy);
+  Verify("int unsigned", C.UnsignedIntTy);
+
+  Verify("unsigned short", C.UnsignedShortTy);
+  Verify("unsigned short int", C.UnsignedShortTy);
+  Verify("int short unsigned", C.UnsignedShortTy);
+
+  Verify("unsigned long", C.UnsignedLongTy);
+  Verify("unsigned long int", C.UnsignedLongTy);
+
+  Verify("unsigned long long", C.UnsignedLongLongTy);
+  Verify("unsigned long long int", C.UnsignedLongLongTy);
+
+  // --- Character Variations (No 'int' suffix allowed) ---
+  Verify("char", C.CharTy);
+  Verify("signed char", C.SignedCharTy);
+  Verify("unsigned char", C.UnsignedCharTy);
+
+  // Negative check: signed char int is NOT a valid builtin
+  EXPECT_EQ(Cpp::GetType("signed char int"), nullptr);
+
+  // Maybe these should be considered builtins?
+  // EXPECT_EQ(Cpp::GetType("size_t"), C.getSizeType().getAsOpaquePtr());
+  // EXPECT_EQ(Cpp::GetType("ptrdiff_t"),
+  // C.getPointerDiffType().getAsOpaquePtr());
+  // EXPECT_EQ(Cpp::GetType("intptr_t"), C.getIntPtrType().getAsOpaquePtr());
+  // EXPECT_EQ(Cpp::GetType("uintptr_t"), C.getUIntPtrType().getAsOpaquePtr());
+  // EXPECT_EQ(Cpp::GetType("size_t"), C.getSizeType().getAsOpaquePtr());
+  // EXPECT_EQ(Cpp::GetType("size_t"), C.getSizeType().getAsOpaquePtr());
+
+  // EXPECT_EQ(Cpp::GetType("wint_t"), C.WIntTy.getAsOpaquePtr());
+  // EXPECT_EQ(Cpp::GetType("wchar_t"), C.WCharTy.getAsOpaquePtr());
+}
+
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetTypeOfTypedef) {
+  std::string code = R"(
+    typedef int Type_t;
+  )";
+
+  std::vector<Decl*> Decls;
+  GetAllTopLevelDecls(code, Decls);
+  auto Ty = Cpp::GetType("Type_t");
+  EXPECT_TRUE(Ty);
+  EXPECT_TRUE(Ty == Cpp::GetTypeFromScope(Decls[0]));
+  EXPECT_FALSE(Cpp::GetTypeFromScope(nullptr));
+}
+
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsEnumScope) {
+  std::vector<Decl *> Decls;
+  std::vector<Decl *> SubDecls;
+  std::string code = R"(
+    enum Switch {
+      OFF,
+      ON
+    };
+
+    Switch s = Switch::OFF;
+
+    int i = Switch::ON;
+  )";
+
+  GetAllTopLevelDecls(code, Decls);
+  GetAllSubDecls(Decls[0], SubDecls);
+  EXPECT_TRUE(Cpp::IsEnumScope(Decls[0]));
+  EXPECT_FALSE(Cpp::IsEnumScope(Decls[1]));
+  EXPECT_FALSE(Cpp::IsEnumScope(Decls[2]));
+  EXPECT_FALSE(Cpp::IsEnumScope(SubDecls[0]));
+  EXPECT_FALSE(Cpp::IsEnumScope(SubDecls[1]));
+}
+
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsEnumConstant) {
+  std::vector<Decl *> Decls;
+  std::vector<Decl *> SubDecls;
+  std::string code = R"(
+    enum Switch {
+      OFF,
+      ON
+    };
+
+    Switch s = Switch::OFF;
+
+    int i = Switch::ON;
+  )";
+
+  GetAllTopLevelDecls(code, Decls);
+  GetAllSubDecls(Decls[0], SubDecls);
+  EXPECT_FALSE(Cpp::IsEnumConstant(Decls[0]));
+  EXPECT_FALSE(Cpp::IsEnumConstant(Decls[1]));
+  EXPECT_FALSE(Cpp::IsEnumConstant(Decls[2]));
+  EXPECT_TRUE(Cpp::IsEnumConstant(SubDecls[0]));
+  EXPECT_TRUE(Cpp::IsEnumConstant(SubDecls[1]));
+}
+
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_Demangle) {
   std::string code = R"(
     int add(int x, int y) { return x + y; }
     int add(double x, double y) { return x + y; }
@@ -55,7 +202,7 @@ TEST(ScopeReflectionTest, Demangle) {
             std::string::npos);
 }
 
-TEST(ScopeReflectionTest, IsAggregate) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsAggregate) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     char cv[4] = {};
@@ -81,7 +228,7 @@ TEST(ScopeReflectionTest, IsAggregate) {
 }
 
 // Check that the CharInfo table has been constructed reasonably.
-TEST(ScopeReflectionTest, IsNamespace) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsNamespace) {
   std::vector<Decl*> Decls;
   GetAllTopLevelDecls("namespace N {} class C{}; int I;", Decls);
   EXPECT_TRUE(Cpp::IsNamespace(Decls[0]));
@@ -89,7 +236,7 @@ TEST(ScopeReflectionTest, IsNamespace) {
   EXPECT_FALSE(Cpp::IsNamespace(Decls[2]));
 }
 
-TEST(ScopeReflectionTest, IsClass) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsClass) {
   std::vector<Decl*> Decls;
   GetAllTopLevelDecls("namespace N {} class C{}; int I;", Decls);
   EXPECT_FALSE(Cpp::IsClass(Decls[0]));
@@ -97,7 +244,7 @@ TEST(ScopeReflectionTest, IsClass) {
   EXPECT_FALSE(Cpp::IsClass(Decls[2]));
 }
 
-TEST(ScopeReflectionTest, IsClassPolymorphic) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsClassPolymorphic) {
   std::vector<Decl*> Decls;
   GetAllTopLevelDecls(R"(
     namespace N {}
@@ -119,7 +266,7 @@ TEST(ScopeReflectionTest, IsClassPolymorphic) {
   EXPECT_FALSE(Cpp::IsClassPolymorphic(Decls[3]));
 }
 
-TEST(ScopeReflectionTest, IsComplete) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsComplete) {
   std::vector<Decl*> Decls;
   std::string code = R"(
     namespace N {}
@@ -144,7 +291,7 @@ TEST(ScopeReflectionTest, IsComplete) {
   EXPECT_FALSE(Cpp::IsComplete(nullptr));
 }
 
-TEST(ScopeReflectionTest, SizeOf) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_SizeOf) {
   std::vector<Decl*> Decls;
   std::string code = R"(namespace N {} class C{}; int I; struct S;
                         enum E : int; union U{}; class Size4{int i;};
@@ -162,13 +309,7 @@ TEST(ScopeReflectionTest, SizeOf) {
   EXPECT_EQ(Cpp::SizeOf(Decls[7]), sizeof(B));
 }
 
-
-TEST(ScopeReflectionTest, IsBuiltin) {
-#if CLANG_VERSION_MAJOR == 18 && defined(CPPINTEROP_USE_CLING) &&              \
-    defined(_WIN32) && (defined(_M_ARM) || defined(_M_ARM64))
-  GTEST_SKIP() << "Test fails with Cling on Windows on ARM";
-#endif
-
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsBuiltin) {
   // static std::set<std::string> g_builtins =
   // {"bool", "char", "signed char", "unsigned char", "wchar_t", "short", "unsigned short",
   //  "int", "unsigned int", "long", "unsigned long", "long long", "unsigned long long",
@@ -176,7 +317,7 @@ TEST(ScopeReflectionTest, IsBuiltin) {
 
   std::vector<const char*> interpreter_args = { "-include", "new" };
 
-  Cpp::CreateInterpreter(interpreter_args);
+  TestFixture::CreateInterpreter(interpreter_args);
   ASTContext &C = Interp->getCI()->getASTContext();
   EXPECT_TRUE(Cpp::IsBuiltin(C.BoolTy.getAsOpaquePtr()));
   EXPECT_TRUE(Cpp::IsBuiltin(C.CharTy.getAsOpaquePtr()));
@@ -190,6 +331,8 @@ TEST(ScopeReflectionTest, IsBuiltin) {
   EXPECT_TRUE(Cpp::IsBuiltin(C.getComplexType(C.LongDoubleTy).getAsOpaquePtr()));
   EXPECT_TRUE(Cpp::IsBuiltin(C.getComplexType(C.Float128Ty).getAsOpaquePtr()));
 
+// FIXME as part of llvm 22 PR. getTypeDeclType was deleted between llvm 21 and 22
+#if CLANG_VERSION_MAJOR < 22
   // std::complex
   Interp->declare("#include <complex>");
   Sema &S = Interp->getCI()->getSema();
@@ -197,9 +340,17 @@ TEST(ScopeReflectionTest, IsBuiltin) {
   auto *CTD = cast<ClassTemplateDecl>(lookup.front());
   for (ClassTemplateSpecializationDecl *CTSD : CTD->specializations())
     EXPECT_TRUE(Cpp::IsBuiltin(C.getTypeDeclType(CTSD).getAsOpaquePtr()));
+#endif
+
+  // User-defined records (even with "complex" in the name) are not builtins.
+  Interp->declare("class complex_number {}; class regular_record {};");
+  EXPECT_FALSE(
+      Cpp::IsBuiltin(Cpp::GetTypeFromScope(Cpp::GetNamed("complex_number", nullptr))));
+  EXPECT_FALSE(
+      Cpp::IsBuiltin(Cpp::GetTypeFromScope(Cpp::GetNamed("regular_record", nullptr))));
 }
 
-TEST(ScopeReflectionTest, IsTemplate) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsTemplate) {
   std::vector<Decl *> Decls;
   std::string code = R"(template<typename T>
                         class A{};
@@ -225,7 +376,7 @@ TEST(ScopeReflectionTest, IsTemplate) {
   EXPECT_FALSE(Cpp::IsTemplate(Decls[3]));
 }
 
-TEST(ScopeReflectionTest, IsTemplateSpecialization) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsTemplateSpecialization) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     template<typename T>
@@ -241,7 +392,7 @@ TEST(ScopeReflectionTest, IsTemplateSpecialization) {
           Cpp::GetScopeFromType(Cpp::GetVariableType(Decls[1]))));
 }
 
-TEST(ScopeReflectionTest, IsTypedefed) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsTypedefed) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     typedef int I;
@@ -255,7 +406,7 @@ TEST(ScopeReflectionTest, IsTypedefed) {
   EXPECT_FALSE(Cpp::IsTypedefed(Decls[2]));
 }
 
-TEST(ScopeReflectionTest, IsAbstract) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsAbstract) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     class A {};
@@ -275,7 +426,7 @@ TEST(ScopeReflectionTest, IsAbstract) {
   EXPECT_FALSE(Cpp::IsAbstract(Decls[2]));
 }
 
-TEST(ScopeReflectionTest, IsVariable) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsVariable) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     int i;
@@ -299,7 +450,7 @@ TEST(ScopeReflectionTest, IsVariable) {
   EXPECT_TRUE(Cpp::IsVariable(SubDecls[3]));
 }
 
-TEST(ScopeReflectionTest, GetName) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetName) {
   std::vector<Decl*> Decls;
   std::string code = R"(namespace N {} class C{}; int I; struct S;
                         enum E : int; union U{}; class Size4{int i;};
@@ -317,7 +468,7 @@ TEST(ScopeReflectionTest, GetName) {
   EXPECT_EQ(Cpp::GetName(nullptr), "<unnamed>");
 }
 
-TEST(ScopeReflectionTest, GetCompleteName) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetCompleteName) {
   std::vector<Decl *> Decls;
   std::string code = R"(namespace N {}
                         class C{};
@@ -351,19 +502,24 @@ TEST(ScopeReflectionTest, GetCompleteName) {
   EXPECT_EQ(Cpp::GetCompleteName(Cpp::GetScopeFromType(
                                              Cpp::GetVariableType(
                                                      Decls[9]))), "A<int>");
+#if CLANG_VERSION_MAJOR < 22
   EXPECT_EQ(Cpp::GetCompleteName(Decls[10]), "(unnamed)");
+#else
+  EXPECT_EQ(Cpp::GetCompleteName(Decls[10]), "(unnamed enum)");
+#endif
   EXPECT_EQ(Cpp::GetCompleteName(Decls[11]), "fn");
   EXPECT_EQ(Cpp::GetCompleteName(nullptr), "<unnamed>");
 
   ASTContext& C = Interp->getCI()->getASTContext();
   Cpp::TemplateArgInfo template_args[2] = {C.IntTy.getAsOpaquePtr(),
                                            C.DoubleTy.getAsOpaquePtr()};
-  Cpp::TCppScope_t fn = Cpp::InstantiateTemplate(Decls[11], template_args, 2);
+  Cpp::TCppScope_t fn =
+      Cpp::InstantiateTemplate(Decls[11], template_args, 2 DFLT_FALSE);
   EXPECT_TRUE(fn);
   EXPECT_EQ(Cpp::GetCompleteName(fn), "fn<int, double>");
 }
 
-TEST(ScopeReflectionTest, GetQualifiedName) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetQualifiedName) {
   std::vector<Decl*> Decls;
   std::string code = R"(namespace N {
                         class C {
@@ -383,7 +539,7 @@ TEST(ScopeReflectionTest, GetQualifiedName) {
   EXPECT_EQ(Cpp::GetQualifiedName(Decls[4]), "N::C::E");
 }
 
-TEST(ScopeReflectionTest, GetQualifiedCompleteName) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetQualifiedCompleteName) {
   std::vector<Decl*> Decls;
   std::string code = R"(namespace N {
                         class C {
@@ -408,7 +564,7 @@ TEST(ScopeReflectionTest, GetQualifiedCompleteName) {
   EXPECT_EQ(Cpp::GetQualifiedCompleteName(Decls[6]), "N::C::E");
 }
 
-TEST(ScopeReflectionTest, GetUsingNamespaces) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetUsingNamespaces) {
   std::vector<Decl *> Decls, Decls1;
   std::string code = R"(
     namespace abc {
@@ -441,12 +597,12 @@ TEST(ScopeReflectionTest, GetUsingNamespaces) {
   EXPECT_EQ(usingNamespaces1.size(), 0);
 }
 
-TEST(ScopeReflectionTest, GetGlobalScope) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetGlobalScope) {
   EXPECT_EQ(Cpp::GetQualifiedName(Cpp::GetGlobalScope()), "");
   EXPECT_EQ(Cpp::GetName(Cpp::GetGlobalScope()), "");
 }
 
-TEST(ScopeReflectionTest, GetUnderlyingScope) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetUnderlyingScope) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     namespace N {
@@ -465,7 +621,7 @@ TEST(ScopeReflectionTest, GetUnderlyingScope) {
   EXPECT_EQ(Cpp::GetQualifiedName(Cpp::GetUnderlyingScope(nullptr)), "<unnamed>");
 }
 
-TEST(ScopeReflectionTest, GetScope) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetScope) {
   std::string code = R"(namespace N {
                         class C {
                           int i;
@@ -476,7 +632,7 @@ TEST(ScopeReflectionTest, GetScope) {
                         typedef N::C T;
                        )";
 
-  Cpp::CreateInterpreter();
+  TestFixture::CreateInterpreter();
   Interp->declare(code);
   Cpp::TCppScope_t tu = Cpp::GetScope("", 0);
   Cpp::TCppScope_t ns_N = Cpp::GetScope("N", 0);
@@ -491,7 +647,7 @@ TEST(ScopeReflectionTest, GetScope) {
   EXPECT_EQ(Cpp::GetQualifiedName(non_existent), "<unnamed>");
 }
 
-TEST(ScopeReflectionTest, GetScopefromCompleteName) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetScopefromCompleteName) {
   std::string code = R"(namespace N1 {
                         namespace N2 {
                           class C {
@@ -501,7 +657,7 @@ TEST(ScopeReflectionTest, GetScopefromCompleteName) {
                         }
                        )";
 
-  Cpp::CreateInterpreter();
+  TestFixture::CreateInterpreter();
 
   Interp->declare(code);
   EXPECT_EQ(Cpp::GetQualifiedName(Cpp::GetScopeFromCompleteName("N1")), "N1");
@@ -510,11 +666,7 @@ TEST(ScopeReflectionTest, GetScopefromCompleteName) {
   EXPECT_EQ(Cpp::GetQualifiedName(Cpp::GetScopeFromCompleteName("N1::N2::C::S")), "N1::N2::C::S");
 }
 
-TEST(ScopeReflectionTest, GetNamed) {
-#if CLANG_VERSION_MAJOR == 18 && defined(CPPINTEROP_USE_CLING) &&              \
-    defined(_WIN32) && (defined(_M_ARM) || defined(_M_ARM64))
-  GTEST_SKIP() << "Test fails with Cling on Windows on ARM";
-#endif
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetNamed) {
   std::string code = R"(namespace N1 {
                         namespace N2 {
                           class C {
@@ -528,7 +680,7 @@ TEST(ScopeReflectionTest, GetNamed) {
 
   std::vector<const char*> interpreter_args = {"-include", "new"};
 
-  Cpp::CreateInterpreter(interpreter_args);
+  TestFixture::CreateInterpreter(interpreter_args);
 
   Interp->declare(code);
   Cpp::TCppScope_t ns_N1 = Cpp::GetNamed("N1", nullptr);
@@ -555,7 +707,7 @@ TEST(ScopeReflectionTest, GetNamed) {
   EXPECT_EQ(Cpp::GetQualifiedName(std_string_npos_var), "std::basic_string<char>::npos");
 }
 
-TEST(ScopeReflectionTest, GetParentScope) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetParentScope) {
   std::string code = R"(namespace N1 {
                         namespace N2 {
                           class C {
@@ -567,10 +719,10 @@ TEST(ScopeReflectionTest, GetParentScope) {
                         }
                        )";
 
-  Cpp::CreateInterpreter();
+  TestFixture::CreateInterpreter();
 
   Interp->declare(code);
-  Cpp::TCppScope_t ns_N1 = Cpp::GetNamed("N1");
+  Cpp::TCppScope_t ns_N1 = Cpp::GetNamed("N1" DFLT_NULLPTR);
   Cpp::TCppScope_t ns_N2 = Cpp::GetNamed("N2", ns_N1);
   Cpp::TCppScope_t cl_C = Cpp::GetNamed("C", ns_N2);
   Cpp::TCppScope_t int_i = Cpp::GetNamed("i", cl_C);
@@ -587,7 +739,7 @@ TEST(ScopeReflectionTest, GetParentScope) {
   EXPECT_EQ(Cpp::GetQualifiedName(Cpp::GetParentScope(en_B)), "N1::N2::C::E");
 }
 
-TEST(ScopeReflectionTest, GetScopeFromType) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetScopeFromType) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     namespace N {
@@ -631,7 +783,7 @@ TEST(ScopeReflectionTest, GetScopeFromType) {
             "N::C");
 }
 
-TEST(ScopeReflectionTest, GetNumBases) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetNumBases) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     class A {};
@@ -662,7 +814,7 @@ TEST(ScopeReflectionTest, GetNumBases) {
   EXPECT_EQ(Cpp::GetNumBases(Cpp::GetUnderlyingScope(Decls[7])), 1);
 }
 
-TEST(ScopeReflectionTest, GetBaseClass) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetBaseClass) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     class A {};
@@ -698,20 +850,20 @@ TEST(ScopeReflectionTest, GetBaseClass) {
   EXPECT_EQ(get_base_class_name(Decls[4], 0), "D");
   EXPECT_EQ(get_base_class_name(Decls[10], 0), "<unnamed>");
 
-  auto *VD = Cpp::GetNamed("var");
+  auto* VD = Cpp::GetNamed("var" DFLT_NULLPTR);
   auto *VT = Cpp::GetVariableType(VD);
   auto *TC2_A_Decl = Cpp::GetScopeFromType(VT);
   auto *TC1_A_Decl = Cpp::GetBaseClass(TC2_A_Decl, 0);
   EXPECT_EQ(Cpp::GetCompleteName(TC1_A_Decl), "TC1<A>");
 
-  auto* VD1 = Cpp::GetNamed("var1");
+  auto* VD1 = Cpp::GetNamed("var1" DFLT_NULLPTR);
   auto* VT1 = Cpp::GetVariableType(VD1);
   auto* TC3_A_Decl = Cpp::GetScopeFromType(VT1);
   auto* A_class = Cpp::GetBaseClass(TC3_A_Decl, 0);
   EXPECT_EQ(Cpp::GetCompleteName(A_class), "A");
 }
 
-TEST(ScopeReflectionTest, IsSubclass) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IsSubclass) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     class A {};
@@ -753,7 +905,7 @@ TEST(ScopeReflectionTest, IsSubclass) {
   EXPECT_FALSE(Cpp::IsSubclass(Decls[4], nullptr));
 }
 
-TEST(ScopeReflectionTest, GetBaseClassOffset) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetBaseClassOffset) {
   std::vector<Decl *> Decls;
 #define Stringify(s) Stringifyx(s)
 #define Stringifyx(...) #__VA_ARGS__
@@ -773,24 +925,32 @@ CODE;
 #undef Stringify
 #undef CODE
 
-  auto *c = new C();
-  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[2], Decls[0]), (char *)(A*)c - (char *)c);
-  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[2], Decls[1]), (char *)(B*)c - (char *)c);
+  std::unique_ptr<C> c(new C());
+  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[2], Decls[0]),
+            (char*)(A*)c.get() - (char*)c.get());
+  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[2], Decls[1]),
+            (char*)(B*)c.get() - (char*)c.get());
 
-  auto *d = new D();
-  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[3], Decls[0]), (char *)(A*)d - (char *)d);
-  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[3], Decls[1]), (char *)(B*)d - (char *)d);
-  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[3], Decls[2]), (char *)(C*)d - (char *)d);
+  std::unique_ptr<D> d(new D());
+  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[3], Decls[0]),
+            (char*)(A*)d.get() - (char*)d.get());
+  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[3], Decls[1]),
+            (char*)(B*)d.get() - (char*)d.get());
+  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[3], Decls[2]),
+            (char*)(C*)d.get() - (char*)d.get());
 
-  auto *e = new E();
-  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[4], Decls[0]), (char *)(A*)e - (char *)e);
-  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[4], Decls[1]), (char *)(B*)e - (char *)e);
+  std::unique_ptr<E> e(new E());
+  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[4], Decls[0]),
+            (char*)(A*)e.get() - (char*)e.get());
+  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[4], Decls[1]),
+            (char*)(B*)e.get() - (char*)e.get());
 
-  auto *g = new G();
-  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[6], Decls[0]), (char *)(A*)g - (char *)g);
+  std::unique_ptr<G> g(new G());
+  EXPECT_EQ(Cpp::GetBaseClassOffset(Decls[6], Decls[0]),
+            (char*)(A*)g.get() - (char*)g.get());
 }
 
-TEST(ScopeReflectionTest, GetAllCppNames) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetAllCppNames) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     class A { int a; };
@@ -832,7 +992,7 @@ TEST(ScopeReflectionTest, GetAllCppNames) {
   test_get_all_cpp_names(Decls[5], {});
 }
 
-TEST(ScopeReflectionTest, InstantiateNNTPClassTemplate) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_InstantiateNNTPClassTemplate) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     template <int N>
@@ -851,7 +1011,7 @@ TEST(ScopeReflectionTest, InstantiateNNTPClassTemplate) {
   Cpp::TCppType_t IntTy = C.IntTy.getAsOpaquePtr();
   std::vector<Cpp::TemplateArgInfo> args1 = {{IntTy, "5"}};
   EXPECT_TRUE(Cpp::InstantiateTemplate(Decls[0], args1.data(),
-                                       /*type_size*/ args1.size()));
+                                       /*type_size*/ args1.size() DFLT_FALSE));
 
   // C API
   auto* I = clang_createInterpreterFromRawPtr(Cpp::GetInterpreter());
@@ -865,7 +1025,7 @@ TEST(ScopeReflectionTest, InstantiateNNTPClassTemplate) {
   clang_Interpreter_dispose(I);
 }
 
-TEST(ScopeReflectionTest, InstantiateVarTemplate) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_InstantiateVarTemplate) {
   std::vector<Decl*> Decls;
   std::string code = R"(
 template<class T> constexpr T pi = T(3.1415926535897932385L);
@@ -875,21 +1035,18 @@ template<class T> constexpr T pi = T(3.1415926535897932385L);
   ASTContext& C = Interp->getCI()->getASTContext();
 
   std::vector<Cpp::TemplateArgInfo> args1 = {C.IntTy.getAsOpaquePtr()};
-  auto Instance1 = Cpp::InstantiateTemplate(Decls[0], args1.data(),
-                                            /*type_size*/ args1.size());
+  auto* Instance1 =
+      Cpp::InstantiateTemplate(Decls[0], args1.data(),
+                               /*type_size*/ args1.size() DFLT_FALSE);
   EXPECT_TRUE(isa<VarDecl>((Decl*)Instance1));
   auto* VD = cast<VarTemplateSpecializationDecl>((Decl*)Instance1);
   VarTemplateDecl* VDTD1 = VD->getSpecializedTemplate();
   EXPECT_TRUE(VDTD1->isThisDeclarationADefinition());
-#if CLANG_VERSION_MAJOR == 18
-  TemplateArgument TA1 = (*VD->getTemplateArgsInfo())[0].getArgument();
-#else
   TemplateArgument TA1 = (*VD->getTemplateArgsAsWritten())[0].getArgument();
-#endif // CLANG_VERSION_MAJOR
   EXPECT_TRUE(TA1.getAsType()->isIntegerType());
 }
 
-TEST(ScopeReflectionTest, InstantiateFunctionTemplate) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_InstantiateFunctionTemplate) {
   std::vector<Decl*> Decls;
   std::string code = R"(
 template<typename T> T TrivialFnTemplate() { return T(); }
@@ -899,8 +1056,9 @@ template<typename T> T TrivialFnTemplate() { return T(); }
   ASTContext& C = Interp->getCI()->getASTContext();
 
   std::vector<Cpp::TemplateArgInfo> args1 = {C.IntTy.getAsOpaquePtr()};
-  auto Instance1 = Cpp::InstantiateTemplate(Decls[0], args1.data(),
-                                            /*type_size*/ args1.size());
+  auto* Instance1 =
+      Cpp::InstantiateTemplate(Decls[0], args1.data(),
+                               /*type_size*/ args1.size() DFLT_FALSE);
   EXPECT_TRUE(isa<FunctionDecl>((Decl*)Instance1));
   FunctionDecl* FD = cast<FunctionDecl>((Decl*)Instance1);
   FunctionDecl* FnTD1 = FD->getTemplateInstantiationPattern();
@@ -909,15 +1067,12 @@ template<typename T> T TrivialFnTemplate() { return T(); }
   EXPECT_TRUE(TA1.getAsType()->isIntegerType());
 }
 
-TEST(ScopeReflectionTest, InstantiateTemplateFunctionFromString) {
-#if CLANG_VERSION_MAJOR == 18 && defined(CPPINTEROP_USE_CLING) &&              \
-    defined(_WIN32) && (defined(_M_ARM) || defined(_M_ARM64))
-  GTEST_SKIP() << "Test fails with Cling on Windows on ARM";
-#endif
+TYPED_TEST(CPPINTEROP_TEST_MODE,
+           ScopeReflection_InstantiateTemplateFunctionFromString) {
   if (llvm::sys::RunningOnValgrind())
     GTEST_SKIP() << "XFAIL due to Valgrind report";
   std::vector<const char*> interpreter_args = {"-include", "new"};
-  Cpp::CreateInterpreter(interpreter_args);
+  TestFixture::CreateInterpreter(interpreter_args);
   std::string code = R"(#include <memory>)";
   Interp->process(code);
   const char* str = "std::make_unique<int,int>";
@@ -925,7 +1080,7 @@ TEST(ScopeReflectionTest, InstantiateTemplateFunctionFromString) {
   EXPECT_TRUE(Instance1);
 }
 
-TEST(ScopeReflectionTest, InstantiateTemplate) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_InstantiateTemplate) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     template<typename T>
@@ -969,8 +1124,9 @@ TEST(ScopeReflectionTest, InstantiateTemplate) {
   ASTContext &C = Interp->getCI()->getASTContext();
 
   std::vector<Cpp::TemplateArgInfo> args1 = {C.IntTy.getAsOpaquePtr()};
-  auto Instance1 = Cpp::InstantiateTemplate(Decls[0], args1.data(),
-                                            /*type_size*/ args1.size());
+  auto* Instance1 =
+      Cpp::InstantiateTemplate(Decls[0], args1.data(),
+                               /*type_size*/ args1.size() DFLT_FALSE);
   EXPECT_TRUE(isa<ClassTemplateSpecializationDecl>((Decl*)Instance1));
   auto *CTSD1 = static_cast<ClassTemplateSpecializationDecl*>(Instance1);
   EXPECT_TRUE(CTSD1->hasDefinition());
@@ -979,7 +1135,7 @@ TEST(ScopeReflectionTest, InstantiateTemplate) {
   EXPECT_TRUE(CTSD1->hasDefinition());
 
   auto Instance2 = Cpp::InstantiateTemplate(Decls[1], nullptr,
-                                            /*type_size*/ 0);
+                                            /*type_size*/ 0 DFLT_FALSE);
   EXPECT_TRUE(isa<ClassTemplateSpecializationDecl>((Decl*)Instance2));
   auto *CTSD2 = static_cast<ClassTemplateSpecializationDecl*>(Instance2);
   EXPECT_TRUE(CTSD2->hasDefinition());
@@ -987,8 +1143,9 @@ TEST(ScopeReflectionTest, InstantiateTemplate) {
   EXPECT_TRUE(TA2.getAsType()->isIntegerType());
 
   std::vector<Cpp::TemplateArgInfo> args3 = {C.IntTy.getAsOpaquePtr()};
-  auto Instance3 = Cpp::InstantiateTemplate(Decls[2], args3.data(),
-                                            /*type_size*/ args3.size());
+  auto* Instance3 =
+      Cpp::InstantiateTemplate(Decls[2], args3.data(),
+                               /*type_size*/ args3.size() DFLT_FALSE);
   EXPECT_TRUE(isa<ClassTemplateSpecializationDecl>((Decl*)Instance3));
   auto *CTSD3 = static_cast<ClassTemplateSpecializationDecl*>(Instance3);
   EXPECT_TRUE(CTSD3->hasDefinition());
@@ -1004,8 +1161,9 @@ TEST(ScopeReflectionTest, InstantiateTemplate) {
 
   std::vector<Cpp::TemplateArgInfo> args4 = {C.IntTy.getAsOpaquePtr(),
                                                {C.IntTy.getAsOpaquePtr(), "3"}};
-  auto Instance4 = Cpp::InstantiateTemplate(Decls[3], args4.data(),
-                                            /*type_size*/ args4.size());
+  auto* Instance4 =
+      Cpp::InstantiateTemplate(Decls[3], args4.data(),
+                               /*type_size*/ args4.size() DFLT_FALSE);
 
   EXPECT_TRUE(isa<ClassTemplateSpecializationDecl>((Decl*)Instance4));
   auto *CTSD4 = static_cast<ClassTemplateSpecializationDecl*>(Instance4);
@@ -1016,7 +1174,8 @@ TEST(ScopeReflectionTest, InstantiateTemplate) {
   EXPECT_TRUE(TA4_1.getAsIntegral() == 3);
 }
 
-TEST(ScopeReflectionTest, GetClassTemplateInstantiationArgs) {
+TYPED_TEST(CPPINTEROP_TEST_MODE,
+           ScopeReflection_GetClassTemplateInstantiationArgs) {
   std::vector<Decl *> Decls;
   std::string code = R"(
     template<typename ...T> struct __Cppyy_AppendTypesSlow {};
@@ -1027,9 +1186,9 @@ TEST(ScopeReflectionTest, GetClassTemplateInstantiationArgs) {
 
   GetAllTopLevelDecls(code, Decls);
 
-  auto *v1 = Cpp::GetNamed("v1");
-  auto *v2 = Cpp::GetNamed("v2");
-  auto *v3 = Cpp::GetNamed("v3");
+  auto* v1 = Cpp::GetNamed("v1" DFLT_NULLPTR);
+  auto* v2 = Cpp::GetNamed("v2" DFLT_NULLPTR);
+  auto* v3 = Cpp::GetNamed("v3" DFLT_NULLPTR);
   EXPECT_TRUE(v1 && v2 && v3);
 
   auto *v1_class = Cpp::GetScopeFromType(Cpp::GetVariableType(v1));
@@ -1053,12 +1212,7 @@ TEST(ScopeReflectionTest, GetClassTemplateInstantiationArgs) {
   EXPECT_TRUE(instance_types.size() == 0);
 }
 
-
-TEST(ScopeReflectionTest, IncludeVector) {
-#if CLANG_VERSION_MAJOR == 18 && defined(CPPINTEROP_USE_CLING) &&              \
-    defined(_WIN32) && (defined(_M_ARM) || defined(_M_ARM64))
-  GTEST_SKIP() << "Test fails with Cling on Windows on ARM";
-#endif
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_IncludeVector) {
   if (llvm::sys::RunningOnValgrind())
       GTEST_SKIP() << "XFAIL due to Valgrind report";
   std::string code = R"(
@@ -1066,15 +1220,15 @@ TEST(ScopeReflectionTest, IncludeVector) {
     #include <iostream>
   )";
   std::vector<const char*> interpreter_args = {"-include", "new"};
-  Cpp::CreateInterpreter(interpreter_args);
+  TestFixture::CreateInterpreter(interpreter_args);
   Interp->declare(code);
 }
 
-TEST(ScopeReflectionTest, GetOperator) {
+TYPED_TEST(CPPINTEROP_TEST_MODE, ScopeReflection_GetOperator) {
   if (llvm::sys::RunningOnValgrind())
     GTEST_SKIP() << "XFAIL due to Valgrind report";
 
-  Cpp::CreateInterpreter();
+  TestFixture::CreateInterpreter();
 
   std::string code = R"(
     class MyClass {
@@ -1108,39 +1262,44 @@ TEST(ScopeReflectionTest, GetOperator) {
     }
   )";
 
-  Cpp::Declare(code.c_str());
+  Cpp::Declare(code.c_str() DFLT_FALSE);
 
   std::vector<Cpp::TCppFunction_t> ops;
 
-  Cpp::GetOperator(Cpp::GetGlobalScope(), Cpp::Operator::OP_Plus, ops);
+  Cpp::GetOperator(Cpp::GetGlobalScope(), Cpp::Operator::OP_Plus,
+                   ops DFLT_OP_ARITY);
   EXPECT_EQ(ops.size(), 1);
   ops.clear();
 
-  Cpp::GetOperator(Cpp::GetGlobalScope(), Cpp::Operator::OP_Minus, ops);
+  Cpp::GetOperator(Cpp::GetGlobalScope(), Cpp::Operator::OP_Minus,
+                   ops DFLT_OP_ARITY);
   EXPECT_EQ(ops.size(), 1);
   ops.clear();
 
-  Cpp::GetOperator(Cpp::GetGlobalScope(), Cpp::Operator::OP_Star, ops);
+  Cpp::GetOperator(Cpp::GetGlobalScope(), Cpp::Operator::OP_Star,
+                   ops DFLT_OP_ARITY);
   EXPECT_EQ(ops.size(), 0);
   ops.clear();
 
   // operators defined within a namespace
-  Cpp::GetOperator(Cpp::GetScope("extra_ops"), Cpp::Operator::OP_Plus, ops);
+  Cpp::GetOperator(Cpp::GetScope("extra_ops" DFLT_0), Cpp::Operator::OP_Plus,
+                   ops DFLT_OP_ARITY);
   EXPECT_EQ(ops.size(), 2);
   ops.clear();
 
   // unary operator
-  Cpp::GetOperator(Cpp::GetScope("extra_ops"), Cpp::Operator::OP_Tilde, ops);
+  Cpp::GetOperator(Cpp::GetScope("extra_ops" DFLT_0), Cpp::Operator::OP_Tilde,
+                   ops DFLT_OP_ARITY);
   EXPECT_EQ(ops.size(), 1);
   ops.clear();
 
-  Cpp::GetOperator(Cpp::GetScope("extra_ops"), Cpp::Operator::OP_Tilde, ops,
-                   Cpp::OperatorArity::kUnary);
+  Cpp::GetOperator(Cpp::GetScope("extra_ops" DFLT_0), Cpp::Operator::OP_Tilde,
+                   ops, Cpp::OperatorArity::kUnary);
   EXPECT_EQ(ops.size(), 1);
   ops.clear();
 
-  Cpp::GetOperator(Cpp::GetScope("extra_ops"), Cpp::Operator::OP_Tilde, ops,
-                   Cpp::OperatorArity::kBinary);
+  Cpp::GetOperator(Cpp::GetScope("extra_ops" DFLT_0), Cpp::Operator::OP_Tilde,
+                   ops, Cpp::OperatorArity::kBinary);
   EXPECT_EQ(ops.size(), 0);
 
   std::string inheritance_code = R"(
@@ -1159,13 +1318,15 @@ TEST(ScopeReflectionTest, GetOperator) {
     }
   };
   )";
-  Cpp::Declare(inheritance_code.c_str());
+  Cpp::Declare(inheritance_code.c_str() DFLT_FALSE);
 
   ops.clear();
-  Cpp::GetOperator(Cpp::GetScope("Child"), Cpp::Operator::OP_Plus, ops);
+  Cpp::GetOperator(Cpp::GetScope("Child" DFLT_0), Cpp::Operator::OP_Plus,
+                   ops DFLT_OP_ARITY);
   EXPECT_EQ(ops.size(), 1);
 
   ops.clear();
-  Cpp::GetOperator(Cpp::GetScope("Child"), Cpp::Operator::OP_Minus, ops);
+  Cpp::GetOperator(Cpp::GetScope("Child" DFLT_0), Cpp::Operator::OP_Minus,
+                   ops DFLT_OP_ARITY);
   EXPECT_EQ(ops.size(), 1);
 }

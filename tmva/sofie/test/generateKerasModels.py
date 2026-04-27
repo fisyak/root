@@ -1,13 +1,27 @@
 import os
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import Model,Sequential
-from tensorflow.keras.layers import Input,Dense,Activation,ReLU,LeakyReLU,BatchNormalization,Conv2D,Reshape,Concatenate,Add,Subtract,Multiply
+from tensorflow.keras.layers import (
+    Activation,
+    Add,
+    BatchNormalization,
+    Concatenate,
+    Conv2D,
+    Dense,
+    Input,
+    LeakyReLU,
+    Multiply,
+    ReLU,
+    Reshape,
+    Subtract,
+)
+from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.optimizers import SGD
+
 
 def generateFunctionalModel():
     input=Input(shape=(8,),batch_size=2)
@@ -24,7 +38,7 @@ def generateFunctionalModel():
 
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit(x_train, y_train, verbose=0, epochs=10, batch_size=2)
-    model.save('KerasModelFunctional.h5')
+    model.save('KerasModelFunctional.keras')
 
 def generateSequentialModel():
     model=Sequential()
@@ -39,7 +53,7 @@ def generateSequentialModel():
 
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit(x_train, y_train, verbose=0, epochs=10, batch_size=4)
-    model.save('KerasModelSequential.h5')
+    model.save('KerasModelSequential.keras')
 
 def generateBatchNormModel():
     model=Sequential()
@@ -53,7 +67,7 @@ def generateBatchNormModel():
 
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit(x_train, y_train, verbose=0, epochs=10, batch_size=2)
-    model.save('KerasModelBatchNorm.h5')
+    model.save('KerasModelBatchNorm.keras')
 
 def generateConv2DModel_ValidPadding():
     model=Sequential()
@@ -65,7 +79,7 @@ def generateConv2DModel_ValidPadding():
 
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit(x_train, y_train, verbose=0, epochs=10, batch_size=2)
-    model.save('KerasModelConv2D_Valid.h5')
+    model.save('KerasModelConv2D_Valid.keras')
 
 def generateConv2DModel_SamePadding():
     model=Sequential()
@@ -77,7 +91,7 @@ def generateConv2DModel_SamePadding():
 
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit(x_train, y_train, verbose=0, epochs=10, batch_size=2)
-    model.save('KerasModelConv2D_Same.h5')
+    model.save('KerasModelConv2D_Same.keras')
 
 def generateReshapeModel():
     model = Sequential()
@@ -90,7 +104,7 @@ def generateReshapeModel():
 
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit(x_train, y_train, verbose=0, epochs=10, batch_size=2)
-    model.save('KerasModelReshape.h5')
+    model.save('KerasModelReshape.keras')
 
 def generateConcatModel():
     input_1 = Input(shape=(2,))
@@ -107,7 +121,7 @@ def generateConcatModel():
 
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit([x1_train,x2_train], y_train, verbose=0, epochs=10, batch_size=1)
-    model.save('KerasModelConcatenate.h5')
+    model.save('KerasModelConcatenate.keras')
 
 def generateBinaryOpModel():
     input1 = Input(shape=(2, ))
@@ -124,7 +138,7 @@ def generateBinaryOpModel():
 
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit([x1_train,x2_train], y_train, epochs=10, verbose=0, batch_size=2)
-    model.save('KerasModelBinaryOp.h5')
+    model.save('KerasModelBinaryOp.keras')
 
 def generateActivationModel():
     input=Input(shape=(8,))
@@ -140,7 +154,7 @@ def generateActivationModel():
 
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit(x_train, y_train, epochs=10, verbose=0, batch_size=1)
-    model.save('KerasModelActivations.h5')
+    model.save('KerasModelActivations.keras')
 
 def generateSwishModel():
 # Create the Keras model
@@ -157,7 +171,7 @@ def generateSwishModel():
     x_train=randomGenerator.rand(1,8)
     y_train=randomGenerator.rand(1,1)
     model.fit(x_train, y_train, epochs=10, verbose=0, batch_size=1)
-    model.save('KerasModelSwish.h5')
+    model.save('KerasModelSwish.keras')
 
 def generateCustomModel():
     model = Sequential()
@@ -167,7 +181,7 @@ def generateCustomModel():
     y_train=randomGenerator.rand(1,4)
     model.compile(loss='mean_squared_error', optimizer=SGD(learning_rate=0.01))
     model.fit(x_train, y_train, verbose=0, epochs=10, batch_size=1)
-    model.save('KerasModelCustomOp.h5')
+    model.save('KerasModelCustomOp.keras')
 
 print("generating Keras models for testing.....")
 generateFunctionalModel()

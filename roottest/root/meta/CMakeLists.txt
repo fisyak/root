@@ -89,4 +89,9 @@ ROOTTEST_ADD_TEST(hello_ROOT_C
                   OUTREF hello_ROOT_C_${libsuf}.ref
                   FIXTURES_REQUIRED root-meta-hello_ROOT-fixture)
 
+if(TARGET Gui)
+  ROOTTEST_ADD_TEST(optionList
+                    MACRO optionList.cxx)
+endif()
+
 ROOTTEST_ADD_TESTDIRS()

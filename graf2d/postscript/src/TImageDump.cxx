@@ -51,7 +51,6 @@ TImageDump can be used in any mode (batch, interactive) as follows
 
 TImageDump::TImageDump() : TVirtualPS()
 {
-   fStream    = nullptr;
    fImage     = nullptr;
    gVirtualPS = this;
    fType      = 0;
@@ -80,7 +79,6 @@ TImageDump::TImageDump(const char *fname, Int_t wtype) : TVirtualPS(fname, wtype
 
 void TImageDump::Open(const char *fname, Int_t type)
 {
-   fStream = nullptr;
    fImage  = TImage::Create();
    fType   = type;
    SetName(fname);
@@ -118,13 +116,12 @@ void TImageDump::Close(Option_t *)
 
 void TImageDump::DrawBox(Double_t x1, Double_t y1, Double_t x2, Double_t  y2)
 {
-   if (!gPad || !fImage) {
+   if (!gPad || !fImage)
       return;
-   }
 
    fImage->BeginPaint();
 
-   static Double_t x[4], y[4];
+   Double_t x[4], y[4];
    Int_t ix1 = x1 < x2 ? XtoPixel(x1) : XtoPixel(x2);
    Int_t ix2 = x1 < x2 ? XtoPixel(x2) : XtoPixel(x1);
    Int_t iy1 = y1 < y2 ? YtoPixel(y1) : YtoPixel(y2);
@@ -283,15 +280,14 @@ void TImageDump::DrawPolyMarker(Int_t, Float_t *, Float_t *)
 
 void TImageDump::DrawPolyMarker(Int_t n, Double_t *xw, Double_t *yw)
 {
-   if (!gPad || !fImage) {
+   if (!gPad || !fImage)
       return;
-   }
 
    fImage->BeginPaint();
 
    fMarkerStyle = TMath::Abs(fMarkerStyle);
    Int_t ms = TAttMarker::GetMarkerStyleBase(fMarkerStyle);
-   static TPoint pt[20];
+   TPoint pt[20];
 
    if (ms == 4)
       ms = 24;
@@ -640,107 +636,18 @@ void TImageDump::DrawPolyMarker(Int_t n, Double_t *xw, Double_t *yw)
 
 void TImageDump::DrawPS(Int_t nn, Double_t *x, Double_t *y)
 {
-   if (!gPad || !fImage || !nn) {
+   if (!gPad || !fImage || !nn)
       return;
-   }
 
    fImage->BeginPaint();
 
-   TColor *col = nullptr;
-   Int_t  fais = 0 , fasi = 0;
    Bool_t line = nn > 1;
    UInt_t n = TMath::Abs(nn);
-
-   fais = fFillStyle/1000;
-   fasi = fFillStyle%1000;
-
-   Short_t px1, py1, px2, py2;
-   static const UInt_t gCachePtSize = 200;
-   static TPoint gPointCache[gCachePtSize];
+   Int_t fais = fFillStyle / 1000;
+   Int_t fasi = fFillStyle % 1000;
 
    // SetLineStyle
-   Int_t ndashes = 0;
-   static char dashList[10];
-   Int_t dashSize = 0;
-
-   if (line) {
-      if (fLineWidth<=0) return;
-      // dash lines
-      if (fLineStyle > 1) {
-         TString st = gStyle->GetLineStyleString(fLineStyle);
-         TObjArray *tokens = st.Tokenize(" ");
-         ndashes = tokens->GetEntries();
-         char *dash = new char[ndashes];
-
-         for (int j = 0; j < ndashes; j++) {
-            Int_t it;
-            sscanf(((TObjString*)tokens->At(j))->GetName(), "%d", &it);
-            dash[j] = (char)(it/4);
-         }
-
-         dashSize = TMath::Min((int)sizeof(dashList), ndashes);
-         for (int i = 0; i < dashSize; i++ ) {
-            dashList[i] = dash[i];
-         }
-         delete tokens;
-         delete [] dash;
-      }
-
-      // SetLineColor
-      col = gROOT->GetColor(fLineColor);
-      if (!col) { // no color, make it black
-         fLineColor = 1;
-         col = gROOT->GetColor(fLineColor);
-         if (!col) return;
-      }
-   }
-
-   if (n == 1) {  // point
-      col = gROOT->GetColor(fFillColor);
-      if (!col) { // no color, make it black
-         fFillColor = 1;
-         col = gROOT->GetColor(fFillColor);
-         if (!col) return;
-      }
-      px1 = XtoPixel(x[0]);   py1 = YtoPixel(y[0]);
-      fImage->PutPixel(px1, py1, col->AsHexString());
-      return;
-   }
-
-   if (n == 2) {  // line
-      px1 = XtoPixel(x[0]);   py1 = YtoPixel(y[0]);
-      px2 = XtoPixel(x[1]);   py2 = YtoPixel(y[1]);
-
-      // SetLineColor
-      col = gROOT->GetColor(fLineColor);
-      if (!col) { // no color, make it black
-         fLineColor = 1;
-         col = gROOT->GetColor(fLineColor);
-         if (!col) return;
-      }
-      if (fLineStyle < 2) {
-         fImage->DrawLine(px1, py1, px2, py2, col->AsHexString(), fLineWidth);
-      } else {
-         fImage->DrawDashLine(px1, py1, px2, py2, dashSize, (const char*)dashList,
-                                 col->AsHexString(), fLineWidth);
-      }
-      return;
-   }
-
-   if (!line && ((fais == 3) || (fais == 2)) && (fasi > 100) ) {
-      return;
-   }
-
-   TPoint *pt = nullptr;
-   Bool_t del = kTRUE;
-
-   if (n+1 < gCachePtSize) {
-      pt = (TPoint*)&gPointCache;
-      del = kFALSE;
-   } else {
-      pt = new TPoint[n+1];
-      del = kTRUE;
-   }
+   std::vector<char> dashList;
 
    TColor *fcol = gROOT->GetColor(fFillColor);
    if (!fcol) { // no color, set it white
@@ -754,6 +661,54 @@ void TImageDump::DrawPS(Int_t nn, Double_t *x, Double_t *y)
       lcol = gROOT->GetColor(fLineColor);
    }
 
+   if (line) {
+      if (fLineWidth <= 0)
+         return;
+      // dash lines
+      if (fLineStyle > 1) {
+         TString st = gStyle->GetLineStyleString(fLineStyle);
+         std::unique_ptr<TObjArray> tokens(st.Tokenize(" "));
+
+         if (tokens)
+            for (int j = 0; j < tokens->GetEntries(); j++) {
+               Int_t it;
+               sscanf(tokens->At(j)->GetName(), "%d", &it);
+               dashList.emplace_back((char)(it/4));
+            }
+      }
+   }
+
+   if (n == 1) {  // point
+      auto px1 = XtoPixel(x[0]);
+      auto py1 = YtoPixel(y[0]);
+      if (fcol)
+         fImage->PutPixel(px1, py1, fcol->AsHexString());
+      return;
+   }
+
+   if (n == 2) {  // line
+      auto px1 = XtoPixel(x[0]);
+      auto py1 = YtoPixel(y[0]);
+      auto px2 = XtoPixel(x[1]);
+      auto py2 = YtoPixel(y[1]);
+
+      // SetLineColor
+      if (lcol) {
+         if (fLineStyle < 2) {
+            fImage->DrawLine(px1, py1, px2, py2, lcol->AsHexString(), fLineWidth);
+         } else {
+            fImage->DrawDashLine(px1, py1, px2, py2, dashList.size(), dashList.data(),
+                                 lcol->AsHexString(), fLineWidth);
+         }
+      }
+      return;
+   }
+
+   if (!line && ((fais == 3) || (fais == 2)) && (fasi > 100))
+      return;
+
+   std::vector<TPoint> pt(n+1);
+
    for (UInt_t i = 0; i < n; i++) {
       pt[i].fX = XtoPixel(x[i]);
       pt[i].fY = YtoPixel(y[i]);
@@ -764,39 +719,27 @@ void TImageDump::DrawPS(Int_t nn, Double_t *x, Double_t *y)
    const char *stipple = (fais == 3) && (fasi > 0) && (fasi < 26) ? (const char*)gStipples[fasi] : nullptr;
 
    // filled polygon
-   if (!line && fFillStyle && (fFillStyle != 4000)) {
-      if (!fcol) {
-         if (del) delete [] pt;
-         return;
-      }
-
-      if (n < 5) {   // convex
-         fImage->FillPolygon(n, pt, fcol->AsHexString(), stipple);
-      } else {       // non-convex fill area
-         fImage->DrawFillArea(n, pt, fcol->AsHexString(), stipple);
-      }
+   if (!line && fFillStyle && (fFillStyle != 4000) && fcol) {
+      if (n < 5)    // convex
+         fImage->FillPolygon(n, pt.data(), fcol->AsHexString(), stipple);
+      else        // non-convex fill area
+         fImage->DrawFillArea(n, pt.data(), fcol->AsHexString(), stipple);
    }
 
    // hollow polygon or polyline is drawn
    if (line || !fFillStyle || (fFillStyle == 4000)) {
-      if (!lcol) {
-         if (del)
-            delete [] pt;
-         return;
-      }
       if (!line) {
-         fImage->DrawPolyLine(n+1, pt, fcol->AsHexString(), 1);
-      } else {
+         if (fcol)
+            fImage->DrawPolyLine(n+1, pt.data(), fcol->AsHexString(), 1);
+      } else if (lcol) {
          if (fLineStyle < 2) { // solid
-            fImage->DrawPolyLine(n, pt, lcol->AsHexString(), fLineWidth);
+            fImage->DrawPolyLine(n, pt.data(), lcol->AsHexString(), fLineWidth);
          } else { // dashed
-            DrawDashPolyLine(n, pt,  dashSize, (const char*)dashList,
+            DrawDashPolyLine(n, pt.data(), dashList.size(), dashList.data(),
                             lcol->AsHexString(), fLineWidth);
          }
       }
    }
-   if (del)
-      delete [] pt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -817,12 +760,10 @@ void TImageDump::DrawDashPolyLine(Int_t nn, TPoint *xy, UInt_t nDash,
 {
    Int_t x0 = xy[0].GetX();
    Int_t y0 = xy[0].GetY();
-   Int_t x = 0;
-   Int_t y = 0;
 
    for (Int_t i = 1; i < nn; i++) {
-      x = xy[i].GetX();
-      y = xy[i].GetY();
+      Int_t x = xy[i].GetX();
+      Int_t y = xy[i].GetY();
 
       fImage->DrawDashLine(x0, y0, x, y, nDash, pDash, col, thick);
 
@@ -836,12 +777,18 @@ void TImageDump::DrawDashPolyLine(Int_t nn, TPoint *xy, UInt_t nDash,
 
 void TImageDump::NewPage()
 {
+   fX0 = fY0 = 0;
    if (gPad && fImage) {
-      UInt_t w = UInt_t(gPad->GetWw()*gPad->GetWNDC()) * gStyle->GetImageScaling();
-      UInt_t h = UInt_t(gPad->GetWh()*gPad->GetHNDC()) * gStyle->GetImageScaling();
+      UInt_t w = gPad->GetWw() * gStyle->GetImageScaling();
+      UInt_t h = gPad->GetWh() * gStyle->GetImageScaling();
+      if (gPad != gPad->GetMother()) {
+         fX0 = gPad->XtoAbsPixel(gPad->GetX1())* gStyle->GetImageScaling();
+         fY0 = gPad->YtoAbsPixel(gPad->GetY2())* gStyle->GetImageScaling();
+         w = w * gPad->GetAbsWNDC();
+         h = h * gPad->GetAbsHNDC();
+      }
       fImage->DrawRectangle(0, 0, w, h, "#ffffffff");
    }
-   return;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -852,9 +799,8 @@ void TImageDump::NewPage()
 
 void TImageDump::Text(Double_t x, Double_t y, const char *chars)
 {
-   if (!gPad || !fImage) {
+   if (!gPad || !fImage)
       return;
-   }
 
    fImage->BeginPaint();
 
@@ -864,7 +810,7 @@ void TImageDump::Text(Double_t x, Double_t y, const char *chars)
    t.SetTextAlign(fTextAlign);
    t.SetTextAngle(fTextAngle);
    t.SetTextColor(fTextColor);
-   fImage->DrawText(&t, XtoPixel(x), YtoPixel(y));
+   fImage->DrawTextOnPad(&t, XtoPixel(x), YtoPixel(y), gPad, fX0, fY0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -875,9 +821,8 @@ void TImageDump::Text(Double_t x, Double_t y, const char *chars)
 
 void TImageDump::Text(Double_t x, Double_t y, const wchar_t *chars)
 {
-   if (!gPad || !fImage) {
+   if (!gPad || !fImage)
       return;
-   }
 
    fImage->BeginPaint();
 
@@ -887,20 +832,17 @@ void TImageDump::Text(Double_t x, Double_t y, const wchar_t *chars)
    t.SetTextAlign(fTextAlign);
    t.SetTextAngle(fTextAngle);
    t.SetTextColor(fTextColor);
-   fImage->DrawText(&t, XtoPixel(x), YtoPixel(y));
+   fImage->DrawTextOnPad(&t, XtoPixel(x), YtoPixel(y), gPad, fX0, fY0);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Draw text with URL. Same as Text.
+///
 
-////////////////////////// CellArray code ////////////////////////////////////
-static UInt_t *gCellArrayColors = nullptr;
-static Int_t   gCellArrayN = 0;
-static Int_t   gCellArrayW = 0;
-static Int_t   gCellArrayH = 0;
-static Int_t   gCellArrayX1 = 0;
-static Int_t   gCellArrayX2 = 0;
-static Int_t   gCellArrayY1 = 0;
-static Int_t   gCellArrayY2 = 0;
-static Int_t   gCellArrayIdx = 0;
+void TImageDump::TextUrl(Double_t x, Double_t y, const char *chars, const char *)
+{
+   Text(x, y, chars);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 ///cell array begin
@@ -908,27 +850,20 @@ static Int_t   gCellArrayIdx = 0;
 void TImageDump::CellArrayBegin(Int_t w, Int_t h, Double_t x1, Double_t x2,
                                 Double_t y1, Double_t y2)
 {
-   if (!gPad || !fImage || (w <= 0) || (h <= 0)) {
+   if (!gPad || !fImage || (w <= 0) || (h <= 0))
       return;
-   }
-
-   if (gCellArrayColors) {
-      delete [] gCellArrayColors;
-   }
 
    fImage->BeginPaint();
 
-   gCellArrayN = w * h;
-   gCellArrayW = w;
-   gCellArrayH = h;
-   gCellArrayColors = new UInt_t[gCellArrayN];
+   fCellArrayW = w;
+   fCellArrayH = h;
+   fCellArrayColors.resize(w * h);
+   fCellArrayIdx = 0;
 
-   gCellArrayX1 = x1 < x2 ? XtoPixel(x1) : XtoPixel(x2);
-   gCellArrayX2 = x1 > x2 ? XtoPixel(x2) : XtoPixel(x1);
-   gCellArrayY1 = y1 < y2 ? YtoPixel(y1) : YtoPixel(y2);
-   gCellArrayY2 = y1 < y2 ? YtoPixel(y2) : YtoPixel(y1);
-
-   gCellArrayIdx = 0;
+   fCellArrayX1 = x1 < x2 ? XtoPixel(x1) : XtoPixel(x2);
+   fCellArrayX2 = x1 > x2 ? XtoPixel(x2) : XtoPixel(x1);
+   fCellArrayY1 = y1 < y2 ? YtoPixel(y1) : YtoPixel(y2);
+   fCellArrayY2 = y1 < y2 ? YtoPixel(y2) : YtoPixel(y1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -936,12 +871,12 @@ void TImageDump::CellArrayBegin(Int_t w, Int_t h, Double_t x1, Double_t x2,
 
 void TImageDump::CellArrayFill(Int_t r, Int_t g, Int_t b)
 {
-   if (gCellArrayIdx >= gCellArrayN) return;
+   if (fCellArrayIdx >= fCellArrayColors.size())
+      return;
 
    fImage->BeginPaint();
 
-   gCellArrayColors[gCellArrayIdx] = ((r & 0xFF) << 16) + ((g & 0xFF) << 8) + (b & 0xFF);
-   gCellArrayIdx++;
+   fCellArrayColors[fCellArrayIdx++] = ((r & 0xFF) << 16) + ((g & 0xFF) << 8) + (b & 0xFF);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -949,25 +884,22 @@ void TImageDump::CellArrayFill(Int_t r, Int_t g, Int_t b)
 
 void TImageDump::CellArrayEnd()
 {
-   if (!fImage || !gCellArrayColors || !gCellArrayW || !gCellArrayH) {
+   if (!fImage || fCellArrayColors.empty() || !fCellArrayW || !fCellArrayH)
       return;
-   }
 
    fImage->BeginPaint();
 
-   fImage->DrawCellArray(gCellArrayX1, gCellArrayX2, gCellArrayY1, gCellArrayY2,
-                         gCellArrayW, gCellArrayH, gCellArrayColors);
+   fImage->DrawCellArray(fCellArrayX1, fCellArrayX2, fCellArrayY1, fCellArrayY2,
+                         fCellArrayW, fCellArrayH, fCellArrayColors.data());
 
-   delete [] gCellArrayColors;
-   gCellArrayColors = nullptr;
-   gCellArrayN = 0;
-   gCellArrayW = 0;
-   gCellArrayH = 0;
-   gCellArrayX1 = 0;
-   gCellArrayX2 = 0;
-   gCellArrayY1 = 0;
-   gCellArrayY2 = 0;
-   gCellArrayIdx = 0;
+   fCellArrayColors.clear();
+   fCellArrayIdx = 0;
+   fCellArrayW = 0;
+   fCellArrayH = 0;
+   fCellArrayX1 = 0;
+   fCellArrayX2 = 0;
+   fCellArrayY1 = 0;
+   fCellArrayY2 = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -986,7 +918,7 @@ void TImageDump::SetColor(Float_t /*r*/, Float_t /*g*/, Float_t /*b*/)
 
 Int_t TImageDump::XtoPixel(Double_t x)
 {
-   return  gPad->XtoAbsPixel(x)*gStyle->GetImageScaling();
+   return gPad->XtoAbsPixel(x)*gStyle->GetImageScaling() - fX0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -994,5 +926,5 @@ Int_t TImageDump::XtoPixel(Double_t x)
 
 Int_t TImageDump::YtoPixel(Double_t y)
 {
-   return  gPad->YtoAbsPixel(y)*gStyle->GetImageScaling();
+   return  gPad->YtoAbsPixel(y)*gStyle->GetImageScaling() - fY0;
 }

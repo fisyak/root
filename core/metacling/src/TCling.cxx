@@ -348,6 +348,7 @@ void TCling__PrintStackTrace() {
 
 extern "C" int TCling__LoadLibrary(const char *library)
 {
+   gCling->RegisterAutoLoadedLibrary(library);
    return gSystem->Load(library, "", false);
 }
 
@@ -2707,6 +2708,34 @@ void TCling::PrintIntro()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Print information about the interpreter.
+///\param[in] option Selects the type of information to print.
+///
+/// List of currently support options:
+///   - autoparsed: Print the list of classes that triggered autoparsing.
+void TCling::Print(Option_t *option) const
+{
+   if (option && *option) {
+      if (!strcmp(option, "autoparsed")) {
+         std::cout << "Auto parsed classes:" << std::endl;
+         for (auto & cls : fAutoParseClasses) {
+            std::cout << "  " << cls << std::endl;
+         }
+      } else if (!strcmp(option, "autoloaded")) {
+         std::cout << "Auto loaded libraries:" << std::endl;
+         for (auto & lib : fAutoLoadedLibraries) {
+            std::cout << "  " << lib << std::endl;
+         }
+      } else {
+         ::Error("TCling::Print", "Unknown option '%s'", option);
+      }
+   } else {
+      ::Info("TCling::Print", "No options specified");
+   }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 /// \brief Add a directory to the list of directories in which the
 ///        interpreter looks for include files.
 /// \param[in] path The path to the directory.
@@ -3468,6 +3497,14 @@ static bool StartsWithStrLit(const char *haystack, const char (&needle)[N]) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Register that a library was autoloaded either to provide a 'missing' symbol
+/// or to provide a class (see TClass::GetClass and TROOT::LoadClass).
+void TCling::RegisterAutoLoadedLibrary(const char *libname)
+{
+   fAutoLoadedLibraries.insert(libname);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Register a new shared library name with the interpreter; add it to
 /// fSharedLibs.
 
@@ -4041,6 +4078,8 @@ static std::string AlternateTuple(const char *classname, const cling::LookupHelp
    guard << guard_name;
 
    std::ostringstream alternateTuple;
+   std::ostringstream initializers;
+
    alternateTuple << "#ifndef " << guard.str() << "\n";
    alternateTuple << "#define " << guard.str() << "\n";
    alternateTuple << "namespace ROOT { namespace Internal {\n";
@@ -4053,10 +4092,13 @@ static std::string AlternateTuple(const char *classname, const cling::LookupHelp
          unsigned int nMember = 0;
          auto iter = tupleContent.fElements.begin() + 1; // Skip the template name (tuple).
          auto theEnd = tupleContent.fElements.end() - 1; // skip the 'stars'.
+         auto sep = ':';
          while (iter != theEnd) {
             alternateTuple << "   " << *iter << " _" << nMember << ";\n";
+            initializers << "    " << sep << " _" << nMember << "(std::get<" << nMember << ">(std::forward<Tuple>(t)))\n";
             ++iter;
             ++nMember;
+            sep = ',';
          }
          break;
       }
@@ -4064,10 +4106,13 @@ static std::string AlternateTuple(const char *classname, const cling::LookupHelp
          unsigned int nMember = tupleContent.fElements.size() - 3;
          auto iter = tupleContent.fElements.rbegin() + 1; // skip the 'stars'.
          auto theEnd = tupleContent.fElements.rend() - 1; // Skip the template name (tuple).
+         auto sep = ':';
          while (iter != theEnd) {
             alternateTuple << "   " << *iter << " _" << nMember << ";\n";
+            initializers << "    " << sep << " _" << nMember << "(std::get<" << nMember << ">(std::forward<Tuple>(t)))\n";
             ++iter;
             --nMember;
+            sep = ',';
          }
          break;
       }
@@ -4077,6 +4122,15 @@ static std::string AlternateTuple(const char *classname, const cling::LookupHelp
          break;
       }
    }
+
+   // default constructor
+   alternateTuple << "  TEmulatedTuple() = default;\n";
+
+   // constructor from other tuple-like types, like std::tuple
+   alternateTuple << "  template <typename Tuple>\n";
+   alternateTuple << "  TEmulatedTuple(Tuple&& t)\n";
+   alternateTuple << initializers.str();
+   alternateTuple << "  {}\n";
 
    alternateTuple << "};\n";
    alternateTuple << "}}\n";
@@ -6576,6 +6630,12 @@ UInt_t TCling::AutoParseImplRecurse(const char *cls, bool topLevel)
       }
    }
 
+   if (nHheadersParsed) {
+      // Register that we did autoparsing for this class.
+      fAutoParseClasses.insert(cls);
+      if (gDebug)
+         Info("AutoParse", "Parsed %d headers for %s", nHheadersParsed, cls);
+   }
    return nHheadersParsed;
 
 }
@@ -6682,6 +6742,7 @@ void* TCling::LazyFunctionCreatorAutoload(const std::string& mangled_name) {
    if (!LibLoader(libName))
       return nullptr;
 
+   fAutoLoadedLibraries.insert(libName);
    return llvm::sys::DynamicLibrary::SearchForAddressOfSymbol(dlsym_mangled_name);
 }
 
@@ -8198,6 +8259,14 @@ std::string TCling::CallFunc_GetWrapperCode(CallFunc_t *func) const
 //
 //  ClassInfo interface
 //
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t TCling::ClassInfo_AlignOf(ClassInfo_t *cinfo) const
+{
+   TClingClassInfo *TClinginfo = (TClingClassInfo *)cinfo;
+   return TClinginfo->GetAlignOf();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return true if the entity pointed to by 'declid' is declared in

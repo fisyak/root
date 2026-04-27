@@ -55,6 +55,7 @@ In order to access the name of a class within the ROOT type system, the method T
 #include "TDataType.h"
 #include "TDatime.h"
 #include "TEnum.h"
+#include "TEnv.h"
 #include "TError.h"
 #include "TExMap.h"
 #include "TFunctionTemplate.h"
@@ -123,6 +124,7 @@ In order to access the name of a class within the ROOT type system, the method T
 #include "TClonesArray.h"
 #include "TRef.h"
 #include "TRefArray.h"
+#include "ROOT/RAlignmentUtils.hxx"
 
 using std::multimap, std::make_pair, std::string;
 
@@ -2734,6 +2736,13 @@ Int_t TClass::GetBaseClassOffsetRecurse(const TClass *cl)
                   if (!baseclass) return -1;
                   Int_t subOffset = baseclass->GetBaseClassOffsetRecurse(cl);
                   if (subOffset == -2) return -2;
+                  auto align = baseclass->GetClassAlignment();
+                  if (ROOT::Internal::IsValidAlignment(align)) {
+                     offset = ROOT::Internal::AlignUp((size_t)offset, align);
+                  } else {
+                     Error("GetBaseClassOffsetRecurse", "Can not determine alignment for base class %s (got %zu)\n",
+                           baseclass->GetName(), align);
+                  }
                   if (subOffset != -1) return offset+subOffset;
                   offset += baseclass->Size();
                } else if (element->IsA() == TStreamerSTL::Class()) {
@@ -2742,6 +2751,13 @@ Int_t TClass::GetBaseClassOffsetRecurse(const TClass *cl)
                   if (!baseclass) return -1;
                   Int_t subOffset = baseclass->GetBaseClassOffsetRecurse(cl);
                   if (subOffset == -2) return -2;
+                  auto align = baseclass->GetClassAlignment();
+                  if (ROOT::Internal::IsValidAlignment(align)) {
+                     offset = ROOT::Internal::AlignUp((size_t)offset, align);
+                  } else {
+                     Error("GetBaseClassOffsetRecurse", "Can not determine alignment for base class %s (got %zu)\n",
+                           baseclass->GetName(), align);
+                  }
                   if (subOffset != -1) return offset+subOffset;
                   offset += baseclass->Size();
 
@@ -2969,6 +2985,11 @@ TVirtualIsAProxy* TClass::GetIsAProxy() const
 /// If silent is 'true', do not warn about missing dictionary for the class.
 /// (typically used for classes that are used only for transient members)
 /// Returns `nullptr` in case class is not found.
+///
+/// To completely disallow auto-parsing during TClass::GetClass, you can either
+/// set the shell environment variable `ROOT_DISABLE_TCLASS_GET_CLASS_AUTOPARSING`
+/// (to anything) or set the `rootrc` key `Root.TClass.GetClass.AutoParsing` to
+/// `false`.
 
 TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent)
 {
@@ -3052,6 +3073,16 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent, size_t hi
       // We should really not fall through to here, but if we do, let's just
       // continue as before ...
    }
+
+   bool disableAutoParsing = gInterpreter->IsAutoParsingSuspended();
+   // We could get the user choice from:
+   //   - TClass::SetGetClassAutoParsing
+   static const bool requestDisableAutoParsing =
+      !gEnv->GetValue("Root.TClass.GetClass.AutoParsing", true) ||
+      gSystem->Getenv("ROOT_DISABLE_TCLASS_GET_CLASS_AUTOPARSING") != nullptr;
+   if (requestDisableAutoParsing)
+      disableAutoParsing = true;
+   TInterpreter::SuspendAutoParsing autoparseFence(gInterpreter, disableAutoParsing);
 
    // Note: this variable does not always holds the fully normalized name
    // as there is information from a not yet loaded library or from header
@@ -5738,6 +5769,38 @@ void TClass::SetCurrentStreamerInfo(TVirtualStreamerInfo *info)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Return the alignment requirement (in bytes) for objects of this class.
+///
+/// Returns (size_t)-1 if the class info is invalid, 0 for a forward-declared
+/// class, an enum, a namespace or or a class with no definition. For all other
+/// cases the actual alignment obtained from the dictionary or the clang ASTRecordLayout,
+/// or the StreamerInfo (in that order of priority) is returned.
+///
+/// Returns `0` when the alignment cannot be determined.
+
+size_t TClass::GetClassAlignment() const
+{
+   if (fAlignment != 0)
+      return fAlignment;
+   if ((fState < kEmulated && !fCollectionProxy) || Property() & (kIsNamespace | kIsEnum))
+      return 0;
+   if (HasInterpreterInfo()) {
+      return gCling->ClassInfo_AlignOf(GetClassInfo());
+   }
+   if (fCollectionProxy) {
+      // If the collection proxy has a dictionary, it will have return earlier,
+      // so we know that the collection proxy is emulated.
+      if (!(fCollectionProxy->GetProperties() & TVirtualCollectionProxy::kIsEmulated)) {
+         Fatal("TClass::GetClassAlignment", "Cannot determine alignment for collection proxy of class %s.", GetName());
+         return 0;
+      }
+      return alignof(std::vector<char>);
+   }
+   assert(GetStreamerInfo() && GetStreamerInfo()->GetClassAlignment() != 0);
+   return GetStreamerInfo()->GetClassAlignment();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Return size of object of this class.
 
 Int_t TClass::Size() const
@@ -6747,9 +6810,21 @@ void TClass::AdoptReferenceProxy(TVirtualRefProxy* proxy)
 ////////////////////////////////////////////////////////////////////////////////
 /// Adopt the TMemberStreamer pointer to by p and use it to Stream non basic
 /// member name.
-
-void TClass::AdoptMemberStreamer(const char *name, TMemberStreamer *p)
+/// Returns false if the member streamer could not be adopted (which happens if this class had its StreamerInfo
+/// compiled already).
+/// This function transfers ownership of the `strm` pointer to the TClass, so it should not be used anymore on the
+/// caller side. In particular, if `AdoptMemberStreamer` returns false `strm` has been deleted and becomes invalid.
+bool TClass::AdoptMemberStreamer(const char *name, TMemberStreamer *p)
 {
+   // Too late to add member streamers!
+   if (fLastReadInfo && (*fLastReadInfo).IsCompiled()) {
+      Error("AdoptMemberStreamer",
+            "Cannot adopt member streamer for %s::%s: StreamerInfo for the class is already compiled.", GetName(),
+            name);
+      delete p;
+      return false;
+   }
+
    if (fRealData) {
 
       R__LOCKGUARD(gInterpreterMutex);
@@ -6761,29 +6836,14 @@ void TClass::AdoptMemberStreamer(const char *name, TMemberStreamer *p)
             // If there is a TStreamerElement that took a pointer to the
             // streamer we should inform it!
             rd->AdoptStreamer(p);
-            return;
+            return true;
          }
       }
    }
 
-   Error("AdoptMemberStreamer","Cannot adope member streamer for %s::%s",GetName(), name);
+   Error("AdoptMemberStreamer", "Cannot adopt member streamer for %s::%s", GetName(), name);
    delete p;
-
-//  NOTE: This alternative was proposed but not is not used for now,
-//  One of the major difference with the code above is that the code below
-//  did not require the RealData to have been built
-//    if (!fData) return;
-//    const char *n = name;
-//    while (*n=='*') n++;
-//    TString ts(n);
-//    int i = ts.Index("[");
-//    if (i>=0) ts.Remove(i,999);
-//    TDataMember *dm = (TDataMember*)fData->FindObject(ts.Data());
-//    if (!dm) {
-//       Warning("SetStreamer","Can not find member %s::%s",GetName(),name);
-//       return;
-//    }
-//    dm->SetStreamer(p);
+   return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

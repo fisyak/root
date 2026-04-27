@@ -46,6 +46,7 @@ RooAbsPdf::fitTo() is called and gets destroyed when the fitting ends.
 #include <iomanip>
 #include <numeric>
 #include <thread>
+#include <unordered_set>
 
 namespace RooFit {
 
@@ -325,17 +326,6 @@ void Evaluator::updateOutputSizes()
    for (auto &info : _nodes) {
       info.outputSize = outputSizeMap.at(info.absArg);
       info.isDirty = true;
-
-      // In principle we don't need dirty flag propagation because the driver
-      // takes care of deciding which node needs to be re-evaluated. However,
-      // disabling it also for scalar mode results in very long fitting times
-      // for specific models (test 14 in stressRooFit), which still needs to be
-      // understood. TODO.
-      if (!info.isScalar()) {
-         setOperMode(info.absArg, RooAbsArg::ADirty);
-      } else {
-         setOperMode(info.absArg, info.originalOperMode);
-      }
    }
 
    if (_useGPU) {
@@ -627,9 +617,52 @@ void Evaluator::markGPUNodes()
 /// Evaluator gets deleted.
 void Evaluator::setOperMode(RooAbsArg *arg, RooAbsArg::OperMode opMode)
 {
-   if (opMode != arg->operMode()) {
-      _changeOperModeRAIIs.emplace(std::make_unique<ChangeOperModeRAII>(arg, opMode));
+   if (!_operModeChanges)
+      _operModeChanges = std::make_unique<ChangeOperModeRAII>();
+   _operModeChanges->change(arg, opMode);
+}
+
+// Change the operation modes of all RooAbsArgs in the computation graph.
+// The changes are reset when the returned RAII object goes out of scope.
+//
+// We also walk transitively through value clients of the nodes to cover any
+// node that RooAbsReal::doEval (the fallback scalar implementation) might
+// inadvertently propagate the ADirty mode to via its recursive restore: that
+// helper sets servers temporarily to AClean and then calls
+// setOperMode(oldOperMode) to restore, which recurses to value clients when
+// oldOperMode is ADirty. If we did not protect those clients here, any node
+// outside the computation graph that shares a fundamental (e.g. a parameter
+// like a RooRealVar) would be left permanently in ADirty after the first
+// minimization, dramatically slowing down later scalar evaluations (for
+// example on pdfs held by the legacy test statistics' internal cache).
+std::unique_ptr<ChangeOperModeRAII> Evaluator::setOperModes(RooAbsArg::OperMode opMode)
+{
+   auto out = std::make_unique<ChangeOperModeRAII>();
+   std::unordered_set<RooAbsArg *> visited;
+
+   std::vector<RooAbsArg *> queue;
+   queue.reserve(_nodes.size());
+   for (auto &info : _nodes) {
+      queue.push_back(info.absArg);
    }
+
+   while (!queue.empty()) {
+      RooAbsArg *node = queue.back();
+      queue.pop_back();
+      if (!visited.insert(node).second)
+         continue;
+
+      out->change(node, opMode);
+
+      // Only follow value-client links: that is exactly the propagation path
+      // used by RooAbsArg::setOperMode with mode==ADirty.
+      if (opMode == RooAbsArg::ADirty) {
+         for (auto *client : node->valueClients()) {
+            queue.push_back(client);
+         }
+      }
+   }
+   return out;
 }
 
 void Evaluator::print(std::ostream &os)

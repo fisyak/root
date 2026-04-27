@@ -97,12 +97,22 @@ namespace ROOT {
    void DisableImplicitMT();
    Bool_t IsImplicitMTEnabled();
    UInt_t GetThreadPoolSize();
+   namespace Experimental {
+   void EnableObjectAutoRegistration();
+   void DisableObjectAutoRegistration();
+   bool ObjectAutoRegistrationEnabled();
+   } // namespace Experimental
 }
+
+namespace ROOT::Deprecated::Internal {
+TSeqCollection *GetListOfSecContexts(const TROOT &);
+} // namespace ROOT::Deprecated::Internal
 
 class TROOT : public TDirectory {
 
 friend class TCling;
 friend TROOT *ROOT::Internal::GetROOT2();
+friend TSeqCollection *ROOT::Deprecated::Internal::GetListOfSecContexts(const TROOT &);
 
 private:
    Int_t           fLineIsProcessing = 0;   ///< To synchronize multi-threads
@@ -256,7 +266,9 @@ public:
    TSeqCollection   *GetListOfStreamerInfo() const { return fStreamerInfo; }
    TSeqCollection   *GetListOfMessageHandlers() const { return fMessageHandlers; }
    TCollection      *GetListOfClassGenerators() const { return fClassGenerators; }
-   TSeqCollection   *GetListOfSecContexts() const { return fSecContexts; }
+   TSeqCollection   *GetListOfSecContexts() const
+      R__DEPRECATED(6, 42, "GetListOfSecContexts is deprecated. See README.AUTH for details.")
+      { return ROOT::Deprecated::Internal::GetListOfSecContexts(*this); }
    TSeqCollection   *GetClipboard() const { return fClipboard; }
    TSeqCollection   *GetListOfDataSets() const { return fDataSets; }
    TCollection      *GetListOfEnums(Bool_t load = kFALSE);
@@ -366,7 +378,10 @@ public:
    static const TString& GetDocDir();
    static const TString& GetMacroDir();
    static const TString& GetTutorialDir();
-   static const TString& GetSourceDir();
+   static const TString &GetSourceDir()
+      R__DEPRECATED(6, 42,
+                    "This function is removed because it made only sense in the corner case where the ROOT source is "
+                    "copied inside the ROOT installation, which is never the case unless the user does it by hand.");
    static const TString& GetIconPath();
    static const TString& GetTTFFontDir();
 

@@ -31,6 +31,8 @@
 
 #include "TSecContext.h" // for kROOTTZERO.
 
+namespace ROOT::Deprecated {
+
 class THostAuth : public TObject {
 
 private:
@@ -109,5 +111,9 @@ public:
 
    ClassDefOverride(THostAuth,1)  // Class providing host specific authentication information
 };
+
+} // namespace ROOT::Deprecated
+
+using THostAuth R__DEPRECATED(6, 42, "the RootAuth library is deprecated") = ROOT::Deprecated::THostAuth;
 
 #endif

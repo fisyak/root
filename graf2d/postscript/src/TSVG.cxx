@@ -82,7 +82,6 @@ using the file extension `.svgz`.
 
 TSVG::TSVG() : TVirtualPS()
 {
-   fStream      = nullptr;
    fType        = 0;
    fCompact     = kFALSE;
    gVirtualPS   = this;
@@ -105,7 +104,6 @@ TSVG::TSVG() : TVirtualPS()
 
 TSVG::TSVG(const char *fname, Int_t wtype, Bool_t compact) : TVirtualPS(fname, wtype)
 {
-   fStream = nullptr;
    SetTitle("SVG");
    fCompact = compact;
    Open(fname, wtype);
@@ -141,10 +139,9 @@ void TSVG::Open(const char *fname, Int_t wtype)
    }
 
    // Open OS file
-   fStream   = new std::ofstream(fname,std::ios::out);
-   if (!fStream || !fStream->good()) {
-      printf("ERROR in TSVG::Open: Cannot open file:%s\n",fname);
-      if (!fStream) return;
+   if (!OpenStream(fname)) {
+      Error("Open", "Cannot open file: %s", fname);
+      return;
    }
 
    gVirtualPS = this;
@@ -174,13 +171,14 @@ TSVG::~TSVG()
 
 void TSVG::Close(Option_t *)
 {
-   if (!gVirtualPS) return;
-   if (!fStream) return;
-   if (gPad) gPad->Update();
+   if (!gVirtualPS || !fStream)
+      return;
+   if (gPad)
+      gPad->Update();
    PrintStr("</svg>@");
 
    // Close file stream
-   if (fStream) { fStream->close(); delete fStream; fStream = nullptr;}
+   CloseStream();
 
    gVirtualPS = nullptr;
 }
@@ -214,7 +212,7 @@ void TSVG::Off()
 
 void TSVG::DrawBox(Double_t x1, Double_t y1, Double_t x2, Double_t  y2)
 {
-   static Double_t x[4], y[4];
+   Double_t x[4], y[4];
    Double_t ix1 = XtoSVG(TMath::Min(x1,x2));
    Double_t ix2 = XtoSVG(TMath::Max(x1,x2));
    Double_t iy1 = YtoSVG(TMath::Min(y1,y2));
@@ -302,6 +300,7 @@ void TSVG::PrintPath(Bool_t convert, Int_t n, Double_t *xps, Double_t *yps, Bool
    for (Int_t i = 1; i < n; i++) {
       Double_t ixdi = convert ? XtoSVG(xps[i]) : xps[i];
       Double_t iydi = convert ? YtoSVG(yps[i]) : yps[i];
+
       Double_t ix   = ixdi - ixd0;
       Double_t iy   = iydi - iyd0;
 
@@ -386,13 +385,8 @@ void TSVG::DrawFrame(Double_t xl, Double_t yl, Double_t xt, Double_t  yt,
    PrintFast(9,"<path d=\"");
    PrintPath(kFALSE, 7, xps, yps);
    PrintFast(7,"\" fill=");
-
    SetColorAlpha(mode == -1 ? dark : light);
-
-   if (fgLineJoin)
-      PrintStr(TString::Format(" stroke-linejoin=\"%s\"", fgLineJoin == 1 ? "round" : "bevel"));
-   if (fgLineCap)
-      PrintStr(TString::Format(" stroke-linecap=\"%s\"", fgLineCap == 1 ? "round" : "square"));
+   PrintLineJointAttributes();
    PrintFast(2,"/>");
 
    //- Draw bottom&right part of the box
@@ -409,10 +403,7 @@ void TSVG::DrawFrame(Double_t xl, Double_t yl, Double_t xt, Double_t  yt,
    PrintPath(kFALSE, 7, xps, yps);
    PrintFast(7,"\" fill=");
    SetColorAlpha(mode == -1 ? light : dark);
-   if (fgLineJoin)
-      PrintStr(TString::Format(" stroke-linejoin=\"%s\"", fgLineJoin == 1 ? "round" : "bevel"));
-   if (fgLineCap)
-      PrintStr(TString::Format(" stroke-linecap=\"%s\"", fgLineCap == 1 ? "round" : "square"));
+   PrintLineJointAttributes();
    PrintFast(2,"/>");
 }
 
@@ -495,10 +486,7 @@ void TSVG::PrintPolyMarker(Int_t n, T *xw, T* yw)
       PrintStr(" stroke-width=\"");
       WriteReal(TMath::Max(1, Int_t(TAttMarker::GetMarkerLineWidth(fMarkerStyle))), kFALSE);
       PrintStr("\" fill=\"none\"");
-      if (fgLineJoin)
-         PrintStr(TString::Format(" stroke-linejoin=\"%s\"", fgLineJoin == 1 ? "round" : "bevel"));
-      if (fgLineCap)
-         PrintStr(TString::Format(" stroke-linecap=\"%s\"", fgLineCap == 1 ? "round" : "square"));
+      PrintLineJointAttributes();
       PrintStr(">");
    }
    for (Int_t i = 0; i < n; i++) {
@@ -870,6 +858,46 @@ void TSVG::DrawPolyMarker(Int_t n, Double_t *xw, Double_t *yw)
    PrintPolyMarker<Double_t>(n, xw, yw);
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+/// Print line style attributes on the end of "path" string
+
+void TSVG::PrintLineStyleOnEndOfPath()
+{
+   PrintFast(21,"\" fill=\"none\" stroke=");
+   SetColorAlpha(fLineColor, kFALSE, kTRUE);
+   if(fLineWidth > 1.) {
+      PrintFast(15," stroke-width=\"");
+      WriteReal(fLineWidth, kFALSE);
+      PrintFast(1,"\"");
+   }
+   if (fLineStyle > 1) {
+      PrintFast(19," stroke-dasharray=\"");
+      TString st = (TString)gStyle->GetLineStyleString(fLineStyle);
+      TObjArray *tokens = st.Tokenize(" ");
+      for (Int_t j = 0; j<tokens->GetEntries(); j++) {
+         Int_t it;
+         sscanf(((TObjString*)tokens->At(j))->GetName(), "%d", &it);
+         if (j>0) PrintFast(1,",");
+         WriteReal(it/4);
+      }
+      delete tokens;
+      PrintFast(1,"\"");
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Print line join attributes - if present
+
+void TSVG::PrintLineJointAttributes()
+{
+   if (fgLineJoin)
+      PrintStr(TString::Format(" stroke-linejoin=\"%s\"", fgLineJoin == 1 ? "round" : "bevel"));
+   if (fgLineCap)
+      PrintStr(TString::Format(" stroke-linecap=\"%s\"", fgLineCap == 1 ? "round" : "square"));
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////
 /// This function defines a path with xw and yw and draw it according the
 /// value of nn:
@@ -908,28 +936,9 @@ void TSVG::DrawPS(Int_t nn, Double_t *xw, Double_t *yw)
 
    PrintPath(kTRUE, n, xw, yw, nn < 0);
 
-   if (nn > 0) {
-      PrintFast(21,"\" fill=\"none\" stroke=");
-      SetColorAlpha(fLineColor, kFALSE, kTRUE);
-      if(fLineWidth > 1.) {
-         PrintFast(15," stroke-width=\"");
-         WriteReal(fLineWidth, kFALSE);
-         PrintFast(1,"\"");
-      }
-      if (fLineStyle > 1) {
-         PrintFast(19," stroke-dasharray=\"");
-         TString st = (TString)gStyle->GetLineStyleString(fLineStyle);
-         TObjArray *tokens = st.Tokenize(" ");
-         for (Int_t j = 0; j<tokens->GetEntries(); j++) {
-            Int_t it;
-            sscanf(((TObjString*)tokens->At(j))->GetName(), "%d", &it);
-            if (j>0) PrintFast(1,",");
-            WriteReal(it/4);
-         }
-         delete tokens;
-         PrintFast(1,"\"");
-      }
-   } else {
+   if (nn > 0)
+      PrintLineStyleOnEndOfPath();
+   else {
       PrintFast(7,"\" fill=");
       if (fais == 0) {
          PrintFast(14,"\"none\" stroke=");
@@ -938,12 +947,53 @@ void TSVG::DrawPS(Int_t nn, Double_t *xw, Double_t *yw)
          SetColorAlpha(fFillColor);
       }
    }
-   if (fgLineJoin)
-      PrintStr(TString::Format(" stroke-linejoin=\"%s\"", fgLineJoin == 1 ? "round" : "bevel"));
-   if (fgLineCap)
-      PrintStr(TString::Format(" stroke-linecap=\"%s\"", fgLineCap == 1 ? "round" : "square"));
+   PrintLineJointAttributes();
    PrintFast(2,"/>");
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// This method draw N segments
+void TSVG::DrawSegments(Int_t n, Double_t *xw, Double_t *yw)
+{
+   if (fLineWidth < 0)
+      return;
+
+   if(n < 1) {
+      Error("DrawSegments", "At least one segment has to be provided");
+      return;
+   }
+
+   PrintStr("@");
+   PrintFast(9,"<path d=\"");
+
+   for(Int_t i = 0; i < 2*n; i += 2) {
+      Double_t ixd0 = XtoSVG(xw[i]);
+      Double_t iyd0 = YtoSVG(yw[i]);
+      Double_t ixd1 = XtoSVG(xw[i+1]);
+      Double_t iyd1 = YtoSVG(yw[i+1]);
+
+      Double_t dx   = ixd1 - ixd0;
+      Double_t dy   = iyd1 - iyd0;
+
+      if (fCompact && (TMath::Abs(dx) < kEpsilon))
+         dx = 0;
+      if (fCompact && (TMath::Abs(dy) < kEpsilon))
+         dy = 0;
+
+      if (dx || dy) {
+         PrintFast(1,"M");
+         WriteReal(ixd0, kFALSE);
+         PrintFast(1,",");
+         WriteReal(iyd0, kFALSE);
+         MovePS(dx, dy);
+      }
+   }
+
+   PrintLineStyleOnEndOfPath();
+   PrintLineJointAttributes();
+   PrintFast(2,"/>");
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Begin the Cell Array painting
@@ -1510,6 +1560,23 @@ void TSVG::Text(Double_t xx, Double_t yy, const char *chars)
       PrintStr("@");
       PrintFast(4,"</g>");
    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Draw text with URL.
+///
+
+void TSVG::TextUrl(Double_t x, Double_t y, const char *chars, const char *url)
+{
+   PrintStr("@");
+   PrintFast(9,"<a href=\"");
+   PrintStr(url);
+   PrintFast(2,"\">");
+   PrintStr("@");
+   Text(x, y, chars);
+   PrintStr("@");
+   PrintFast(4,"</a>");
+   PrintStr("@");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

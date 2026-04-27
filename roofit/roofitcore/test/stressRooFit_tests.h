@@ -900,18 +900,16 @@ public:
       // Fit model to data, extended ML term automatically included
       model.fitTo(*data);
 
-      // Plot data and PDF overlaid, use expected number of events for p.d.f projection normalization
-      // rather than observed number of events (==data->numEntries())
+      // Plot data and PDF overlaid
       RooPlot *xframe = x.frame(Title("extended ML fit example"));
       data->plotOn(xframe);
-      model.plotOn(xframe, Normalization(1.0, RooAbsReal::RelativeExpected));
+      model.plotOn(xframe);
 
       // Overlay the background component of model with a dashed line
-      model.plotOn(xframe, Components(bkg), LineStyle(kDashed), Normalization(1.0, RooAbsReal::RelativeExpected));
+      model.plotOn(xframe, Components(bkg), LineStyle(kDashed));
 
       // Overlay the background+sig2 components of model with a dotted line
-      model.plotOn(xframe, Components(RooArgSet(bkg, sig2)), LineStyle(kDotted),
-                   Normalization(1.0, RooAbsReal::RelativeExpected));
+      model.plotOn(xframe, Components(RooArgSet(bkg, sig2)), LineStyle(kDotted));
 
       /////////////////////
       // M E T H O D   2 //
@@ -2974,22 +2972,21 @@ public:
       RooPlot *frame1 = x.frame(Bins(30), Title("Physics sample"));
 
       // Plot all data tagged as physics sample
-      combData.plotOn(frame1, Cut("sample==sample::physics"));
+      std::unique_ptr<RooAbsData> slicedData1{combData.reduce(Cut("sample==sample::physics"))};
+      slicedData1->SetName("combData_Cut[sample==sample::physics]"); // to be consistent with reference file
+      slicedData1->plotOn(frame1);
 
       // Plot "physics" slice of simultaneous pdf.
-      // NBL You _must_ project the sample index category with data using ProjWData
-      // as a RooSimultaneous makes no prediction on the shape in the index category
-      // and can thus not be integrated
-      simPdf.plotOn(frame1, Slice(sample, "physics"), ProjWData(sample, combData));
-      simPdf.plotOn(frame1, Slice(sample, "physics"), Components("px"), ProjWData(sample, combData),
-                    LineStyle(kDashed));
+      simPdf.getPdf("physics")->plotOn(frame1);
+      simPdf.getPdf("physics")->plotOn(frame1, Components("px"), LineStyle(kDashed));
 
-      // The same plot for the control sample slice
+      // The same plot for the control sample slice.
       RooPlot *frame2 = x.frame(Bins(30), Title("Control sample"));
-      combData.plotOn(frame2, Cut("sample==sample::control"));
-      simPdf.plotOn(frame2, Slice(sample, "control"), ProjWData(sample, combData));
-      simPdf.plotOn(frame2, Slice(sample, "control"), Components("px_ctl"), ProjWData(sample, combData),
-                    LineStyle(kDashed));
+      std::unique_ptr<RooAbsData> slicedData2{combData.reduce(Cut("sample==sample::control"))};
+      slicedData2->SetName("combData_Cut[sample==sample::control]"); // to be consistent with reference file
+      slicedData2->plotOn(frame2);
+      simPdf.getPdf("control")->plotOn(frame2);
+      simPdf.getPdf("control")->plotOn(frame2, Components("px_ctl"), LineStyle(kDashed));
 
       regPlot(frame1, "rf501_plot1");
       regPlot(frame2, "rf501_plot2");
@@ -3528,77 +3525,6 @@ public:
 
       // Perform fit and save result
       std::unique_ptr<RooFitResult> r{model.fitTo(*data, Save())};
-
-      return true;
-   }
-};
-
-// Setting up a chi^2 fit to an unbinned dataset with X,Y,err(Y)
-// values (and optionally err(X) values).
-class TestBasic609 : public RooUnitTest {
-public:
-   TestBasic609(TFile *refFile, bool writeRef, int verbose)
-      : RooUnitTest("Chi^2 fit to X-Y dataset", refFile, writeRef, verbose)
-   {
-   }
-   bool testCode() override
-   {
-
-      // C r e a t e   d a t a s e t   w i t h   X   a n d   Y   v a l u e s
-      // -------------------------------------------------------------------
-
-      // Make weighted XY dataset with asymmetric errors stored
-      // The StoreError() argument is essential as it makes
-      // the dataset store the error in addition to the values
-      // of the observables. If errors on one or more observables
-      // are asymmetric, one can store the asymmetric error
-      // using the StoreAsymError() argument
-
-      RooRealVar x("x", "x", -11, 11);
-      RooRealVar y("y", "y", -10, 200);
-      RooDataSet dxy("dxy", "dxy", RooArgSet(x, y), StoreError(RooArgSet(x, y)));
-
-      // Fill an example dataset with X,err(X),Y,err(Y) values
-      for (int i = 0; i <= 10; i++) {
-
-         // Set X value and error
-         x = -10 + 2 * i;
-         x.setError(i < 5 ? 0.5 / 1. : 1.0 / 1.);
-
-         // Set Y value and error
-         y = x.getVal() * x.getVal() + 4 * fabs(RooRandom::randomGenerator()->Gaus());
-         y.setError(sqrt(y.getVal()));
-
-         dxy.add(RooArgSet(x, y));
-      }
-
-      // P e r f o r m   c h i 2   f i t   t o   X + / - d x   a n d   Y + / - d Y   v a l u e s
-      // ---------------------------------------------------------------------------------------
-
-      // Make fit function
-      RooRealVar a("a", "a", 0.0, -10, 10);
-      RooRealVar b("b", "b", 0.0, -100, 100);
-      RooRealVar c("c", "c", 0.0, -100, 100);
-      RooPolyVar f("f", "f", x, RooArgList(b, a, c));
-
-      // Plot dataset in X-Y interpretation
-      RooPlot *frame = x.frame(Title("Chi^2 fit of function set of (X#pmdX,Y#pmdY) values"));
-      dxy.plotOnXY(frame, YVar(y));
-
-      // Fit chi^2 using X and Y errors
-      std::unique_ptr<RooFitResult> fit1{f.chi2FitTo(dxy, YVar(y), Save(), PrintLevel(-1))};
-
-      // Overlay fitted function
-      f.plotOn(frame);
-
-      // Alternative: fit chi^2 integrating f(x) over ranges defined by X errors, rather
-      // than taking point at center of bin
-      std::unique_ptr<RooFitResult> fit2{f.chi2FitTo(dxy, YVar(y), Save(), PrintLevel(-1), Integrate(true))};
-
-      // Overlay alternate fit result
-      f.plotOn(frame, LineStyle(kDashed), LineColor(kRed), Name("alternate"));
-
-      regPlot(frame, "rf609_frame");
 
       return true;
    }

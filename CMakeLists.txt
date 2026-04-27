@@ -12,31 +12,10 @@ if(WIN32)
   cmake_policy(SET CMP0091 OLD)
   set(CMAKE_SKIP_TEST_ALL_DEPENDENCY TRUE)
 endif()
-if(CMAKE_HOST_APPLE AND (NOT CMAKE_OSX_SYSROOT OR CMAKE_OSX_SYSROOT STREQUAL ""))
-  # The SYSROOT *must* be set before the project() call
-  # TODO: The following code is *necessary* on a standard MacOS platform (e.g. an Apple MacOS machine), but may not
-  # be as necessary on other MacOS platforms (e.g. Nix). A PR removed the following code https://github.com/root-project/root/pull/19718
-  # and the CI was happy with it, but unfortunately it was working simply because during our CI run jobs something is
-  # setting the SDKROOT environment variable, which implicitly sets the CMAKE_OSX_SYSROOT variable. This was highlighted
-  # by another PR https://github.com/root-project/root/pull/19855. On a standard Apple MacOS system, where the SDKROOT
-  # variable is not set by default, the build of ROOT would fail without the following code. It is unclear what is setting
-  # the SDKROOT variable only during our CI jobs, logging to the same CI machines and launching a build manually shows
-  # the same build error.
-  find_program(XCRUN_EXECUTABLE xcrun)
-  if(EXISTS ${XCRUN_EXECUTABLE})
-    execute_process(COMMAND ${XCRUN_EXECUTABLE} --sdk macosx --show-sdk-path
-      OUTPUT_VARIABLE SDK_PATH
-      ERROR_QUIET
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if(NOT EXISTS "${SDK_PATH}")
-      message(FATAL_ERROR "Could not detect macOS SDK path")
-    endif()
 
-    set(CMAKE_OSX_SYSROOT "${SDK_PATH}" CACHE PATH "SDK path" FORCE)
-  else()
-    message(WARNING "The CMAKE_OSX_SYSROOT variable is not set and the 'xcrun' executable is not available. "
-                    "This build of ROOT might not be able to find the correct MacOS SDK.")
-  endif()
+if(CMAKE_HOST_APPLE)
+  # Don't move this because the SDK needs to be set before "project(ROOT)"
+  include(cmake/modules/SetOSX_SDK.cmake)
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR AND NOT ALLOW_IN_SOURCE)
@@ -261,8 +240,6 @@ if(ccache)
   if(EXISTS ${CCACHE_COMMAND})
     message(STATUS "Found ccache: ${CCACHE_COMMAND}")
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ${CCACHE_COMMAND})
-    execute_process(COMMAND ${CCACHE_COMMAND} "-V" OUTPUT_VARIABLE CCACHE_VERSION)
-    string(REGEX REPLACE "ccache version ([0-9\\.]+).*" "\\1" CCACHE_VERSION ${CCACHE_VERSION})
   else()
     message(STATUS "Could NOT find ccache")
     set(ccache OFF CACHE BOOL "Use ccache (disabled since ccache was not found)" FORCE)
@@ -428,6 +405,16 @@ add_subdirectory (graf2d)
 add_subdirectory (graf3d)
 if(NOT minimal)
   add_subdirectory (gui)
+else()
+  if(asimage)
+    message(SEND_ERROR "minimal=ON is not compatible with asimage=ON. Consider setting instead gminimal=ON")
+  endif()
+  if(asimage_tiff)
+    message(SEND_ERROR "minimal=ON is not compatible with asimage_tiff=ON. Consider setting instead gminimal=ON")
+  endif()
+  if(x11)
+    message(SEND_ERROR "minimal=ON is not compatible with x11=ON. Consider setting instead gminimal=ON")
+  endif()
 endif()
 add_subdirectory (montecarlo)
 if(geom)
@@ -574,21 +561,25 @@ endif()
 ROOT_ADD_TEST_SUBDIRECTORY(tutorials)
 
 #---hsimple.root---------(use the executable for clearer dependencies and proper return code)---
-add_custom_target(hsimple ALL DEPENDS tutorials/hsimple.root)
-add_dependencies(hsimple onepcm)
-if(WIN32)
-  set(hsimple_cmd COMMAND ${CMAKE_COMMAND} -E env PATH="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}\\\;%PATH%"
-                          ROOT_INCLUDE_PATH=${DEFAULT_ROOT_INCLUDE_PATH}
-                          ROOTIGNOREPREFIX=1 ROOT_HIST=0 $<TARGET_FILE:root.exe> -l -q -b -n -x ${CMAKE_SOURCE_DIR}/tutorials/hsimple.C -e return)
-else()
-  set(hsimple_cmd COMMAND ROOT_INCLUDE_PATH=${DEFAULT_ROOT_INCLUDE_PATH}
-                          ROOTIGNOREPREFIX=1 ROOT_HIST=0 $<TARGET_FILE:root.exe> -l -q -b -n -x ${CMAKE_SOURCE_DIR}/tutorials/hsimple.C -e return)
+# We can't build hsimple when cross compiling
+if(NOT CMAKE_CROSSCOMPILING)
+  add_custom_target(hsimple ALL DEPENDS tutorials/hsimple.root)
+  add_dependencies(hsimple onepcm)
+  add_custom_command(OUTPUT tutorials/hsimple.root
+                    VERBATIM
+                    COMMAND
+                      ${CMAKE_COMMAND} -E env
+                      ROOT_INCLUDE_PATH=${DEFAULT_ROOT_INCLUDE_PATH}
+                      ROOTIGNOREPREFIX=1
+                      ROOT_HIST=0
+                      $<TARGET_FILE:root.exe> -q -b -n
+                        -e ".L ${CMAKE_SOURCE_DIR}/tutorials/hsimple.C"
+                        -e "hsimple();"
+                        -e return
+                    WORKING_DIRECTORY tutorials
+                    DEPENDS $<TARGET_FILE:root.exe> Cling Hist Tree Gpad Graf HistPainter move_artifacts)
+  install(FILES ${CMAKE_BINARY_DIR}/tutorials/hsimple.root DESTINATION ${CMAKE_INSTALL_TUTDIR} COMPONENT tests)
 endif()
-add_custom_command(OUTPUT tutorials/hsimple.root
-                   ${hsimple_cmd}
-                   WORKING_DIRECTORY tutorials
-                   DEPENDS $<TARGET_FILE:root.exe> Cling Hist Tree Gpad Graf HistPainter move_artifacts)
-install(FILES ${CMAKE_BINARY_DIR}/tutorials/hsimple.root DESTINATION ${CMAKE_INSTALL_TUTDIR} COMPONENT tests)
 
 if(runtime_cxxmodules)
   add_dependencies(hsimple modules_idx)

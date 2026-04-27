@@ -13,9 +13,8 @@ ROOT_STANDARD_LIBRARY_PACKAGE(GX11
   HEADERS
     TGX11.h
   SOURCES
-    src/gifdecode.c
-    src/gifencode.c
-    src/gifquantize.c
+    ../gifencode/gifdecode.cxx
+    ../gifencode/gifencode.cxx
     src/GX11Gui.cxx
     src/Rotated.cxx
     src/TGX11.cxx
@@ -34,6 +33,8 @@ ROOT_STANDARD_LIBRARY_PACKAGE(GX11
 )
 
 target_include_directories(GX11 PRIVATE ${X11_INCLUDE_DIR})
+target_include_directories(GX11 PRIVATE ../gifencode)
+
 
 if(AIX)
   target_include_directories(GX11 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)

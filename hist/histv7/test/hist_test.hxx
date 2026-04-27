@@ -2,31 +2,41 @@
 #define hist_test
 
 #include <ROOT/RAxes.hxx>
+#include <ROOT/RAxisVariant.hxx>
 #include <ROOT/RBinIndex.hxx>
+#include <ROOT/RBinIndexMultiDimRange.hxx>
 #include <ROOT/RBinIndexRange.hxx>
 #include <ROOT/RBinWithError.hxx>
 #include <ROOT/RCategoricalAxis.hxx>
 #include <ROOT/RHist.hxx>
 #include <ROOT/RHistAutoAxisFiller.hxx>
+#include <ROOT/RHistConcurrentFiller.hxx>
 #include <ROOT/RHistEngine.hxx>
+#include <ROOT/RHistFillContext.hxx>
 #include <ROOT/RHistStats.hxx>
 #include <ROOT/RRegularAxis.hxx>
+#include <ROOT/RSliceBinIndexMapper.hxx>
+#include <ROOT/RSliceSpec.hxx>
 #include <ROOT/RVariableBinAxis.hxx>
 #include <ROOT/RWeight.hxx>
 
 using ROOT::Experimental::RAxisVariant;
 using ROOT::Experimental::RBinIndex;
+using ROOT::Experimental::RBinIndexMultiDimRange;
 using ROOT::Experimental::RBinIndexRange;
 using ROOT::Experimental::RBinWithError;
 using ROOT::Experimental::RCategoricalAxis;
 using ROOT::Experimental::RHist;
 using ROOT::Experimental::RHistAutoAxisFiller;
+using ROOT::Experimental::RHistConcurrentFiller;
 using ROOT::Experimental::RHistEngine;
 using ROOT::Experimental::RHistStats;
 using ROOT::Experimental::RRegularAxis;
+using ROOT::Experimental::RSliceSpec;
 using ROOT::Experimental::RVariableBinAxis;
 using ROOT::Experimental::RWeight;
 using ROOT::Experimental::Internal::RAxes;
+using ROOT::Experimental::Internal::RSliceBinIndexMapper;
 
 #include <gtest/gtest.h>
 

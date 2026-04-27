@@ -8,21 +8,37 @@
 # For the list of contributors see $ROOTSYS/README/CREDITS.                    #
 ################################################################################
 
-import atexit
+from __future__ import annotations
+
 import builtins
 import os
+import platform
 import sys
 import types
 from importlib.abc import Loader, MetaPathFinder
 from importlib.machinery import ModuleSpec
-from typing import Optional, Union
-
-import cppyy
-import cppyy.types
 
 from . import _asan  # noqa: F401  # imported for side effects for setup specific to AddressSanitizer environments
 from ._facade import ROOTFacade
-from ._pythonization import _register_pythonizations
+from ._python_version import _root_python_version
+
+_runtime_version = platform.python_version()
+
+
+def _major_minor(v):
+    return ".".join(v.split(".")[:2])
+
+
+# Check for Python ABI compatibility with this ROOT build. This check prevents
+# hard crashes and undefined behavior, yielding helpful error messages instead.
+if _major_minor(_runtime_version) != _major_minor(_root_python_version):
+    import textwrap
+
+    message = f"""
+    ROOT was built for Python {_root_python_version}, but you are running Python {_runtime_version}.
+    Python major.minor versions must match. Use a matching Python or ROOT build.
+    """
+    raise ImportError(textwrap.dedent(message))
 
 # Prevent cppyy's check for extra header directory
 os.environ["CPPYY_API_PATH"] = "none"
@@ -46,10 +62,6 @@ if "win32" in sys.platform:
 _cached_strings = []
 for s in ["Branch", "FitFCN", "ROOT", "SetBranchAddress", "SetFCN", "_TClass__DynamicCast", "__class__"]:
     _cached_strings.append(sys.intern(s))
-
-
-# Trigger the addition of the pythonizations
-_register_pythonizations()
 
 # Check if we are in the IPython shell
 _is_ipython = hasattr(builtins, "__IPYTHON__")
@@ -105,7 +117,7 @@ def _can_be_module(obj) -> bool:
     return False
 
 
-def _lookup_root_module(fullname: str) -> Optional[Union[types.ModuleType, cppyy.types.Scope]]:
+def _lookup_root_module(fullname: str) -> Optional[Union[types.ModuleType, cppyy.types.Scope]]:  # noqa: F821
     """
     Recursively looks up attributes of the ROOT facade, using a full module
     name, and return it if it can be used as a ROOT submodule. This is the case
@@ -173,7 +185,6 @@ if _is_ipython:
 
     ip = get_ipython()
     if hasattr(ip, "kernel"):
-        import JupyROOT  # noqa: F401  # imported the side effect of setting up JupyROOT
+        from . import _jupyroot  # noqa: F401  # imported the side effect of setting up JupyROOT
 
         # from . import JsMVA
-

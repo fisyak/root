@@ -170,7 +170,7 @@ These operations do not modify the dataframe or book computations but simply ret
 | GetFilterNames() | Return the names of all filters in the computation graph. |
 | GetNRuns() | Return the number of event loops run by this RDataFrame instance so far. |
 | GetNSlots() | Return the number of processing slots that RDataFrame will use during the event loop (i.e. the concurrency level). |
-| SaveGraph() | Store the computation graph of an RDataFrame in [DOT format (graphviz)](https://en.wikipedia.org/wiki/DOT_(graph_description_language)) for easy inspection. See the [relevant section](\ref representgraph) for details. |
+| ROOT::RDF::SaveGraph() | Store the computation graph of an RDataFrame in [DOT format (graphviz)](https://en.wikipedia.org/wiki/DOT_(graph_description_language)) for easy inspection. See the [relevant section](\ref representgraph) for details. |
 
 \anchor rdf_intro
 ## Introduction
@@ -533,6 +533,8 @@ h = df.Define("good_pts", "pt[pt > 0]").Histo1D("good_pts")
 ~~~
 
 Learn more at ROOT::VecOps::RVec.
+
+ROOT provides convenience utility functions to work with RVec which are available in the [ROOT::VecOps namespace](\ref vecops)
 
 \anchor transformations
 ## Transformations: manipulating data
@@ -1200,6 +1202,14 @@ ROOT::RDF::Experimental::RResultMap<TH1D> hx = ROOT::RDF::Experimental::Variatio
 hx["nominal"].Draw(); // same effect as nominal_hx->Draw()
 hx["pt:down"].Draw("SAME");
 hx["pt:up"].Draw("SAME");
+~~~
+
+A shorter expression syntax is allowed for convenience (see the docs of the Vary overloads for more details):
+
+~~~{.cpp}
+auto nominal_hx =
+   df.Vary("pt", "{pt*0.9f, pt*1.1f}", {"down", "up"})
+// The rest is the same as above
 ~~~
 
 A list of variation "tags" is passed as the last argument to Vary(). The tags give names to the varied values that are returned
@@ -1940,7 +1950,7 @@ df.Filter("std::isfinite(x)").Mean("x")
 \endcode
 
 \anchor rosetta-stone
-### Translating TTree::Draw to RDataFrame 
+### Translating TTree commands to RDataFrame
 
 <table>
 <tr>
@@ -2026,7 +2036,7 @@ df.Define("good_pt", "Muon_pt[Muon_pt > 100]").Histo1D("good_pt")->Draw();
    <td>
 ~~~{cpp}
 // Draw the histogram and fill hnew with it
-tree->Draw("sqrt(x)>>hnew","y>0"); 
+tree->Draw("sqrt(x)>>hnew","y>0");
 
 // Retrieve hnew from the current directory
 auto hnew = gDirectory->Get<TH1F>("hnew");
@@ -2077,7 +2087,7 @@ df.Range(5,7).Histo1D("x")->Draw();
 <tr>
    <td>
 ~~~{cpp}
-// Draw the X() component of the 
+// Draw the X() component of the
 // ROOT::Math::DisplacementVector3D in vec_list
 tree->Draw("vec_list.X()");
 ~~~
@@ -2091,8 +2101,8 @@ df.Define("x", "ROOT::RVecD out; for(const auto &el: vec_list) out.push_back(el.
 <tr>
    <td>
 ~~~{cpp}
-// Gather all values from a branch holding a collection per event, `pt`, 
-// and fill a histogram so that we can count the total number of values across all events 
+// Gather all values from a branch holding a collection per event, `pt`,
+// and fill a histogram so that we can count the total number of values across all events
 tree->Draw("pt>>histo");
 auto histo = gDirectory->Get<TH1D>("histo");
 histo->GetEntries();
@@ -2101,6 +2111,43 @@ histo->GetEntries();
    <td>
 ~~~{cpp}
 df.Histo1D("pt")->GetEntries();
+~~~
+   </td>
+</tr>
+<tr>
+   <td>
+      <b>TTree::Scan()</b>
+   </td>
+   <td>
+      <b>ROOT::RDataFrame</b>
+   </td>
+</tr>
+<tr>
+   <td>
+~~~{cpp}
+// Print a table of the first 10 entries for all variables in the Tree
+// if the first entry in the Muon_pt collection is > 10.
+tree->Scan("*", "Muon_pt[0] > 10.", "", 10);
+~~~
+   </td>
+   <td>
+~~~{cpp}
+// Selecting columns using a regular expression
+df.Filter("Muon_pt[0] > 10.").Display(".*", 10)->Print();
+~~~
+   </td>
+</tr>
+<tr>
+   <td>
+~~~{cpp}
+// For 10 events, print Muon_pt and Muon_eta, starting at entry 100
+tree->Scan("Muon_pt:Muon_eta", "", "", 10, 100);
+~~~
+   </td>
+   <td>
+~~~{cpp}
+// Selecting columns using a collection of names
+df.Range(100, 0).Display({"Muon_pt", "Muon_eta"}, 10)->Print();
 ~~~
    </td>
 </tr>
@@ -2224,17 +2271,6 @@ RDataFrame::RDataFrame(std::unique_ptr<ROOT::RDF::RDataSource> ds, const ColumnN
 RDataFrame::RDataFrame(ROOT::RDF::Experimental::RDatasetSpec spec)
    : RInterface(std::make_shared<RDFDetail::RLoopManager>(std::move(spec)))
 {
-}
-
-RDataFrame::~RDataFrame()
-{
-   // If any node of the computation graph associated with this RDataFrame
-   // declared code to jit, we need to make sure the compilation actually
-   // happens. For example, a jitted Define could have been booked but
-   // if the computation graph is not actually run then the code of the
-   // Define node is not jitted. This in turn would cause memory leaks.
-   // See https://github.com/root-project/root/issues/15399
-   fLoopManager->Jit();
 }
 
 namespace RDF {

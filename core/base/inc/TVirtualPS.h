@@ -42,6 +42,9 @@ protected:
    char          *fBuffer{nullptr};         // File buffer
    const char    *fImplicitCREsc{nullptr};  // Escape symbol before enforced new line
 
+   Bool_t         OpenStream(const char *fname, Bool_t binary = kFALSE);
+   void           CloseStream();
+
 public:
    TVirtualPS();
    TVirtualPS(const char *filename, Int_t type=-111);
@@ -58,10 +61,12 @@ public:
    virtual void  DrawPolyMarker(Int_t n, Double_t *x, Double_t *y) = 0;
    virtual void  DrawPS(Int_t n, Float_t *xw, Float_t *yw) = 0;
    virtual void  DrawPS(Int_t n, Double_t *xw, Double_t *yw) = 0;
+   virtual void  DrawSegments(Int_t n, Double_t *xw, Double_t *yw);
    virtual void  NewPage() = 0;
    virtual void  Open(const char *filename, Int_t type=-111) = 0;
    virtual void  Text(Double_t x, Double_t y, const char *string) = 0;
    virtual void  Text(Double_t x, Double_t y, const wchar_t *string) = 0;
+   virtual void  TextUrl(Double_t x, Double_t y, const char *string, const char *url) = 0;
    virtual void  SetColor(Float_t r, Float_t g, Float_t b) = 0;
 
    virtual void  PrintFast(Int_t nch, const char *string="");

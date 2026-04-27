@@ -21,8 +21,10 @@
 #include <RooRealProxy.h>
 #include <RooSetProxy.h>
 
+#include <memory>
 #include <stack>
 
+class ChangeOperModeRAII;
 class RooAbsArg;
 class RooAbsCategory;
 class RooAbsPdf;
@@ -62,14 +64,18 @@ public:
    void constOptimizeTestStatistic(ConstOpCode /*opcode*/, bool /*doAlsoTrackingOpt*/) override {}
 
    bool hasGradient() const override;
+   bool hasHessian() const override;
 
    void gradient(double *out) const override;
+   void hessian(double *out) const override;
 
    void generateGradient();
+   void generateHessian();
 
    void setUseGeneratedFunctionCode(bool);
-
    void writeDebugMacro(std::string const &) const;
+
+   std::unique_ptr<ChangeOperModeRAII> setOperModes(RooAbsArg::OperMode opMode);
 
 protected:
    double evaluate() const override;

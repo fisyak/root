@@ -1,4 +1,4 @@
-# RNTuple Binary Format Specification 1.0.1.0
+# RNTuple Binary Format Specification 1.0.2.0
 
 ## Versioning Notes
 
@@ -392,6 +392,7 @@ The "flags" field can have any of the following bits set:
 | 0x01     | Repetitive field, i.e. for every entry $n$ copies of the field are stored  |
 | 0x02     | Projected field                                                            |
 | 0x04     | Has ROOT type checksum as reported by TClass                               |
+| 0x08     | The field is a collection that was stored using a SoA layout               |
 
 If `flag==0x01` (_repetitive field_) is set, the field represents a fixed-size array.
 For fixed-size arrays, another (sub) field with `Parent Field ID` equal to the ID of this field
@@ -414,6 +415,11 @@ The following restrictions apply on field projections:
 
 If `flag==0x04` (_type checksum_) is set, the field metadata contain the checksum of the ROOT streamer info.
 This checksum is only used for I/O rules in order to find types that are identified by checksum.
+
+If `flag==0x08` (_SoA_) is set,
+the field is a collection that was represented in memory in a SoA (struct of arrays) layout.
+The flag has no impact otherwise on the on-disk representation of the collection.
+It can be used to distingush collections stored through a collection proxy from collection stored with a SoA field.
 
 Depending on the flags, the following optional values follow:
 
@@ -562,6 +568,12 @@ If the index of the first element is negative (sign bit set), the column is defe
 In this case, no (synthetic) pages exist up to and including the cluster of the first element index.
 See Section "Page List Envelope" for further information about suppressed columns.
 
+Note that an unsuppressed deferred column must only be attached to a field that has no ancestor fields
+with the structural role collection or variant.
+For instance, columns belonging to nested structs can be deferred; columns belonging to a struct under a vector cannot.
+For the latter to work, the RNTuple metadata would need to store the sum of elements written in a collection
+(or individually for all variants) per cluster and cluster group, which is not recorded in this file format version.
+
 If flag 0x02 (column with range) is set, the column metadata contains the inclusive range of valid values
 for this column (used e.g. for quantized real values).
 The range is represented as a min and a max value, specified as IEEE 754 little-endian double precision floats.
@@ -650,6 +662,7 @@ In general, a schema extension is optional, and thus this record frame might be 
 The interpretation of the information contained therein should be identical
 as if it was found directly at the end of the header.
 This is necessary when fields have been added during writing.
+In particular, it is possible to add in the extension header subfields of parents defined in the regular header.
 
 Note that the field IDs and physical column IDs given by the serialization order
 should continue from the largest IDs found in the header.
@@ -699,6 +712,7 @@ It has the following contents, followed a locator to the linked RNTuple anchor a
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 The meaning of the Schema Version is described below.
+Note that the Attribute Anchor Uncompressed Size includes the 8 bytes of the checksum.
 
 ### Page List Envelope
 
@@ -888,6 +902,23 @@ For example, the type name `const pair<size_t, array<class ::Event, 2>>` will be
 `std::pair<std::uint64_t,std::array<Event,2>>` with an alias type name
 `std::pair<size_t,std::array<Event,2>>`.
 
+#### Treatment of ROOT Typedefs
+
+A noteworthy implementation detail of the ROOT implemetation is the treatment of ROOT typedefs for fundamental types.
+The types `Bool_t`, `Float_t`, `Double_t`, `[U]Char_t`, `[U]Short_t`, `[U]Int_t`, `[U]Long[64]_t`
+are not treated as typedefs but they are directly mapped to the corresponding normalized RNTuple fundamental types.
+
+An exception is `[U]Long64_t` that appears as a template parameter of a user-defined class,
+either directly or indirectly.
+This case is treated as a normal typedef,
+i.e. the RNTuple alias type will contain the type spelling that uses `[U]Long64_t`.
+For example, the type `MyClass<std::set<Long64_t>>` will be normalized to `MyClass<std::set<std::int64_t>>`
+with a type alias that is equal to the original spelling.
+This treatment is necessary for compatibility between the RNTuple schema and the ROOT streamer info records.
+
+The typedef `Double32_t` is treated as a normal typedef.
+It is always normalized to `double` and the type name containing `Double32_t` is stored as type alias.
+
 ### Fundamental Types
 
 The following fundamental types are stored as `plain` fields with a single column each.
@@ -1060,6 +1091,18 @@ The on-disk representation of associative collections is identical to a `std::ma
   - Child field of type `std::pair<K, V>`, where `K` and `V` must be types with RNTuple I/O support.
 
 N.B., proxy-based associative collections are supported in the RNTuple binary format, but currently are not implemented in ROOT's RNTuple reader and writer. This will be added in the future.
+
+#### Classes representing a SoA layout of an underlying record type
+
+User classes that are marked in the dictionary as SoA layout classes of an underlying record type `T`
+behave as collections of the given underlying record type.
+The underlying record type must be a user-defined class with RNTuple support.
+The on-disk representation is identical to a `std::vector<T>`, using two fields:
+  - Collection parent field whose principal column is of type `(Split)Index[64|32]`.
+  - Child field of type `T` with name `_0`.
+
+The field's type name is the type of the SoA class.
+The SoA flag of the field descriptor must be set.
 
 ### ROOT::RNTupleCardinality<SizeT>
 

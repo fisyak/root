@@ -79,13 +79,15 @@ extern "C" char *crypt(const char *, const char *);
 #   include <openssl/blowfish.h>
 #endif
 
-struct R__rsa_KEY: rsa_KEY { R__rsa_KEY(): rsa_KEY() {} };
-struct R__rsa_KEY_export: rsa_KEY_export {};
-struct R__rsa_NUMBER: rsa_NUMBER {};
-
 #ifdef R__SSL
    static BF_KEY fgBFKey; // Blowfish symmetric key
 #endif
+
+namespace ROOT::Deprecated {
+
+struct R__rsa_KEY: rsa_KEY { R__rsa_KEY(): rsa_KEY() {} };
+struct R__rsa_KEY_export: rsa_KEY_export {};
+struct R__rsa_NUMBER: rsa_NUMBER {};
 
 // Statics initialization
 TList          *TAuthenticate::fgAuthInfo = 0;
@@ -118,8 +120,12 @@ Int_t           TAuthenticate::fgProcessID = -1;
 
 TVirtualMutex *gAuthenticateMutex = 0;
 
+} // namespace ROOT::Deprecated
+
+TVirtualMutex *&gAuthenticateMutex = ROOT::Deprecated::gAuthenticateMutex;
+
 // Standard version of Sec Context match checking
-Int_t StdCheckSecCtx(const char *, TRootSecContext *);
+static Int_t StdCheckSecCtx(const char *, ROOT::Deprecated::TRootSecContext *);
 
 
 
@@ -158,8 +164,7 @@ static int auth_rand()
 ////////////////////////////////////////////////////////////////////////////////
 /// Create authentication object.
 
-TAuthenticate::TAuthenticate(TSocket *sock, const char *remote,
-                             const char *proto, const char *user)
+ROOT::Deprecated::TAuthenticate::TAuthenticate(TSocket *sock, const char *remote, const char *proto, const char *user)
 {
    if (gDebug > 2 && gAuthenticateMutex)
       Info("Authenticate", "locking mutex (pid:  %d)",gSystem->GetPid());
@@ -328,7 +333,7 @@ TAuthenticate::TAuthenticate(TSocket *sock, const char *remote,
 ////////////////////////////////////////////////////////////////////////////////
 /// Called in connection with a timer timeout
 
-void TAuthenticate::CatchTimeOut()
+void ROOT::Deprecated::TAuthenticate::CatchTimeOut()
 {
    Info("CatchTimeOut", "%d sec timeout expired (protocol: %s)",
         fgAuthTO, fgAuthMeth[fSecurity].Data());
@@ -344,7 +349,7 @@ void TAuthenticate::CatchTimeOut()
 /// Authenticate to remote rootd server. Return kTRUE if
 /// authentication succeeded.
 
-Bool_t TAuthenticate::Authenticate()
+Bool_t ROOT::Deprecated::TAuthenticate::Authenticate()
 {
    if (gDebug > 2 && gAuthenticateMutex)
       Info("Authenticate", "locking mutex (pid:  %d)",gSystem->GetPid());
@@ -656,7 +661,7 @@ negotia:
 /// Set default authentication environment. The values are inferred
 /// from fSecurity and fDetails.
 
-void TAuthenticate::SetEnvironment()
+void ROOT::Deprecated::TAuthenticate::SetEnvironment()
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -778,8 +783,7 @@ void TAuthenticate::SetEnvironment()
 ////////////////////////////////////////////////////////////////////////////////
 /// Try to get user name and passwd from several sources.
 
-Bool_t TAuthenticate::GetUserPasswd(TString &user, TString &passwd,
-                                    Bool_t &pwhash, Bool_t srppwd)
+Bool_t ROOT::Deprecated::TAuthenticate::GetUserPasswd(TString &user, TString &passwd, Bool_t &pwhash, Bool_t srppwd)
 {
    if (srppwd) {
       Error("GetUserPasswd", "SRP no longer supported by ROOT");
@@ -846,7 +850,7 @@ Bool_t TAuthenticate::GetUserPasswd(TString &user, TString &passwd,
 /// ~/.netrc files. For more info see the version with 4 arguments.
 /// This version is maintained for backward compatability reasons.
 
-Bool_t TAuthenticate::CheckNetrc(TString &user, TString &passwd)
+Bool_t ROOT::Deprecated::TAuthenticate::CheckNetrc(TString &user, TString &passwd)
 {
    Bool_t hash = false;
    return CheckNetrc(user, passwd, hash, /* srppwd */ false);
@@ -876,8 +880,7 @@ Bool_t TAuthenticate::CheckNetrc(TString &user, TString &passwd)
 ///
 /// for the secure protocols. All lines must start in the first column.
 
-Bool_t TAuthenticate::CheckNetrc(TString &user, TString &passwd,
-                                 Bool_t &pwhash, Bool_t srppwd)
+Bool_t ROOT::Deprecated::TAuthenticate::CheckNetrc(TString &user, TString &passwd, Bool_t &pwhash, Bool_t srppwd)
 {
    if (srppwd) {
       Error("CheckNetrc", "SRP no longer supported by ROOT");
@@ -971,7 +974,7 @@ again:
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the global user.
 
-const char *TAuthenticate::GetGlobalUser()
+const char *ROOT::Deprecated::TAuthenticate::GetGlobalUser()
 {
    return fgUser;
 }
@@ -979,7 +982,7 @@ const char *TAuthenticate::GetGlobalUser()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the global password hash flag.
 
-Bool_t TAuthenticate::GetGlobalPwHash()
+Bool_t ROOT::Deprecated::TAuthenticate::GetGlobalPwHash()
 {
    return fgPwHash;
 }
@@ -987,7 +990,7 @@ Bool_t TAuthenticate::GetGlobalPwHash()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the global SRP password flag.
 
-Bool_t TAuthenticate::GetGlobalSRPPwd()
+Bool_t ROOT::Deprecated::TAuthenticate::GetGlobalSRPPwd()
 {
    return false;
 }
@@ -995,7 +998,7 @@ Bool_t TAuthenticate::GetGlobalSRPPwd()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning default expiring date for new validity contexts
 
-TDatime TAuthenticate::GetGlobalExpDate()
+TDatime ROOT::Deprecated::TAuthenticate::GetGlobalExpDate()
 {
    return fgExpDate;
 }
@@ -1003,7 +1006,7 @@ TDatime TAuthenticate::GetGlobalExpDate()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the default user information.
 
-const char *TAuthenticate::GetDefaultUser()
+const char *ROOT::Deprecated::TAuthenticate::GetDefaultUser()
 {
    return fgDefaultUser;
 }
@@ -1011,7 +1014,7 @@ const char *TAuthenticate::GetDefaultUser()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the principal to be used to init Krb5 tickets.
 
-const char *TAuthenticate::GetKrb5Principal()
+const char *ROOT::Deprecated::TAuthenticate::GetKrb5Principal()
 {
    ::Error("Krb5Auth", "Kerberos5 is no longer supported by ROOT");
    return nullptr;
@@ -1020,7 +1023,7 @@ const char *TAuthenticate::GetKrb5Principal()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the authentication reuse settings.
 
-Bool_t TAuthenticate::GetAuthReUse()
+Bool_t ROOT::Deprecated::TAuthenticate::GetAuthReUse()
 {
    return fgAuthReUse;
 }
@@ -1028,7 +1031,7 @@ Bool_t TAuthenticate::GetAuthReUse()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the prompt user settings.
 
-Bool_t TAuthenticate::GetPromptUser()
+Bool_t ROOT::Deprecated::TAuthenticate::GetPromptUser()
 {
    return fgPromptUser;
 }
@@ -1036,7 +1039,7 @@ Bool_t TAuthenticate::GetPromptUser()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the method corresponding to idx.
 
-const char *TAuthenticate::GetAuthMethod(Int_t idx)
+const char *ROOT::Deprecated::TAuthenticate::GetAuthMethod(Int_t idx)
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -1051,7 +1054,7 @@ const char *TAuthenticate::GetAuthMethod(Int_t idx)
 /// Static method returning the method index (which can be used to find
 /// the method in GetAuthMethod()). Returns -1 in case meth is not found.
 
-Int_t TAuthenticate::GetAuthMethodIdx(const char *meth)
+Int_t ROOT::Deprecated::TAuthenticate::GetAuthMethodIdx(const char *meth)
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -1071,7 +1074,7 @@ Int_t TAuthenticate::GetAuthMethodIdx(const char *meth)
 /// Returns user name (which must be deleted by caller) or 0.
 /// If non-interactive run returns default user.
 
-char *TAuthenticate::PromptUser(const char *remote)
+char *ROOT::Deprecated::TAuthenticate::PromptUser(const char *remote)
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -1111,7 +1114,7 @@ char *TAuthenticate::PromptUser(const char *remote)
 /// to get passwd. Returns passwd (which must de deleted by caller) or 0.
 /// If non-interactive run returns -1
 
-char *TAuthenticate::PromptPasswd(const char *prompt)
+char *ROOT::Deprecated::TAuthenticate::PromptPasswd(const char *prompt)
 {
    if (isatty(0) == 0 || isatty(1) == 0) {
       ::Warning("TAuthenticate::PromptPasswd",
@@ -1163,7 +1166,7 @@ char *TAuthenticate::PromptPasswd(const char *prompt)
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the globus authorization hook (no longer supported)
 
-GlobusAuth_t TAuthenticate::GetGlobusAuthHook()
+ROOT::Deprecated::GlobusAuth_t ROOT::Deprecated::TAuthenticate::GetGlobusAuthHook()
 {
    return nullptr;
 }
@@ -1171,7 +1174,7 @@ GlobusAuth_t TAuthenticate::GetGlobusAuthHook()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the RSA public keys.
 
-const char *TAuthenticate::GetRSAPubExport(Int_t key)
+const char *ROOT::Deprecated::TAuthenticate::GetRSAPubExport(Int_t key)
 {
    key = (key >= 0 && key <= 1) ? key : 0;
    return fgRSAPubExport[key].keys;
@@ -1180,7 +1183,7 @@ const char *TAuthenticate::GetRSAPubExport(Int_t key)
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the RSA initialization flag.
 
-Int_t TAuthenticate::GetRSAInit()
+Int_t ROOT::Deprecated::TAuthenticate::GetRSAInit()
 {
    return fgRSAInit;
 }
@@ -1188,7 +1191,7 @@ Int_t TAuthenticate::GetRSAInit()
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method setting the default type of RSA key.
 
-void TAuthenticate::SetDefaultRSAKeyType(Int_t key)
+void ROOT::Deprecated::TAuthenticate::SetDefaultRSAKeyType(Int_t key)
 {
    if (key >= 0 && key <= 1)
       fgRSAKey = key;
@@ -1197,7 +1200,7 @@ void TAuthenticate::SetDefaultRSAKeyType(Int_t key)
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method setting RSA initialization flag.
 
-void TAuthenticate::SetRSAInit(Int_t init)
+void ROOT::Deprecated::TAuthenticate::SetRSAInit(Int_t init)
 {
    fgRSAInit = init;
 }
@@ -1205,7 +1208,7 @@ void TAuthenticate::SetRSAInit(Int_t init)
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning the list with authentication details.
 
-TList *TAuthenticate::GetAuthInfo()
+TList *ROOT::Deprecated::TAuthenticate::GetAuthInfo()
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -1217,7 +1220,7 @@ TList *TAuthenticate::GetAuthInfo()
 ////////////////////////////////////////////////////////////////////////////////
 /// Print error string depending on error code.
 
-void TAuthenticate::AuthError(const char *where, Int_t err)
+void ROOT::Deprecated::TAuthenticate::AuthError(const char *where, Int_t err)
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -1251,7 +1254,7 @@ void TAuthenticate::AuthError(const char *where, Int_t err)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set global user name to be used for authentication to rootd.
 
-void TAuthenticate::SetGlobalUser(const char *user)
+void ROOT::Deprecated::TAuthenticate::SetGlobalUser(const char *user)
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -1265,7 +1268,7 @@ void TAuthenticate::SetGlobalUser(const char *user)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set global passwd to be used for authentication to rootd.
 
-void TAuthenticate::SetGlobalPasswd(const char *passwd)
+void ROOT::Deprecated::TAuthenticate::SetGlobalPasswd(const char *passwd)
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -1279,7 +1282,7 @@ void TAuthenticate::SetGlobalPasswd(const char *passwd)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set global passwd hash flag to be used for authentication to rootd.
 
-void TAuthenticate::SetGlobalPwHash(Bool_t pwhash)
+void ROOT::Deprecated::TAuthenticate::SetGlobalPwHash(Bool_t pwhash)
 {
    fgPwHash = pwhash;
 }
@@ -1287,7 +1290,7 @@ void TAuthenticate::SetGlobalPwHash(Bool_t pwhash)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set global SRP passwd flag to be used for authentication to rootd.
 
-void TAuthenticate::SetGlobalSRPPwd(Bool_t)
+void ROOT::Deprecated::TAuthenticate::SetGlobalSRPPwd(Bool_t)
 {
    ::Error("SetGlobalSRPPwd", "SRP no longer supported by ROOT");
 }
@@ -1295,7 +1298,7 @@ void TAuthenticate::SetGlobalSRPPwd(Bool_t)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set default expiring date for new validity contexts
 
-void TAuthenticate::SetGlobalExpDate(TDatime expdate)
+void ROOT::Deprecated::TAuthenticate::SetGlobalExpDate(TDatime expdate)
 {
    fgExpDate = expdate;
 }
@@ -1303,7 +1306,7 @@ void TAuthenticate::SetGlobalExpDate(TDatime expdate)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set default user name.
 
-void TAuthenticate::SetDefaultUser(const char *defaultuser)
+void ROOT::Deprecated::TAuthenticate::SetDefaultUser(const char *defaultuser)
 {
    if (fgDefaultUser != "")
       fgDefaultUser = "";
@@ -1315,7 +1318,7 @@ void TAuthenticate::SetDefaultUser(const char *defaultuser)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set timeout (active if > 0)
 
-void TAuthenticate::SetTimeOut(Int_t to)
+void ROOT::Deprecated::TAuthenticate::SetTimeOut(Int_t to)
 {
    fgAuthTO = (to <= 0) ? -1 : to;
 }
@@ -1323,7 +1326,7 @@ void TAuthenticate::SetTimeOut(Int_t to)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set global AuthReUse flag
 
-void TAuthenticate::SetAuthReUse(Bool_t authreuse)
+void ROOT::Deprecated::TAuthenticate::SetAuthReUse(Bool_t authreuse)
 {
    fgAuthReUse = authreuse;
 }
@@ -1331,7 +1334,7 @@ void TAuthenticate::SetAuthReUse(Bool_t authreuse)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set global PromptUser flag
 
-void TAuthenticate::SetPromptUser(Bool_t promptuser)
+void ROOT::Deprecated::TAuthenticate::SetPromptUser(Bool_t promptuser)
 {
    fgPromptUser = promptuser;
 }
@@ -1339,7 +1342,7 @@ void TAuthenticate::SetPromptUser(Bool_t promptuser)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set secure authorization function.
 
-void TAuthenticate::SetSecureAuthHook(SecureAuth_t func)
+void ROOT::Deprecated::TAuthenticate::SetSecureAuthHook(SecureAuth_t func)
 {
    fgSecAuthHook = func;
 }
@@ -1348,7 +1351,7 @@ void TAuthenticate::SetSecureAuthHook(SecureAuth_t func)
 /// Set kerberos5 authorization function. Automatically called when
 /// libKrb5Auth is loaded.
 
-void TAuthenticate::SetKrb5AuthHook(Krb5Auth_t)
+void ROOT::Deprecated::TAuthenticate::SetKrb5AuthHook(Krb5Auth_t)
 {
    ::Error("Krb5Auth", "Kerberos5 is no longer supported by ROOT");
 }
@@ -1357,7 +1360,7 @@ void TAuthenticate::SetKrb5AuthHook(Krb5Auth_t)
 /// Set Globus authorization function. Automatically called when
 /// libGlobusAuth is loaded.
 
-void TAuthenticate::SetGlobusAuthHook(GlobusAuth_t)
+void ROOT::Deprecated::TAuthenticate::SetGlobusAuthHook(GlobusAuth_t)
 {
    ::Error("GlobusAuth", "Globus is no longer supported by ROOT");
 }
@@ -1365,7 +1368,7 @@ void TAuthenticate::SetGlobusAuthHook(GlobusAuth_t)
 ////////////////////////////////////////////////////////////////////////////////
 /// SSH client authentication code (no longer supported)
 
-Int_t TAuthenticate::SshAuth(TString & /* user */)
+Int_t ROOT::Deprecated::TAuthenticate::SshAuth(TString & /* user */)
 {
    ::Error("SshAuth", "SSH is no longer supported by ROOT");
    return 1;
@@ -1374,7 +1377,7 @@ Int_t TAuthenticate::SshAuth(TString & /* user */)
 ////////////////////////////////////////////////////////////////////////////////
 /// Method returning the user to be used for the ssh login (no longer supported)
 
-const char *TAuthenticate::GetSshUser(TString /* user */) const
+const char *ROOT::Deprecated::TAuthenticate::GetSshUser(TString /* user */) const
 {
    ::Error("GetSshUser", "SSH is no longer supported by ROOT");
    return nullptr;
@@ -1386,7 +1389,7 @@ const char *TAuthenticate::GetSshUser(TString /* user */) const
 /// in the first field (in the case 'href' is a name, ie not IP address)
 /// Returns kTRUE if the two matches.
 
-Bool_t TAuthenticate::CheckHost(const char *host, const char *href)
+Bool_t ROOT::Deprecated::TAuthenticate::CheckHost(const char *host, const char *href)
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -1444,7 +1447,7 @@ Bool_t TAuthenticate::CheckHost(const char *host, const char *href)
 ////////////////////////////////////////////////////////////////////////////////
 /// RFIO authentication (no longer supported)
 
-Int_t TAuthenticate::RfioAuth(TString &)
+Int_t ROOT::Deprecated::TAuthenticate::RfioAuth(TString &)
 {
    ::Error("RfioAuth", "RfioAuth is no longer supported by ROOT");
    return -1;
@@ -1455,7 +1458,7 @@ Int_t TAuthenticate::RfioAuth(TString &)
 /// Returns 0 in case authentication failed
 ///         1 in case of success
 
-Int_t TAuthenticate::ClearAuth(TString &user, TString &passwd, Bool_t &pwdhash)
+Int_t ROOT::Deprecated::TAuthenticate::ClearAuth(TString &user, TString &passwd, Bool_t &pwdhash)
 {
    R__LOCKGUARD2(gAuthenticateMutex);
 
@@ -1907,8 +1910,8 @@ Int_t TAuthenticate::ClearAuth(TString &user, TString &passwd, Bool_t &pwdhash)
 /// (host,user), setting fHostAuth accordingly.
 /// If no entry is found fHostAuth is not changed
 
-THostAuth *TAuthenticate::GetHostAuth(const char *host, const char *user,
-                                      Option_t */*opt*/, Int_t *exact)
+ROOT::Deprecated::THostAuth *
+ROOT::Deprecated::TAuthenticate::GetHostAuth(const char *host, const char *user, Option_t */*opt*/, Int_t *exact)
 {
    if (exact)
       *exact = 0;
@@ -1979,8 +1982,8 @@ THostAuth *TAuthenticate::GetHostAuth(const char *host, const char *user,
 /// in the fgAuthInfo list
 /// Returns pointer to it or 0
 
-THostAuth *TAuthenticate::HasHostAuth(const char *host, const char *user,
-                                      Option_t */*opt*/)
+ROOT::Deprecated::THostAuth *
+ROOT::Deprecated::TAuthenticate::HasHostAuth(const char *host, const char *user, Option_t */*opt*/)
 {
    if (gDebug > 2)
       ::Info("TAuthenticate::HasHostAuth", "enter ... %s ... %s", host, user);
@@ -2019,7 +2022,7 @@ THostAuth *TAuthenticate::HasHostAuth(const char *host, const char *user,
 /// The expanded, temporary file, is pointed to by 'ftmp'
 /// and should be already open. To be called recursively.
 
-void TAuthenticate::FileExpand(const char *fexp, FILE *ftmp)
+void ROOT::Deprecated::TAuthenticate::FileExpand(const char *fexp, FILE *ftmp)
 {
    FILE *fin;
    char line[kMAXPATHLEN];
@@ -2098,7 +2101,7 @@ void TAuthenticate::FileExpand(const char *fexp, FILE *ftmp)
 /// Determine default authentication details for method 'sec' and user 'usr'.
 /// Checks .rootrc family files. Returned string must be deleted by the user.
 
-char *TAuthenticate::GetDefaultDetails(int sec, int opt, const char *usr)
+char *ROOT::Deprecated::TAuthenticate::GetDefaultDetails(int sec, int opt, const char *usr)
 {
    char temp[kMAXPATHLEN] = { 0 };
    const char copt[2][5] = { "no", "yes" };
@@ -2129,7 +2132,7 @@ char *TAuthenticate::GetDefaultDetails(int sec, int opt, const char *usr)
 ////////////////////////////////////////////////////////////////////////////////
 /// Remove THostAuth instance from the list
 
-void TAuthenticate::RemoveHostAuth(THostAuth * ha, Option_t */*opt*/)
+void ROOT::Deprecated::TAuthenticate::RemoveHostAuth(THostAuth * ha, Option_t */*opt*/)
 {
    GetAuthInfo()->Remove(ha);
    // ... destroy it
@@ -2141,14 +2144,14 @@ void TAuthenticate::RemoveHostAuth(THostAuth * ha, Option_t */*opt*/)
 /// If 'opt' contains 's' or 'S' prints information about established TSecContext,
 /// else prints information about THostAuth
 
-void TAuthenticate::Show(Option_t *opt)
+void ROOT::Deprecated::TAuthenticate::Show(Option_t *opt)
 {
    TString sopt(opt);
 
    if (sopt.Contains("s", TString::kIgnoreCase)) {
 
       // Print established security contexts
-      TIter next(gROOT->GetListOfSecContexts());
+      TIter next(ROOT::Deprecated::Internal::GetListOfSecContexts(*gROOT));
       TSecContext *sc = 0;
       while ((sc = (TSecContext *)next()))
          sc->Print();
@@ -2177,9 +2180,9 @@ void TAuthenticate::Show(Option_t *opt)
 /// options = "Opt,strlen(username),username.Data()"
 /// message = kROOTD_USER, ...
 
-Int_t TAuthenticate::AuthExists(TString username, Int_t method, const char *options,
-                                Int_t *message, Int_t *rflag,
-                                CheckSecCtx_t checksecctx)
+Int_t ROOT::Deprecated::TAuthenticate::AuthExists(TString username, Int_t method, const char *options,
+                                                  Int_t *message, Int_t *rflag,
+                                                  CheckSecCtx_t checksecctx)
 {
    // Welcome message, if requested ...
    if (gDebug > 2)
@@ -2204,7 +2207,7 @@ Int_t TAuthenticate::AuthExists(TString username, Int_t method, const char *opti
 
    // If nothing found, try the all list
    if (!secctx) {
-      next = TIter(gROOT->GetListOfSecContexts());
+      next = TIter(ROOT::Deprecated::Internal::GetListOfSecContexts(*gROOT));
       while ((secctx = (TRootSecContext *)next())) {
          if (secctx->GetMethod() == method) {
             if (fRemote == secctx->GetHost()) {
@@ -2371,7 +2374,7 @@ Int_t TAuthenticate::AuthExists(TString username, Int_t method, const char *opti
 /// Initialize random machine using seed from /dev/urandom
 /// (or current time if /dev/urandom not available).
 
-void TAuthenticate::InitRandom()
+void ROOT::Deprecated::TAuthenticate::InitRandom()
 {
    static Bool_t notinit = kTRUE;
 
@@ -2399,7 +2402,7 @@ void TAuthenticate::InitRandom()
 /// Generate a valid pair of private/public RSA keys to protect for
 /// authentication token exchange
 
-Int_t TAuthenticate::GenRSAKeys()
+Int_t ROOT::Deprecated::TAuthenticate::GenRSAKeys()
 {
    if (gDebug > 2)
       Info("GenRSAKeys", "enter");
@@ -2643,7 +2646,7 @@ Int_t TAuthenticate::GenRSAKeys()
 ///       1      letters and numbers  (upper and lower case)
 ///       2      hex characters       (upper and lower case)
 
-char *TAuthenticate::GetRandString(Int_t opt, Int_t len)
+char *ROOT::Deprecated::TAuthenticate::GetRandString(Int_t opt, Int_t len)
 {
    unsigned int iimx[4][4] = {
       {0x0, 0xffffff08, 0xafffffff, 0x2ffffffe}, // opt = 0
@@ -2701,8 +2704,7 @@ char *TAuthenticate::GetRandString(Int_t opt, Int_t len)
 /// Returns number of bytes sent, or -1 in case of error.
 /// enc = 1 for private encoding, enc = 2 for public encoding
 
-Int_t TAuthenticate::SecureSend(TSocket *sock, Int_t enc,
-                                Int_t key, const char *str)
+Int_t ROOT::Deprecated::TAuthenticate::SecureSend(TSocket *sock, Int_t enc, Int_t key, const char *str)
 {
    char buftmp[kMAXSECBUF];
    char buflen[20];
@@ -2762,7 +2764,7 @@ Int_t TAuthenticate::SecureSend(TSocket *sock, Int_t enc,
 /// Return number of received bytes or -1 in case of error.
 /// dec = 1 for private decoding, dec = 2 for public decoding
 
-Int_t TAuthenticate::SecureRecv(TSocket *sock, Int_t dec, Int_t key, char **str)
+Int_t ROOT::Deprecated::TAuthenticate::SecureRecv(TSocket *sock, Int_t dec, Int_t key, char **str)
 {
 
    char buftmp[kMAXSECBUF];
@@ -2783,8 +2785,9 @@ Int_t TAuthenticate::SecureRecv(TSocket *sock, Int_t dec, Int_t key, char **str)
    if (len == 0) {
       return len;
    }
-   if (!strncmp(buflen, "-1", 2))
+   if (len < 0 || len > kMAXSECBUF) {
       return nrec;
+   }
 
    // Receive buffer
    if ((nrec = sock->RecvRaw(buftmp, len)) < 0)
@@ -2834,8 +2837,8 @@ Int_t TAuthenticate::SecureRecv(TSocket *sock, Int_t dec, Int_t key, char **str)
 ////////////////////////////////////////////////////////////////////////////////
 /// Store RSA public keys from export string rsaPubExport.
 
-Int_t TAuthenticate::DecodeRSAPublic(const char *rsaPubExport, R__rsa_NUMBER &rsa_n,
-                                     R__rsa_NUMBER &rsa_d, char **rsassl)
+Int_t ROOT::Deprecated::TAuthenticate::DecodeRSAPublic(const char *rsaPubExport, R__rsa_NUMBER &rsa_n,
+                                                       R__rsa_NUMBER &rsa_d, char **rsassl)
 {
    if (!rsaPubExport)
       return -1;
@@ -2937,7 +2940,7 @@ Int_t TAuthenticate::DecodeRSAPublic(const char *rsaPubExport, R__rsa_NUMBER &rs
 /// Store RSA public keys from export string rsaPubExport.
 /// Returns type of stored key, or -1 is not recognized
 
-Int_t TAuthenticate::SetRSAPublic(const char *rsaPubExport, Int_t klen)
+Int_t ROOT::Deprecated::TAuthenticate::SetRSAPublic(const char *rsaPubExport, Int_t klen)
 {
    if (gDebug > 2)
       ::Info("TAuthenticate::SetRSAPublic",
@@ -3015,7 +3018,7 @@ Int_t TAuthenticate::SetRSAPublic(const char *rsaPubExport, Int_t klen)
 /// Receives server RSA Public key
 /// Sends local RSA public key encoded
 
-Int_t TAuthenticate::SendRSAPublicKey(TSocket *socket, Int_t key)
+Int_t ROOT::Deprecated::TAuthenticate::SendRSAPublicKey(TSocket *socket, Int_t key)
 {
    // Receive server public key
    char serverPubKey[kMAXSECBUF];
@@ -3109,7 +3112,7 @@ Int_t TAuthenticate::SendRSAPublicKey(TSocket *socket, Int_t key)
 /// `<Root_etc_dir>/system.rootauthrc` and create related THostAuth objects.
 /// Files are read only if they changed since last reading
 
-Int_t TAuthenticate::ReadRootAuthrc()
+Int_t ROOT::Deprecated::TAuthenticate::ReadRootAuthrc()
 {
    // rootauthrc family
    TString tRootAuthrc;
@@ -3328,7 +3331,7 @@ Int_t TAuthenticate::ReadRootAuthrc()
 /// Returns: 1 if ok, 0 if not
 /// Deactivates Ctx is not valid
 
-Int_t StdCheckSecCtx(const char *user, TRootSecContext *ctx)
+static Int_t StdCheckSecCtx(const char *user, ROOT::Deprecated::TRootSecContext *ctx)
 {
    Int_t rc = 0;
 
@@ -3341,14 +3344,14 @@ Int_t StdCheckSecCtx(const char *user, TRootSecContext *ctx)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Tool for updating fgAuthInfo 
+/// Tool for updating fgAuthInfo
 /// 'nin' contains list of last input information through (re)reading
 /// of a rootauthrc-alike file. 'nin' info has priority.
 /// 'std' is cleaned from inactive members.
 /// 'nin' members used to update existing members in 'std' are
 /// removed from 'nin', do that they do not leak
 
-void TAuthenticate::MergeHostAuthList(TList *std, TList *nin, Option_t *opt)
+void ROOT::Deprecated::TAuthenticate::MergeHostAuthList(TList *std, TList *nin, Option_t *opt)
 {
    // Remove inactive from the 'std'
    TIter nxstd(std);
@@ -3362,7 +3365,7 @@ void TAuthenticate::MergeHostAuthList(TList *std, TList *nin, Option_t *opt)
 
    // Merge 'nin' info in 'std'
    TIter nxnew(nin);
-   THostAuth *hanew;
+   ROOT::Deprecated::THostAuth *hanew;
    while ((hanew = (THostAuth *)nxnew())) {
       if (hanew->NumMethods()) {
          TString hostsrv;
@@ -3398,9 +3401,9 @@ void TAuthenticate::MergeHostAuthList(TList *std, TList *nin, Option_t *opt)
 /// Tool for removing SecContext ctx from THostAuth listed in
 /// fgAuthInfo
 
-void TAuthenticate::RemoveSecContext(TRootSecContext *ctx)
+void ROOT::Deprecated::TAuthenticate::RemoveSecContext(TRootSecContext *ctx)
 {
-   THostAuth *ha = 0;
+   ROOT::Deprecated::THostAuth *ha = 0;
 
    // authinfo first
    TIter nxai(GetAuthInfo());
@@ -3419,7 +3422,7 @@ void TAuthenticate::RemoveSecContext(TRootSecContext *ctx)
 ////////////////////////////////////////////////////////////////////////////////
 /// Static method returning supported client protocol.
 
-Int_t TAuthenticate::GetClientProtocol()
+Int_t ROOT::Deprecated::TAuthenticate::GetClientProtocol()
 {
    return TSocket::GetClientProtocol();
 }

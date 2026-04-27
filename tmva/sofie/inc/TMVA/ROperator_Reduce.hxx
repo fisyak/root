@@ -18,7 +18,7 @@ namespace SOFIE{
 
 enum EReduceOpMode { ReduceMean, ReduceSum, ReduceSumSquare, ReduceProd, InvalidReduceOp };
 
-template <typename T, EReduceOpMode Op>
+template <EReduceOpMode Op>
 class ROperator_Reduce final : public ROperator
 {
 private:
@@ -76,7 +76,7 @@ public:
          std::sort(ax.begin(), ax.end());
          for (size_t j = 0; j < ax.size(); j++) {
             // erase reduced dimensions, but keep last one
-            if (outputShape.size() > 1) {
+            if (outputShape.size() > 0) {
                outputShape.erase(outputShape.begin() + ax[j]);
                for (size_t k = j+1; k < ax.size(); k++)
                   ax[k] -= 1;  // decrease by one since we have removed a value
@@ -113,16 +113,13 @@ public:
       fShapeY = DoShapeInference(fShapeX);
       model.AddIntermediateTensor(fNY, model.GetTensorType(fNX), fShapeY);
       if (model.Verbose()){
-         std::cout << Name() << " : " << fNX << " -> " << fNY << " shape " << ConvertShapeToString(fShapeY) << std::endl;
+         std::cout << Name() << " : " << fNX << " -> " << fNY << " shape " << ConvertDimShapeToString(fShapeY) << std::endl;
       }
       model.AddNeededStdLib("algorithm");
    }
 
    std::string Generate(std::string opName) override {
       opName = "op_" + opName;
-      if (fShapeX.empty() || fShapeY.empty()) {
-         throw std::runtime_error("TMVA SOFIE Reduce Op called to Generate without being initialized first");
-      }
 
       auto inputLength = TMVA::Experimental::SOFIE::ConvertDimShapeToLength(fShapeX);
       auto outputLength = TMVA::Experimental::SOFIE::ConvertDimShapeToLength(fShapeY);
@@ -166,7 +163,7 @@ public:
       std::string reducedLength;
       if (fInputDimShape) {
          reducedLength = "reducedLength_" + opName;
-         out << SP << "size_t " << reducedLength << " = " <<  inputLength << " / " << outputLength << ";\n";
+         out << SP << "size_t " << reducedLength << " = (" <<  inputLength << ") / (" << outputLength << ");\n";
       } else {
          int rLength = std::stoi(inputLength) / std::stoi(outputLength);
          reducedLength = std::to_string(rLength);
@@ -218,7 +215,7 @@ public:
          out << SP << SP << "}\n"; // end j loop
          out << SP  << "}\n"; // end i loop
          if(fReduceOpMode == ReduceMean) {
-            out << SP  << "for (size_t j = 0; i < " << outputLength << "; j++) {\n";
+            out << SP << "for (size_t j = 0; j < " << outputLength << "; j++) {\n";
             out << SP << SP << "tensor_" << fNY << "[j] /= static_cast<float>(" << reducedLength << ");\n";
             out << SP << "}\n"; // end j loop
          }

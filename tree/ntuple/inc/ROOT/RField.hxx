@@ -69,14 +69,18 @@ class RFieldZero final : public RFieldBase {
    /// This flag is reset on Clone().
    bool fAllowFieldSubstitutions = false;
 
+   std::unordered_set<std::string> fSubfieldNames; ///< Efficient detection of duplicate field names
+
 protected:
    std::unique_ptr<RFieldBase> CloneImpl(std::string_view newName) const final;
    void ConstructValue(void *) const final {}
 
 public:
-   RFieldZero() : RFieldBase("", "", ROOT::ENTupleStructure::kRecord, false /* isSimple */) {}
+   RFieldZero();
 
-   using RFieldBase::Attach;
+   /// A public version of the Attach method that allows piece-wise construction of the zero field.
+   /// Will throw on duplicate subfield names.
+   void Attach(std::unique_ptr<RFieldBase> child);
    size_t GetValueSize() const final { return 0; }
    size_t GetAlignment() const final { return 0; }
 
@@ -133,12 +137,12 @@ public:
 /// The field for a class with dictionary
 class RClassField : public RFieldBase {
 private:
-   enum ESubFieldRole {
+   enum ESubfieldRole {
       kBaseClass,
       kDataMember,
    };
-   struct RSubFieldInfo {
-      ESubFieldRole fRole;
+   struct RSubfieldInfo {
+      ESubfieldRole fRole;
       std::size_t fOffset;
    };
    // Information to read into the staging area a field that is used as an input to an I/O customization rule
@@ -162,7 +166,7 @@ private:
 
    TClass *fClass;
    /// Additional information kept for each entry in `fSubfields`
-   std::vector<RSubFieldInfo> fSubfieldsInfo;
+   std::vector<RSubfieldInfo> fSubfieldsInfo;
    std::size_t fMaxAlignment = 1;
 
    /// The staging area stores inputs to I/O rules according to the offsets given by the streamer info of
@@ -178,7 +182,7 @@ private:
 private:
    RClassField(std::string_view fieldName, const RClassField &source); ///< Used by CloneImpl
    RClassField(std::string_view fieldName, TClass *classp);
-   void Attach(std::unique_ptr<RFieldBase> child, RSubFieldInfo info);
+   void Attach(std::unique_ptr<RFieldBase> child, RSubfieldInfo info);
 
    /// Returns the id of member 'name' in the class field given by 'fieldId', or kInvalidDescriptorId if no such
    /// member exist. Looks recursively in base classes.
@@ -272,7 +276,7 @@ protected:
    void ReconcileOnDiskField(const RNTupleDescriptor &desc) final;
 
 public:
-   RStreamerField(std::string_view fieldName, std::string_view className, std::string_view typeAlias = "");
+   RStreamerField(std::string_view fieldName, std::string_view className);
    RStreamerField(RStreamerField &&other) = default;
    RStreamerField &operator=(RStreamerField &&other) = default;
    ~RStreamerField() final = default;
@@ -438,6 +442,7 @@ public:
 #include "RField/RFieldProxiedCollection.hxx"
 #include "RField/RFieldRecord.hxx"
 #include "RField/RFieldSequenceContainer.hxx"
+#include "RField/RFieldSoA.hxx"
 #include "RField/RFieldSTLMisc.hxx"
 
 namespace ROOT {

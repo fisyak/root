@@ -1,6 +1,5 @@
 #include "histutil_test.hxx"
 
-#include <TAxis.h>
 #include <TH1.h>
 
 #include <array>
@@ -29,12 +28,6 @@ TEST(ConvertToTH1I, RHistEngine)
    ASSERT_EQ(th1i->GetNbinsX(), Bins);
    ASSERT_EQ(th1i->GetNbinsY(), 1);
    ASSERT_EQ(th1i->GetNbinsZ(), 1);
-
-   const auto *xAxis = th1i->GetXaxis();
-   EXPECT_FALSE(xAxis->IsVariableBinSize());
-   EXPECT_EQ(xAxis->GetNbins(), Bins);
-   EXPECT_EQ(xAxis->GetXmin(), 0.0);
-   EXPECT_EQ(xAxis->GetXmax(), Bins);
 
    for (std::size_t i = 0; i < Bins + 2; i++) {
       // Bin 7 was filled twice.
@@ -107,6 +100,27 @@ TEST(ConvertToTH1I, RHist)
    EXPECT_EQ(stats[3], 2470);
 }
 
+TEST(ConvertToTH1I, RHistSetBinContentTainted)
+{
+   static constexpr std::size_t Bins = 20;
+   RHist<int> hist(Bins, {0, Bins});
+   hist.SetBinContent(RBinIndex(1), 42);
+   ASSERT_TRUE(hist.GetStats().IsTainted());
+
+   auto th1i = ConvertToTH1I(hist);
+   ASSERT_TRUE(th1i);
+
+   EXPECT_EQ(th1i->GetBinContent(2), 42);
+
+   EXPECT_EQ(th1i->GetEntries(), 0);
+   Double_t stats[4];
+   th1i->GetStats(stats);
+   EXPECT_EQ(stats[0], 0);
+   EXPECT_EQ(stats[1], 0);
+   EXPECT_EQ(stats[2], 0);
+   EXPECT_EQ(stats[3], 0);
+}
+
 TEST(ConvertToTH1C, RHistEngine)
 {
    static constexpr std::size_t Bins = 20;
@@ -156,7 +170,7 @@ TEST(ConvertToTH1L, RHistEngine)
    // Set one 64-bit long long value larger than what double can exactly represent.
    static constexpr long long Large = (1LL << 60) - 1;
    const std::array<RBinIndex, 1> indices = {1};
-   ROOT::Experimental::Internal::SetBinContent(engineLL, indices, Large);
+   engineLL.SetBinContent(indices, Large);
 
    th1l = ConvertToTH1L(engineLL);
    ASSERT_TRUE(th1l);

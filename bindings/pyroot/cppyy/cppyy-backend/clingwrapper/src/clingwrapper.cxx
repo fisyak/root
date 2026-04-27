@@ -1113,7 +1113,17 @@ Cppyy::TCppObject_t Cppyy::CallO(TCppMethod_t method,
     TCppObject_t self, size_t nargs, void* args, TCppType_t result_type)
 {
     TClassRef& cr = type_from_handle(result_type);
-    void* obj = ::operator new(gInterpreter->ClassInfo_Size(cr->GetClassInfo()));
+    auto *classInfo = cr->GetClassInfo();
+    // If the class info is missing, we better return null and let cppyy
+    // handle the error, before we step into undefined behavior
+    if(!classInfo)
+       return (TCppObject_t)0;
+    auto classSize = gInterpreter->ClassInfo_Size(classInfo);
+    // ClassInfo_Size returns -1 in case of invalid info, and 0 for
+    // forward-declared classes, which we can't use.
+    if (classSize <= 0)
+        return (TCppObject_t)0;
+    void* obj = ::operator new(classSize);
     if (WrapperCall(method, nargs, args, self, obj))
         return (TCppObject_t)obj;
     ::operator delete(obj);
@@ -1235,6 +1245,18 @@ bool Cppyy::IsAggregate(TCppType_t type)
     if (cr.GetClass())
         return cr->ClassProperty() & kClassIsAggregate;
     return false;
+}
+
+bool Cppyy::IsIntegerType(const std::string &type_name)
+{
+   // Test if the named type is an integer type
+   TypeInfo_t *ti = gInterpreter->TypeInfo_Factory(type_name.c_str());
+   if (!ti)
+      return false;
+   void *qtp = gInterpreter->TypeInfo_QualTypePtr(ti);
+   bool result = qtp ? gInterpreter->IsIntegerType(qtp) : false;
+   gInterpreter->TypeInfo_Delete(ti);
+   return result;
 }
 
 bool Cppyy::IsDefaultConstructable(TCppType_t type)
@@ -1693,7 +1715,7 @@ ptrdiff_t Cppyy::GetBaseOffset(TCppType_t derived, TCppType_t base,
             std::ostringstream msg;
             msg << "failed offset calculation between " << cb->GetName() << " and " << cd->GetName();
             // TODO: propagate this warning to caller w/o use of Python C-API
-            // PyErr_Warn(PyExc_RuntimeWarning, const_cast<char*>(msg.str().c_str()));
+            // PyErr_WarnEx(PyExc_RuntimeWarning, const_cast<char*>(msg.str().c_str()), 1);
             std::cerr << "Warning: " << msg.str() << '\n';
         }
 
@@ -2417,12 +2439,12 @@ intptr_t Cppyy::GetDatamemberOffset(TCppScope_t scope, TCppIndex_t idata)
         if (m->Property() & kIsStatic) {
             if (strchr(cr->GetName(), '<'))
                 gInterpreter->ProcessLine(((std::string)cr->GetName()+"::"+m->GetName()+";").c_str());
-            offset = (intptr_t)m->GetOffsetCint();    // yes, CINT (GetOffset() is both wrong
+            offset = (intptr_t)m->GetOffsetCint();    // yes, Cling (GetOffset() is both wrong
                                                       // and caches that wrong result!
             if (offset == (intptr_t)-1)
                 return (intptr_t)gInterpreter->ProcessLine((std::string("&")+cr->GetName()+"::"+m->GetName()+";").c_str());
         } else
-            offset = (intptr_t)m->GetOffsetCint();    // yes, CINT, see above
+            offset = (intptr_t)m->GetOffsetCint();    // yes, Cling, see above
         return offset;
     }
 

@@ -55,6 +55,10 @@ endif(ROOT_SKLEARN_FOUND)
 
 # Enable tests based on available python modules
 if(ROOT_TORCH_FOUND)
+   configure_file(generatePyTorchModelClassification.py generatePyTorchModelClassification.py COPYONLY)
+   configure_file(generatePyTorchModelMulticlass.py generatePyTorchModelMulticlass.py COPYONLY)
+   configure_file(generatePyTorchModelRegression.py generatePyTorchModelRegression.py COPYONLY)
+
    # Test PyTorch: Binary classification
 
    if (ROOT_SKLEARN_FOUND)
@@ -93,12 +97,12 @@ if((ROOT_KERAS_FOUND AND ROOT_THEANO_FOUND) OR (ROOT_KERAS_FOUND AND ROOT_TENSOR
    ROOT_ADD_TEST(PyMVA-Keras-Classification COMMAND testPyKerasClassification DEPENDS ${PyMVA-Keras-Classification-depends})
 
    # Test PyKeras: Regression
-   if (NOT ROOT_ARCHITECTURE MATCHES macosx)
-      #veto also keras tutorial on macos due to issue in disabling eager execution on macos
+   #if (NOT ROOT_ARCHITECTURE MATCHES macosx)
+   #veto also keras tutorial on macos due to issue in disabling eager execution on macos
       ROOT_EXECUTABLE(testPyKerasRegression testPyKerasRegression.C
          LIBRARIES ${Libraries})
       ROOT_ADD_TEST(PyMVA-Keras-Regression COMMAND testPyKerasRegression DEPENDS ${PyMVA-Keras-Regression-depends})
-   endif()
+   #endif()
 
 
    # Test PyKeras: Multi-class classification

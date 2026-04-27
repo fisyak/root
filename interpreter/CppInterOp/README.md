@@ -104,11 +104,18 @@ git clone --depth=1 https://github.com/compiler-research/cppyy-backend.git
 
 #### Setup Clang-REPL
 
-Clone the 20.x release of the LLVM project repository.
+Clone the 22.x release of the LLVM project repository.
 
 ```bash
-git clone --depth=1 --branch release/20.x https://github.com/llvm/llvm-project.git
+git clone --depth=1 --branch release/22.x https://github.com/llvm/llvm-project.git
 cd llvm-project
+```
+
+If you want to have out-of-process JIT execution enabled in CppInterOp, then apply this patch on Linux-x86_64 and MacOS arm64 environment.
+> Note that this patch will not work for Windows because out-of-process JIT execution is currently implemented for Linux-x86_64 and MacOS arm64 only.
+
+```bash
+git apply -v ../CppInterOp/patches/llvm/clang20-1-out-of-process.patch
 ```
 
 ##### Build Clang-REPL
@@ -130,6 +137,45 @@ cmake -DLLVM_ENABLE_PROJECTS=clang                                  \
                 -DCLANG_ENABLE_BOOTSTRAP=OFF                        \
                 ../llvm
 cmake --build . --target clang clang-repl --parallel $(nproc --all)
+```
+
+Note the 'llvm-project' directory location by executing
+
+```bash
+cd ../
+export LLVM_DIR=$PWD
+cd ../
+```
+
+##### Build Clang-REPL with Out-of-Process JIT Execution
+
+To have ``Out-of-Process JIT Execution`` enabled, run following commands to build clang and clang-repl to support this feature:
+> Only for Linux x86_64 and MacOS arm64
+
+```bash
+mkdir build 
+cd build 
+cmake -DLLVM_ENABLE_PROJECTS="clang;compiler-rt"                   \
+              -DLLVM_TARGETS_TO_BUILD="host;NVPTX"                \
+              -DCMAKE_BUILD_TYPE=Release                          \
+              -DLLVM_ENABLE_ASSERTIONS=ON                         \
+              -DCLANG_ENABLE_STATIC_ANALYZER=OFF                  \
+              -DCLANG_ENABLE_ARCMT=OFF                            \
+              -DCLANG_ENABLE_FORMAT=OFF                           \
+              -DCLANG_ENABLE_BOOTSTRAP=OFF                        \
+              ../llvm
+```
+
+###### For Linux x86_64
+
+```bash
+cmake --build . --target clang clang-repl llvm-jitlink-executor orc_rt-x86_64 --parallel $(nproc --all)
+```
+
+###### For MacOS arm64
+
+```bash
+cmake --build . --target clang clang-repl llvm-jitlink-executor orc_rt_osx --parallel $(sysctl -n hw.ncpu)
 ```
 
 Note the 'llvm-project' directory location by executing
@@ -163,9 +209,13 @@ Now CppInterOp can be built. This can be done by executing
 ```bash
 mkdir CppInterOp/build/
 cd CppInterOp/build/
-cmake -DBUILD_SHARED_LIBS=ON -DCPPINTEROP_USE_CLING=ON -DCPPINTEROP_USE_REPL=Off -DCling_DIR=$LLVM_DIR/build/tools/cling -DLLVM_DIR=$LLVM_DIR/build/lib/cmake/llvm -DClang_DIR=$LLVM_DIR/build/lib/cmake/clang -DCMAKE_INSTALL_PREFIX=$CPPINTEROP_DIR ..
+cmake -DBUILD_SHARED_LIBS=ON -DLLVM_DIR=$LLVM_DIR/build/lib/cmake/llvm -DClang_DIR=$LLVM_DIR/build/lib/cmake/clang -DCMAKE_INSTALL_PREFIX=$CPPINTEROP_DIR ..
 cmake --build . --target install --parallel $(nproc --all)
 ```
+
+and
+
+> Do make sure to pass ``DLLVM_BUILT_WITH_OOP_JIT=ON``, if you want to have out-of-process JIT execution feature enabled.
 
 #### Testing CppInterOp
 
@@ -209,12 +259,8 @@ hosted under the `root-project` (see the git path below).
 Use the following build instructions to build
 
 ```bash
-git clone https://github.com/root-project/cling.git
-cd ./cling/
-git checkout tags/v1.2
-git apply -v ../CppInterOp/patches/llvm/cling1.2-LookupHelper.patch
-cd ..
-git clone --depth=1 -b cling-llvm18 https://github.com/root-project/llvm-project.git
+git clone --depth=1 --branch v1.3 https://github.com/root-project/cling.git
+git clone --depth=1 -b cling-llvm20-20260119-01 https://github.com/root-project/llvm-project.git
 mkdir llvm-project/build
 cd llvm-project/build
 cmake -DLLVM_ENABLE_PROJECTS=clang                                 \
@@ -406,10 +452,10 @@ git clone --depth=1 https://github.com/compiler-research/cppyy-backend.git
 
 #### Setup Clang-REPL
 
-Clone the 20.x release of the LLVM project repository.
+Clone the 22.x release of the LLVM project repository.
 
 ```bash
-git clone --depth=1 --branch release/20.x https://github.com/llvm/llvm-project.git
+git clone --depth=1 --branch release/22.x https://github.com/llvm/llvm-project.git
 cd llvm-project
 ```
 
@@ -498,12 +544,8 @@ hosted under the `root-project` (see the git path below).
 Use the following build instructions to build
 
 ```powershell
-git clone https://github.com/root-project/cling.git
-cd .\cling\
-git checkout tags/v1.2
-git apply -v ..\CppInterOp\patches\llvm\cling1.2-LookupHelper.patch
-cd ..
-git clone --depth=1 -b cling-llvm18 https://github.com/root-project/llvm-project.git
+git clone --depth=1 --branch v1.3 https://github.com/root-project/cling.git
+git clone --depth=1 -b cling-llvm20-20260119-01 https://github.com/root-project/llvm-project.git
 $env:ncpus = $([Environment]::ProcessorCount)
 $env:PWD_DIR= $PWD.Path
 $env:CLING_DIR="$env:PWD_DIR\cling"

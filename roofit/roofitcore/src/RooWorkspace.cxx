@@ -178,7 +178,7 @@ RooWorkspace::RooWorkspace(const char* name, const char* title) :
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Construct empty workspace with given name and option to export reference to
-/// all workspace contents to a CINT namespace with the same name.
+/// all workspace contents to a Cling namespace with the same name.
 
 RooWorkspace::RooWorkspace(const char* name, bool /*doCINTExport*/)  :
   TNamed(name,name), _classes(this)
@@ -623,22 +623,6 @@ bool RooWorkspace::import(const RooAbsArg& inArg,
   RooArgSet(*cloneTop).snapshot(cloneSet2, !noRecursion);
   RooAbsArg* cloneTop2 = cloneSet2.find(topName2.c_str()) ;
 
-  // Make final check list of conflicting nodes
-  RooArgSet conflictNodes2 ;
-  RooArgSet branchSet2 ;
-  for (const auto branch2 : branchSet2) {
-    if (_allOwnedNodes.find(branch2->GetName())) {
-      conflictNodes2.add(*branch2) ;
-    }
-  }
-
-  // Terminate here if there are conflicts and no resolution protocol
-  if (!conflictNodes2.empty()) {
-    coutE(ObjectHandling) << "RooWorkSpace::import(" << GetName() << ") ERROR object named " << inArg.GetName() << ": component(s) "
-        << conflictNodes2 << " cause naming conflict after conflict resolution protocol was executed" << std::endl ;
-    return true ;
-  }
-
   // Perform any auxiliary imports at this point
   for (const auto node : cloneSet2) {
     if (node->importWorkspaceHook(*this)) {
@@ -1075,7 +1059,7 @@ bool RooWorkspace::commitTransaction()
     return false ;
   }
 
-  // Publish sandbox nodes in directory and/or CINT if requested
+  // Publish sandbox nodes in directory and/or Cling if requested
   for(RooAbsArg* sarg : _sandboxNodes) {
     if (_dir && sarg->IsA() != RooConstVar::Class()) {
       _dir->InternalAppend(sarg) ;
@@ -1951,9 +1935,8 @@ bool RooWorkspace::import(TObject const& object, const char* aliasName, bool rep
     return true ;
   }
 
-  TH1::AddDirectory(false) ;
-  auto wrapper = new RooTObjWrap(object.Clone()) ;
-  TH1::AddDirectory(true) ;
+  TDirectory::TContext ctx{nullptr}; // No self-registration to directories
+  auto wrapper = new RooTObjWrap(object.Clone());
   wrapper->setOwning(true) ;
   wrapper->SetName(aliasName) ;
   wrapper->SetTitle(aliasName) ;

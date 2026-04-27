@@ -1664,11 +1664,10 @@ void TMVA::Factory::EvaluateAllMethods(void)
                TPrincipal *tpBkg = new TPrincipal(nmeth + nvar, "");
 
                //              set required tree branch references
-               Int_t ivar = 0;
                std::vector<TString> *theVars = new std::vector<TString>;
                std::vector<ResultsClassification *> mvaRes;
                for (MVector::iterator itrMethod = methodsNoCuts.begin(); itrMethod != methodsNoCuts.end();
-                    ++itrMethod, ++ivar) {
+                    ++itrMethod) {
                   MethodBase *m = dynamic_cast<MethodBase *>(*itrMethod);
                   if (m == 0)
                      continue;
@@ -2314,7 +2313,7 @@ TH1F *TMVA::Factory::EvaluateImportanceAll(DataLoader *loader, Types::EMVA theMe
       SROC = ROC[x];
       for (uint32_t i = 0; i < VIBITS; ++i) {
          if (x & (uint64_t(1) << i)) {
-            y = x & ~(1 << i);
+            y = x & ~(uint64_t(1) << i);
             std::bitset<VIBITS> ybitset(y);
             // need at least one variable
             // NOTE: if sub-seed is zero then is the special case
@@ -2413,7 +2412,7 @@ TH1F *TMVA::Factory::EvaluateImportanceShort(DataLoader *loader, Types::EMVA the
    // removing global result because it is requiring a lot of RAM for all seeds
 
    for (uint32_t i = 0; i < VIBITS; ++i) {
-      if (x & (1 << i)) {
+      if (x & (uint64_t(1) << i)) {
          y = x & ~(uint64_t(1) << i);
          std::bitset<VIBITS> ybitset(y);
          // need at least one variable
@@ -2528,7 +2527,7 @@ TH1F *TMVA::Factory::EvaluateImportanceRandom(DataLoader *loader, UInt_t nseeds,
 
       for (uint32_t i = 0; i < 32; ++i) {
          if (x & (uint64_t(1) << i)) {
-            y = x & ~(1 << i);
+            y = x & ~(uint64_t(1) << i);
             std::bitset<32> ybitset(y);
             // need at least one variable
             // NOTE: if sub-seed is zero then is the special case

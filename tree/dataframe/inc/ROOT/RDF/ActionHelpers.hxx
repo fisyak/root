@@ -32,6 +32,14 @@
 #include "ROOT/RDF/RActionImpl.hxx"
 #include "ROOT/RDF/RMergeableValue.hxx"
 
+#include "RConfigure.h" // for R__HAS_ROOT7
+#ifdef R__HAS_ROOT7
+#include <ROOT/RHist.hxx>
+#include <ROOT/RHistConcurrentFiller.hxx>
+#include <ROOT/RHistEngine.hxx>
+#include <ROOT/RWeight.hxx>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -40,6 +48,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility> // std::index_sequence
 #include <vector>
@@ -150,6 +159,12 @@ public:
    {
       if (!fReturnEmptyReport)
          fNode->Report(*fReport);
+   }
+
+   std::unique_ptr<RMergeableValueBase> GetMergeableValue() const final
+   {
+      auto cutinfo_vec = fReport->fCutInfos;
+      return std::make_unique<RMergeableReport>(*fReport, cutinfo_vec);
    }
 
    std::string GetActionName() { return "Report"; }
@@ -468,6 +483,115 @@ public:
       return FillHelper(result, fObjects.size());
    }
 };
+
+#ifdef R__HAS_ROOT7
+template <typename BinContentType, bool WithWeight = false>
+class R__CLING_PTRCHECK(off) RHistFillHelper
+   : public ROOT::Detail::RDF::RActionImpl<RHistFillHelper<BinContentType, WithWeight>> {
+public:
+   using Result_t = ROOT::Experimental::RHist<BinContentType>;
+
+private:
+   std::unique_ptr<ROOT::Experimental::RHistConcurrentFiller<BinContentType>> fFiller;
+   std::vector<std::shared_ptr<ROOT::Experimental::RHistFillContext<BinContentType>>> fContexts;
+
+public:
+   RHistFillHelper(std::shared_ptr<ROOT::Experimental::RHist<BinContentType>> h, unsigned int nSlots)
+      : fFiller(new ROOT::Experimental::RHistConcurrentFiller<BinContentType>(h)), fContexts(nSlots)
+   {
+      for (unsigned int i = 0; i < nSlots; i++) {
+         fContexts[i] = fFiller->CreateFillContext();
+      }
+   }
+   RHistFillHelper(const RHistFillHelper &) = delete;
+   RHistFillHelper(RHistFillHelper &&) = default;
+   RHistFillHelper &operator=(const RHistFillHelper &) = delete;
+   RHistFillHelper &operator=(RHistFillHelper &&) = default;
+   ~RHistFillHelper() = default;
+
+   std::shared_ptr<Result_t> GetResultPtr() const { return fFiller.GetHist(); }
+
+   void Initialize() {}
+   void InitTask(TTreeReader *, unsigned int) {}
+
+   template <typename... ColumnTypes, const std::size_t... I>
+   void
+   ExecWithWeight(unsigned int slot, const std::tuple<const ColumnTypes &...> &columnValues, std::index_sequence<I...>)
+   {
+      // Build a tuple of const references with the actual arguments, stripping the weight and avoiding copies.
+      std::tuple<const std::tuple_element_t<I, std::tuple<ColumnTypes...>> &...> args(std::get<I>(columnValues)...);
+      ROOT::Experimental::RWeight weight(std::get<sizeof...(ColumnTypes) - 1>(columnValues));
+      fContexts[slot]->Fill(args, weight);
+   }
+
+   template <typename... ColumnTypes>
+   void Exec(unsigned int slot, const ColumnTypes &...columnValues)
+   {
+      if constexpr (WithWeight) {
+         auto t = std::forward_as_tuple(columnValues...);
+         ExecWithWeight(slot, t, std::make_index_sequence<sizeof...(ColumnTypes) - 1>());
+      } else {
+         fContexts[slot]->Fill(columnValues...);
+      }
+   }
+
+   void Finalize()
+   {
+      for (auto &&context : fContexts) {
+         context->Flush();
+      }
+   }
+
+   std::string GetActionName() { return "Hist"; }
+};
+
+template <typename BinContentType, bool WithWeight = false>
+class R__CLING_PTRCHECK(off) RHistEngineFillHelper
+   : public ROOT::Detail::RDF::RActionImpl<RHistEngineFillHelper<BinContentType, WithWeight>> {
+public:
+   using Result_t = ROOT::Experimental::RHistEngine<BinContentType>;
+
+private:
+   std::shared_ptr<Result_t> fHist;
+
+public:
+   RHistEngineFillHelper(std::shared_ptr<ROOT::Experimental::RHistEngine<BinContentType>> h) : fHist(h) {}
+   RHistEngineFillHelper(const RHistEngineFillHelper &) = delete;
+   RHistEngineFillHelper(RHistEngineFillHelper &&) = default;
+   RHistEngineFillHelper &operator=(const RHistEngineFillHelper &) = delete;
+   RHistEngineFillHelper &operator=(RHistEngineFillHelper &&) = default;
+   ~RHistEngineFillHelper() = default;
+
+   std::shared_ptr<Result_t> GetResultPtr() const { return fHist; }
+
+   void Initialize() {}
+   void InitTask(TTreeReader *, unsigned int) {}
+
+   template <typename... ColumnTypes, const std::size_t... I>
+   void ExecWithWeight(const std::tuple<const ColumnTypes &...> &columnValues, std::index_sequence<I...>)
+   {
+      // Build a tuple of const references with the actual arguments, stripping the weight and avoiding copies.
+      std::tuple<const std::tuple_element_t<I, std::tuple<ColumnTypes...>> &...> args(std::get<I>(columnValues)...);
+      ROOT::Experimental::RWeight weight(std::get<sizeof...(ColumnTypes) - 1>(columnValues));
+      fHist->FillAtomic(args, weight);
+   }
+
+   template <typename... ColumnTypes>
+   void Exec(unsigned int, const ColumnTypes &...columnValues)
+   {
+      if constexpr (WithWeight) {
+         auto t = std::forward_as_tuple(columnValues...);
+         ExecWithWeight(t, std::make_index_sequence<sizeof...(ColumnTypes) - 1>());
+      } else {
+         fHist->FillAtomic(columnValues...);
+      }
+   }
+
+   void Finalize() {}
+
+   std::string GetActionName() { return "Hist"; }
+};
+#endif
 
 class R__CLING_PTRCHECK(off) FillTGraphHelper : public ROOT::Detail::RDF::RActionImpl<FillTGraphHelper> {
 public:

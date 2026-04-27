@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <set>
 #include <string>
+#include <sys/types.h>
 #include <vector>
 
 // The cross-platform CPPINTEROP_API macro definition
@@ -32,11 +33,12 @@
 #endif
 #endif
 
-namespace Cpp {
+namespace CppImpl {
 using TCppIndex_t = size_t;
 using TCppScope_t = void*;
 using TCppConstScope_t = const void*;
 using TCppType_t = void*;
+using TCppConstType_t = const void*;
 using TCppFunction_t = void*;
 using TCppConstFunction_t = const void*;
 using TCppFuncAddr_t = void*;
@@ -93,18 +95,89 @@ enum Operator : unsigned char {
 };
 
 enum OperatorArity : unsigned char { kUnary = 1, kBinary, kBoth };
+enum Signedness : unsigned char { kSigned = 1, kUnsigned };
 
 /// Enum modelling CVR qualifiers.
 enum QualKind : unsigned char {
   Const = 1 << 0,
   Volatile = 1 << 1,
-  Restrict = 1 << 2
+  Restrict = 1 << 2,
+  All = Const | Volatile | Restrict
 };
 
+/// Enum modelling programming languages.
+enum class InterpreterLanguage : unsigned char {
+  Unknown,
+  Asm,
+  CIR,
+  LLVM_IR,
+  C,
+  CPlusPlus,
+  ObjC,
+  ObjCPlusPlus,
+  OpenCL,
+  OpenCLCXX,
+  CUDA,
+  HIP,
+  HLSL
+};
+
+/// Enum modelling language standards.
+enum class InterpreterLanguageStandard : unsigned char {
+  c89,
+  c94,
+  gnu89,
+  c99,
+  gnu99,
+  c11,
+  gnu11,
+  c17,
+  gnu17,
+  c23,
+  gnu23,
+  c2y,
+  gnu2y,
+  cxx98,
+  gnucxx98,
+  cxx11,
+  gnucxx11,
+  cxx14,
+  gnucxx14,
+  cxx17,
+  gnucxx17,
+  cxx20,
+  gnucxx20,
+  cxx23,
+  gnucxx23,
+  cxx26,
+  gnucxx26,
+  opencl10,
+  opencl11,
+  opencl12,
+  opencl20,
+  opencl30,
+  openclcpp10,
+  openclcpp2021,
+  hlsl,
+  hlsl2015,
+  hlsl2016,
+  hlsl2017,
+  hlsl2018,
+  hlsl2021,
+  hlsl202x,
+  hlsl202y,
+  lang_unspecified
+};
 inline QualKind operator|(QualKind a, QualKind b) {
   return static_cast<QualKind>(static_cast<unsigned char>(a) |
                                static_cast<unsigned char>(b));
 }
+
+enum class ValueKind : std::uint8_t {
+  None,
+  LValue,
+  RValue,
+};
 
 /// A class modeling function calls for functions produced by the interpreter
 /// in compiled code. It provides an information if we are calling a standard
@@ -298,7 +371,7 @@ CPPINTEROP_API bool IsComplete(TCppScope_t scope);
 CPPINTEROP_API size_t SizeOf(TCppScope_t scope);
 
 /// Checks if it is a "built-in" or a "complex" type.
-CPPINTEROP_API bool IsBuiltin(TCppType_t type);
+CPPINTEROP_API bool IsBuiltin(TCppConstType_t type);
 
 /// Checks if it is a templated class.
 CPPINTEROP_API bool IsTemplate(TCppScope_t handle);
@@ -384,6 +457,14 @@ CPPINTEROP_API std::string GetQualifiedName(TCppScope_t klass);
 /// the "qualified" name (including the namespace), it also
 /// gets the template arguments.
 CPPINTEROP_API std::string GetQualifiedCompleteName(TCppScope_t klass);
+
+/// Retrieves the Doxygen documentation comment for a declaration.
+/// \param[in] scope -- The declaration to get the comment for.
+/// \param[in] strip_comment_markers -- If true, removes comment markers (///,
+/// /**, etc.).
+/// \returns The documentation comment, or empty string if none exists.
+CPPINTEROP_API std::string GetDoxygenComment(TCppScope_t scope,
+                                             bool strip_comment_markers = true);
 
 /// Gets the list of namespaces utilized in the supplied scope.
 CPPINTEROP_API std::vector<TCppScope_t> GetUsingNamespaces(TCppScope_t scope);
@@ -541,6 +622,9 @@ CPPINTEROP_API bool IsDestructor(TCppConstFunction_t method);
 /// Checks if the provided parameter is a 'Static' method.
 CPPINTEROP_API bool IsStaticMethod(TCppConstFunction_t method);
 
+/// Checks if the provided constructor or conversion operator is explicit
+CPPINTEROP_API bool IsExplicit(TCppConstFunction_t method);
+
 ///\returns the address of the function given its potentially mangled name.
 CPPINTEROP_API TCppFuncAddr_t GetFunctionAddress(const char* mangled_name);
 
@@ -605,6 +689,20 @@ CPPINTEROP_API bool IsRecordType(TCppType_t type);
 /// Checks if the provided parameter is a Plain Old Data Type (POD).
 CPPINTEROP_API bool IsPODType(TCppType_t type);
 
+/// Checks if type has an integer representation.
+/// If \p s is non-null, it is set to the signedness of the type.
+CPPINTEROP_API bool IsIntegerType(TCppType_t type, Signedness* s = nullptr);
+
+/// Checks if type has a floating representation
+CPPINTEROP_API bool IsFloatingType(TCppType_t type);
+
+/// Checks if two types are the equivalent
+/// i.e. have the same canonical type
+CPPINTEROP_API bool IsSameType(TCppType_t type_a, TCppType_t type_b);
+
+/// Checks if type is a void pointer
+CPPINTEROP_API bool IsVoidPointerType(TCppType_t type);
+
 /// Checks if type is a pointer
 CPPINTEROP_API bool IsPointerType(TCppType_t type);
 
@@ -614,11 +712,8 @@ CPPINTEROP_API TCppType_t GetPointeeType(TCppType_t type);
 /// Checks if type is a reference
 CPPINTEROP_API bool IsReferenceType(TCppType_t type);
 
-/// Checks if type is a LValue reference
-CPPINTEROP_API bool IsLValueReferenceType(TCppType_t type);
-
-/// Checks if type is a LValue reference
-CPPINTEROP_API bool IsRValueReferenceType(TCppType_t type);
+/// Get if lvalue or rvalue reference
+CPPINTEROP_API ValueKind GetValueKind(TCppType_t type);
 
 /// Get the type that the reference refers to
 CPPINTEROP_API TCppType_t GetNonReferenceType(TCppType_t type);
@@ -712,6 +807,13 @@ CPPINTEROP_API bool ActivateInterpreter(TInterp_t I);
 /// matter, since the library will function in the same way.
 ///\returns the current interpreter instance, if any.
 CPPINTEROP_API TInterp_t GetInterpreter();
+
+/// Returns the programming language of the interpreter.
+CPPINTEROP_API InterpreterLanguage GetLanguage(TInterp_t I = nullptr);
+
+/// Returns the language standard of the interpreter.
+CPPINTEROP_API InterpreterLanguageStandard
+GetLanguageStandard(TInterp_t I = nullptr);
 
 /// Sets the Interpreter instance with an external interpreter, meant to
 /// be called by an external library that manages it's own interpreter.
@@ -891,12 +993,13 @@ CPPINTEROP_API TCppObject_t Construct(TCppScope_t scope, void* arena = nullptr,
 /// Destroys one or more objects of a class
 /// \param[in] This this pointer of the object to destruct. Can also be the
 /// starting address of an array of objects
+/// \param[in] scope Class to destruct
 /// \param[in] withFree if true, we call operator delete/free, else just the
 /// destructor
 /// \param[in] count indicate the number of objects to destruct, if \c This
 /// points to an array of objects
 /// \returns true if wrapper generation and invocation succeeded.
-CPPINTEROP_API bool Destruct(TCppObject_t This, TCppConstScope_t type,
+CPPINTEROP_API bool Destruct(TCppObject_t This, TCppConstScope_t scope,
                              bool withFree = true, TCppIndex_t count = 0UL);
 
 /// @name Stream Redirection
@@ -934,6 +1037,16 @@ CPPINTEROP_API void CodeComplete(std::vector<std::string>& Results,
 ///\returns 0 on success, non-zero on failure.
 CPPINTEROP_API int Undo(unsigned N = 1);
 
-} // end namespace Cpp
+#ifndef _WIN32
+/// Returns the process ID of the executor process.
+/// \returns the PID of the executor process.
+CPPINTEROP_API pid_t GetExecutorPID();
+#endif
 
+} // namespace CppImpl
+
+#ifndef CPPINTEROP_DISPATCH_H
+// NOLINTNEXTLINE(misc-unused-alias-decls)
+namespace Cpp = CppImpl;
+#endif
 #endif // CPPINTEROP_CPPINTEROP_H

@@ -493,3 +493,281 @@ TEST(OptParse, UnexpectedFlagComplex)
 
    EXPECT_EQ(opts.GetErrors(), std::vector<std::string>({"Unknown flag: -vvv"}));
 }
+
+TEST(OptParse, MultipleSwitches1)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-v"}, ROOT::RCmdLineOpts::EFlagType::kSwitch, "", ROOT::RCmdLineOpts::kFlagAllowMultiple);
+
+   const char *args[] = {"somename", "-vvv"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   EXPECT_EQ(opts.GetSwitch("v"), 3);
+}
+
+TEST(OptParse, MultipleSwitches2)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-v"}, ROOT::RCmdLineOpts::EFlagType::kSwitch, "", ROOT::RCmdLineOpts::kFlagAllowMultiple);
+
+   const char *args[] = {"somename", "-v", "-v", "-vv"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   EXPECT_EQ(opts.GetSwitch("v"), 4);
+}
+
+TEST(OptParse, MultipleSwitches3)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-v"}, ROOT::RCmdLineOpts::EFlagType::kSwitch, "", ROOT::RCmdLineOpts::kFlagAllowMultiple);
+   opts.AddFlag({"-a"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+
+   const char *args[] = {"somename", "-vav"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   EXPECT_EQ(opts.GetSwitch("v"), 2);
+   EXPECT_TRUE(opts.GetSwitch("a"));
+}
+
+TEST(OptParse, MultipleFlags)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-m", "--module"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "",
+                ROOT::RCmdLineOpts::kFlagAllowMultiple);
+
+   const char *args[] = {"somename", "-m", "foo", "--module", "bar", "-m", "baz"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   auto values = opts.GetFlagValues("m");
+   ASSERT_EQ(values.size(), 3);
+   EXPECT_EQ(values[0], "foo");
+   EXPECT_EQ(values[1], "bar");
+   EXPECT_EQ(values[2], "baz");
+}
+
+TEST(OptParse, MultipleFlagsMissingArg)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-m", "--module"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "",
+                ROOT::RCmdLineOpts::kFlagAllowMultiple);
+
+   const char *args[] = {"somename", "-m", "foo", "--module", "bar", "-m"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_EQ(opts.GetErrors(), std::vector<std::string>{"Missing argument for flag -m"});
+   auto values = opts.GetFlagValues("m");
+   ASSERT_EQ(values.size(), 2);
+}
+
+TEST(OptParse, MultipleFlagsAsInt)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-a"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "", ROOT::RCmdLineOpts::kFlagAllowMultiple);
+
+   const char *args[] = {"somename", "-a", "1", "-a", "42"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   auto values = opts.GetFlagValuesAs<int>("a");
+   ASSERT_EQ(values.size(), 2);
+   EXPECT_EQ(values[0], 1);
+   EXPECT_EQ(values[1], 42);
+}
+
+TEST(OptParse, MultipleFlagsAsIntError)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-a"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "", ROOT::RCmdLineOpts::kFlagAllowMultiple);
+
+   const char *args[] = {"somename", "-a", "1", "-a", "42a"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   EXPECT_THROW(opts.GetFlagValuesAs<int>("a"), std::invalid_argument);
+}
+
+TEST(OptParse, PrefixShort)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-D"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "",
+                ROOT::RCmdLineOpts::kFlagAllowMultiple | ROOT::RCmdLineOpts::kFlagPrefixArg);
+   opts.AddFlag({"-b"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+
+   const char *args[] = {"somename", "-b", "-Dname"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   EXPECT_TRUE(opts.GetSwitch("b"));
+   EXPECT_EQ(opts.GetFlagValue("D"), "name");
+}
+
+TEST(OptParse, PrefixLong)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"--D"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "",
+                ROOT::RCmdLineOpts::kFlagAllowMultiple | ROOT::RCmdLineOpts::kFlagPrefixArg);
+
+   const char *args[] = {"somename", "--Dname", "--DotherName"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   EXPECT_EQ(opts.GetFlagValues("D"), std::vector<std::string_view>({"name", "otherName"}));
+}
+
+TEST(OptParse, PrefixAmbiguous)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-f"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "", ROOT::RCmdLineOpts::kFlagPrefixArg);
+   EXPECT_THROW(opts.AddFlag({"-foo"}, ROOT::RCmdLineOpts::EFlagType::kSwitch), std::invalid_argument);
+}
+
+TEST(OptParse, PrefixAmbiguous2)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-f2"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "", ROOT::RCmdLineOpts::kFlagPrefixArg);
+   EXPECT_THROW(opts.AddFlag({"-f22"}, ROOT::RCmdLineOpts::EFlagType::kSwitch), std::invalid_argument);
+}
+
+TEST(OptParse, PrefixAmbiguous3)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-f22"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+   EXPECT_THROW(opts.AddFlag({"-f2"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "", ROOT::RCmdLineOpts::kFlagPrefixArg),
+                std::invalid_argument);
+}
+
+TEST(OptParse, PrefixNonAmbiguous)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-f22"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "", ROOT::RCmdLineOpts::kFlagPrefixArg);
+   opts.AddFlag({"-f2"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+}
+
+TEST(OptParse, PrefixNonAmbiguous2)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-f1"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "", ROOT::RCmdLineOpts::kFlagPrefixArg);
+   opts.AddFlag({"-f2"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "", ROOT::RCmdLineOpts::kFlagPrefixArg);
+}
+
+TEST(OptParse, PrefixMultiple)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"--D"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "",
+                ROOT::RCmdLineOpts::kFlagAllowMultiple | ROOT::RCmdLineOpts::kFlagPrefixArg);
+
+   const char *args[] = {"somename", "--D", "name", "--D=name", "--Dname"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   EXPECT_EQ(opts.GetFlagValues("D"), std::vector<std::string_view>({"name", "=name", "name"}));
+}
+
+TEST(OptParse, PrefixWithEqual)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"--D"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "",
+                ROOT::RCmdLineOpts::kFlagAllowMultiple | ROOT::RCmdLineOpts::kFlagPrefixArg);
+
+   const char *args[] = {"somename", "--Df=a", "--D", "f=a"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   EXPECT_EQ(opts.GetFlagValues("D"), std::vector<std::string_view>({"f=a", "f=a"}));
+}
+
+TEST(OptParse, PrefixShortMulticharacter)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-includeI"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "",
+                ROOT::RCmdLineOpts::kFlagAllowMultiple | ROOT::RCmdLineOpts::kFlagPrefixArg);
+
+   const char *args[] = {"somename", "-includeI/foo/bar", "-includeI", "/foo/bar"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_TRUE(opts.GetErrors().empty());
+   EXPECT_EQ(opts.GetFlagValues("includeI"), std::vector<std::string_view>({"/foo/bar", "/foo/bar"}));
+}
+
+TEST(OptParse, PrefixDisablesGrouping)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-D"}, ROOT::RCmdLineOpts::EFlagType::kWithArg, "", ROOT::RCmdLineOpts::kFlagPrefixArg);
+   opts.AddFlag({"-e"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+   opts.AddFlag({"-f"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+
+   const char *args[] = {"somename", "-efDfoo"};
+   opts.Parse(args, std::size(args));
+
+   EXPECT_GT(opts.GetErrors().size(), 0);
+   EXPECT_TRUE(opts.GetFlagValues("D").empty());
+}
+
+TEST(OptParse, PrefixSwitch)
+{
+   ROOT::RCmdLineOpts opts;
+   try {
+      opts.AddFlag({"-D"}, ROOT::RCmdLineOpts::EFlagType::kSwitch, "", ROOT::RCmdLineOpts::kFlagPrefixArg);
+      FAIL() << "adding a Switch with FlagPrefixArg should fail";
+   } catch (const std::invalid_argument &ex) {
+      EXPECT_STREQ(ex.what(), "Flag `-D` has option kFlagPrefixArg but it's a Switch, so the option makes no sense.");
+   }
+}
+
+TEST(OptParse, EmptyAliases)
+{
+   ROOT::RCmdLineOpts opts;
+   try {
+      opts.AddFlag({}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+      FAIL() << "adding a flag with no names should fail";
+   } catch (const std::invalid_argument &ex) {
+      EXPECT_STREQ(ex.what(), "AddFlag must receive at least 1 name for the flag!");
+   }
+}
+
+TEST(OptParse, DuplicateFlag)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-a"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+   try {
+      opts.AddFlag({"-a"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+      FAIL() << "adding the same flag twice should fail";
+   } catch (const std::invalid_argument &ex) {
+      EXPECT_STREQ(ex.what(), "Flag `a` was added multiple times. Note that adding flags with the same name but "
+                              "different number of `-` can only be done as aliases of the same call to AddFlag().");
+   }
+}
+
+TEST(OptParse, DuplicateFlagLongShort)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-a"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+   try {
+      opts.AddFlag({"--a"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+      FAIL() << "adding the same flag twice should fail";
+   } catch (const std::invalid_argument &ex) {
+      EXPECT_STREQ(ex.what(), "Flag `a` was added multiple times. Note that adding flags with the same name but "
+                              "different number of `-` can only be done as aliases of the same call to AddFlag().");
+   }
+}
+
+TEST(OptParse, DuplicateFlagLongShortOk)
+{
+   ROOT::RCmdLineOpts opts;
+   opts.AddFlag({"-a", "--a"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+}
+
+TEST(OptParse, DuplicateFlagAlias)
+{
+   ROOT::RCmdLineOpts opts;
+   try {
+      opts.AddFlag({"--a", "--a"}, ROOT::RCmdLineOpts::EFlagType::kSwitch);
+      FAIL() << "adding the same flag twice should fail";
+   } catch (const std::invalid_argument &ex) {
+      EXPECT_STREQ(ex.what(), "The same flag `--a` was passed multiple times to AddFlag().");
+   }
+}

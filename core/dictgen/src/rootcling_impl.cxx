@@ -149,15 +149,6 @@ static llvm::cl::OptionCategory gRootclingOptions("rootcling common options");
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SetRootSys();
-
-ROOT::Internal::RootCling::TROOTSYSSetter::TROOTSYSSetter() {
-   // rootcling's libCore needs "our" ROOTSYS:
-   SetRootSys();
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 void EmitStreamerInfo(const char *normName)
 {
    if (gDriverConfig->fAddStreamerInfoToROOTFile)
@@ -467,73 +458,6 @@ bool IsLinkdefFile(const clang::PresumedLoc& PLoc)
 bool IsSelectionFile(const char *filename)
 {
    return ROOT::TMetaUtils::IsLinkdefFile(filename) || IsSelectionXml(filename);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// Set the ROOTSYS env var based on the executable location.
-
-void SetRootSys()
-{
-   const char *exepath = GetExePath();
-   if (exepath && *exepath) {
-#if !defined(_WIN32)
-      char *ep = new char[PATH_MAX];
-      if (!realpath(exepath, ep)) {
-         fprintf(stderr, "rootcling: error getting realpath of rootcling!");
-         strlcpy(ep, exepath, PATH_MAX);
-      }
-#else
-      int nche = strlen(exepath) + 1;
-      char *ep = new char[nche];
-      strlcpy(ep, exepath, nche);
-#endif
-      char *s;
-
-      if ((s = strrchr(ep, '/'))) {
-         // $ROOTSYS/bin/rootcling
-         int removesubdirs = 2;
-         if (!strncmp(s + 1, "rootcling_stage1.exe", 20)) {
-            // $ROOTSYS/bin/rootcling_stage1.exe
-            removesubdirs = 2;
-            gBuildingROOT = true;
-         } else if (!strncmp(s + 1, "rootcling_stage1", 16)) {
-            // $ROOTSYS/core/rootcling_stage1/src/rootcling_stage1
-            removesubdirs = 4;
-            gBuildingROOT = true;
-         }
-         for (int i = 1; s && i < removesubdirs; ++i) {
-            *s = 0;
-            s = strrchr(ep, '/');
-         }
-         if (s) *s = 0;
-      } else {
-         // There was no slashes at all let now change ROOTSYS
-         delete [] ep;
-         return;
-      }
-
-      if (!gBuildingROOT) {
-         delete [] ep;
-         return; // don't mess with user's ROOTSYS.
-      }
-
-      int ncha = strlen(ep) + 10;
-      char *env = new char[ncha];
-      snprintf(env, ncha, "ROOTSYS=%s", ep);
-
-      if (gDriverConfig) {
-         // After the putenv below, gRootDir might point to the old ROOTSYS
-         // entry, i.e. to deleted memory. Update it.
-         const char** pRootDir = gDriverConfig->fPRootDir;
-         if (pRootDir) {
-            *pRootDir = env + 8;
-         }
-      }
-
-      putenv(env);
-      // intentionally not call delete [] env, while GLIBC keep use pointer
-      delete [] ep;
-   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1833,59 +1757,6 @@ void CallWriteStreamer(const ROOT::TMetaUtils::AnnotatedRecordDecl &cl,
    } else {
       WriteStreamer(cl, interp, normCtxt, dictStream);
    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void GenerateLinkdef(llvm::cl::list<std::string> &InputFiles,
-                     std::string &code_for_parser)
-{
-   code_for_parser += "#ifdef __CINT__\n\n";
-   code_for_parser += "#pragma link off all globals;\n";
-   code_for_parser += "#pragma link off all classes;\n";
-   code_for_parser += "#pragma link off all functions;\n\n";
-
-   for (std::string& arg : InputFiles) {
-      char trail[3];
-      int nostr = 0, noinp = 0, bcnt = 0, l = arg.length() - 1;
-      for (int j = 0; j < 3; j++) {
-         if (arg[l] == '-') {
-            arg[l] = '\0';
-            nostr = 1;
-            l--;
-         }
-         if (arg[l] == '!') {
-            arg[l] = '\0';
-            noinp = 1;
-            l--;
-         }
-         if (arg[l] == '+') {
-            arg[l] = '\0';
-            bcnt = 1;
-            l--;
-         }
-      }
-      if (nostr || noinp) {
-         trail[0] = 0;
-         if (nostr) strlcat(trail, "-", 3);
-         if (noinp) strlcat(trail, "!", 3);
-      }
-      if (bcnt) {
-         strlcpy(trail, "+", 3);
-         if (nostr)
-            ROOT::TMetaUtils::Error(nullptr, "option + mutual exclusive with -\n");
-      }
-      llvm::SmallString<256> filestem = llvm::sys::path::filename(arg);
-      llvm::sys::path::replace_extension(filestem, "");
-
-      code_for_parser += "#pragma link C++ class ";
-      code_for_parser += filestem.str().str();
-      if (nostr || noinp || bcnt)
-         code_for_parser += trail;
-      code_for_parser += ";\n";
-   }
-
-   code_for_parser += "\n#endif\n";
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4059,7 +3930,7 @@ int RootClingMain(int argc,
 
    const char *etcDir = gDriverConfig->fTROOT__GetEtcDir();
    std::string llvmResourceDir = etcDir ? std::string(etcDir) + "/cling" : "";
-   
+
    if (gBareClingSubcommand) {
       std::vector<const char *> clingArgsC;
       clingArgsC.push_back(executableFileName);
@@ -4235,7 +4106,7 @@ int RootClingMain(int argc,
    // cling-only arguments
    if (etcDir)
       clingArgs.push_back(std::string("-I") + llvm::sys::path::convert_to_slash(etcDir));
-   
+
    // We do not want __ROOTCLING__ in the pch!
    if (!gOptGeneratePCH) {
       clingArgs.push_back("-D__ROOTCLING__");
@@ -4274,8 +4145,8 @@ int RootClingMain(int argc,
    // Data is in 'outputFile', therefore in the same scope.
    llvm::StringRef moduleName;
    std::string vfsArg;
-   // Adding -fmodules to the args will break lexing with __CINT__ defined,
-   // and we actually do lex with __CINT__ and reuse this variable later,
+   // Adding -fmodules to the args will break lexing with __CLING__ defined,
+   // and we actually do lex with __CLING__ and reuse this variable later,
    // we have to copy it now.
    auto clingArgsInterpreter = clingArgs;
 
@@ -4486,8 +4357,8 @@ int RootClingMain(int argc,
    TClassEdit::Init(&helper);
 
    // flags used only for the pragma parser:
-   clingArgs.push_back("-D__CINT__");
-   clingArgs.push_back("-D__MAKECINT__");
+   clingArgs.push_back("-D__CINT__"); // backward compatibility. Now __CLING__ should be used instead
+   clingArgs.push_back("-D__MAKECINT__"); // backward compatibility. Now __ROOTCLING__ should used instead
 
    AddPlatformDefines(clingArgs);
 
@@ -4639,11 +4510,6 @@ int RootClingMain(int argc,
       return 1;
    }
 
-   if (linkdef.empty()) {
-      // Generate autolinkdef
-      GenerateLinkdef(gOptDictionaryHeaderFiles, interpPragmaSource);
-   }
-
    // Check if code goes to stdout or rootcling file
    std::ofstream fileout;
    string main_dictname(gOptDictionaryFileName.getValue());
@@ -4750,7 +4616,6 @@ int RootClingMain(int argc,
       // interpPragmaSource and we still need to process it.
 
       LinkdefReader ldefr(interp, constructorTypes);
-      clingArgs.push_back("-Ietc/cling/cint"); // For multiset and multimap
 
       if (!ldefr.Parse(selectionRules, interpPragmaSource, clingArgs,
                        llvmResourceDir.c_str())) {
@@ -4794,6 +4659,12 @@ int RootClingMain(int argc,
    // Speed up the operations with rules
    selectionRules.FillCache();
    selectionRules.Optimize();
+
+   // Addresses ROOT-5174
+   if (gBuildingROOT? 0 : 2 >= selectionRules.Size() && !gOptCxxModule && !isGenreflex) {
+      ROOT::TMetaUtils::Error(nullptr, "No selection rules specified and creation of C++ module not requested: did you forget to specify a selection file or to request the creation of a C++ module?\n");
+      return 1;
+   }
 
    if (isGenreflex){
       if (0 != selectionRules.CheckDuplicates()){
@@ -5661,6 +5532,7 @@ int GenReflexMain(int argc, char **argv)
       "        Default value is 'false'\n"
       "      - rntupleStreamerMode [true/false]: enforce streamed or native writing for RNTuple.\n"
       "        If unset, RNTuple stores classes in split mode or fails if the class cannot be split.\n"
+      "      - rntupleSoARecord [class name]: marks the class as an RNTuple SoA layout for the underlying record\n"
       "      - noInputOperator [true/false]: turns off input operator generation if set\n"
       "        to 'true'. Default value is 'false'\n"
       "      Example XML:\n"
@@ -5671,6 +5543,7 @@ int GenReflexMain(int argc, char **argv)
       "                 [id=\"xxxx\"] [noStreamer=\"true/false\"]\n"
       "                 [noInputOperator=\"true/false\"]\n"
       "                 [rntupleStreamerMode=\"true/false\"] />\n"
+      "                 [rntupleSoARecord=\"class_name\"] />\n"
       "          <class name=\"classname\" >\n"
       "            <field name=\"m_transient\" transient=\"true\"/>\n"
       "            <field name=\"m_anothertransient\" persistent=\"false\"/>\n"

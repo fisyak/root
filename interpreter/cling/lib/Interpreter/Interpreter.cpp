@@ -27,7 +27,6 @@
 #include "cling/Interpreter/AutoloadCallback.h"
 #include "cling/Interpreter/CIFactory.h"
 #include "cling/Interpreter/ClangInternalState.h"
-#include "cling/Interpreter/ClingCodeCompleteConsumer.h"
 #include "cling/Interpreter/CompilationOptions.h"
 #include "cling/Interpreter/DynamicExprInfo.h"
 #include "cling/Interpreter/DynamicLibraryManager.h"
@@ -51,6 +50,7 @@
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/Interpreter/CodeCompletion.h"
 #include "clang/Lex/ExternalPreprocessorSource.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/HeaderSearchOptions.h"
@@ -821,7 +821,7 @@ namespace cling {
     return Value;
   }
 
-  ///\brief Maybe transform the input line to implement cint command line
+  ///\brief Maybe transform the input line to implement Cling command line
   /// semantics (declarations are global) and compile to produce a module.
   ///
   Interpreter::CompilationResult
@@ -984,8 +984,6 @@ namespace cling {
     size_t wrapPos = utils::getWrapPoint(wrapped, getCI()->getLangOpts());
     const std::string& Src = WrapInput(wrapped, wrapped, wrapPos);
 
-    CO.CodeCompletionOffset = offset + wrapPos;
-
     StateDebuggerRAII stateDebugger(this);
 
     // This triggers the FileEntry to be created and the completion
@@ -1036,15 +1034,14 @@ namespace cling {
     std::string llvmDir = parentResourceDir.str();
 
     // arguments for constructing CI
-    auto declCollector = std::make_unique<cling::DeclCollector>();
     const ModuleFileExtensions& moduleExtensions = {};
 
     auto InterpCI = std::unique_ptr<clang::CompilerInstance>(
-        CIFactory::createCI("\n", getOptions(), llvmDir.c_str(),
-                            std::move(declCollector), moduleExtensions,
+        CIFactory::createCI("\n", getOptions(), llvmDir.c_str(), std::nullopt,
+                            moduleExtensions,
                             /*AutoComplete=*/true));
 
-    auto CC = ClingCodeCompleter();
+    auto CC = clang::ReplCodeCompleter();
     CC.codeComplete(InterpCI.get(), line, 1U, cursor + 1, this->getCI(),
                     completions);
 

@@ -70,19 +70,9 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   string(REGEX REPLACE "^.*[ ]version[ ][0-9]+\\.([0-9]+).*" "\\1" CLANG_MINOR "${_clang_version_info}")
 
   if(CMAKE_GENERATOR STREQUAL "Ninja")
-    # LLVM/Clang are automatically checking if we are in interactive terminal mode.
-    # We use color output only for Ninja, because Ninja by default is buffering the output,
-    # so Clang disables colors as it is sure whether the output goes to a file or to a terminal.
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcolor-diagnostics")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcolor-diagnostics")
-  endif()
-  if(ccache AND CCACHE_VERSION VERSION_LESS "3.2.0")
-    # https://bugzilla.samba.org/show_bug.cgi?id=8118
-    # Call to 'ccache clang' is triggering next warning (valid for ccache 3.1.x, fixed in 3.2):
-    # "clang: warning: argument unused during compilation: '-c"
-    # Adding -Qunused-arguments provides a workaround for the bug.
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Qunused-arguments")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Qunused-arguments")
+    # Since Ninja buffers outputs, the builtin tty colour detection fails
+    # https://github.com/ninja-build/ninja/wiki/FAQ#why-does-my-program-with-colored-output-not-have-color-under-ninja
+    set(CMAKE_COLOR_DIAGNOSTICS ON)
   endif()
 else()
   set(CLANG_MAJOR 0)
@@ -267,15 +257,3 @@ endif()
 if(gnuinstall)
   set(R__HAVE_CONFIG 1)
 endif()
-
-#---Check if we use the new libstdc++ CXX11 ABI-----------------------------------------------------
-# Necessary to compile check_cxx_source_compiles this early
-include(CheckCXXSourceCompiles)
-check_cxx_source_compiles(
-"
-#include <string>
-#if _GLIBCXX_USE_CXX11_ABI == 0
-  #error NOCXX11
-#endif
-int main() {}
-" GLIBCXX_USE_CXX11_ABI)

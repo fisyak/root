@@ -238,3 +238,9 @@ ROOTTEST_ADD_TEST(attributesCheck
                   MACRO execAttributesCheck.C
                   OUTREF execAttributesCheck.ref
                   FIXTURES_REQUIRED root-meta-genreflex-attributesCheck-fixture)
+
+# ROOT-3746
+ROOTTEST_ADD_TEST(unusedReadRule
+                  COMMAND ${ROOT_genreflex_CMD} ${CMAKE_CURRENT_SOURCE_DIR}/classes_root_3746.h
+                          --select=${CMAKE_CURRENT_SOURCE_DIR}/sel_root_3746.xml
+                  ERRREF root_3746.eref)

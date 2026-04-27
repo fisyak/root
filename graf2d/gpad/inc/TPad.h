@@ -136,8 +136,7 @@ private:
    TPad(const TPad &pad) = delete;
    TPad &operator=(const TPad &rhs) = delete;
 
-   void CopyBackgroundPixmap(Int_t x, Int_t y);
-   void CopyBackgroundPixmaps(TPad *start, TPad *stop, Int_t x, Int_t y);
+   void CopyBackgroundPixmaps(TPad *stop, Int_t x, Int_t y);
    void DrawDist(Rectangle_t aBBox, Rectangle_t bBBox, char mode);
 
    Bool_t            Collide(Int_t i, Int_t j, Int_t w, Int_t h);
@@ -301,12 +300,15 @@ public:
    void              PaintPolyLineNDC(Int_t n, Double_t *x, Double_t *y, Option_t *option="") override;
    void              PaintPolyMarker(Int_t n, Float_t *x, Float_t *y, Option_t *option="") override;
    void              PaintPolyMarker(Int_t n, Double_t *x, Double_t *y, Option_t *option="") override;
+   void              PaintSegments(Int_t n, Double_t *x, Double_t *y, Option_t *option="") override;
+   void              PaintSegmentsNDC(Int_t n, Double_t *u, Double_t *v) override;
    void              PaintMarker3D(Double_t x, Double_t y, Double_t z) override;
    void              PaintModified() override;
    void              PaintText(Double_t x, Double_t y, const char *text) override;
    void              PaintText(Double_t x, Double_t y, const wchar_t *text) override;
    void              PaintTextNDC(Double_t u, Double_t v, const char *text) override;
    void              PaintTextNDC(Double_t u, Double_t v, const wchar_t *text) override;
+   void              PaintTextUrl(Double_t x, Double_t y, const char *text, const char *url) override;
    virtual TPad     *Pick(Int_t px, Int_t py, TObjLink *&pickobj);
    Double_t          PixeltoX(Double_t px) override;
    Double_t          PixeltoY(Double_t py) override;
@@ -379,6 +381,8 @@ public:
    TObject          *WaitPrimitive(const char *pname="", const char *emode="") override;
    Int_t             XtoAbsPixel(Double_t x) const override;
    Int_t             YtoAbsPixel(Double_t y) const override;
+   Int_t             HtoAbsPixel(Double_t y1, Double_t y2) const override;
+   Int_t             WtoAbsPixel(Double_t x1, Double_t x2) const override;
    Double_t          XtoPad(Double_t x) const override;
    Double_t          YtoPad(Double_t y) const override;
    Int_t             XtoPixel(Double_t x) const override;

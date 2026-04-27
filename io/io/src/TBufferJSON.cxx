@@ -311,12 +311,12 @@ public:
 
 class TJSONStackObj : public TObject {
    struct StlRead {
-      Int_t fIndx{0};                   //! index of object in STL container
-      Int_t fMap{0};                    //! special iterator over STL map::key members
-      Bool_t fFirst{kTRUE};             //! is first or second element is used in the pair
-      nlohmann::json::iterator fIter;   //! iterator for std::map stored as JSON object
-      const char *fTypeTag{nullptr};    //! type tag used for std::map stored as JSON object
-      nlohmann::json fValue;            //! temporary value reading std::map as JSON
+      Int_t fIndx{0};                   ///<! index of object in STL container
+      Int_t fMap{0};                    ///<! special iterator over STL map::key members
+      Bool_t fFirst{kTRUE};             ///<! is first or second element is used in the pair
+      nlohmann::json::iterator fIter;   ///<! iterator for std::map stored as JSON object
+      const char *fTypeTag{nullptr};    ///<! type tag used for std::map stored as JSON object
+      nlohmann::json fValue;            ///<! temporary value reading std::map as JSON
       nlohmann::json *GetStlNode(nlohmann::json *prnt)
       {
          if (fMap <= 0)
@@ -346,22 +346,22 @@ class TJSONStackObj : public TObject {
    };
 
 public:
-   TStreamerInfo *fInfo{nullptr};       //!
-   TStreamerElement *fElem{nullptr};    //! element in streamer info
-   Bool_t fIsStreamerInfo{kFALSE};      //!
-   Bool_t fIsElemOwner{kFALSE};         //!
-   Bool_t fIsPostProcessed{kFALSE};     //! indicate that value is written
-   Bool_t fIsObjStarted{kFALSE};        //! indicate that object writing started, should be closed in postprocess
-   Bool_t fAccObjects{kFALSE};          //! if true, accumulate whole objects in values
-   Bool_t fBase64{kFALSE};              //! enable base64 coding when writing array
-   std::vector<std::string> fValues;    //! raw values
-   int fMemberCnt{1};                   //! count number of object members, normally _typename is first member
-   int *fMemberPtr{nullptr};            //! pointer on members counter, can be inherit from parent stack objects
-   Int_t fLevel{0};                     //! indent level
-   std::unique_ptr<TArrayIndexProducer> fIndx; //! producer of ndim indexes
-   nlohmann::json *fNode{nullptr};      //! JSON node, used for reading
-   std::unique_ptr<StlRead> fStlRead;   //! custom structure for stl container reading
-   Version_t fClVersion{0};             //! keep actual class version, workaround for ReadVersion in custom streamer
+   TStreamerInfo *fInfo{nullptr};       ///<!
+   TStreamerElement *fElem{nullptr};    ///<! element in streamer info
+   Bool_t fIsStreamerInfo{kFALSE};      ///<!
+   Bool_t fIsElemOwner{kFALSE};         ///<!
+   Bool_t fIsPostProcessed{kFALSE};     ///<! indicate that value is written
+   Bool_t fIsObjStarted{kFALSE};        ///<! indicate that object writing started, should be closed in postprocess
+   Bool_t fAccObjects{kFALSE};          ///<! if true, accumulate whole objects in values
+   Bool_t fBase64{kFALSE};              ///<! enable base64 coding when writing array
+   std::vector<std::string> fValues;    ///<! raw values
+   int fMemberCnt{1};                   ///<! count number of object members, normally _typename is first member
+   int *fMemberPtr{nullptr};            ///<! pointer on members counter, can be inherit from parent stack objects
+   Int_t fLevel{0};                     ///<! indent level
+   std::unique_ptr<TArrayIndexProducer> fIndx; ///<! producer of ndim indexes
+   nlohmann::json *fNode{nullptr};      ///<! JSON node, used for reading
+   std::unique_ptr<StlRead> fStlRead;   ///<! custom structure for stl container reading
+   Version_t fClVersion{0};             ///<! keep actual class version, workaround for ReadVersion in custom streamer
 
    TJSONStackObj() = default;
 
@@ -563,7 +563,8 @@ TString TBufferJSON::zipJSON(const char *json)
 
    int nout = 0;
 
-   R__zipMultipleAlgorithm(ROOT::RCompressionSetting::ELevel::kDefaultZLIB, &srcsize, (char *)json, &tgtsize, (char *) buf.data(), &nout, ROOT::RCompressionSetting::EAlgorithm::kZLIB);
+   R__zipMultipleAlgorithm(ROOT::RCompressionSetting::ELevel::kDefaultZLIB, &srcsize, json, &tgtsize,
+                           (char *)buf.data(), &nout, ROOT::RCompressionSetting::EAlgorithm::kZLIB);
 
    return TBase64::Encode(buf.data(), nout);
 }
@@ -3346,11 +3347,9 @@ void TBufferJSON::JsonWriteFastArray(const T *arr, Long64_t arrsize, const char 
       fValue.Append("[]");
       return;
    }
-   constexpr Int_t dataWidth = 1; // at least 1
-   const Int_t maxElements = (std::numeric_limits<Int_t>::max() - Length())/dataWidth;
-   if (arrsize > maxElements)
-   {
-      Fatal("JsonWriteFastArray", "Not enough space left in the buffer (1GB limit). %lld elements is greater than the max left of %d", arrsize, maxElements);
+   const Int_t maxElements = std::numeric_limits<Int_t>::max();
+   if (arrsize > maxElements) {
+      Fatal("JsonWriteFastArray", "Array larger than 2^31 elements cannot be stored in JSON");
       return; // In case the user re-routes the error handler to not die when Fatal is called
    }
 

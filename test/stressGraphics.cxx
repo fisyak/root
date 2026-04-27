@@ -33,6 +33,7 @@
 #include <iomanip>
 #include <fstream>
 #include <ctime>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -277,6 +278,7 @@ Int_t StatusPrint(const TString &filename, const TString &title, Int_t res, Int_
          std::cout << "         Result    = " << res << "\n";
          std::cout << "         Reference = " << ref << "\n";
          std::cout << "         Error     = " << TMath::Abs(res - ref) << " (was " << err << ")\n";
+         std::cout << "         File      = " << filename << "\n";
          gTestsFailed++;
          return 1;
       }
@@ -355,9 +357,19 @@ Int_t CompareSVGFiles(const TString &filename1, const TString &filename2, int te
       return 0;
    }
 
+   std::stringstream diffOld;
+   std::stringstream diffNew;
+   auto flushDiff = [&]() {
+      if (diffOld.tellp() != std::streampos(0)) {
+         std::cout << diffOld.str() << diffNew.str() << "\n";
+         diffOld.str("");
+         diffNew.str("");
+      }
+   };
+
    std::string line1, line2;
 
-   int cnt = 0, diffcnt = 0, finediffcnt = 0;
+   int cnt = 0, diffcnt = 0, finediffcnt = 0, lastError = -1;
 
    while (std::getline(f1, line1) && std::getline(f2, line2)) {
       ++cnt;
@@ -369,23 +381,22 @@ Int_t CompareSVGFiles(const TString &filename1, const TString &filename2, int te
       if (!gSvgCompact && (cnt == 8))
          continue;
 
-      // ignore difference in file name, only for debugging
-      // if (gSvgCompact && (cnt == 4))
-      //   continue;
+      if (lastError + 1 != cnt) {
+         flushDiff();
+         diffOld << "--- " << filename1 << "\n" << "+++ " << filename2 << "\n@@@ " << cnt << "\n";
+      }
+      lastError = cnt;
+      diffOld << "-  " << line1 << "\n";
+      diffNew << "+  " << line2 << "\n";
 
-      printf("Diff in line %d", cnt);
-      if (line1.length() != line2.length())
-         printf("  len1: %d len2: %d\n", (int) line1.length(), (int) line2.length());
-      else
-         printf("\n");
-      printf("Ref: %s\n", line1.substr(0, 200).c_str());
-      printf("New: %s\n", line2.substr(0, 200).c_str());
       if ((testsvg == kFineSvgTest) && SpecialCompareOfSVGLines(line1, line2)) {
          if (finediffcnt++ > 5)
             return 0;
       } else if (++diffcnt > 5)
-         return 0;
+         break;
    }
+
+   flushDiff();
 
    if (diffcnt > 0)
       return 0;
@@ -484,8 +495,9 @@ void TestReport(TCanvas *C, const TString &name, const TString &title, const TSt
 
    // start files generation
    if (gSvgMode) {
+      C->cd();
+      // important - create svg when main canvas selected, SVG size depends on this
       TSVG svg(e.svgfile, 111, gSvgCompact);
-      C->cd(0);
       C->Draw();
       svg.Close();
    } else {
@@ -494,13 +506,13 @@ void TestReport(TCanvas *C, const TString &name, const TString &title, const TSt
 
          C->SaveAs(e.pdffile);
       } else {
+         C->cd();
          TPostScript ps1(e.psfile, 111);
-         C->cd(0);
          C->Draw();
          ps1.Close();
 
+         C->cd();
          TPDF pdf(e.pdffile, 111);
-         C->cd(0);
          C->Draw();
          pdf.Close();
       }
@@ -633,8 +645,8 @@ void print_reports()
       StatusPrint(e.pngfile, "PNG output", FileSize(e.pngfile), ref->pngref, ref->pngerr);
 
       if (e.execute_ccode) {
-         Int_t ret_code = StatusPrint(e.ps2file, "C file result",
-                                    e.IPS ? FileSize(e.ps2file) : AnalysePS(e.ps2file), ref->ps2ref, ref->ps2err);
+         Int_t ret_code = StatusPrint(e.ps2file, gWebMode ? ".C -> .SVG file result" : ".C -> .PS file result",
+                                      e.IPS ? FileSize(e.ps2file) : AnalysePS(e.ps2file), ref->ps2ref, ref->ps2err);
 
 #ifndef __CLING__
          if (!gOptionK && !ret_code)
@@ -711,6 +723,60 @@ void tpolyline()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Test fill hatches drawing in complex TPolyLine
+
+void hatches()
+{
+   std::vector<Double_t> vectx, vecty;
+
+   auto C = StartTest(700,500);
+   C->Range(0,0,100,100);
+
+   const int num_steps = 10;
+
+   const Double_t x0 = 5, y0 = 5,
+                  szx = 90, szy = 90.,
+                  dx = szx/num_steps, dy = szy/num_steps;
+
+    auto add_point = [&](Double_t x, Double_t y) {
+       vectx.push_back(x);
+       vecty.push_back(y);
+    };
+
+    for (int step = 0; step < num_steps; step++) {
+        add_point(step == 0 ? x0 : x0 + 0.25*dx, y0 + step*dy);
+        add_point(x0 + szx, y0 + step*dy);
+        if (step == num_steps - 1) {
+           add_point(x0 + szx, y0 + (step + 0.25)*dy);
+        } else {
+           add_point(x0 + szx, y0 + (step + 0.75)*dy);
+           add_point(x0 + 0.25*dx, y0 + (step + 0.75)*dy);
+           add_point(x0 + 0.25*dx, y0 + (step + 1)*dy);
+        }
+    }
+
+    for (int step = num_steps-1; step > 0; step--) {
+        add_point(x0, y0 + (step + 0.25)*dy);
+        add_point(x0, y0 + (step - 0.5)*dy);
+        add_point(x0 + szx - 0.25*dx, y0 + (step - 0.5)*dy);
+        add_point(x0 + szx - 0.25*dx, y0 + (step - 0.75)*dy);
+    }
+
+    add_point(x0, y0 + 0.25*dy);
+    add_point(x0, y0);
+
+   auto p = new TPolyLine(vectx.size(),vectx.data(),vecty.data());
+   p->SetLineWidth(1);
+   p->SetLineColor(2);
+   p->SetFillColor(7);
+   p->SetFillStyle(3227);
+   C->Add(p, "f");
+   C->Add(p);
+
+   TestReport(C, "hatches", "Hatches for complex TPolyLine");
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Test TArrow
 
 void arrows()
@@ -724,14 +790,16 @@ void arrows()
 
    auto ar1 = new TArrow(0.1,0.1,0.1,0.7);
    C->Add(ar1);
-   auto ar2 = new TArrow(0.2,0.1,0.2,0.7,0.05,"|>");
+   auto ar2 = new TArrow(0.18,0.1,0.18,0.7,0.05,"|>");
    ar2->SetAngle(40);
    ar2->SetLineWidth(2);
    C->Add(ar2);
-   auto ar3 = new TArrow(0.3,0.1,0.3,0.7,0.05,"<|>");
+   auto ar3 = new TArrow(0.26,0.1,0.26,0.7,0.05,"<|>");
    ar3->SetAngle(40);
    ar3->SetLineWidth(2);
    C->Add(ar3);
+   auto ar33 = new TArrow(0.34,0.1,0.34,0.7,0.05,"|-->--|");
+   C->Add(ar33);
    auto ar4 = new TArrow(0.46,0.7,0.82,0.42,0.07,"|>");
    ar4->SetAngle(60);
    ar4->SetLineWidth(2);
@@ -2005,7 +2073,7 @@ void th2_cut()
    Float_t y[6] = { 2, 0, -2, -2,  0,  2 };
    TCutG *cut = new TCutG("cut", 6, x, y);
 
-   TH1 *hpxpy = (TH1*)gHsimple->Get("hpxpy");
+   TH1 *hpxpy = (TH1 *)gHsimple->Get("hpxpy")->Clone("th2_cut");
 
    hpxpy->Draw("col [cut]");
    cut->Draw("l");
@@ -3745,6 +3813,8 @@ void zoomfit()
 void hbars()
 {
    TCanvas *C = StartTest(700,800);
+   TDirectory dir("hbars_dir", "Directory for the hbars test");
+   TDirectory::TContext dirCtx{&dir};
 
    TTree *T = (TTree*)gCernstaff->Get("T");
    T->SetFillColor(45);
@@ -3758,9 +3828,10 @@ void hbars()
    //vertical bar chart
    C->cd(2); gPad->SetGrid(); gPad->SetFrameFillColor(33);
    T->Draw("Division>>hDiv","","goff");
-   TH1F *hDiv   = (TH1F*)gDirectory->Get("hDiv");
+   TH1F *hDiv = (TH1F *)dir.Get("hDiv");
    hDiv->SetStats(0);
    TH1F *hDivFR = (TH1F*)hDiv->Clone("hDivFR");
+   hDivFR->SetDirectory(&dir);
    T->Draw("Division>>hDivFR","Nation==\"FR\"","goff");
    hDiv->SetBarWidth(0.45);
    hDiv->SetBarOffset(0.1);
@@ -3817,7 +3888,7 @@ void clonepad()
 {
    TCanvas *C = StartTest(700,500);
 
-   TH1 *hpxpy = (TH1*)gHsimple->Get("hpxpy");
+   TH1 *hpxpy = (TH1 *)gHsimple->Get("hpxpy")->Clone("hpxpy_clonepad");
    hpxpy->Draw();
    TCanvas *C2 = (TCanvas*)C->DrawClone();
 
@@ -4410,15 +4481,16 @@ void stressGraphics(Int_t verbose = 0, Bool_t generate = kFALSE, Bool_t keep_fil
       gErrorIgnoreLevel = 0;
 
    const char *ref_name = "stressGraphics.ref", *ref_kind = "       ";
+   ref_kind = "   ZLIB";
    if (gWebMode) {
       ref_name = "stressGraphics_web.ref";
       ref_kind = gSvgMode ? "WEB SVG" : "    WEB";
    } else if (gSvgMode) {
       ref_kind = "    SVG";
    } else {
-#ifdef R__HAS_CLOUDFLARE_ZLIB
-      ref_name = "stressGraphics_builtinzlib.ref";
-      ref_kind = "   ZLIB";
+#ifdef R__HAS_ZLIB_NG
+      ref_name = "stressGraphics_zlibng.ref";
+      ref_kind = "ZLIB_NG";
 #endif
    }
 
@@ -4440,6 +4512,7 @@ void stressGraphics(Int_t verbose = 0, Bool_t generate = kFALSE, Bool_t keep_fil
    tline         ();
    tmarker       ();
    tpolyline     ();
+   hatches       ();
    arrows        ();
    patterns      ();
    crown         ();
@@ -4704,7 +4777,7 @@ int main(int argc, char *argv[])
 
    stressGraphics(verbose, generate, keep);
 
-   return 0;
+   return gTestsFailed != 0;
 }
 #endif
 

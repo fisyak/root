@@ -10,9 +10,9 @@ class TH2UsingDecls(unittest.TestCase):
 
     # Tests
     def test_GetBinError(self):
-        h = ROOT.TH2F("h", "h", 1, 1, 0, 1, 0, 1)
+        h = ROOT.TH2F("h", "h", 1, 0, 1, 1, 0, 1)
         for _ in range(4):
-            h.Fill(1, 1, 1)
+            h.Fill(0.5, 0.5, 1)
         self.assertEqual(h.GetBinErrorUp(1, 1), 2)
         self.assertEqual(h.GetBinErrorLow(1, 1), 2)
 
@@ -52,6 +52,43 @@ class TH2Operations(unittest.TestCase):
     def test_scalar_multiplication_right(self):
         hscaled = self.h1 * 2.0
         self.assertAlmostEqual(hscaled.GetBinContent(1, 1), 4.0)
+
+
+class TH2Poly(unittest.TestCase):
+    """
+    Test TH2Poly.
+    """
+
+    def test_add_bin_ownership(self):
+        """Verify that Python releases the ownership of the objects passed to TH2Poly::AddBin()"""
+        h2p = ROOT.TH2Poly()
+
+        def add_bins():
+
+            n = 4
+
+            g1 = ROOT.TGraph(n)
+            for i, x, y in zip(range(n), [0.0, 1.0, 1.0, 0.0], [0.0, 0.0, 1.0, 1.0]):
+                g1.SetPoint(i, x, y)
+
+            g2 = ROOT.TGraph(n)
+            for i, x, y in zip(range(n), [1.0, 2.0, 2.0, 1.0], [0.0, 0.0, 1.0, 1.0]):
+                g2.SetPoint(i, x, y)
+
+            g3 = ROOT.TGraph(n)
+            for i, x, y in zip(range(n), [0.0, 1.0, 1.0, 0.0], [1.0, 1.0, 2.0, 2.0]):
+                g3.SetPoint(i, x, y)
+
+            h2p.AddBin(g1)
+            h2p.AddBin(g2)
+            h2p.AddBin(g3)
+
+        add_bins()
+
+        # Fill some values
+        h2p.Fill(0.5, 0.5, 2)
+        h2p.Fill(1.5, 0.5, 5)
+        h2p.Fill(0.5, 1.5, 3)
 
 
 if __name__ == "__main__":

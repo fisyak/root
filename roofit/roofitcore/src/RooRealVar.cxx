@@ -108,7 +108,8 @@ RooRealVar::RooRealVar(const char *name, const char *title,
 {
   _value = value ;
   _fast = true ;
-  removeRange();
+  removeMin();
+  removeMax();
   setConstant(true) ;
   TRACE_CREATE;
 }
@@ -349,7 +350,7 @@ RooErrorVar* RooRealVar::errorVar() const
 
 bool RooRealVar::hasBinning(const char* name) const
 {
-  return sharedProp()->_altBinning.find(name) != sharedProp()->_altBinning.end();
+  return sharedProp()->_altBinning.find(name) != sharedProp()->_altBinning.end() || _altNonSharedBinning.find(name) != _altNonSharedBinning.end();
 }
 
 
@@ -360,9 +361,9 @@ bool RooRealVar::hasBinning(const char* name) const
 /// a reference to the default binning is returned. If verbose is true a message
 /// is printed if a binning is created on the fly.
 
-const RooAbsBinning& RooRealVar::getBinning(const char* name, bool verbose, bool createOnTheFly) const
+const RooAbsBinning& RooRealVar::getBinning(const char* name, bool verbose, bool createOnTheFly, bool shared) const
 {
-  return const_cast<RooRealVar*>(this)->getBinning(name, verbose, createOnTheFly) ;
+  return const_cast<RooRealVar*>(this)->getBinning(name, verbose, createOnTheFly, shared) ;
 }
 
 
@@ -373,7 +374,7 @@ const RooAbsBinning& RooRealVar::getBinning(const char* name, bool verbose, bool
 /// a reference to the default binning is returned. If verbose is true a message
 /// is printed if a binning is created on the fly.
 
-RooAbsBinning& RooRealVar::getBinning(const char* name, bool verbose, bool createOnTheFly)
+RooAbsBinning& RooRealVar::getBinning(const char* name, bool verbose, bool createOnTheFly, bool shared)
 {
   // Return default (normalization) binning and range if no name is specified
   if (name==nullptr) {
@@ -409,7 +410,11 @@ RooAbsBinning& RooRealVar::getBinning(const char* name, bool verbose, bool creat
     coutI(Eval) << "RooRealVar::getBinning(" << GetName() << ") new range named '"
       << name << "' created with default bounds" << std::endl ;
   }
-  sharedProp()->_altBinning[name] = binning;
+  if(shared) {
+    sharedProp()->_altBinning[name] = binning;
+  } else {
+    _altNonSharedBinning[name].reset(binning);
+  }
 
   return *binning ;
 }
@@ -435,29 +440,48 @@ std::list<std::string> RooRealVar::getBinningNames() const
   return binningNames;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Remove a named binning (or a named range, which are stored internally as binnings)
+
+void RooRealVar::removeBinning(const char* name) {
+  // Remove any old binning with this name
+  auto sharedProps = sharedProp();
+  auto item = sharedProps->_altBinning.find(name);
+  if (item != sharedProps->_altBinning.end()) {
+    item->second->removeHook(*this);
+    if (sharedProps->_ownBinnings)
+         delete item->second;
+
+    sharedProps->_altBinning.erase(item);
+  }
+  auto item2 = _altNonSharedBinning.find(name);
+  if (item2 != _altNonSharedBinning.end()) {
+    item2->second->removeHook(*this);
+    _altNonSharedBinning.erase(item2);
+  }
+}
+
+
+
 void RooRealVar::removeMin(const char* name) {
   getBinning(name).setMin(-RooNumber::infinity());
 }
 void RooRealVar::removeMax(const char* name) {
   getBinning(name).setMax(RooNumber::infinity());
 }
-void RooRealVar::removeRange(const char* name) {
-  getBinning(name).setRange(-RooNumber::infinity(),RooNumber::infinity());
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a uniform binning under name 'name' for this variable.
 /// \param[in] nBins Number of bins. The limits are taken from the currently set limits.
 /// \param[in] name Optional name. If name is null, install as default binning.
-void RooRealVar::setBins(Int_t nBins, const char* name) {
-  setBinning(RooUniformBinning(getMin(name),getMax(name),nBins),name);
+void RooRealVar::setBins(Int_t nBins, const char* name, bool shared) {
+  setBinning(RooUniformBinning(getMin(name),getMax(name),nBins),name,shared);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Add given binning under name 'name' with this variable. If name is null,
 /// the binning is installed as the default binning.
-void RooRealVar::setBinning(const RooAbsBinning& binning, const char* name)
+void RooRealVar::setBinning(const RooAbsBinning& binning, const char* name, bool shared)
 {
   std::unique_ptr<RooAbsBinning> newBinning( binning.clone() );
 
@@ -470,26 +494,13 @@ void RooRealVar::setBinning(const RooAbsBinning& binning, const char* name)
     _binning = std::move(newBinning);
   } else {
     // Remove any old binning with this name
-    auto sharedProps = sharedProp();
-    auto item = sharedProps->_altBinning.find(name);
-    if (item != sharedProps->_altBinning.end()) {
-      item->second->removeHook(*this);
-      if (sharedProps->_ownBinnings)
-        delete item->second;
-
-      sharedProps->_altBinning.erase(item);
-    }
-    auto item2 = _altNonSharedBinning.find(name);
-    if (item2 != _altNonSharedBinning.end()) {
-      item2->second->removeHook(*this);
-      _altNonSharedBinning.erase(item2);
-    }
+    removeBinning(name);
 
     // Install new
     newBinning->SetName(name) ;
     newBinning->SetTitle(name) ;
     newBinning->insertHook(*this) ;
-    if (newBinning->isShareable()) {
+    if (newBinning->isShareable() && shared) {
       sharedProp()->_altBinning[name] = newBinning.release();
     } else {
       _altNonSharedBinning[name] = std::move(newBinning);
@@ -503,10 +514,10 @@ void RooRealVar::setBinning(const RooAbsBinning& binning, const char* name)
 /// Set minimum of name range to given value. If name is null
 /// minimum of default range is set
 
-void RooRealVar::setMin(const char* name, double value)
+void RooRealVar::setMin(const char* name, double value, bool shared)
 {
   // Set new minimum of fit range
-  RooAbsBinning& binning = getBinning(name,true,true) ;
+  RooAbsBinning& binning = getBinning(name,true,true,shared) ;
 
   // Check if new limit is consistent
   if (value >= getMax()) {
@@ -533,10 +544,10 @@ void RooRealVar::setMin(const char* name, double value)
 /// Set maximum of name range to given value. If name is null
 /// maximum of default range is set
 
-void RooRealVar::setMax(const char* name, double value)
+void RooRealVar::setMax(const char* name, double value, bool shared)
 {
   // Set new maximum of fit range
-  RooAbsBinning& binning = getBinning(name,true,true) ;
+  RooAbsBinning& binning = getBinning(name,true,true,shared) ;
 
   // Check if new limit is consistent
   if (value < getMin()) {
@@ -568,12 +579,12 @@ void RooRealVar::setMax(const char* name, double value)
 /// plotting). If the name is `nullptr`, the function sets the limits of the default range.
 /// \param[in] min Miniminum of the range.
 /// \param[in] max Maximum of the range.
-void RooRealVar::setRange(const char* name, double min, double max)
+void RooRealVar::setRange(const char* name, double min, double max, bool shared)
 {
-  bool exists = name == nullptr || sharedProp()->_altBinning.count(name) > 0;
+  bool exists = name == nullptr || sharedProp()->_altBinning.count(name) > 0 || _altNonSharedBinning.count(name) > 0;
 
   // Set new fit range
-  RooAbsBinning& binning = getBinning(name,false,true) ;
+  RooAbsBinning& binning = getBinning(name,false,true,shared) ;
 
   // Check if new limit is consistent
   if (min>max) {
@@ -599,10 +610,10 @@ void RooRealVar::setRange(const char* name, double min, double max)
 /// Set or modify a parameterised range, i.e., a range the varies in dependence
 /// of parameters.
 /// See setRange() for more details.
-void RooRealVar::setRange(const char* name, RooAbsReal& min, RooAbsReal& max)
+void RooRealVar::setRange(const char* name, RooAbsReal& min, RooAbsReal& max, bool shared)
 {
   RooParamBinning pb(min,max,100) ;
-  setBinning(pb,name) ;
+  setBinning(pb,name,shared) ;
 }
 
 

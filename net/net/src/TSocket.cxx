@@ -9,16 +9,17 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TSocket                                                              //
-//                                                                      //
-// This class implements client sockets. A socket is an endpoint for    //
-// communication between two machines.                                  //
-// The actual work is done via the TSystem class (either TUnixSystem    //
-// or TWinNTSystem).                                                    //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+/**
+\file TSocket.cxx
+\class TSocket
+\brief This class implements client sockets.
+\note This class deals with sockets: the user is entirely responsible for the security of their usage, for example, but
+not limited to, the management of the connections to said sockets.
+
+A socket is an endpoint for communication between two machines. The actual work is done via the TSystem class (either
+TUnixSystem or TWinNTSystem).
+
+**/
 
 #include "Bytes.h"
 #include "Compression.h"
@@ -35,6 +36,23 @@
 #include "TVirtualAuth.h"
 #include "TStreamerInfo.h"
 #include "TProcessID.h"
+
+#include <limits>
+
+Bool_t ROOT::Deprecated::TSocketFriend::IsAuthenticated(const TSocket &s)
+{
+   return s.fSecContext;
+}
+
+void ROOT::Deprecated::TSocketFriend::SetSecContext(TSocket &s, TSecContext *ctx)
+{
+   s.fSecContext = ctx;
+}
+
+ROOT::Deprecated::TSecContext *ROOT::Deprecated::TSocketFriend::GetSecContext(const TSocket &s)
+{
+   return s.fSecContext;
+}
 
 
 ULong64_t TSocket::fgBytesSent = 0;
@@ -804,59 +822,74 @@ Int_t TSocket::Recv(Int_t &status, Int_t &kind)
 /// Returns length of message in bytes (can be 0 if other side of connection
 /// is closed) or -1 in case of error or -4 in case a non-blocking socket
 /// would block (i.e. there is nothing to be read) or -5 if pipe broken
-/// or reset by peer (EPIPE || ECONNRESET). In those case mess == 0.
+/// or reset by peer (EPIPE || ECONNRESET). In those case mess == nullptr.
 
 Int_t TSocket::Recv(TMessage *&mess)
 {
    TSystem::ResetErrno();
 
    if (!IsValid()) {
-      mess = 0;
+      mess = nullptr;
       return -1;
    }
 
-oncemore:
-   ResetBit(TSocket::kBrokenConn);
    Int_t  n;
-   UInt_t len;
-   if ((n = gSystem->RecvRaw(fSocket, &len, sizeof(UInt_t), 0)) <= 0) {
-      if (n == 0 || n == -5) {
-         // Connection closed, reset or broken
-         MarkBrokenConnection();
+   while (1) {
+      ResetBit(TSocket::kBrokenConn);
+      UInt_t len;
+      if ((n = gSystem->RecvRaw(fSocket, &len, sizeof(UInt_t), 0)) <= 0) {
+         if (n == 0 || n == -5) {
+            // Connection closed, reset or broken
+            MarkBrokenConnection();
+         }
+         mess = nullptr;
+         return n;
       }
-      mess = 0;
-      return n;
-   }
-   len = net2host(len);  //from network to host byte order
+      len = net2host(len);  //from network to host byte order
 
-   ResetBit(TSocket::kBrokenConn);
-   char *buf = new char[len+sizeof(UInt_t)];
-   if ((n = gSystem->RecvRaw(fSocket, buf+sizeof(UInt_t), len, 0)) <= 0) {
-      if (n == 0 || n == -5) {
-         // Connection closed, reset or broken
-         MarkBrokenConnection();
+      if (len > (std::numeric_limits<decltype(len)>::max() - sizeof(decltype(len)))) {
+         Error("Recv", "Buffer length is %u and %u+sizeof(UInt_t) cannot be represented as an UInt_t.", len, len);
+         return -1;
       }
-      delete [] buf;
-      mess = 0;
-      return n;
+
+      ResetBit(TSocket::kBrokenConn);
+      char *buf = new char[len+sizeof(UInt_t)];
+      if ((n = gSystem->RecvRaw(fSocket, buf+sizeof(UInt_t), len, 0)) <= 0) {
+         if (n == 0 || n == -5) {
+            // Connection closed, reset or broken
+            MarkBrokenConnection();
+         }
+         delete [] buf;
+         mess = nullptr;
+         return n;
+      }
+
+      fBytesRecv  += n + sizeof(UInt_t);
+      fgBytesRecv += n + sizeof(UInt_t);
+
+      // `buf` becomes owned by the TMessage.
+      mess = new TMessage(buf, len+sizeof(UInt_t));
+
+      // receive any streamer infos
+      bool streamerInfoReceived = RecvStreamerInfos(mess);
+      if (streamerInfoReceived) {
+         // do another loop. No need to delete `mess` because RecvStreamerInfos already did it.
+         continue;
+      }
+
+      // receive any process ids
+      bool processIdReceived = RecvProcessIDs(mess);
+      if (processIdReceived) {
+         // do another loop. No need to delete `mess` because RecvProcessIDs already did it.
+         continue;
+      }
+
+      break;
    }
-
-   fBytesRecv  += n + sizeof(UInt_t);
-   fgBytesRecv += n + sizeof(UInt_t);
-
-   mess = new TMessage(buf, len+sizeof(UInt_t));
-
-   // receive any streamer infos
-   if (RecvStreamerInfos(mess))
-      goto oncemore;
-
-   // receive any process ids
-   if (RecvProcessIDs(mess))
-      goto oncemore;
 
    if (mess->What() & kMESS_ACK) {
       ResetBit(TSocket::kBrokenConn);
-      char ok[2] = { 'o', 'k' };
+      const char ok[2] = { 'o', 'k' };
       Int_t n2 = 0;
       if ((n2 = gSystem->SendRaw(fSocket, ok, sizeof(ok), 0)) < 0) {
          if (n2 == -5) {
@@ -864,7 +897,7 @@ oncemore:
             MarkBrokenConnection();
          }
          delete mess;
-         mess = 0;
+         mess = nullptr;
          return n2;
       }
       mess->SetWhat(mess->What() & ~kMESS_ACK);
@@ -1160,7 +1193,7 @@ Bool_t TSocket::Authenticate(const char *user)
       }
 
       // Get an instance of the interface class
-      TVirtualAuth *auth = (TVirtualAuth *)(h->ExecPlugin(0));
+      auto auth = (ROOT::Deprecated::TVirtualAuth *)(h->ExecPlugin(0));
       if (!auth) {
          Error("Authenticate", "could not instantiate the interface class");
          return rc;
@@ -1200,7 +1233,7 @@ Bool_t TSocket::Authenticate(const char *user)
 
             // Authentication was not required: create inactive
             // security context for consistency
-            fSecContext = new TSecContext(user, host, 0, -4, 0, 0);
+            fSecContext = new ROOT::Deprecated::TSecContext(user, host, 0, -4, 0, 0);
             if (gDebug > 3)
                Info("Authenticate", "no authentication required remotely");
 
@@ -1258,8 +1291,8 @@ Bool_t TSocket::Authenticate(const char *user)
 /// Returns pointer to an authenticated socket or 0 if creation or
 /// authentication is unsuccessful.
 
-TSocket *TSocket::CreateAuthSocket(const char *url, Int_t size, Int_t tcpwindowsize,
-                                   TSocket *opensock, Int_t *err)
+TSocket *ROOT::Deprecated::TSocketFriend::CreateAuthSocket(
+   const char *url, Int_t size, Int_t tcpwindowsize, TSocket *opensock, Int_t *err)
 {
    R__LOCKGUARD2(gSocketAuthMutex);
 
@@ -1344,7 +1377,7 @@ TSocket *TSocket::CreateAuthSocket(const char *url, Int_t size, Int_t tcpwindows
          sock = new TPSocket(eurl, TUrl(url).GetPort(), size, tcpwindowsize);
 
       // Cleanup if failure ...
-      if (sock && !sock->IsAuthenticated()) {
+      if (sock && !ROOT::Deprecated::TSocketFriend::IsAuthenticated(*sock)) {
          // Nothing to do except setting the error code (if required) and sock to NULL
          if (err) {
             *err = (Int_t)kErrAuthNotOK;
@@ -1395,9 +1428,8 @@ TSocket *TSocket::CreateAuthSocket(const char *url, Int_t size, Int_t tcpwindows
 /// Returns pointer to an authenticated socket or 0 if creation or
 /// authentication is unsuccessful.
 
-TSocket *TSocket::CreateAuthSocket(const char *user, const char *url,
-                                   Int_t port, Int_t size, Int_t tcpwindowsize,
-                                   TSocket *opensock, Int_t *err)
+TSocket *ROOT::Deprecated::TSocketFriend::CreateAuthSocket(
+   const char *user, const char *url, Int_t port, Int_t size, Int_t tcpwindowsize, TSocket *opensock, Int_t *err)
 {
    R__LOCKGUARD2(gSocketAuthMutex);
 
@@ -1426,7 +1458,7 @@ TSocket *TSocket::CreateAuthSocket(const char *user, const char *url,
    }
 
    // Create the socket and return it
-   return TSocket::CreateAuthSocket(eurl,size,tcpwindowsize,opensock,err);
+   return TSocketFriend::CreateAuthSocket(eurl,size,tcpwindowsize,opensock,err);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

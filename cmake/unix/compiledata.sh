@@ -19,8 +19,6 @@ ROOTLIBS=$9
 shift
 RINTLIBS=$9
 shift
-INCDIR=$9
-shift
 CUSTOMSHARED=$9
 shift
 CUSTOMEXE=$9
@@ -32,9 +30,6 @@ shift
 IGNORE_BUILD_NODE_CHANGES=$9
 shift
 
-if [ "$INCDIR" = "$ROOTSYS/include" ]; then
-   INCDIR=\$ROOTSYS/include
-fi
 if [ "$LIBDIR" = "$ROOTSYS/lib" ]; then
    LIBDIR=\$ROOTSYS/lib
 fi
@@ -44,14 +39,12 @@ EXPLLINKLIBS="\$LinkedLibs"
 if [ "$ARCH" = "macosx" ] || [ "$ARCH" = "macosx64" ] || \
    [ "$ARCH" = "macosxicc" ] || [ "$ARCH" = "macosxarm64" ]; then
    SOEXT="so"
-   if [ "x`echo $SOFLAGS | grep -- '-install_name'`" != "x" ]; then
-      # If install_name is specified, remove it.
-      SOFLAGS="$OPT -dynamiclib -single_module -Wl,-dead_strip_dylibs"
+   if [ "x`echo $SOFLAGS | grep -- '-install_name'`" == "x" ]; then
+      # If install_name is not specified, add default RPATH-compatible syntax
+      # See 'man ld' on a MacOS system and the following link for further explanation:
+      # https://developer.apple.com/forums/thread/736728
+      SOFLAGS="$SOFLAGS -Wl,-install_name,@rpath/\$LibName.$SOEXT"
    fi
-   # Add rpath to the compiler options on MacOS, reproducing the same
-   # behaviour of manually creating the shared library by using the flags
-   # output by `root-config --libs`
-   SOFLAGS="$SOFLAGS -Wl,-rpath,$LIBDIR"
 elif [ "x`echo $SOFLAGS | grep -- '-soname,$'`" != "x" ]; then
     # If soname is specified, add the library name.
     SOFLAGS=$SOFLAGS\$LibName.$SOEXT
@@ -126,7 +119,7 @@ echo "#define COMPILER \""`type -path $CXX`"\"" >> "${COMPILEDATA}.tmp"
 echo "#define COMPILERVERS \"$COMPILERVERS\"" >> "${COMPILEDATA}.tmp"
 echo "#define COMPILERVERSSTR \"$COMPILERVERSSTR\"" >> "${COMPILEDATA}.tmp"
 if [ "$CUSTOMSHARED" = "" ]; then
-   echo "#define MAKESHAREDLIB  \"cd \$BuildDir ; $BXX -fPIC -c \$Opt $CXXFLAGS \$IncludePath \$SourceFiles ; $BXX \$Opt \$ObjectFiles $SOFLAGS $LDFLAGS $EXPLLINKLIBS -o \$SharedLib\"" >> "${COMPILEDATA}.tmp"
+   echo "#define MAKESHAREDLIB  \"cd \$BuildDir ; $BXX -fPIC -c \$Opt $CXXFLAGS \$IncludePath \$SourceFiles ; $BXX \$Opt \$ObjectFiles $SOFLAGS $LDFLAGS \$RPath $EXPLLINKLIBS -o \$SharedLib \"" >> "${COMPILEDATA}.tmp"
 else
    echo "#define MAKESHAREDLIB \"$CUSTOMSHARED\"" >> "${COMPILEDATA}.tmp"
 fi
@@ -139,7 +132,6 @@ echo "#define CXXOPT \"$CXXOPT\"" >> "${COMPILEDATA}.tmp"
 echo "#define CXXDEBUG \"$CXXDEBUG\"" >> "${COMPILEDATA}.tmp"
 echo "#define ROOTBUILD \"$ROOTBUILD\"" >> "${COMPILEDATA}.tmp"
 echo "#define LINKEDLIBS \"-L$LIBDIR $ROOTLIBS $RINTLIBS \""  >> "${COMPILEDATA}.tmp"
-echo "#define INCLUDEPATH \"-I$INCDIR\"" >> "${COMPILEDATA}.tmp"
 echo "#define OBJEXT \"o\"" >> "${COMPILEDATA}.tmp"
 echo "#define SOEXT \"$SOEXT\"" >> "${COMPILEDATA}.tmp"
 

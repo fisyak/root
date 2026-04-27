@@ -24,13 +24,11 @@ import tarfile
 import time
 
 import build_utils
-import openstack
 from build_utils import (
     calc_options_hash,
     die,
     github_log_group,
     is_macos,
-    load_config,
     subprocess_with_capture,
     subprocess_with_log,
     upload_file,
@@ -38,12 +36,6 @@ from build_utils import (
 
 S3CONTAINER = 'ROOT-build-artifacts'  # Used for uploads
 S3URL = 'https://s3.cern.ch/swift/v1/' + S3CONTAINER  # Used for downloads
-
-try:
-    CONNECTION = openstack.connect(cloud='envvars')
-except Exception as exc:
-    print("Failed to open the S3 connection:", exc, file=sys.stderr)
-    CONNECTION = None
 
 WINDOWS = (os.name == 'nt')
 WORKDIR = (os.environ['HOME'] + '/ROOT-CI') if not WINDOWS else 'C:/ROOT-CI'
@@ -58,25 +50,62 @@ def main():
 
     args = parse_args()
 
-    build_utils.log = build_utils.Tracer(args.platform, args.dockeropts)
+    build_utils.log = build_utils.Tracer(args.platform_config, args.dockeropts)
 
     pull_request = args.head_ref and args.head_ref != args.base_ref
 
-    if not pull_request:
+    if pull_request:
+        # We check whether the PR is done from a branch that has the same name of
+        # the target branch in the ROOT repository using base_ref and head_ref:
+        # - The base_ref is e.g. "master" or "v6-38-00-patches" 
+        # - The head_ref for PRs is formatted as <PR branch>:<Fork branch> e.g. "refs/pull/20742/head:cppyy_fixup"
+        if not ":" in args.head_ref:
+            build_utils.print_error(f"This has been identified as a PR build. However, the head-ref is {args.head_ref}.")
+        branch_in_fork = args.head_ref.split(":")[-1]
+        if branch_in_fork == args.base_ref:
+            build_utils.print_error(f"The branch name in the fork and the base-ref are both called {branch_in_fork}. This is not supported. Please change the name of the branch in the forked repository.")
+            sys.exit(1)
+    else:
         build_utils.print_info("head_ref same as base_ref, assuming non-PR build")
 
     cleanup_previous_build()
 
-    # Load CMake options from .github/workflows/root-ci-config/buildconfig/[platform].txt
     this_script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    options_dict = {
-        **load_config(f'{this_script_dir}/buildconfig/global.txt'),
-        # file below overwrites values from above
-        **load_config(f'{this_script_dir}/buildconfig/{args.platform}.txt')
-    }
+    # Compute CMake build options:
+    # - Get global options
+    # - Read options from .github/workflows/root-ci-config/buildconfig/[platform_config].txt
+    #   + If minimal is off, override the global options with the platform ones
+    #   + If minimal is on, ignore global options. The minimal options takes priority
+    # - Apply overrides from command line if necessary
+    options_dict = build_utils.load_config(f"{this_script_dir}/buildconfig/global.txt")
+    last_options = dict(options_dict)
+
+    platform_options = build_utils.load_config(f"{this_script_dir}/buildconfig/{args.platform_config}.txt")
+
+    if "minimal" in platform_options and platform_options["minimal"] == "ON":
+        options_dict = platform_options
+        print(f"Minimal build detected in the platform options. Ignoring global configuration.")
+    else:
+        options_dict.update(platform_options)
+        print(f"Build option overrides for {args.platform_config}:")
+        build_utils.print_options_diff(options_dict, last_options)
+
+    if args.overrides is not None:
+        print("Build option overrides from command line:")
+        last_options = dict(options_dict)
+        options_dict.update((arg.split("=", maxsplit=1) for arg in args.overrides))
+        build_utils.print_options_diff(options_dict, last_options)
+
+    ctest_custom_flags = ""
+    if 'ROOT_CTEST_CUSTOM_FLAGS' in options_dict:
+        ctest_custom_flags = options_dict['ROOT_CTEST_CUSTOM_FLAGS']
+        options_dict.pop('ROOT_CTEST_CUSTOM_FLAGS') # we do not want a -D called like that
 
     options = build_utils.cmake_options_from_dict(options_dict)
+    print("Full build options")
+    for key, val in sorted(options_dict.items()):
+        print(f"\t{key: <30}{val}")
 
     if WINDOWS:
         options = "-Thost=x64 " + options
@@ -115,6 +144,10 @@ def main():
 
     git_pull("src", args.repository, args.base_ref)
 
+    benchmark: bool = 'rootbench' in options_dict and options_dict['rootbench'] == "ON"
+    if benchmark:
+        git_pull("rootbench", "https://github.com/root-project/rootbench", "master")
+
     if pull_request:
       base_head_sha = get_base_head_sha("src", args.repository, args.sha, args.head_sha)
 
@@ -123,7 +156,7 @@ def main():
 
       rebase("src", "origin", base_head_sha, head_ref_dst, args.head_sha)
 
-    testing: bool = options_dict['testing'].lower() == "on"
+    testing: bool = options_dict['testing'] == "ON"
 
     if not WINDOWS:
         show_node_state()
@@ -138,18 +171,21 @@ def main():
     # "official" branches (master, v?-??-??-patches), i.e. not for pull_request
     # We also want to upload any successful build, even if it fails testing
     # later on.
-    if not pull_request and not args.incremental:
+    if not pull_request and not args.incremental and args.upload_artifacts:
         archive_and_upload(yyyy_mm_dd, obj_prefix)
 
     if args.binaries:
         create_binaries(args.buildtype)
 
     if testing:
-        extra_ctest_flags = ""
+        extra_ctest_flags = ''
         if WINDOWS:
-            extra_ctest_flags += "--repeat until-pass:5 "
-            extra_ctest_flags += "--build-config " + args.buildtype
-
+            extra_ctest_flags += '--repeat until-pass:5 '
+            extra_ctest_flags += '--build-config ' + args.buildtype
+        if benchmark:
+            extra_ctest_flags = ' -R "^rootbench-" '
+        if ctest_custom_flags:
+            extra_ctest_flags += ctest_custom_flags
         ctest_returncode = run_ctest(extra_ctest_flags)
 
     if args.coverage:
@@ -180,6 +216,7 @@ def parse_args():
     # true/false for boolean arguments instead.
     parser = argparse.ArgumentParser()
     parser.add_argument("--platform",                           help="Platform to build on")
+    parser.add_argument("--platform_config", default=None,      help="The configuration for the platform", nargs='?', const='')
     parser.add_argument("--dockeropts",      default=None,      help="Extra docker options, if any")
     parser.add_argument("--incremental",     default="false",   help="Do incremental build")
     parser.add_argument("--buildtype",       default="Release", help="Release|Debug|RelWithDebInfo")
@@ -193,6 +230,8 @@ def parse_args():
     parser.add_argument("--architecture",    default=None,      help="Windows only, target arch")
     parser.add_argument("--repository",      default="https://github.com/root-project/root.git",
                         help="url to repository")
+    parser.add_argument("--overrides",       default=None,      help="Override build options using a syntax like 'A=1 B=2'", nargs="*")
+    parser.add_argument("--upload_artifacts", default="true",   help="Whether to upload binary artifacts")
 
     args = parser.parse_args()
 
@@ -200,9 +239,13 @@ def parse_args():
     args.incremental = args.incremental.lower() in ('yes', 'true', '1', 'on')
     args.coverage = args.coverage.lower() in ('yes', 'true', '1', 'on')
     args.binaries = args.binaries.lower() in ('yes', 'true', '1', 'on')
+    args.upload_artifacts = args.upload_artifacts.lower() in ('yes', 'true', '1', 'on')
 
     if not args.base_ref:
         die(os.EX_USAGE, "base_ref not specified")
+
+    if not args.platform_config: # If nothing special, we take the standard platform configuration, called as the platform
+        args.platform_config = args.platform
 
     return args
 
@@ -255,7 +298,7 @@ def git_pull(directory: str, repository: str, branch: str):
             returncode = subprocess_with_log(f"""
                 git clone --branch {branch} --single-branch {repository} "{targetdir}"
             """)
-        
+
         if returncode == 0:
             return
 
@@ -315,8 +358,10 @@ def run_ctest(extra_ctest_flags: str) -> int:
     failures in main().
     """
     builddir = os.path.join(WORKDIR, "build")
+    setupROOTEnv = f""". '{builddir}/bin/thisroot.sh'""" if 'rootbench' in extra_ctest_flags else ''
     ctest_result = subprocess_with_log(f"""
         cd '{builddir}'
+        {setupROOTEnv}
         ctest --output-on-failure --parallel {os.cpu_count()} --output-junit TestResults.xml {extra_ctest_flags}
     """)
 
@@ -332,6 +377,14 @@ def archive_and_upload(archive_name, prefix):
     with tarfile.open(f"{WORKDIR}/{new_archive}", "x:gz", compresslevel=COMPRESSIONLEVEL) as targz:
         targz.add("src")
         targz.add("build")
+
+    try:
+        import openstack
+        CONNECTION = openstack.connect(cloud='envvars')
+    except Exception as exc:
+        print("Failed to open the S3 connection:", exc, file=sys.stderr)
+        CONNECTION = None
+
 
     upload_file(
         connection=CONNECTION,
@@ -379,7 +432,7 @@ def dump_requested_config(options):
 
 @github_log_group("Build")
 def cmake_build(buildtype):
-    generator_flags = "-- '-verbosity:minimal'" if WINDOWS else ""
+    generator_flags = "-- '-verbosity:minimal' '-consoleloggerparameters:summary'" if WINDOWS else ""
     parallel_jobs = "4" if WINDOWS else str(os.cpu_count())
 
     builddir = os.path.join(WORKDIR, "build")

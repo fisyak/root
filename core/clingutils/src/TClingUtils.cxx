@@ -386,6 +386,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
                                          bool rRequestOnlyTClass,
                                          int rRequestedVersionNumber,
                                          int rRequestedRNTupleSerializationMode,
+                                         const std::string &rRequestedRNTupleSoARecord,
                                          const cling::Interpreter &interpreter,
                                          const TNormalizedCtxt &normCtxt)
    : fRuleIndex(index),
@@ -395,7 +396,8 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
      fRequestNoInputOperator(rRequestNoInputOperator),
      fRequestOnlyTClass(rRequestOnlyTClass),
      fRequestedVersionNumber(rRequestedVersionNumber),
-     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode)
+     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode),
+     fRequestedRNTupleSoARecord(rRequestedRNTupleSoARecord)
 // clang-format on
 {
    TMetaUtils::GetNormalizedName(fNormalizedName, decl->getASTContext().getTypeDeclType(decl), interpreter,normCtxt);
@@ -417,6 +419,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
                                          bool rRequestOnlyTClass,
                                          int rRequestVersionNumber,
                                          int rRequestedRNTupleSerializationMode,
+                                         const std::string &rRequestedRNTupleSoARecord,
                                          const cling::Interpreter &interpreter,
                                          const TNormalizedCtxt &normCtxt)
    : fRuleIndex(index),
@@ -427,7 +430,8 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
      fRequestNoInputOperator(rRequestNoInputOperator),
      fRequestOnlyTClass(rRequestOnlyTClass),
      fRequestedVersionNumber(rRequestVersionNumber),
-     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode)
+     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode),
+     fRequestedRNTupleSoARecord(rRequestedRNTupleSoARecord)
 // clang-format on
 {
    // For comparison purposes.
@@ -456,6 +460,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
                                          bool rRequestOnlyTClass,
                                          int rRequestVersionNumber,
                                          int rRequestedRNTupleSerializationMode,
+                                         const std::string &rRequestedRNTupleSoARecord,
                                          const cling::Interpreter &interpreter,
                                          const TNormalizedCtxt &normCtxt)
    : fRuleIndex(index),
@@ -466,7 +471,8 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
      fRequestNoInputOperator(rRequestNoInputOperator),
      fRequestOnlyTClass(rRequestOnlyTClass),
      fRequestedVersionNumber(rRequestVersionNumber),
-     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode)
+     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode),
+     fRequestedRNTupleSoARecord(rRequestedRNTupleSoARecord)
 // clang-format on
 {
    // For comparison purposes.
@@ -490,6 +496,7 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
                                          bool rRequestOnlyTClass,
                                          int rRequestVersionNumber,
                                          int rRequestedRNTupleSerializationMode,
+                                         const std::string &rRequestedRNTupleSoARecord,
                                          const cling::Interpreter &interpreter,
                                          const TNormalizedCtxt &normCtxt)
    : fRuleIndex(index),
@@ -500,7 +507,8 @@ AnnotatedRecordDecl::AnnotatedRecordDecl(long index,
      fRequestNoInputOperator(rRequestNoInputOperator),
      fRequestOnlyTClass(rRequestOnlyTClass),
      fRequestedVersionNumber(rRequestVersionNumber),
-     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode)
+     fRequestedRNTupleSerializationMode(rRequestedRNTupleSerializationMode),
+     fRequestedRNTupleSoARecord(rRequestedRNTupleSoARecord)
 // clang-format on
 {
    // const clang::ClassTemplateSpecializationDecl *tmplt_specialization = llvm::dyn_cast<clang::ClassTemplateSpecializationDecl> (decl);
@@ -1979,7 +1987,8 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
    if (HasCustomStreamerMemberFunction(cl, decl, interp, normCtxt)) {
       rootflag = rootflag | TClassTable__kHasCustomStreamerMember;
    }
-   finalString << "isa_proxy, " << rootflag << "," << "\n" << "                  sizeof(" << csymbol << ") );" << "\n";
+   finalString << "isa_proxy, " << rootflag << "," << "\n"
+               << "                  sizeof(" << csymbol << "), alignof(" << csymbol << ") );" << "\n";
    if (HasIOConstructor(decl, args, ctorTypes, interp)) {
       finalString << "      instance.SetNew(&new_" << mappedname.c_str() << ");" << "\n";
       if (args.size()==0 && NeedDestructor(decl, interp))
@@ -2041,6 +2050,11 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
       // FIXME Workaround: for the moment we do not generate coll proxies with unique ptrs since
       // they imply copies and therefore do not compile.
       auto classNameForIO = TClassEdit::GetNameForIO(classname);
+
+      finalString << "      static_assert(alignof(" << csymbol << "::value_type) <= 4096,\n";
+      finalString << "          \"Class with alignment strictly greater than 4096 are currently not supported in "
+                     "CollectionProxy. \"\n";
+      finalString << "          \"Please report this case to the developers\");\n";
       finalString << "      instance.AdoptCollectionProxyInfo(TCollectionProxyInfo::Generate(TCollectionProxyInfo::" << methodTCP << "< " << classNameForIO.c_str() << " >()));" << "\n";
 
       needCollectionProxy = true;
@@ -2061,6 +2075,14 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
       finalString << "\n" << "      instance.AdoptAlternate(::ROOT::AddClassAlternate(\""
                   << classname << "\",\"" << cl.GetDemangledTypeInfo() << "\"));\n";
 
+   }
+
+   //---------------------------------------------------------------------------
+   // Register underlying SoA record for RNTuple SoA layouts
+   /////////////////////////////////////////////////////////////////////////////
+
+   if (!cl.RequestedRNTupleSoARecord().empty()) {
+      finalString << "      instance.SetRNTupleSoARecord(\"" << cl.RequestedRNTupleSoARecord() << "\");" << "\n";
    }
 
    //---------------------------------------------------------------------------
@@ -4047,6 +4069,7 @@ static void KeepNParams(clang::QualType& normalizedType,
    const int nNormArgs = normArgs.size();
 
    bool mightHaveChanged = false;
+   int latestNonDefaultArg = -1;
 
    // becomes true when a parameter has a value equal to its default
    for (int formal = 0, inst = 0; formal != nArgs; ++formal, ++inst) {
@@ -4085,10 +4108,12 @@ static void KeepNParams(clang::QualType& normalizedType,
                argsToKeep.push_back(normTArg);
             }
             // Done.
+            latestNonDefaultArg = -1;
             break;
          }
          mightHaveChanged |= RecurseKeepNParams(normTArg, tArg, interp, normCtxt, astCtxt);
          argsToKeep.push_back(normTArg);
+         latestNonDefaultArg = formal;
          continue;
       } else {
          if (!isStdDropDefault) {
@@ -4110,15 +4135,20 @@ static void KeepNParams(clang::QualType& normalizedType,
       } else if (argKind == clang::TemplateArgument::Integral){
          equal = areEqualValues(tArg, *tParPtr);
       }
+
+      argsToKeep.push_back(normTArg);
       if (!equal) {
+         latestNonDefaultArg = formal;
          mightHaveChanged |= RecurseKeepNParams(normTArg, tArg, interp, normCtxt, astCtxt);
-         argsToKeep.push_back(normTArg);
       } else {
          mightHaveChanged = true;
       }
 
 
    } // of loop over parameters and arguments
+
+   if (latestNonDefaultArg >= 0)
+      argsToKeep.resize(latestNonDefaultArg + 1);
 
    if (!prefix_changed && !mightHaveChanged) {
       normalizedType = originalNormalizedType;
@@ -4140,7 +4170,6 @@ static void KeepNParams(clang::QualType& normalizedType,
       normalizedType = astCtxt.getElaboratedType(clang::ElaboratedTypeKeyword::None, prefix, normalizedType);
       normalizedType = astCtxt.getQualifiedType(normalizedType,prefix_qualifiers);
    }
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5219,9 +5248,16 @@ void ROOT::TMetaUtils::SetPathsForRelocatability(std::vector<std::string>& cling
 
    if (!envInclPath)
       return;
+
+#ifdef _WIN32
+   constexpr char kPathSep = ';';
+#else
+   constexpr char kPathSep = ':';
+#endif
+
    std::istringstream envInclPathsStream(envInclPath);
    std::string inclPath;
-   while (std::getline(envInclPathsStream, inclPath, ':')) {
+   while (std::getline(envInclPathsStream, inclPath, kPathSep)) {
       // Can't use TSystem in here; re-implement TSystem::ExpandPathName().
       replaceEnvVars("ROOT_INCLUDE_PATH", inclPath);
       if (!inclPath.empty()) {

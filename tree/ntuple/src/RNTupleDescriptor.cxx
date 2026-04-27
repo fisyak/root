@@ -42,7 +42,8 @@ bool ROOT::RFieldDescriptor::operator==(const RFieldDescriptor &other) const
           fTypeName == other.fTypeName && fTypeAlias == other.fTypeAlias && fNRepetitions == other.fNRepetitions &&
           fStructure == other.fStructure && fParentId == other.fParentId &&
           fProjectionSourceId == other.fProjectionSourceId && fLinkIds == other.fLinkIds &&
-          fLogicalColumnIds == other.fLogicalColumnIds && other.fTypeChecksum == other.fTypeChecksum;
+          fLogicalColumnIds == other.fLogicalColumnIds && fTypeChecksum == other.fTypeChecksum &&
+          fIsSoACollection == other.fIsSoACollection;
 }
 
 ROOT::RFieldDescriptor ROOT::RFieldDescriptor::Clone() const
@@ -63,6 +64,7 @@ ROOT::RFieldDescriptor ROOT::RFieldDescriptor::Clone() const
    clone.fColumnCardinality = fColumnCardinality;
    clone.fLogicalColumnIds = fLogicalColumnIds;
    clone.fTypeChecksum = fTypeChecksum;
+   clone.fIsSoACollection = fIsSoACollection;
    return clone;
 }
 
@@ -208,7 +210,21 @@ ROOT::RColumnDescriptor ROOT::RColumnDescriptor::Clone() const
 ROOT::RClusterDescriptor::RPageInfoExtended
 ROOT::RClusterDescriptor::RPageRange::Find(ROOT::NTupleSize_t idxInCluster) const
 {
-   const auto N = fCumulativeNElements.size();
+   if (!fCumulativeNElements) {
+      // Small range, just iterate through fPageInfos
+      NTupleSize_t pageNumber = 0;
+      NTupleSize_t firstInPage = 0;
+      for (const auto &pi : fPageInfos) {
+         if (firstInPage + pi.GetNElements() > idxInCluster) {
+            return RPageInfoExtended{pi, firstInPage, pageNumber};
+         }
+         pageNumber++;
+         firstInPage += pi.GetNElements();
+      }
+      R__ASSERT(false);
+   }
+
+   const auto N = fCumulativeNElements->size();
    R__ASSERT(N > 0);
    R__ASSERT(N == fPageInfos.size());
 
@@ -217,12 +233,12 @@ ROOT::RClusterDescriptor::RPageRange::Find(ROOT::NTupleSize_t idxInCluster) cons
    std::size_t midpoint = N;
    while (left <= right) {
       midpoint = (left + right) / 2;
-      if (fCumulativeNElements[midpoint] <= idxInCluster) {
+      if ((*fCumulativeNElements)[midpoint] <= idxInCluster) {
          left = midpoint + 1;
          continue;
       }
 
-      if ((midpoint == 0) || (fCumulativeNElements[midpoint - 1] <= idxInCluster))
+      if ((midpoint == 0) || ((*fCumulativeNElements)[midpoint - 1] <= idxInCluster))
          break;
 
       right = midpoint - 1;
@@ -230,7 +246,7 @@ ROOT::RClusterDescriptor::RPageRange::Find(ROOT::NTupleSize_t idxInCluster) cons
    R__ASSERT(midpoint < N);
 
    auto pageInfo = fPageInfos[midpoint];
-   decltype(idxInCluster) firstInPage = (midpoint == 0) ? 0 : fCumulativeNElements[midpoint - 1];
+   decltype(idxInCluster) firstInPage = (midpoint == 0) ? 0 : (*fCumulativeNElements)[midpoint - 1];
    R__ASSERT(firstInPage <= idxInCluster);
    R__ASSERT((firstInPage + pageInfo.GetNElements()) > idxInCluster);
    return RPageInfoExtended{pageInfo, firstInPage, midpoint};
@@ -321,6 +337,11 @@ ROOT::RExtraTypeInfoDescriptor ROOT::RExtraTypeInfoDescriptor::Clone() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+ROOT::DescriptorId_t ROOT::Internal::CallFindClusterIdOn(const RNTupleDescriptor &desc, ROOT::NTupleSize_t entryIdx)
+{
+   return desc.FindClusterId(entryIdx);
+}
 
 bool ROOT::RNTupleDescriptor::operator==(const RNTupleDescriptor &other) const
 {
@@ -581,13 +602,11 @@ ROOT::DescriptorId_t ROOT::RNTupleDescriptor::FindPrevClusterId(ROOT::Descriptor
 }
 
 std::vector<ROOT::DescriptorId_t>
-ROOT::RNTupleDescriptor::RHeaderExtension::GetTopLevelFields(const RNTupleDescriptor &desc) const
+ROOT::RNTupleDescriptor::RHeaderExtension::GetTopMostFields(const RNTupleDescriptor &desc) const
 {
-   auto fieldZeroId = desc.GetFieldZeroId();
-
    std::vector<ROOT::DescriptorId_t> fields;
    for (const auto fieldId : fFieldIdsOrder) {
-      if (desc.GetFieldDescriptor(fieldId).GetParentId() == fieldZeroId)
+      if (fFieldIdsLookup.count(desc.GetFieldDescriptor(fieldId).GetParentId()) == 0)
          fields.emplace_back(fieldId);
    }
    return fields;
@@ -632,7 +651,7 @@ std::vector<std::uint64_t> ROOT::RNTupleDescriptor::GetFeatureFlags() const
          base += 64;
       }
       f -= base;
-      flags |= 1 << f;
+      flags |= std::uint64_t(1) << f;
    }
    result.emplace_back(flags);
    return result;
@@ -970,12 +989,16 @@ ROOT::RResult<ROOT::RClusterDescriptor> ROOT::Internal::RClusterDescriptorBuilde
       if (fCluster.fColumnRanges.count(pr.first) == 0) {
          return R__FAIL("missing column range");
       }
-      pr.second.fCumulativeNElements.clear();
-      pr.second.fCumulativeNElements.reserve(pr.second.fPageInfos.size());
-      ROOT::NTupleSize_t sum = 0;
-      for (const auto &pi : pr.second.fPageInfos) {
-         sum += pi.GetNElements();
-         pr.second.fCumulativeNElements.emplace_back(sum);
+      pr.second.fCumulativeNElements.reset();
+      const auto nPages = pr.second.fPageInfos.size();
+      if (nPages > RClusterDescriptor::RPageRange::kLargeRangeThreshold) {
+         pr.second.fCumulativeNElements = std::make_unique<std::vector<NTupleSize_t>>();
+         pr.second.fCumulativeNElements->reserve(nPages);
+         ROOT::NTupleSize_t sum = 0;
+         for (const auto &pi : pr.second.fPageInfos) {
+            sum += pi.GetNElements();
+            pr.second.fCumulativeNElements->emplace_back(sum);
+         }
       }
    }
    RClusterDescriptor result;
@@ -1166,6 +1189,10 @@ ROOT::Internal::RFieldDescriptorBuilder::FromField(const ROOT::RFieldBase &field
       .NRepetitions(field.GetNRepetitions());
    if (field.GetTraits() & ROOT::RFieldBase::kTraitTypeChecksum)
       fieldDesc.TypeChecksum(field.GetTypeChecksum());
+   if (field.GetTraits() & ROOT::RFieldBase::kTraitSoACollection) {
+      assert(field.GetStructure() == ENTupleStructure::kCollection);
+      fieldDesc.IsSoACollection(true);
+   }
    return fieldDesc;
 }
 
@@ -1176,6 +1203,9 @@ ROOT::RResult<ROOT::RFieldDescriptor> ROOT::Internal::RFieldDescriptorBuilder::M
    }
    if (fField.GetStructure() == ROOT::ENTupleStructure::kInvalid) {
       return R__FAIL("invalid field structure");
+   }
+   if (fField.IsSoACollection() && (fField.GetStructure() != ROOT::ENTupleStructure::kCollection)) {
+      return R__FAIL("invalid SoA flag on non-collection field");
    }
    // FieldZero is usually named "" and would be a false positive here
    if (fField.GetParentId() != ROOT::kInvalidDescriptorId) {

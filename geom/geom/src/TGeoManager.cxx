@@ -286,11 +286,11 @@ in order to enhance rays.
 #include "TGeoRegion.h"
 #include "TGDMLMatrix.h"
 #include "TGeoOpticalSurface.h"
+#include "TGeoColorScheme.h"
 
 // statics and globals
 
 TGeoManager *gGeoManager = nullptr;
-
 
 std::mutex TGeoManager::fgMutex;
 Bool_t TGeoManager::fgLock = kFALSE;
@@ -351,7 +351,7 @@ TGeoManager::TGeoManager()
       fSkinSurfaces = nullptr;
       fBorderSurfaces = nullptr;
       memset(fPdgId, 0, 1024 * sizeof(Int_t));
-      //   TObjArray            *fNavigators;       //! list of navigators
+      //   TObjArray            *fNavigators;       ///<! list of navigators
       fCurrentTrack = nullptr;
       fCurrentVolume = nullptr;
       fTopVolume = nullptr;
@@ -770,8 +770,8 @@ Int_t TGeoManager::AddVolume(TGeoVolume *volume)
    }
    volume->SetNumber(uid);
    if (!fHashVolumes) {
-      fHashVolumes = new THashList(256);
-      fHashGVolumes = new THashList(256);
+      fHashVolumes = new THashList(256, 3);
+      fHashGVolumes = new THashList(256, 3);
    }
    TObjArray *list = fVolumes;
    if (!volume->GetShape() || volume->IsRunTime() || volume->IsVolumeMulti()) {
@@ -1201,6 +1201,26 @@ Int_t TGeoManager::ReplaceVolume(TGeoVolume *vorig, TGeoVolume *vnew)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Rebuild the voxel structures that are flagged as needing rebuild.
+
+void TGeoManager::RebuildVoxels()
+{
+   Int_t nvol = fVolumes->GetEntriesFast();
+   TGeoVolume *vol;
+   TGeoVoxelFinder *voxels;
+   for (Int_t i = 0; i < nvol; i++) {
+      vol = (TGeoVolume *)fVolumes->At(i);
+      if (!vol)
+         continue;
+      voxels = vol->GetVoxels();
+      if (voxels && voxels->NeedRebuild()) {
+         voxels->Voxelize();
+         vol->FindOverlaps(); // after voxelization, check overlaps again
+      }
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Transform all volumes named VNAME to assemblies. The volumes must be virtual.
 
 Int_t TGeoManager::TransformVolumeToAssembly(const char *vname)
@@ -1538,8 +1558,8 @@ void TGeoManager::CloseGeometry(Option_t *option)
       if (!fHashVolumes) {
          Int_t nvol = fVolumes->GetEntriesFast();
          Int_t ngvol = fGVolumes->GetEntriesFast();
-         fHashVolumes = new THashList(nvol + 1);
-         fHashGVolumes = new THashList(ngvol + 1);
+         fHashVolumes = new THashList(nvol + 1, 3);
+         fHashGVolumes = new THashList(ngvol + 1, 3);
          Int_t i;
          for (i = 0; i < ngvol; i++)
             fHashGVolumes->AddLast(fGVolumes->At(i));
@@ -2258,42 +2278,30 @@ Int_t TGeoManager::GetSafeLevel() const
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Set default volume colors according to A of material
+///
+/// If called with no argument, it uses the new default "natural" scheme
+/// (including name-based material overrides) and falls back to Z-binned colors.
 
-void TGeoManager::DefaultColors()
+void TGeoManager::DefaultColors(const TGeoColorScheme *cs /*=nullptr*/)
 {
-   const Int_t nmax = 110;
-   Int_t col[nmax];
-   for (Int_t i = 0; i < nmax; i++)
-      col[i] = kGray;
+   TGeoColorScheme defaultCS(EGeoColorSet::kNatural);
+   const TGeoColorScheme *scheme = cs ? cs : &defaultCS;
 
-   // here we should create a new TColor with the same rgb as in the default
-   // ROOT colors used below
-   col[3] = kYellow - 10;
-   col[4] = col[5] = kGreen - 10;
-   col[6] = col[7] = kBlue - 7;
-   col[8] = col[9] = kMagenta - 3;
-   col[10] = col[11] = kRed - 10;
-   col[12] = kGray + 1;
-   col[13] = kBlue - 10;
-   col[14] = kOrange + 7;
-   col[16] = kYellow + 1;
-   col[20] = kYellow - 10;
-   col[24] = col[25] = col[26] = kBlue - 8;
-   col[29] = kOrange + 9;
-   col[79] = kOrange - 2;
-
-   TGeoVolume *vol;
+   TGeoVolume *vol = nullptr;
    TIter next(fVolumes);
+
    while ((vol = (TGeoVolume *)next())) {
-      TGeoMedium *med = vol->GetMedium();
-      if (!med)
-         continue;
-      TGeoMaterial *mat = med->GetMaterial();
-      Int_t matZ = (Int_t)mat->GetZ();
-      vol->SetLineColor(col[matZ]);
-      if (mat->GetDensity() < 0.1)
-         vol->SetTransparency(60);
+      // Ask scheme for a color (>=0 means "use it")
+      const Int_t c = scheme->Color(vol);
+      if (c >= 0)
+         vol->SetLineColor(c);
+
+      // Ask scheme for transparency ([0..100] means "use it")
+      const Int_t t = scheme->Transparency(vol);
+      if (t >= 0)
+         vol->SetTransparency(t);
    }
+   ModifiedPad();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2708,7 +2716,6 @@ void TGeoManager::SaveAttributes(const char *filename)
    }
    out << "   // draw top volume with new settings" << std::endl;
    out << "   top->Draw();" << std::endl;
-   out << "   gPad->x3d();" << std::endl;
    out << "}" << std::endl;
    out.close();
 }
@@ -2987,8 +2994,8 @@ TGeoVolume *TGeoManager::FindVolumeFast(const char *name, Bool_t multi)
    if (!fHashVolumes) {
       Int_t nvol = fVolumes->GetEntriesFast();
       Int_t ngvol = fGVolumes->GetEntriesFast();
-      fHashVolumes = new THashList(nvol + 1);
-      fHashGVolumes = new THashList(ngvol + 1);
+      fHashVolumes = new THashList(nvol + 1, 3);
+      fHashGVolumes = new THashList(ngvol + 1, 3);
       Int_t i;
       for (i = 0; i < ngvol; i++)
          fHashGVolumes->AddLast(fGVolumes->At(i));
@@ -3631,6 +3638,7 @@ void TGeoManager::SetNsegments(Int_t nseg)
       fNsegments = nseg;
    if (fPainter)
       fPainter->SetNsegments(nseg);
+   InvalidateMeshCaches();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3639,6 +3647,19 @@ void TGeoManager::SetNsegments(Int_t nseg)
 Int_t TGeoManager::GetNsegments() const
 {
    return fNsegments;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Invalidate mesh caches built by composite shapes
+
+void TGeoManager::InvalidateMeshCaches()
+{
+   TIter next_shape(fShapes);
+   TGeoShape *shape;
+   while ((shape = (TGeoShape *)next_shape())) {
+      if (shape->IsComposite())
+         ((TGeoCompositeShape *)shape)->InvalidateMeshCaches();
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3905,6 +3926,18 @@ void TGeoManager::CheckOverlaps(Double_t ovlp, Option_t *option)
       return;
    }
    fTopNode->CheckOverlaps(ovlp, option);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Check all geometry for illegal overlaps within a limit OVLP.
+
+void TGeoManager::CheckOverlapsBySampling(Double_t ovlp, Int_t npoints)
+{
+   if (!fTopNode) {
+      Error("CheckOverlaps", "Top node not set");
+      return;
+   }
+   fTopNode->CheckOverlapsBySampling(ovlp, npoints);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

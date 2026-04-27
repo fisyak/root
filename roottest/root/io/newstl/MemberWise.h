@@ -143,14 +143,14 @@ public:
    std::vector<Member>   fHasCustomStreamer;
    std::vector<Content>  fNotSplit; //||
    std::vector<WithAttachedStreamer> fAttachedStreamer;
-   std::vector<WithStreamerOnly> fStreamerOnly; //!
+   std::vector<WithStreamerOnly> fStreamerOnly; ///<!
    std::vector<WithExplicitCannotSplit> fCannotSplit;
    std::vector<WithStreamerOnly> fStreamerOnlyNoReq; //
 
    std::vector<NeverWritten> fAlwaysEmpty;
 };
 
-#ifdef __MAKECINT__
+#ifdef __ROOTCLING__
 #pragma link C++ class Member-;
 #pragma link C++ class Content+;
 #pragma link C++ class Holder+;

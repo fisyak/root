@@ -16,6 +16,7 @@
 
 #include <ROOT/RError.hxx>
 #include <ROOT/RCluster.hxx>
+#include <ROOT/RClusterPool.hxx>
 #include <ROOT/RColumnElementBase.hxx>
 #include <ROOT/RNTupleDescriptor.hxx>
 #include <ROOT/RNTupleMetrics.hxx>
@@ -326,7 +327,7 @@ public:
 
 protected:
    virtual void InitImpl(RNTupleModel &model) = 0;
-   virtual void CommitDatasetImpl() = 0;
+   virtual RNTupleLink CommitDatasetImpl() = 0;
 
 public:
    /// Parameters for the SealPage() method
@@ -386,10 +387,22 @@ public:
    /// CommitClusterGroup (or the beginning of writing).
    virtual void CommitClusterGroup() = 0;
 
+   /// Creates a new sink with the same underlying storage as this but writing to a different
+   /// RNTuple named `name`. Only one of the two sinks can safely write at the same time.
+   /// The RNTuple written by this cloned sink will be stored in a hidden key (this is a convenient assumption we
+   /// make now since this method is only used to create attribute RNTuples).
+   virtual std::unique_ptr<RPageSink> CloneAsHidden(std::string_view name, const RNTupleWriteOptions &opts) const = 0;
+
+   /// Adds the given anchor information (name + locator) into the main RNTuple's descriptor as an attribute set
+   /// linked to it with the given name.
+   /// The attribute set must have already been written to storage via RNTupleAttrSetWriter::Commit().
+   /// Note that, by RNTuple specs, this is only legal to call on a non-attribute RNTuple's sink.
+   virtual void CommitAttributeSet(std::string_view attrSetName, const RNTupleLink &attrAnchorInfo) = 0;
+
    /// The registered callback is executed at the beginning of CommitDataset();
    void RegisterOnCommitDatasetCallback(Callback_t callback) { fOnDatasetCommitCallbacks.emplace_back(callback); }
    /// Run the registered callbacks and finalize the current cluster and the entrire data set.
-   void CommitDataset();
+   RNTupleLink CommitDataset();
 
    /// Get a new, empty page for the given column that can be filled with up to nElements;
    /// nElements must be larger than zero.
@@ -490,7 +503,7 @@ protected:
    /// Returns the locator of the page list envelope of the given buffer that contains the serialized page list.
    /// Typically, the implementation takes care of compressing and writing the provided buffer.
    virtual RNTupleLocator CommitClusterGroupImpl(unsigned char *serializedPageList, std::uint32_t length) = 0;
-   virtual void CommitDatasetImpl(unsigned char *serializedFooter, std::uint32_t length) = 0;
+   virtual RNTupleLink CommitDatasetImpl(unsigned char *serializedFooter, std::uint32_t length) = 0;
 
    /// Enables the default set of metrics provided by RPageSink. `prefix` will be used as the prefix for
    /// the counters registered in the internal RNTupleMetrics object.
@@ -538,7 +551,9 @@ public:
    RStagedCluster StageCluster(ROOT::NTupleSize_t nNewEntries) final;
    void CommitStagedClusters(std::span<RStagedCluster> clusters) final;
    void CommitClusterGroup() final;
-   void CommitDatasetImpl() final;
+   void CommitAttributeSet(std::string_view attrSetName, const RNTupleLink &attrAnchorInfo) final;
+   /// \return The locator and length of the written anchor.
+   RNTupleLink CommitDatasetImpl() final;
 }; // class RPagePersistentSink
 
 // clang-format off
@@ -618,7 +633,7 @@ private:
    ROOT::DescriptorId_t fLastUsedCluster = ROOT::kInvalidDescriptorId;
    /// Clusters from where pages got preloaded in UnzipClusterImpl(), ordered by first entry number
    /// of the clusters. If the last used cluster changes in LoadPage(), all unused pages from
-   /// previous clusters are evicted from the page pool.
+   /// previous clusters are evicted from the page pool. Pinned clusters won't be evicted.
    std::map<ROOT::NTupleSize_t, ROOT::DescriptorId_t> fPreloadedClusters;
 
    /// Does nothing if fLastUsedCluster == clusterId. Otherwise, updated fLastUsedCluster
@@ -694,7 +709,14 @@ protected:
    ROOT::RNTupleReadOptions fOptions;
    /// The active columns are implicitly defined by the model fields or views
    RActivePhysicalColumns fActivePhysicalColumns;
+   /// Pinned clusters and their $2 * (cluster bunch size) - 1$ successors will not be evicted from the cluster pool.
+   /// Pages of pinned clusters won't be evicted from the page pool.
+   std::unordered_set<ROOT::DescriptorId_t> fPinnedClusters;
 
+   /// The cluster pool asynchronously preloads the next few clusters. Note that derived classes should call
+   /// fClusterPool.StopBackgroundThread() in their destructor so that the I/O background thread does not call
+   /// methods from the destructed derived class.
+   ROOT::Internal::RClusterPool fClusterPool;
    /// Pages that are unzipped with IMT are staged into the page pool
    ROOT::Internal::RPagePool fPagePool;
 
@@ -757,7 +779,7 @@ public:
    /// The underlying `std::shared_mutex`, however, is neither read nor write recursive:
    /// within one thread, only one lock (shared or exclusive) must be acquired at the same time. This requires special
    /// care in sections protected by `GetSharedDescriptorGuard()` and `GetExclDescriptorGuard()` especially to avoid
-   /// that the locks are acquired indirectly (e.g. by a call to `GetNEntries()`). As a general guideline, no other
+   /// that the locks are acquired indirectly. As a general guideline, no other
    /// method of the page source should be called (directly or indirectly) in a guarded section.
    const RSharedDescriptorGuard GetSharedDescriptorGuard() const
    {
@@ -815,6 +837,12 @@ public:
    /// if implicit multi-threading is turned on.
    void UnzipCluster(ROOT::Internal::RCluster *cluster);
 
+   /// Instructs the cluster pool and page pool to consider the given cluster as active (should stay cached).
+   void PinCluster(ROOT::DescriptorId_t clusterId) { fPinnedClusters.insert(clusterId); }
+   /// Allows the given cluster to be evicted from the cluster pool and page pool.
+   void UnpinCluster(ROOT::DescriptorId_t clusterId) { fPinnedClusters.erase(clusterId); }
+   const std::unordered_set<ROOT::DescriptorId_t> &GetPinnedClusters() const { return fPinnedClusters; }
+
    // TODO(gparolini): for symmetry with SealPage(), we should either make this private or SealPage() public.
    RResult<ROOT::Internal::RPage>
    UnsealPage(const RSealedPage &sealedPage, const ROOT::Internal::RColumnElementBase &element);
@@ -826,6 +854,11 @@ public:
    /// Forces the loading of ROOT StreamerInfo from the underlying file. This currently only has an effect for
    /// TFile-backed sources.
    virtual void LoadStreamerInfo() = 0;
+
+   /// Creates a new PageSource using the same underlying file as this but referring to a different RNTuple,
+   /// described by `anchorLink`.
+   virtual std::unique_ptr<RPageSource> OpenWithDifferentAnchor(const ROOT::Internal::RNTupleLink &anchorLink,
+                                                                const ROOT::RNTupleReadOptions &options = {}) = 0;
 }; // class RPageSource
 
 } // namespace Internal

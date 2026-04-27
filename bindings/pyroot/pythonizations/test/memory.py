@@ -1,7 +1,8 @@
-import ROOT
 import gc
 import os
 import unittest
+
+import ROOT
 
 
 def _leak(obj):
@@ -16,7 +17,7 @@ class MemoryStlString(unittest.TestCase):
     def test_tstyle_memory_management(self):
         """Regression test for https://github.com/root-project/root/issues/16918"""
 
-        h1 = ROOT.TH1F("h1", "", 100, 0, 10)
+        _ = ROOT.TH1F("h1", "", 100, 0, 10)
 
         style = ROOT.TStyle("NewSTYLE", "")
         groot = ROOT.ROOT.GetROOT()
@@ -27,19 +28,19 @@ class MemoryStlString(unittest.TestCase):
         """Regression test for https://github.com/root-project/root/issues/16942"""
         # The test is just that the memory regulation works correctly and the
         # application does not segfault
-        f2 = ROOT.TF2("f2", "sin(x)*sin(y)/x/y")
+        _ = ROOT.TF2("f2", "sin(x)*sin(y)/x/y")
 
     def test_tf3_memory_regulation(self):
         """Make sure TF3 is properly managed by the memory regulation logic"""
         # The test is just that the memory regulation works correctly and the
         # application does not segfault
-        f3 = ROOT.TF3("f3","[0] * sin(x) + [1] * cos(y) + [2] * z",0,10,0,10,0,10)
+        _ = ROOT.TF3("f3", "[0] * sin(x) + [1] * cos(y) + [2] * z", 0, 10, 0, 10, 0, 10)
 
     def test_tcolor_memory_regulation(self):
         """Make sure TColor is properly managed by the memory regulation logic"""
         # The test is just that the memory regulation works correctly and the
         # application does not segfault
-        c = ROOT.TColor(42, 42, 42)
+        _ = ROOT.TColor(42, 42, 42)
 
     def test_ttree_clone_in_file_context(self):
         """Test that CloneTree() doesn't give the ownership to Python when
@@ -49,8 +50,8 @@ class MemoryStlString(unittest.TestCase):
 
         ttree = ROOT.TTree("tree", "tree")
 
-        with ROOT.TFile(filename, "RECREATE") as infile:
-            ttree_clone = ttree.CloneTree()
+        with ROOT.TFile(filename, "RECREATE") as _:
+            _ = ttree.CloneTree()
 
         os.remove(filename)
 
@@ -88,7 +89,6 @@ class MemoryStlString(unittest.TestCase):
             "TH1I": ("h", "h", 10, 0, 10),
             "TH1L": ("h", "h", 10, 0, 10),
             "TH1F": ("h", "h", 10, 0, 10),
-            "TH1D": ("h", "h", 10, 0, 10),
             "TProfile": ("h", "h", 10, 0, 10),
             "TH2C": ("h", "h", 10, 0, 10, 10, 0, 10),
             "TH2S": ("h", "h", 10, 0, 10, 10, 0, 10),
@@ -127,11 +127,14 @@ class MemoryStlString(unittest.TestCase):
             "_check_object_setdirectory_in_memory_file_begin", "recreate")
 
         x = klass(*args)
-        # TEfficiency does not automatically register with the directory
-        if not classname == "TEfficiency":
-            self.assertIs(x.GetDirectory(), f1)
-            x.SetDirectory(ROOT.nullptr)
+        # Register the object to the directory in case this hasn't been done:
+        if not x.GetDirectory():
+            x.SetDirectory(f1)
+
+        self.assertIs(x.GetDirectory(), f1)
+        x.SetDirectory(ROOT.nullptr)
         self.assertFalse(x.GetDirectory())
+
         # Make sure that at this point the ownership of the object is with Python
         ROOT.SetOwnership(x, True)
 

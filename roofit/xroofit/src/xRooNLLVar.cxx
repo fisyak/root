@@ -687,7 +687,8 @@ RooArgList xRooNLLVar::xRooFitResult::ranknp(const char *poi, bool up, bool pref
       auto vv = static_cast<RooRealVar *>(out.at(out.size() - 1));
       vv->setVal(v);
       vv->removeError();
-      vv->removeRange();
+      vv->removeMin();
+      vv->removeMax();
    }
    return out;
 }
@@ -2438,10 +2439,10 @@ size_t xRooNLLVar::xRooHypoPoint::addToys(bool alt, int nToys, int initialSeed, 
       for (size_t i = 0; i < nnToys; i++) {
          int seed = RooRandom::randomGenerator()->Integer(std::numeric_limits<uint32_t>::max());
          auto toy = ((alt) ? generateAlt(seed) : generateNull(seed));
-         TDirectory *tmp = gDirectory;
-         gDirectory = nullptr; // disables any saving of fit results for toys
-         toys.push_back(std::make_tuple(seed, toy.pll().first, 1.));
-         gDirectory = tmp;
+         {
+            TDirectory::TContext ctx{nullptr}; // disables any saving of fit results for toys
+            toys.push_back(std::make_tuple(seed, toy.pll().first, 1.));
+         }
          (alt ? altToysAdded : toysAdded)++;
          if (std::isnan(std::get<1>(toys.back())))
             nans++;
@@ -3052,8 +3053,10 @@ xRooNLLVar::xRooHypoSpace xRooNLLVar::hypoSpace(const char *parName, int nPoints
          if (tsType == xRooFit::TestStatistic::qmutilde) {
             dynamic_cast<RooRealVar *>(p)->setRange("physical", 0, std::numeric_limits<double>::infinity());
             Info("xRooNLLVar::hypoSpace", "Setting physical range of %s to [0,inf]", p->GetName());
-         } else if (dynamic_cast<RooRealVar *>(p)->hasRange("physical")) {
-            dynamic_cast<RooRealVar *>(p)->removeRange("physical");
+         } else if (dynamic_cast<RooRealVar *>(p) && static_cast<RooRealVar *>(p)->hasRange("physical")) {
+            auto *var = static_cast<RooRealVar *>(p);
+            var->removeMin("physical");
+            var->removeMax("physical");
             Info("xRooNLLVar::hypoSpace", "Removing physical range of %s", p->GetName());
          }
       }

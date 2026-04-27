@@ -1,14 +1,27 @@
 #include "ntuple_test.hxx"
 
-#include <TFileMerger.h>
+#include <ROOT/RConfig.hxx>
+#ifndef R__BYTESWAP
+#define IS_BIG_ENDIAN 1
+#endif
+
+#if IS_BIG_ENDIAN
+#include <Byteswap.h>
+#endif
 #include <ROOT/TBufferMerger.hxx>
+
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <xxhash.h>
+#include <zlib.h>
+
+#include <TFileMerger.h>
+#include <TKey.h>
+#include <TRandom3.h>
+#include <TTree.h>
+
 #include <string_view>
 #include <unordered_map>
-#include <zlib.h>
-#include "gmock/gmock.h"
-#include <TTree.h>
-#include <TRandom3.h>
 
 using ROOT::TestSupport::CheckDiagsRAII;
 
@@ -18,8 +31,7 @@ namespace {
 std::int32_t ReadRawInt(const void *ptr)
 {
    std::int32_t val = *reinterpret_cast<const std::int32_t *>(ptr);
-#ifndef R__BYTESWAP
-   // on big endian system
+#if IS_BIG_ENDIAN
    auto x = (val & 0x0000FFFF) << 16 | (val & 0xFFFF0000) >> 16;
    return (x & 0x00FF00FF) << 8 | (x & 0xFF00FF00) >> 8;
 #else
@@ -3009,6 +3021,64 @@ TEST(RNTupleMerger, MergeFirstNoEntries)
    }
 }
 
+TEST(RNTupleMerger, MergeSecondNoEntries)
+{
+   // Try merging two ntuples with the same schema, the second two of which has no entries.
+   FileRaii fileGuard1("test_ntuple_merge_second_noentries_1.root");
+   FileRaii fileGuard2("test_ntuple_merge_second_noentries_2.root");
+   {
+      auto model = RNTupleModel::Create();
+      model->MakeField<float>("foo");
+      auto pBar = model->MakeField<int>("bar");
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard1.GetPath());
+      for (int i = 0; i < 10; ++i) {
+         *pBar = i;
+         ntuple->Fill();
+      }
+   }
+   {
+      auto model = RNTupleModel::Create();
+      model->MakeField<float>("foo");
+      model->MakeField<int>("bar");
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard2.GetPath());
+   }
+
+   // Now merge the inputs
+   FileRaii fileGuardOut("test_ntuple_merge_second_noentries_out.root");
+   {
+      // Gather the input sources
+      std::vector<std::unique_ptr<RPageSource>> sources;
+      sources.push_back(RPageSource::Create("ntuple", fileGuard1.GetPath(), RNTupleReadOptions()));
+      sources.push_back(RPageSource::Create("ntuple", fileGuard2.GetPath(), RNTupleReadOptions()));
+      std::vector<RPageSource *> sourcePtrs;
+      for (const auto &s : sources) {
+         sourcePtrs.push_back(s.get());
+      }
+
+      for (auto mode : {ENTupleMergingMode::kFilter, ENTupleMergingMode::kStrict, ENTupleMergingMode::kUnion}) {
+         auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuardOut.GetPath(), RNTupleWriteOptions());
+         RNTupleMergeOptions opts;
+         opts.fMergingMode = mode;
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
+   }
+
+   {
+      auto ntupleOut = RNTupleReader::Open("ntuple", fileGuardOut.GetPath());
+      EXPECT_EQ(ntupleOut->GetNEntries(), 10);
+      EXPECT_EQ(ntupleOut->GetDescriptor().GetNFields(), 3); // zero field + the ones we added
+      auto pFoo = ntupleOut->GetModel().GetDefaultEntry().GetPtr<float>("foo");
+      auto pBar = ntupleOut->GetModel().GetDefaultEntry().GetPtr<int>("bar");
+      for (int i : ntupleOut->GetEntryRange()) {
+         ntupleOut->LoadEntry(i);
+         EXPECT_FLOAT_EQ(*pFoo, 0);
+         EXPECT_EQ(*pBar, i);
+      }
+   }
+}
+
 TEST(RNTupleMerger, MergeEmptySchema)
 {
    // Try merging two ntuples with an empty schema
@@ -3206,7 +3276,81 @@ TEST(RNTupleMerger, MergeSecondEmptySchema)
          auto res = merger.Merge(sourcePtrs, opts);
          EXPECT_TRUE(bool(res));
       }
-      // In Union mode we expect the output ntuple to the same fields as the first
+      // In Union mode we expect the output ntuple to have the same fields as the first
+      {
+         auto ntuple1 = RNTupleReader::Open("ntuple", fileGuard1.GetPath());
+         auto ntupleOut = RNTupleReader::Open("ntuple", fileGuardOut.GetPath());
+         ASSERT_EQ(ntupleOut->GetNEntries(), ntuple1->GetNEntries());
+         ASSERT_EQ(ntupleOut->GetDescriptor().GetNFields(), ntuple1->GetDescriptor().GetNFields());
+
+         auto viewI = ntupleOut->GetView<int>("int");
+         auto viewF = ntupleOut->GetView<float>("flt");
+         for (auto idx : ntupleOut->GetEntryRange()) {
+            EXPECT_EQ(viewI(idx), idx);
+            EXPECT_FLOAT_EQ(viewF(idx), idx);
+         }
+      }
+
+      {
+         auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuardOut.GetPath(), RNTupleWriteOptions());
+         opts.fMergingMode = ENTupleMergingMode::kStrict;
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_FALSE(bool(res));
+      }
+   }
+}
+
+TEST(RNTupleMerger, MergeSecondEmptySchema2)
+{
+   // Try merging two ntuples, the second of which has an empty schema and no entries
+   FileRaii fileGuard1("test_ntuple_merge_secondempty2_1.root");
+   {
+      auto model = RNTupleModel::Create();
+      auto pi = model->MakeField<int>("int");
+      auto pf = model->MakeField<float>("flt");
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard1.GetPath());
+      for (size_t i = 0; i < 10; ++i) {
+         *pi = i;
+         *pf = i;
+         ntuple->Fill();
+      }
+   }
+
+   FileRaii fileGuard2("test_ntuple_merge_secondempty2_2.root");
+   {
+      auto model = RNTupleModel::Create();
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard2.GetPath());
+   }
+
+   // Now merge the inputs
+   FileRaii fileGuardOut("test_ntuple_merge_secondempty2_out.root");
+   {
+      // Gather the input sources
+      std::vector<std::unique_ptr<RPageSource>> sources;
+      sources.push_back(RPageSource::Create("ntuple", fileGuard1.GetPath(), RNTupleReadOptions()));
+      sources.push_back(RPageSource::Create("ntuple", fileGuard2.GetPath(), RNTupleReadOptions()));
+      std::vector<RPageSource *> sourcePtrs;
+      for (const auto &s : sources) {
+         sourcePtrs.push_back(s.get());
+      }
+
+      RNTupleMergeOptions opts;
+      {
+         auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuardOut.GetPath(), RNTupleWriteOptions());
+         opts.fMergingMode = ENTupleMergingMode::kFilter;
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_FALSE(bool(res));
+      }
+      {
+         auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuardOut.GetPath(), RNTupleWriteOptions());
+         opts.fMergingMode = ENTupleMergingMode::kUnion;
+         RNTupleMerger merger{std::move(destination)};
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
+      // In Union mode we expect the output ntuple to have the same fields as the first
       {
          auto ntuple1 = RNTupleReader::Open("ntuple", fileGuard1.GetPath());
          auto ntupleOut = RNTupleReader::Open("ntuple", fileGuardOut.GetPath());
@@ -3806,6 +3950,78 @@ TEST(RNTupleMerger, MergeStreamerFieldsSecondMissing)
             auto res = merger.Merge(sourcePtrs, opts);
             EXPECT_FALSE(bool(res));
          }
+      }
+   }
+}
+
+TEST(RNTupleMerger, MergeNewerVersion)
+{
+   // Verify that merging RNTuples with future versions works as expected (warn user but successfully merge)
+   FileRaii fileGuard("test_ntuple_merge_newer_version.root");
+
+   // Write a regular RNTuple
+   {
+      auto model = RNTupleModel::Create();
+      auto pInt = model->MakeField<int>("int");
+      auto wopts = RNTupleWriteOptions();
+      wopts.SetCompression(0);
+      auto ntuple = RNTupleWriter::Recreate(std::move(model), "ntuple", fileGuard.GetPath(), wopts);
+      for (int i = 0; i < 10; ++i) {
+         *pInt = i;
+         ntuple->Fill();
+      }
+      ntuple->CommitDataset();
+   }
+
+   // Get metadata about its anchor
+   std::uint64_t anchorSeek = 0, anchorNbytes = 0;
+   {
+      auto file = std::unique_ptr<TFile>(TFile::Open(fileGuard.GetPath().c_str()));
+      auto anchorKey = file->GetKey("ntuple");
+      ASSERT_NE(anchorKey, nullptr);
+      anchorSeek = anchorKey->GetSeekKey() + anchorKey->GetKeylen();
+      anchorNbytes = anchorKey->GetNbytes() - anchorKey->GetKeylen() - 8; // 8 for the checksum
+   }
+
+   // Patch the anchor version (and update its checksum)
+   const std::byte newMajorVersion{0x99};
+   // NOTE: skipping the first 6 bytes (nbytes and class version) for checksum calculation
+   anchorSeek += 6;
+   anchorNbytes -= 6;
+   PatchRNTupleSection(fileGuard.GetPath(), anchorSeek, anchorNbytes, 3, &newMajorVersion, sizeof(newMajorVersion),
+                       EEndianness::BE);
+
+   // Merge
+   FileRaii fileGuardOut("test_ntuple_merge_newer_version_out.root");
+   {
+      // Gather the input sources
+      std::vector<std::unique_ptr<RPageSource>> sources;
+      sources.push_back(RPageSource::Create("ntuple", fileGuard.GetPath(), RNTupleReadOptions()));
+      std::vector<RPageSource *> sourcePtrs;
+      for (const auto &s : sources) {
+         sourcePtrs.push_back(s.get());
+      }
+
+      // Create the output
+      auto destination = std::make_unique<RPageSinkFile>("ntuple", fileGuardOut.GetPath(), RNTupleWriteOptions());
+      RNTupleMerger merger{std::move(destination)};
+
+      for (const auto mmode : {ENTupleMergingMode::kFilter, ENTupleMergingMode::kStrict, ENTupleMergingMode::kUnion}) {
+         CheckDiagsRAII diagsRaii;
+         diagsRaii.requiredDiag(kWarning, "ROOT.NTuple.Merge", "has a higher format version", false);
+         RNTupleMergeOptions opts;
+         opts.fMergingMode = mmode;
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_TRUE(bool(res));
+      }
+
+      // Now merge again but with VersionBehavior set to Abort.
+      {
+         RNTupleMergeOptions opts;
+         opts.fVersionBehavior = ROOT::Experimental::Internal::ENTupleMergeVersionBehavior::kAbortOnHigherVersion;
+         auto res = merger.Merge(sourcePtrs, opts);
+         EXPECT_FALSE(bool(res));
+         EXPECT_THAT(res.GetError()->GetReport(), testing::HasSubstr("has a higher format version"));
       }
    }
 }

@@ -2,9 +2,20 @@
 
 #include <type_traits>
 
+// User-defined weight type with a single double, but can be much more complicated
+struct UserWeight {
+   double fWeight = 0;
+};
+
 // User-defined bin content type consisting of a single double, but can be much more complicated.
 struct User {
    double fValue = 0;
+
+   User &operator=(double value)
+   {
+      fValue = value;
+      return *this;
+   }
 
    User &operator++()
    {
@@ -25,6 +36,12 @@ struct User {
       return *this;
    }
 
+   User &operator+=(const UserWeight &w)
+   {
+      fValue += w.fWeight;
+      return *this;
+   }
+
    User &operator+=(const User &rhs)
    {
       fValue += rhs.fValue;
@@ -40,6 +57,8 @@ struct User {
    void AtomicInc() { ROOT::Experimental::Internal::AtomicInc(&fValue); }
 
    void AtomicAdd(double w) { ROOT::Experimental::Internal::AtomicAdd(&fValue, w); }
+
+   void AtomicAdd(const UserWeight &w) { ROOT::Experimental::Internal::AtomicAdd(&fValue, w.fWeight); }
 
    void AtomicAdd(const User &rhs) { ROOT::Experimental::Internal::AtomicAdd(&fValue, rhs.fValue); }
 };
@@ -149,6 +168,28 @@ TEST(RHistEngineUser, FillWeight)
    EXPECT_EQ(engine.GetBinContent(indices).fValue, 0.9);
 }
 
+TEST(RHistEngineUser, FillUserWeight)
+{
+   // Weighted filling with user-defined weight uses operator+=(const UserWeight &)
+   static constexpr std::size_t Bins = 20;
+   const RRegularAxis axis(Bins, {0, Bins});
+   RHistEngine<User> engine({axis});
+
+   // Must use overload accepting std::tuple
+   engine.Fill(std::make_tuple(9.5), UserWeight{0.9});
+
+   EXPECT_EQ(engine.GetBinContent(RBinIndex(9)).fValue, 0.9);
+}
+
+TEST(RHistEngineUser, FillUserWeightInvalidNumberOfArguments)
+{
+   static constexpr std::size_t Bins = 20;
+   const RRegularAxis axis(Bins, {0, Bins});
+   RHistEngine<User> engine({axis});
+
+   EXPECT_THROW(engine.Fill(std::make_tuple(8.5, 9.5), UserWeight{0.9}), std::invalid_argument);
+}
+
 TEST(RHistEngineUser, FillAtomic)
 {
    // Unweighted filling with atomic instructions uses AtomicInc
@@ -166,7 +207,7 @@ TEST(RHistEngineUser, FillAtomic)
 
 TEST(RHistEngineUser, FillAtomicWeight)
 {
-   // Weighted filling with atomic instructions uses AtomicAdd
+   // Weighted filling with atomic instructions uses AtomicAdd(double)
    static constexpr std::size_t Bins = 20;
    const RRegularAxis axis(Bins, {0, Bins});
    RHistEngine<User> engine({axis});
@@ -177,6 +218,28 @@ TEST(RHistEngineUser, FillAtomicWeight)
    EXPECT_EQ(engine.GetBinContent(RBinIndex(8)).fValue, 0.8);
    std::array<RBinIndex, 1> indices = {9};
    EXPECT_EQ(engine.GetBinContent(indices).fValue, 0.9);
+}
+
+TEST(RHistEngineUser, FillAtomicUserWeight)
+{
+   // Weighted filling with user-defined weight and atomic instructions uses AtomicAdd(const UserWeight &)
+   static constexpr std::size_t Bins = 20;
+   const RRegularAxis axis(Bins, {0, Bins});
+   RHistEngine<User> engine({axis});
+
+   // Must use overload accepting std::tuple
+   engine.FillAtomic(std::make_tuple(9.5), UserWeight{0.9});
+
+   EXPECT_EQ(engine.GetBinContent(RBinIndex(9)).fValue, 0.9);
+}
+
+TEST(RHistEngineUser, FillAtomicUserWeightInvalidNumberOfArguments)
+{
+   static constexpr std::size_t Bins = 20;
+   const RRegularAxis axis(Bins, {0, Bins});
+   RHistEngine<User> engine({axis});
+
+   EXPECT_THROW(engine.FillAtomic(std::make_tuple(8.5, 9.5), UserWeight{0.9}), std::invalid_argument);
 }
 
 TEST(RHistEngineUser, Scale)
@@ -194,4 +257,20 @@ TEST(RHistEngineUser, Scale)
 
    EXPECT_EQ(engine.GetBinContent(8).fValue, Factor * 0.8);
    EXPECT_EQ(engine.GetBinContent(9).fValue, Factor * 0.9);
+}
+
+TEST(RHistEngineUser, SetBinContent)
+{
+   // Setting uses operator=
+   static constexpr std::size_t Bins = 20;
+   const RRegularAxis axis(Bins, {0, Bins});
+   RHistEngine<User> engine({axis});
+
+   const RBinIndex index(7);
+   engine.SetBinContent(index, 42);
+   EXPECT_EQ(engine.GetBinContent(index).fValue, 42);
+
+   const std::array<RBinIndex, 1> indices = {index};
+   engine.SetBinContent(indices, 43);
+   EXPECT_EQ(engine.GetBinContent(indices).fValue, 43);
 }

@@ -486,13 +486,6 @@ ROOT::RFieldBase::Create(const std::string &fieldName, const std::string &typeNa
       }
 
       if (!result) {
-         auto e = TEnum::GetEnum(resolvedType.c_str());
-         if (e != nullptr) {
-            result = std::make_unique<REnumField>(fieldName, typeName);
-         }
-      }
-
-      if (!result) {
          auto cl = TClass::GetClass(typeName.c_str());
 
          if (cl && cl->GetState() > TClass::kForwardDeclared) {
@@ -505,8 +498,10 @@ ROOT::RFieldBase::Create(const std::string &fieldName, const std::string &typeNa
             // rather than from TClass. This might be desirable in the future, but for now in this
             // situation we rely on field emulation instead.
             else if (cl->GetState() >= TClass::kInterpreted) {
-               if (ROOT::Internal::GetRNTupleSerializationMode(cl) ==
-                   ROOT::Internal::ERNTupleSerializationMode::kForceStreamerMode) {
+               if (!ROOT::Internal::GetRNTupleSoARecord(cl).empty()) {
+                  result = std::make_unique<ROOT::Experimental::RSoAField>(fieldName, typeName);
+               } else if (ROOT::Internal::GetRNTupleSerializationMode(cl) ==
+                          ROOT::Internal::ERNTupleSerializationMode::kForceStreamerMode) {
                   result = std::make_unique<RStreamerField>(fieldName, typeName);
                } else {
                   result = std::make_unique<RClassField>(fieldName, typeName);
@@ -546,6 +541,13 @@ ROOT::RFieldBase::Create(const std::string &fieldName, const std::string &typeNa
                vecField->fTypeAlias = fieldDesc.GetTypeAlias();
                return vecField;
             }
+         }
+      }
+
+      if (!result) {
+         auto e = TEnum::GetEnum(resolvedType.c_str());
+         if (e != nullptr) {
+            result = std::make_unique<REnumField>(fieldName, typeName);
          }
       }
    } catch (const RException &e) {
@@ -648,12 +650,18 @@ std::vector<ROOT::RFieldBase::RValue> ROOT::RFieldBase::SplitValue(const RValue 
    return std::vector<RValue>();
 }
 
-void ROOT::RFieldBase::Attach(std::unique_ptr<ROOT::RFieldBase> child)
+void ROOT::RFieldBase::Attach(std::unique_ptr<ROOT::RFieldBase> child, std::string_view expectedChildName)
 {
-   // Note that during a model update, new fields will be attached to the zero field. The zero field, however,
-   // does not change its inital state because only its sub fields get connected by RPageSink::UpdateSchema.
-   if (fState != EState::kUnconnected)
-      throw RException(R__FAIL("invalid attempt to attach subfield to already connected field"));
+   // Note that technically the zero field would not need to have the extensible trait: because only its sub fields
+   // get connected by RPageSink::UpdateSchema, it does not change its initial state.
+   if (!(fTraits & kTraitExtensible) && (fState != EState::kUnconnected))
+      throw RException(R__FAIL("invalid attempt to attach subfield to already connected, non-extensible field"));
+
+   if (!expectedChildName.empty() && child->GetFieldName() != expectedChildName) {
+      throw RException(R__FAIL(std::string("invalid subfield name: ") + child->GetFieldName() +
+                               "   expected: " + std::string(expectedChildName)));
+   }
+
    child->fParent = this;
    fSubfields.emplace_back(std::move(child));
 }

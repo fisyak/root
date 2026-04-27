@@ -7,7 +7,6 @@
 set(headers
     include/CPyCppyy/API.h
     include/CPyCppyy/Reflex.h
-    include/CPyCppyy/PyResult.h
     include/CPyCppyy/CommonDefs.h
     include/CPyCppyy/PyException.h
     include/CPyCppyy/DispatchPtr.h
@@ -38,7 +37,6 @@ set(sources
     src/MemoryRegulator.cxx
     src/ProxyWrappers.cxx
     src/PyException.cxx
-    src/PyResult.cxx
     src/PyStrings.cxx
     src/Pythonize.cxx
     src/TemplateProxy.cxx
@@ -73,7 +71,7 @@ endif()
 add_library(cppyy SHARED src/CPyCppyyPyModule.cxx)
 
 # Set the suffix to '.so' and the prefix to 'lib'
-set_target_properties(cppyy PROPERTIES  ${ROOT_LIBRARY_PROPERTIES}
+set_target_properties(cppyy PROPERTIES  ${ROOT_LIBRARY_PROPERTIES_NO_VERSION}
   LIBRARY_OUTPUT_DIRECTORY ${localruntimedir}/cppyy)
 if(MSVC)
   target_link_libraries(cppyy PRIVATE CPyCppyy)

@@ -38,11 +38,27 @@ void ROOT::Internal::SetAllowFieldSubstitutions(RFieldZero &fieldZero, bool val)
    fieldZero.fAllowFieldSubstitutions = val;
 }
 
+void ROOT::RFieldZero::Attach(std::unique_ptr<RFieldBase> child)
+{
+   const std::string childName = child->GetFieldName();
+   if (fSubfieldNames.count(childName) > 0)
+      throw RException(R__FAIL("duplicate field name: " + childName));
+   RFieldBase::Attach(std::move(child), "");
+   fSubfieldNames.insert(childName);
+}
+
+ROOT::RFieldZero::RFieldZero() : RFieldBase("", "", ROOT::ENTupleStructure::kRecord, false /* isSimple */)
+{
+   fTraits |= kTraitExtensible;
+}
+
 std::unique_ptr<ROOT::RFieldBase> ROOT::RFieldZero::CloneImpl(std::string_view /*newName*/) const
 {
    auto result = std::make_unique<RFieldZero>();
-   for (auto &f : fSubfields)
+   for (auto &f : fSubfields) {
       result->Attach(f->Clone(f->GetFieldName()));
+      result->fSubfieldNames.insert(f->GetFieldName());
+   }
    return result;
 }
 
@@ -557,26 +573,13 @@ ROOT::RRecordField::RRecordField(std::string_view name, const RRecordField &sour
 {
    for (const auto &f : source.GetConstSubfields())
       Attach(f->Clone(f->GetFieldName()));
+   fSubfieldNames = source.fSubfieldNames;
    fTraits = source.fTraits;
 }
 
 ROOT::RRecordField::RRecordField(std::string_view fieldName, std::string_view typeName)
    : ROOT::RFieldBase(fieldName, typeName, ROOT::ENTupleStructure::kRecord, false /* isSimple */)
 {
-}
-
-void ROOT::RRecordField::AttachItemFields(std::vector<std::unique_ptr<RFieldBase>> itemFields)
-{
-   fTraits |= kTraitTrivialType;
-   for (auto &item : itemFields) {
-      fMaxAlignment = std::max(fMaxAlignment, item->GetAlignment());
-      fSize += GetItemPadding(fSize, item->GetAlignment()) + item->GetValueSize();
-      fTraits &= item->GetTraits();
-      Attach(std::move(item));
-   }
-   // Trailing padding: although this is implementation-dependent, most add enough padding to comply with the
-   // requirements of the type with strictest alignment
-   fSize += GetItemPadding(fSize, fMaxAlignment);
 }
 
 std::unique_ptr<ROOT::RFieldBase>
@@ -600,25 +603,42 @@ ROOT::RRecordField::RRecordField(std::string_view fieldName, std::vector<std::un
                                  std::string_view emulatedFromType)
    : ROOT::RFieldBase(fieldName, emulatedFromType, ROOT::ENTupleStructure::kRecord, false /* isSimple */)
 {
-   fTraits |= kTraitTrivialType;
-   fOffsets.reserve(itemFields.size());
-   for (auto &item : itemFields) {
-      fSize += GetItemPadding(fSize, item->GetAlignment());
-      fOffsets.push_back(fSize);
-      fMaxAlignment = std::max(fMaxAlignment, item->GetAlignment());
-      fSize += item->GetValueSize();
-      fTraits &= item->GetTraits();
-      Attach(std::move(item));
-   }
+   AttachItemFields(std::move(itemFields));
    fTraits |= !emulatedFromType.empty() * kTraitEmulatedField;
-   // Trailing padding: although this is implementation-dependent, most add enough padding to comply with the
-   // requirements of the type with strictest alignment
-   fSize += GetItemPadding(fSize, fMaxAlignment);
 }
 
 ROOT::RRecordField::RRecordField(std::string_view fieldName, std::vector<std::unique_ptr<RFieldBase>> itemFields)
    : ROOT::RRecordField(fieldName, std::move(itemFields), "")
 {
+   fTraits |= kTraitExtensible;
+}
+
+void ROOT::RRecordField::AddItem(std::unique_ptr<RFieldBase> item)
+{
+   fSize += GetItemPadding(fSize, item->GetAlignment());
+   if (!IsPairOrTuple()) {
+      fOffsets.emplace_back(fSize);
+   }
+   fSize += item->GetValueSize();
+   fMaxAlignment = std::max(fMaxAlignment, item->GetAlignment());
+   fTraits &= item->GetTraits() | (fTraits & kTraitExtensible); // may be called by AddItemToRecord()
+
+   if (IsPairOrTuple()) {
+      Attach(std::move(item), "_" + std::to_string(fSubfields.size()));
+   } else {
+      const std::string itemName = item->GetFieldName();
+      if (fSubfieldNames.count(itemName) > 0)
+         throw RException(R__FAIL("duplicate field name: " + itemName));
+      Attach(std::move(item));
+      fSubfieldNames.insert(itemName);
+   }
+}
+
+void ROOT::Internal::AddItemToRecord(RRecordField &record, std::unique_ptr<RFieldBase> newItem)
+{
+   // Only supported for untyped records
+   assert(record.GetTypeName().empty());
+   record.AddItem(std::move(newItem));
 }
 
 std::size_t ROOT::RRecordField::GetItemPadding(std::size_t baseOffset, std::size_t itemAlignment) const
@@ -842,7 +862,10 @@ ROOT::RNullableField::RNullableField(std::string_view fieldName, const std::stri
    : ROOT::RFieldBase(fieldName, typePrefix + "<" + itemField->GetTypeName() + ">", ROOT::ENTupleStructure::kCollection,
                       false /* isSimple */)
 {
-   Attach(std::move(itemField));
+   if (!itemField->GetTypeAlias().empty())
+      fTypeAlias = typePrefix + "<" + itemField->GetTypeAlias() + ">";
+
+   Attach(std::move(itemField), "_0");
 }
 
 const ROOT::RFieldBase::RColumnRepresentations &ROOT::RNullableField::GetColumnRepresentations() const
@@ -1183,7 +1206,11 @@ ROOT::RAtomicField::RAtomicField(std::string_view fieldName, std::unique_ptr<RFi
       fTraits |= kTraitTriviallyConstructible;
    if (itemField->GetTraits() & kTraitTriviallyDestructible)
       fTraits |= kTraitTriviallyDestructible;
-   Attach(std::move(itemField));
+
+   if (!itemField->GetTypeAlias().empty())
+      fTypeAlias = "std::atomic<" + itemField->GetTypeAlias() + ">";
+
+   Attach(std::move(itemField), "_0");
 }
 
 std::unique_ptr<ROOT::RFieldBase> ROOT::RAtomicField::CloneImpl(std::string_view newName) const

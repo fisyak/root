@@ -41,15 +41,12 @@ class RClassField;
 
 namespace Detail {
 class RFieldVisitor;
-} // namespace Detail
-
-namespace Experimental {
-
-namespace Detail {
 class RRawPtrWriteEntry;
 } // namespace Detail
 
-} // namespace Experimental
+namespace Experimental {
+class RNTupleAttrSetReader;
+}
 
 namespace Internal {
 
@@ -69,6 +66,10 @@ CallFieldBaseCreate(const std::string &fieldName, const std::string &typeName, c
 
 } // namespace Internal
 
+namespace Experimental::Internal {
+struct RNTupleAttrEntry;
+}
+
 // clang-format off
 /**
 \class ROOT::RFieldBase
@@ -86,7 +87,8 @@ This is and can only be partially enforced through C++.
 // clang-format on
 class RFieldBase {
    friend class RFieldZero;                                    // to reset fParent pointer in ReleaseSubfields()
-   friend class ROOT::Experimental::Detail::RRawPtrWriteEntry; // to call Append()
+   friend class ROOT::Detail::RRawPtrWriteEntry;               // to call Append()
+   friend class ROOT::Experimental::RNTupleAttrSetReader;      // for field->Read() in LoadEntry()
    friend struct ROOT::Internal::RFieldCallbackInjector;       // used for unit tests
    friend struct ROOT::Internal::RFieldRepresentationModifier; // used for unit tests
    friend void Internal::CallFlushColumnsOnField(RFieldBase &);
@@ -152,6 +154,10 @@ public:
       /// This field is a user defined type that was missing dictionaries and was reconstructed from the on-disk
       /// information
       kTraitEmulatedField = 0x20,
+      /// Can attach new item fields even when already connected
+      kTraitExtensible = 0x40,
+      /// The field represents a collection in SoA layout
+      kTraitSoACollection = 0x80,
 
       /// Shorthand for types that are both trivially constructible and destructible
       kTraitTrivialType = kTraitTriviallyConstructible | kTraitTriviallyDestructible
@@ -423,8 +429,6 @@ protected:
 
    /// Allow parents to mark their childs as artificial fields (used in class and record fields)
    static void CallSetArtificialOn(RFieldBase &other) { other.SetArtificial(); }
-   /// Allow class fields to adjust the type alias of their members
-   static void SetTypeAliasOf(RFieldBase &other, const std::string &alias) { other.fTypeAlias = alias; }
 
    /// Operations on values of complex types, e.g. ones that involve multiple columns or for which no direct
    /// column type exists.
@@ -508,8 +512,9 @@ protected:
    // on the data that's written, e.g. for polymorphic types in the streamer field.
    virtual ROOT::RExtraTypeInfoDescriptor GetExtraTypeInfo() const { return ROOT::RExtraTypeInfoDescriptor(); }
 
-   /// Add a new subfield to the list of nested fields
-   void Attach(std::unique_ptr<RFieldBase> child);
+   /// Add a new subfield to the list of nested fields. Throws an exception if childName is non-empty and the passed
+   /// field has a different name.
+   void Attach(std::unique_ptr<RFieldBase> child, std::string_view expectedChildName = "");
 
    /// Called by ConnectPageSource() before connecting; derived classes may override this as appropriate, e.g.
    /// for the application of I/O rules. In the process, the field at hand or its subfields may be marked as
@@ -747,6 +752,7 @@ public:
 class RFieldBase::RValue final {
    friend class RFieldBase;
    friend class ROOT::REntry;
+   friend struct ROOT::Experimental::Internal::RNTupleAttrEntry;
 
 private:
    RFieldBase *fField = nullptr;  ///< The field that created the RValue

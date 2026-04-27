@@ -5,6 +5,9 @@
 #include "TH3.h"
 #include "TH1F.h"
 #include "THLimitsFinder.h"
+#include "TDirectory.h"
+#include "TList.h"
+#include "TROOT.h"
 
 #include <cmath>
 #include <cstddef>
@@ -167,6 +170,100 @@ TEST(TH1, Normalize)
    EXPECT_FLOAT_EQ(v2.GetMaximum(), 7.9999990);
 }
 
+TEST(TH1, RegistrationToTDirectory_ImplicitOwnershipOff)
+{
+   const bool oldSetting = ROOT::Experimental::ObjectAutoRegistrationEnabled();
+   ROOT::Experimental::DisableObjectAutoRegistration();
+
+   TH1D histo1("histo1", "Test Histogram", 10, 0, 10);
+   auto histo2 = std::make_unique<TH1D>("histo2", "Test Histogram", 10, 0, 10);
+   TH1D *histo3 = new TH1D("histo3", "Test Histogram", 10, 0, 10);
+
+   {
+      TDirectory dir("dir", "Test Directory");
+      histo3->SetDirectory(&dir);
+
+      dir.cd();
+
+      TH1D histo4("histo4", "Test Histogram", 10, 0, 10);
+      auto histo5 = std::make_unique<TH1D>("histo5", "Test Histogram", 10, 0, 10);
+
+      EXPECT_EQ(dir.GetList()->GetSize(), 1);
+      EXPECT_EQ(dir.Get<TH1D>("histo3"), histo3);
+
+      EXPECT_EQ(histo1.GetDirectory(), nullptr);
+      EXPECT_EQ(histo2->GetDirectory(), nullptr);
+      EXPECT_EQ(histo3->GetDirectory(), &dir);
+      EXPECT_EQ(histo4.GetDirectory(), nullptr);
+      EXPECT_EQ(histo5->GetDirectory(), nullptr);
+
+      histo5.reset();
+
+      EXPECT_EQ(dir.GetList()->GetSize(), 1);
+      EXPECT_EQ(dir.Get<TH1D>("histo3"), histo3);
+   }
+
+   EXPECT_STREQ(histo1.GetName(), "histo1");
+   EXPECT_STREQ(histo2->GetName(), "histo2");
+
+   EXPECT_EQ(histo1.GetDirectory(), nullptr);
+   EXPECT_EQ(histo2->GetDirectory(), nullptr);
+
+   if (oldSetting)
+      ROOT::Experimental::EnableObjectAutoRegistration();
+}
+
+TEST(TH1, RegistrationToTDirectory_ImplicitOwnershipOn)
+{
+   const bool ownershipDisabledBefore = !ROOT::Experimental::ObjectAutoRegistrationEnabled();
+   ROOT::Experimental::EnableObjectAutoRegistration();
+
+   TH1D histo1("histo1", "Test Histogram", 10, 0, 10);
+   auto histo2 = std::make_unique<TH1D>("histo2", "Test Histogram", 10, 0, 10);
+   TH1D *histo3 = new TH1D("histo3", "Test Histogram", 10, 0, 10);
+
+   {
+      TDirectory dir("dir", "Test Directory");
+      histo3->SetDirectory(&dir);
+
+      dir.cd();
+
+      TH1D histo4("histo4", "Test Histogram", 10, 0, 10);
+      auto histo5 = std::make_unique<TH1D>("histo5", "Test Histogram", 10, 0, 10);
+
+      EXPECT_EQ(dir.GetList()->GetSize(), 3);
+      EXPECT_EQ(dir.Get<TH1D>("histo1"), nullptr);
+      EXPECT_EQ(dir.Get<TH1D>("histo2"), nullptr);
+      EXPECT_EQ(dir.Get<TH1D>("histo3"), histo3);
+      EXPECT_EQ(dir.Get<TH1D>("histo4"), &histo4);
+      EXPECT_EQ(dir.Get<TH1D>("histo5"), histo5.get());
+
+      EXPECT_EQ(histo1.GetDirectory(), gROOT);
+      EXPECT_EQ(histo2->GetDirectory(), gROOT);
+      EXPECT_EQ(histo3->GetDirectory(), &dir);
+      EXPECT_EQ(histo4.GetDirectory(), &dir);
+      EXPECT_EQ(histo5->GetDirectory(), &dir);
+
+      histo5.reset();
+
+      EXPECT_EQ(dir.GetList()->GetSize(), 2);
+      EXPECT_EQ(dir.Get<TH1D>("histo1"), nullptr);
+      EXPECT_EQ(dir.Get<TH1D>("histo2"), nullptr);
+      EXPECT_EQ(dir.Get<TH1D>("histo3"), histo3);
+      EXPECT_EQ(dir.Get<TH1D>("histo4"), &histo4);
+      EXPECT_EQ(dir.Get<TH1D>("histo5"), nullptr);
+   }
+
+   EXPECT_STREQ(histo1.GetName(), "histo1");
+   EXPECT_STREQ(histo2->GetName(), "histo2");
+
+   EXPECT_EQ(histo1.GetDirectory(), gROOT);
+   EXPECT_EQ(histo2->GetDirectory(), gROOT);
+
+   if (ownershipDisabledBefore)
+      ROOT::Experimental::DisableObjectAutoRegistration();
+}
+
 TEST(TAxis, BinComputation_FPAccuracy)
 {
    // Example from 1703c54
@@ -318,7 +415,11 @@ TEST(TH1, SetBufferedSumw2)
 // https://github.com/root-project/root/issues/20185
 TEST(TAxis, EqualBinEdges)
 {
-   ROOT_EXPECT_ERROR(TAxis _({1, 1}), "TAxis::Set", "bins must be in increasing order");
+   ROOT_EXPECT_ERROR(TAxis _({1, 1}), "TAxis::Set", "bin edges must be in increasing order");
+   ROOT_EXPECT_ERROR(TAxis _(1, -std::numeric_limits<double>::infinity(), 0), "TAxis::Set", "Axis limits need to be finite numbers");
+   ROOT_EXPECT_ERROR(TAxis _(1, 0., std::numeric_limits<double>::infinity()), "TAxis::Set", "Axis limits need to be finite numbers");
+   ROOT_EXPECT_ERROR(TAxis _(1, std::numeric_limits<double>::quiet_NaN(), 0), "TAxis::Set", "Axis limits need to be finite numbers");
+   ROOT_EXPECT_ERROR(TAxis _(1, 0, std::numeric_limits<double>::quiet_NaN()), "TAxis::Set", "Axis limits need to be finite numbers");
 }
 
 TEST(TH1L, SetBinContent)

@@ -97,6 +97,7 @@ public:
    static void    PrepareString(const char *string);
    static void    PrepareString(const wchar_t *string);
    static void    SetRotationMatrix(Float_t angle);
+   static void    CleanupGlyphs();
 
 public:
    TTF() { }
@@ -118,9 +119,9 @@ public:
    static void           SetHinting(Bool_t state);
    static void           SetKerning(Bool_t state);
    static void           SetSmoothing(Bool_t state);
-   static void           GetTextExtent(UInt_t &w, UInt_t &h, char *text);
-   static void           GetTextExtent(UInt_t &w, UInt_t &h, wchar_t *text);
-   static void           GetTextAdvance(UInt_t &a, char *text);
+   static void           GetTextExtent(UInt_t &w, UInt_t &h, const char *text);
+   static void           GetTextExtent(UInt_t &w, UInt_t &h, const wchar_t *text);
+   static void           GetTextAdvance(UInt_t &a, const char *text);
    static void           SetTextFont(Font_t fontnumber);
    static Int_t          SetTextFont(const char *fontname, Int_t italic=0);
    static void           SetTextSize(Float_t textsize);

@@ -7,11 +7,53 @@
 
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/GlobalDecl.h"
+#include "clang/Basic/DiagnosticIDs.h"
+#include "clang/Basic/DiagnosticOptions.h"
+#if CLANG_VERSION_MAJOR < 21
+#include "clang/Basic/Cuda.h"
+#else
+#include "clang/Basic/OffloadArch.h"
+#endif
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/Version.h"
 #include "clang/Config/config.h"
+#include "clang/Driver/Compilation.h"
+#include "clang/Driver/Driver.h"
+#if CLANG_VERSION_MAJOR < 22
+#include "clang/Driver/Options.h"
+#else
+#include "clang/Options/Options.h"
+#endif
+#include "clang/Frontend/TextDiagnosticBuffer.h"
 #include "clang/Sema/Sema.h"
+
+#include "llvm/ADT/IntrusiveRefCntPtr.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/FileSystem.h"
+
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <string>
+
+#if CLANG_VERSION_MAJOR < 22
+#define clang_driver_options clang::driver::options
+#else
+#define clang_driver_options clang::options
+#endif
+
+#if CLANG_VERSION_MAJOR < 22
+#define Suppress_Elab SuppressElaboration
+#else
+#define Suppress_Elab FullyQualifiedName
+#endif
+
+#if CLANG_VERSION_MAJOR < 22
+#define Get_Tag_Type getTagDeclType
+#else
+#define Get_Tag_Type getCanonicalTagType
+#endif
 
 #ifdef _MSC_VER
 #define dup _dup
@@ -31,37 +73,25 @@ static inline char* GetEnv(const char* Var_Name) {
 #endif
 }
 
-#if CLANG_VERSION_MAJOR < 19
-#define Template_Deduction_Result Sema::TemplateDeductionResult
-#define Template_Deduction_Result_Success                                      \
-  Sema::TemplateDeductionResult::TDK_Success
+#if CLANG_VERSION_MAJOR < 21
+#define Print_Canonical_Types PrintCanonicalTypes
 #else
-#define Template_Deduction_Result TemplateDeductionResult
-#define Template_Deduction_Result_Success TemplateDeductionResult::Success
+#define Print_Canonical_Types PrintAsCanonical
 #endif
 
-#if CLANG_VERSION_MAJOR < 19
-#define For_Visible_Redeclaration Sema::ForVisibleRedeclaration
-#define Clang_For_Visible_Redeclaration clang::Sema::ForVisibleRedeclaration
+#if CLANG_VERSION_MAJOR < 21
+#define clang_LookupResult_Found clang::LookupResult::Found
+#define clang_LookupResult_Not_Found clang::LookupResult::NotFound
+#define clang_LookupResult_Found_Overloaded clang::LookupResult::FoundOverloaded
 #else
-#define For_Visible_Redeclaration RedeclarationKind::ForVisibleRedeclaration
-#define Clang_For_Visible_Redeclaration                                        \
-  RedeclarationKind::ForVisibleRedeclaration
+#define clang_LookupResult_Found clang::LookupResultKind::Found
+#define clang_LookupResult_Not_Found clang::LookupResultKind::NotFound
+#define clang_LookupResult_Found_Overloaded                                    \
+  clang::LookupResultKind::FoundOverloaded
 #endif
 
-#if CLANG_VERSION_MAJOR < 19
-#define CXXSpecialMemberKindDefaultConstructor                                 \
-  clang::Sema::CXXDefaultConstructor
-#define CXXSpecialMemberKindCopyConstructor clang::Sema::CXXCopyConstructor
-#define CXXSpecialMemberKindMoveConstructor clang::Sema::CXXMoveConstructor
-#else
-#define CXXSpecialMemberKindDefaultConstructor                                 \
-  CXXSpecialMemberKind::DefaultConstructor
-#define CXXSpecialMemberKindCopyConstructor                                    \
-  CXXSpecialMemberKind::CopyConstructor
-#define CXXSpecialMemberKindMoveConstructor                                    \
-  CXXSpecialMemberKind::MoveConstructor
-#endif
+#define STRINGIFY(s) STRINGIFY_X(s)
+#define STRINGIFY_X(...) #__VA_ARGS__
 
 #include "clang/Interpreter/CodeCompletion.h"
 
@@ -87,9 +117,10 @@ static inline char* GetEnv(const char* Var_Name) {
 #include "cling/Utils/AST.h"
 
 #include <regex>
+#include <vector>
 
-namespace Cpp {
-namespace Cpp_utils = cling::utils;
+namespace CppInternal {
+namespace utils = cling::utils;
 }
 
 namespace compat {
@@ -200,32 +231,178 @@ inline void codeComplete(std::vector<std::string>& Results,
 #include "clang/Interpreter/Interpreter.h"
 #include "clang/Interpreter/Value.h"
 
+#include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/Error.h"
+#include "llvm/TargetParser/Host.h"
+
+#ifdef LLVM_BUILT_WITH_OOP_JIT
+#include "clang/Basic/Version.h"
+
+#include "llvm/ExecutionEngine/Orc/Debugging/DebuggerSupport.h"
+
+#include <unistd.h>
+#endif
+
+#include <algorithm>
 
 namespace compat {
 
-inline std::unique_ptr<clang::Interpreter>
-createClangInterpreter(std::vector<const char*>& args) {
-  auto has_arg = [](const char* x, llvm::StringRef match = "cuda") {
-    llvm::StringRef Arg = x;
-    Arg = Arg.trim().ltrim('-');
-    return Arg == match;
-  };
-  auto it = std::find_if(args.begin(), args.end(), has_arg);
-  std::vector<const char*> gpu_args = {it, args.end()};
-#ifdef __APPLE__
-  bool CudaEnabled = false;
+/// Detect the CUDA installation path using clang::Driver
+/// \param args user-provided interpreter arguments (may contain --cuda-path).
+/// \param[out] CudaPath the detected CUDA installation path.
+/// \returns true on success, false if not found.
+inline bool detectCudaInstallPath(const std::vector<const char*>& args,
+                                  std::string& CudaPath) {
+  // minimal driver that runs CudaInstallationDetector internally
+  std::string TT = llvm::sys::getProcessTriple();
+  llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs> DiagID(
+      new clang::DiagnosticIDs());
+  // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
+  auto* DiagsBuffer = new clang::TextDiagnosticBuffer;
+#if CLANG_VERSION_MAJOR < 21
+  llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts(
+      new clang::DiagnosticOptions());
+  clang::DiagnosticsEngine Diags(DiagID, DiagOpts, DiagsBuffer);
 #else
-  bool CudaEnabled = !gpu_args.empty();
+  clang::DiagnosticOptions DiagOpts;
+  clang::DiagnosticsEngine Diags(DiagID, DiagOpts, DiagsBuffer);
+#endif
+
+  clang::driver::Driver D("clang", TT, Diags);
+  D.setCheckInputsExist(false);
+
+  // construct args: clang -x cuda -c <<< inputs >>> [args]
+  llvm::SmallVector<const char*, 16> Argv;
+  Argv.push_back("clang");
+  Argv.push_back("-xcuda");
+  Argv.push_back("-c");
+  Argv.push_back("<<< inputs >>>");
+  for (const auto* arg : args)
+    Argv.push_back(arg);
+
+  // build a compilation object, which runs the driver's CUDA installation
+  // detection logic and stores the paths
+  std::unique_ptr<clang::driver::Compilation> C(D.BuildCompilation(Argv));
+  if (!C)
+    return false;
+
+  // --cuda-path was explicitly provided in user args
+  if (auto* A =
+          C->getArgs().getLastArg(clang_driver_options::OPT_cuda_path_EQ)) {
+    std::string Candidate = A->getValue();
+    if (llvm::sys::fs::is_directory(Candidate + "/include")) {
+      CudaPath = Candidate;
+      return true;
+    }
+  }
+
+  // fallback: clang tries to auto-detect the install, CudaInstallationDetector
+  // stores the path internally but doesn't expose it, so we look for
+  // "-internal-isystem <cuda-path>/include" that the driver adds for CUDA
+  // headers.
+  for (const auto& Job : C->getJobs()) {
+    if (const auto* Cmd = llvm::dyn_cast<clang::driver::Command>(&Job)) {
+      const auto& Args = Cmd->getArguments();
+      for (size_t i = 0; i + 1 < Args.size(); ++i) {
+        if (llvm::StringRef(Args[i]) == "-internal-isystem") {
+          llvm::StringRef IncDir(Args[i + 1]);
+          if (IncDir.ends_with("/include") &&
+              llvm::sys::fs::exists(IncDir.str() + "/cuda.h")) {
+            CudaPath = IncDir.drop_back(strlen("/include")).str();
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/// Detect GPU architecture via the CUDA Driver API, tweaked from clang's
+/// nvptx-arch tool (NVPTXArch.cpp) \param[out] Arch Set to "sm_XX" on success,
+/// or clang's default fallback. \returns true on success, false on error (no
+/// CUDA driver available).
+inline bool detectNVPTXArch(std::string& Arch) {
+  std::string Err;
+  // FIXME: Use ToolChain::getSystemGPUArchs() from a minimal driver compilation
+  // instead, and unify this function with detectCudaInstallPath. Ideally we
+  // should rely on the offload-arch/nvptx-arch tool in clang, but there is no
+  // public API or library to link against.
+  auto Lib = llvm::sys::DynamicLibrary::getPermanentLibrary(
+#ifdef _WIN32
+      "nvcuda.dll",
+#else
+      "libcuda.so.1",
+#endif
+      &Err);
+  if (!Lib.isValid())
+    return false;
+
+  using cuInit_t = int (*)(unsigned);
+  using cuDeviceGet_t = int (*)(uint32_t*, int);
+  using cuDeviceGetAttribute_t = int (*)(int*, int, uint32_t);
+
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
+  auto cuInit = reinterpret_cast<cuInit_t>(Lib.getAddressOfSymbol("cuInit"));
+  auto cuDeviceGet =
+      reinterpret_cast<cuDeviceGet_t>(Lib.getAddressOfSymbol("cuDeviceGet"));
+  auto cuDeviceGetAttribute = reinterpret_cast<cuDeviceGetAttribute_t>(
+      Lib.getAddressOfSymbol("cuDeviceGetAttribute"));
+  // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
+
+  if (!cuInit || !cuDeviceGet || !cuDeviceGetAttribute)
+    return false;
+
+  uint32_t dev;
+  int maj, min;
+  if (cuInit(0) || cuDeviceGet(&dev, 0) ||
+      cuDeviceGetAttribute(&maj, /*MAJOR*/ 75, dev) ||
+      cuDeviceGetAttribute(&min, /*MINOR*/ 76, dev)) {
+    Arch = clang::OffloadArchToString(clang::OffloadArch::CudaDefault);
+    return true;
+  }
+  Arch = "sm_" + std::to_string(maj) + std::to_string(min);
+  return true;
+}
+
+inline std::unique_ptr<clang::Interpreter>
+createClangInterpreter(std::vector<const char*>& args, int stdin_fd = -1,
+                       int stdout_fd = -1, int stderr_fd = -1) {
+  bool CudaEnabled = false;
+  std::string OffloadArch;
+  std::string CudaPath;
+  std::vector<const char*> CompilerArgs;
+  for (const auto* arg : args) {
+    llvm::StringRef A(arg);
+    llvm::StringRef Stripped = A.trim().ltrim('-');
+    if (Stripped == "cuda") {
+      CudaEnabled = true;
+    } else if (A.starts_with("--offload-arch=")) {
+      OffloadArch = A.substr(strlen("--offload-arch="));
+    } else if (A.starts_with("--cuda-path=")) {
+      CudaPath = A.substr(strlen("--cuda-path="));
+    } else {
+      CompilerArgs.push_back(arg);
+    }
+  }
+#ifdef __APPLE__
+  CudaEnabled = false;
 #endif
 
   clang::IncrementalCompilerBuilder CB;
-  CB.SetCompilerArgs({args.begin(), it});
+  CB.SetCompilerArgs(CompilerArgs);
 
   std::unique_ptr<clang::CompilerInstance> DeviceCI;
   if (CudaEnabled) {
-    // FIXME: Parametrize cuda-path and offload-arch.
-    CB.SetOffloadArch("sm_35");
+    if (OffloadArch.empty())
+      detectNVPTXArch(OffloadArch);
+
+    if (CudaPath.empty())
+      detectCudaInstallPath(CompilerArgs, CudaPath);
+
+    CB.SetOffloadArch(OffloadArch);
+    if (!CudaPath.empty())
+      CB.SetCudaSDK(CudaPath);
     auto devOrErr = CB.CreateCudaDevice();
     if (!devOrErr) {
       llvm::logAllUnhandledErrors(devOrErr.takeError(), llvm::errs(),
@@ -243,11 +420,62 @@ createClangInterpreter(std::vector<const char*>& args) {
   (*ciOrErr)->LoadRequestedPlugins();
   if (CudaEnabled)
     DeviceCI->LoadRequestedPlugins();
+
+  bool outOfProcess;
+#if defined(_WIN32) || !defined(LLVM_BUILT_WITH_OOP_JIT)
+  outOfProcess = false;
+#else
+  outOfProcess = std::any_of(args.begin(), args.end(), [](const char* arg) {
+    return llvm::StringRef(arg).trim() == "--use-oop-jit";
+  });
+#endif
+
+#ifdef LLVM_BUILT_WITH_OOP_JIT
+
+  clang::Interpreter::JITConfig OutOfProcessConfig;
+  if (outOfProcess) {
+    OutOfProcessConfig.IsOutOfProcess = true;
+    OutOfProcessConfig.OOPExecutor =
+        LLVM_BINARY_LIB_DIR "/bin/llvm-jitlink-executor";
+    OutOfProcessConfig.UseSharedMemory = false;
+    OutOfProcessConfig.SlabAllocateSize = 0;
+    OutOfProcessConfig.CustomizeFork = [stdin_fd, stdout_fd,
+                                        stderr_fd]() { // Lambda defined inline
+      dup2(stdin_fd, STDIN_FILENO);
+      dup2(stdout_fd, STDOUT_FILENO);
+      dup2(stderr_fd, STDERR_FILENO);
+
+      setvbuf(fdopen(stdout_fd, "w+"), nullptr, _IONBF, 0);
+      setvbuf(fdopen(stderr_fd, "w+"), nullptr, _IONBF, 0);
+    };
+
+#ifdef __APPLE__
+    std::string OrcRuntimePath = LLVM_BINARY_LIB_DIR "/lib/clang/" STRINGIFY(
+        LLVM_VERSION_MAJOR) "/lib/darwin/liborc_rt_osx.a";
+#else
+    std::string OrcRuntimePath = LLVM_BINARY_LIB_DIR "/lib/clang/" STRINGIFY(
+        LLVM_VERSION_MAJOR) "/lib/x86_64-unknown-linux-gnu/liborc_rt.a";
+#endif
+    OutOfProcessConfig.OrcRuntimePath = OrcRuntimePath;
+  }
+  auto innerOrErr =
+      CudaEnabled
+          ? clang::Interpreter::createWithCUDA(std::move(*ciOrErr),
+                                               std::move(DeviceCI))
+          : clang::Interpreter::create(std::move(*ciOrErr), OutOfProcessConfig);
+#else
+  if (outOfProcess) {
+    llvm::errs()
+        << "[CreateClangInterpreter]: No compatibility with out-of-process "
+           "JIT. Running in-process JIT execution."
+        << "(To enable recompile CppInterOp with -DLLVM_BUILT_WITH_OOP_JIT=ON)"
+        << "\n";
+  }
   auto innerOrErr =
       CudaEnabled ? clang::Interpreter::createWithCUDA(std::move(*ciOrErr),
                                                        std::move(DeviceCI))
                   : clang::Interpreter::create(std::move(*ciOrErr));
-
+#endif
   if (!innerOrErr) {
     llvm::logAllUnhandledErrors(innerOrErr.takeError(), llvm::errs(),
                                 "Failed to build Interpreter:");
@@ -296,8 +524,20 @@ inline void maybeMangleDeclName(const clang::GlobalDecl& GD,
 // Clang 18 - Add new Interpreter methods: CodeComplete
 
 inline llvm::orc::LLJIT* getExecutionEngine(clang::Interpreter& I) {
+#if CLANG_VERSION_MAJOR < 22
   auto* engine = &llvm::cantFail(I.getExecutionEngine());
   return const_cast<llvm::orc::LLJIT*>(engine);
+#else
+  // FIXME: Remove the need of exposing the low-level execution engine and kill
+  // this horrible hack.
+  struct OrcIncrementalExecutor : public clang::IncrementalExecutor {
+    std::unique_ptr<llvm::orc::LLJIT> Jit;
+  };
+
+  auto& engine = static_cast<OrcIncrementalExecutor&>(
+      llvm::cantFail(I.getExecutionEngine()));
+  return engine.Jit.get();
+#endif
 }
 
 inline llvm::Expected<llvm::JITTargetAddress>
@@ -367,31 +607,28 @@ inline void codeComplete(std::vector<std::string>& Results,
 
 #include "CppInterOpInterpreter.h"
 
-namespace Cpp {
-namespace Cpp_utils = Cpp::utils;
-}
-
 namespace compat {
-using Interpreter = Cpp::Interpreter;
+using Interpreter = CppInternal::Interpreter;
 
 class SynthesizingCodeRAII {
 private:
-  Interpreter* m_Interpreter;
+  [[maybe_unused]] Interpreter* m_Interpreter;
 
 public:
   SynthesizingCodeRAII(Interpreter* i) : m_Interpreter(i) {}
-  ~SynthesizingCodeRAII() {
-    auto GeneratedPTU = m_Interpreter->Parse("");
-    if (!GeneratedPTU)
-      llvm::logAllUnhandledErrors(GeneratedPTU.takeError(), llvm::errs(),
-                                  "Failed to generate PTU:");
-  }
+  // ~SynthesizingCodeRAII() {} // TODO: implement
 };
-}
+} // namespace compat
 
 #endif // CPPINTEROP_USE_REPL
 
 namespace compat {
+
+#ifdef CPPINTEROP_USE_CLING
+using Value = cling::Value;
+#else
+using Value = clang::Value;
+#endif
 
 // Clang >= 16 (=16 with Value patch) change castAs to convertTo
 #ifdef CPPINTEROP_USE_CLING
@@ -409,16 +646,11 @@ inline void InstantiateClassTemplateSpecialization(
 #ifdef CPPINTEROP_USE_CLING
   cling::Interpreter::PushTransactionRAII RAII(&interp);
 #endif
-#if CLANG_VERSION_MAJOR < 20
   interp.getSema().InstantiateClassTemplateSpecialization(
       clang::SourceLocation::getFromRawEncoding(1), CTSD,
-      clang::TemplateSpecializationKind::TSK_Undeclared, /*Complain=*/true);
-#else
-  interp.getSema().InstantiateClassTemplateSpecialization(
-      clang::SourceLocation::getFromRawEncoding(1), CTSD,
-      clang::TemplateSpecializationKind::TSK_Undeclared, /*Complain=*/true,
+      clang::TemplateSpecializationKind::TSK_ExplicitInstantiationDefinition,
+      /*Complain=*/true,
       /*PrimaryHasMatchedPackOnParmToNonPackOnArg=*/false);
-#endif
 }
 } // namespace compat
 

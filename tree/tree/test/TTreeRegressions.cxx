@@ -166,6 +166,19 @@ TEST(TTreeRegressions, PrintClustersRounding)
    t.Print("clusters");
 
    const std::string output = testing::internal::GetCapturedStdout();
+   #ifdef R__HAS_ZLIB_NG
+   // We need this distinction because in some cases, at compression level 1, the heuristics of
+   // zlib-ng will opt for not compression the buffer.
+   // Here we are interested in clustering anyways
+   const auto ref = "******************************************************************************\n"
+                    "*Tree    :t         : t                                                      *\n"
+                    "*Entries :    10000 : Total =           40973 bytes  File  Size =        120 *\n"
+                    "*        :          : Tree compression factor = 199.41                       *\n"
+                    "******************************************************************************\n"
+                    "Cluster Range #  Entry Start      Last Entry           Size   Number of clusters\n"
+                    "0                0                9999                 5966          2\n"
+                    "Total number of clusters: 2 \n"; // This was 1 before the fix
+   #else
    const auto ref = "******************************************************************************\n"
                     "*Tree    :t         : t                                                      *\n"
                     "*Entries :    10000 : Total =           40973 bytes  File  Size =        202 *\n"
@@ -174,6 +187,7 @@ TEST(TTreeRegressions, PrintClustersRounding)
                     "Cluster Range #  Entry Start      Last Entry           Size   Number of clusters\n"
                     "0                0                9999                 5966          2\n"
                     "Total number of clusters: 2 \n"; // This was 1 before the fix
+   #endif
    EXPECT_EQ(output, ref);
 }
 
@@ -238,12 +252,11 @@ TEST(TTreeRegressions, EmptyLeafObject)
 #define MYCLASS struct MyClass { std::vector<MySubClass> sub; MySubClass *Get(int id) { for (size_t i = 0; i < sub.size(); ++i) if (sub[i].id == id) return &sub[i]; return nullptr; } };
 MYSUBCLASS
 MYCLASS
-#define TO_LITERAL(string) _QUOTE_(string)
 
 TEST(TTreeRegressions, TTreeFormulaMemberIndex)
 {
-   gInterpreter->Declare(TO_LITERAL(MYSUBCLASS));
-   gInterpreter->Declare(TO_LITERAL(MYCLASS));
+   gInterpreter->Declare(_R_QUOTEVAL_(MYSUBCLASS));
+   gInterpreter->Declare(_R_QUOTEVAL_(MYCLASS));
 
    TTree tree("tree", "tree");
    MyClass mc;

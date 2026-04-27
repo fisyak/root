@@ -37,6 +37,23 @@ namespace ROOT {
 
 class RNTupleWriteOptions;
 
+namespace Experimental {
+class RNTupleAttrSetWriterHandle;
+class RFile;
+
+/// Creates an RNTupleWriter that writes into the given `file`, appending to it. The RNTuple is written under the
+/// path `ntuplePath`.
+/// `ntuplePath` may have the form `"path/to/ntuple"`, in which case the ntuple's name will be `"ntuple"` and it will
+/// be stored under the given `ntuplePath` in the RFile.
+/// Throws an exception if the model is null.
+/// NOTE: this is a temporary, experimental API that will be replaced by an overload of RNTupleWriter::Append in the
+/// future.
+std::unique_ptr<RNTupleWriter>
+RNTupleWriter_Append(std::unique_ptr<ROOT::RNTupleModel> model, std::string_view ntuplePath,
+                     ROOT::Experimental::RFile &file,
+                     const ROOT::RNTupleWriteOptions &options = ROOT::RNTupleWriteOptions());
+} // namespace Experimental
+
 namespace Internal {
 // Non-public factory method for an RNTuple writer that uses an already constructed page sink
 std::unique_ptr<RNTupleWriter>
@@ -102,10 +119,15 @@ class RNTupleWriter {
    friend ROOT::RNTupleModel::RUpdater;
    friend std::unique_ptr<RNTupleWriter>
       Internal::CreateRNTupleWriter(std::unique_ptr<ROOT::RNTupleModel>, std::unique_ptr<Internal::RPageSink>);
+   friend std::unique_ptr<RNTupleWriter>
+   Experimental::RNTupleWriter_Append(std::unique_ptr<ROOT::RNTupleModel> model, std::string_view ntuplePath,
+                                      ROOT::Experimental::RFile &file, const ROOT::RNTupleWriteOptions &options);
 
 private:
    RNTupleFillContext fFillContext;
    Experimental::Detail::RNTupleMetrics fMetrics;
+   /// All the Attribute Sets created from this Writer.
+   std::vector<std::shared_ptr<Experimental::RNTupleAttrSetWriter>> fAttributeSets;
 
    ROOT::NTupleSize_t fLastCommittedClusterGroup = 0;
 
@@ -116,6 +138,8 @@ private:
 
    // Helper function that is called from CommitCluster() when necessary
    void CommitClusterGroup();
+
+   void CloseAttributeSetImpl(ROOT::Experimental::RNTupleAttrSetWriter &attrSet);
 
    /// Create a writer, potentially wrapping the sink in a RPageSinkBuf.
    static std::unique_ptr<RNTupleWriter> Create(std::unique_ptr<ROOT::RNTupleModel> model,
@@ -152,8 +176,11 @@ public:
    static std::unique_ptr<RNTupleWriter> Append(std::unique_ptr<ROOT::RNTupleModel> model, std::string_view ntupleName,
                                                 TDirectory &fileOrDirectory,
                                                 const ROOT::RNTupleWriteOptions &options = ROOT::RNTupleWriteOptions());
+
    RNTupleWriter(const RNTupleWriter &) = delete;
    RNTupleWriter &operator=(const RNTupleWriter &) = delete;
+   RNTupleWriter(RNTupleWriter &&) = delete;
+   RNTupleWriter &operator=(RNTupleWriter &&) = delete;
    ~RNTupleWriter();
 
    /// The simplest user interface if the default entry that comes with the ntuple model is used.
@@ -170,10 +197,10 @@ public:
    /// Fill an RRawPtrWriteEntry into this ntuple.  This method will check the entry's model ID to ensure it comes from
    /// the writer's own model or throw an exception otherwise.
    /// \return The number of uncompressed bytes written.
-   std::size_t Fill(Experimental::Detail::RRawPtrWriteEntry &entry) { return fFillContext.Fill(entry); }
+   std::size_t Fill(ROOT::Detail::RRawPtrWriteEntry &entry) { return fFillContext.Fill(entry); }
    /// Fill an RRawPtrWriteEntry into this ntuple, but don't commit the cluster. The calling code must pass an
    /// RNTupleFillStatus and check RNTupleFillStatus::ShouldFlushCluster.
-   void FillNoFlush(Experimental::Detail::RRawPtrWriteEntry &entry, RNTupleFillStatus &status)
+   void FillNoFlush(ROOT::Detail::RRawPtrWriteEntry &entry, RNTupleFillStatus &status)
    {
       fFillContext.FillNoFlush(entry, status);
    }
@@ -196,7 +223,7 @@ public:
    void CommitDataset();
 
    std::unique_ptr<ROOT::REntry> CreateEntry() const { return fFillContext.CreateEntry(); }
-   std::unique_ptr<Experimental::Detail::RRawPtrWriteEntry> CreateRawPtrWriteEntry() const
+   std::unique_ptr<ROOT::Detail::RRawPtrWriteEntry> CreateRawPtrWriteEntry() const
    {
       return fFillContext.CreateRawPtrWriteEntry();
    }
@@ -238,6 +265,19 @@ public:
    {
       return std::make_unique<ROOT::RNTupleModel::RUpdater>(*this);
    }
+
+   /// Creates a new Attribute Set called `name` associated to this Writer and returns a non-owning pointer to it.
+   /// The lifetime of the Attribute Set ends at the same time as the Writer's.
+   /// If `options` are passed, they will be used for the attribute set writer; otherwise, they will be derived from
+   /// the main writer.
+   ROOT::Experimental::RNTupleAttrSetWriterHandle
+   CreateAttributeSet(std::unique_ptr<RNTupleModel> model, std::string_view name,
+                      const ROOT::RNTupleWriteOptions *options = nullptr);
+
+   /// Writes the given AttributeSet to the underlying storage and closes it. This method is only useful if you
+   /// want to close the AttributeSet early: otherwise it will automatically closed when the RNTupleWriter gets
+   /// destroyed.
+   void CloseAttributeSet(ROOT::Experimental::RNTupleAttrSetWriterHandle handle);
 }; // class RNTupleWriter
 
 } // namespace ROOT

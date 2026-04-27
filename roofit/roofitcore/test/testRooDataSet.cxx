@@ -170,6 +170,7 @@ TEST(RooDataSet, ReducingData)
    for (int i = 0; i < 3; ++i) {
       // Check with root:
       TH1F test_hist(("h" + std::to_string(i)).c_str(), "histo", 10, massmin, massmax);
+      test_hist.SetDirectory(gDirectory); // TTree::Draw needs to find the histogram
       chi2cutval += 0.5;
 
       std::stringstream cutString;
@@ -373,10 +374,9 @@ TEST(RooDataSet, ImportDataHist)
    RooDataSet ds{"ds", "ds", x, RooFit::Import(dh)};
 
    for (int i = 0; i < x.numBins(); ++i) {
-      dh.get(i);
       ds.get(i);
-      EXPECT_FLOAT_EQ(ds.weight(), dh.weight()) << "weight() is off in bin " << i;
-      EXPECT_FLOAT_EQ(ds.weightSquared(), dh.weightSquared()) << "weightSquared() is off in bin " << i;
+      EXPECT_FLOAT_EQ(ds.weight(), dh.weight(i)) << "weight() is off in bin " << i;
+      EXPECT_FLOAT_EQ(ds.weightSquared(), dh.weightSquared(i)) << "weightSquared() is off in bin " << i;
    }
 }
 
@@ -439,6 +439,7 @@ TEST(RooDataSet, SplitDataSetWithWeightErrors)
 TEST(RooDataSet, ReadDataSetWithErrors626)
 {
    std::unique_ptr<TFile> file{TFile::Open("dataSet_with_errors_6_26_10.root", "READ")};
+   ASSERT_TRUE(file && !file->IsZombie());
 
    auto data = file->Get<RooDataSet>("data");
 

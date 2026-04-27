@@ -24,6 +24,7 @@
 #pragma link C++ class RooPowerSum+ ;
 #pragma link C++ class RooGaussExpTails+ ;
 #pragma link C++ class RooGaussian+ ;
+#pragma link C++ class RooStudentT+ ;
 #pragma link C++ class RooLognormal+ ;
 #pragma link C++ class RooGamma+ ;
 #pragma link C++ class RooGaussModel+ ;
@@ -76,6 +77,8 @@
                 _nonInterfering.back().emplace_back(arg->GetName()); \
              }                                                       \
           } }";
+#pragma link C++ class RooONNXFunction+ ;
+
 #pragma link C++ class RooFunctorBinding+ ;
 #pragma link C++ class RooFunctor1DBinding+ ;
 #pragma link C++ class RooFunctorPdfBinding+ ;

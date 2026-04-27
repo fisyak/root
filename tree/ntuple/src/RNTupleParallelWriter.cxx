@@ -107,12 +107,23 @@ public:
    {
       throw ROOT::RException(R__FAIL("should never commit cluster group via RPageSynchronizingSink"));
    }
-   void CommitDatasetImpl() final
+
+   ROOT::Internal::RNTupleLink CommitDatasetImpl() final
    {
       throw ROOT::RException(R__FAIL("should never commit dataset via RPageSynchronizingSink"));
    }
 
    RSinkGuard GetSinkGuard() final { return RSinkGuard(fMutex); }
+
+   std::unique_ptr<RPageSink> CloneAsHidden(std::string_view, const ROOT::RNTupleWriteOptions &) const final
+   {
+      throw ROOT::RException(R__FAIL("cloning a RPageSynchronizingSink is not implemented yet"));
+   }
+
+   void CommitAttributeSet(std::string_view, const ROOT::Internal::RNTupleLink &) final
+   {
+      throw ROOT::RException(R__FAIL("committing attribute sets is not implemented yet for parallel writing"));
+   }
 };
 
 } // namespace
@@ -181,6 +192,11 @@ ROOT::RNTupleParallelWriter::Append(std::unique_ptr<ROOT::RNTupleModel> model, s
    if (!file->IsBinary()) {
       throw RException(R__FAIL("RNTupleParallelWriter only supports writing to a ROOT file. Cannot write into " +
                                std::string(file->GetName())));
+   }
+   if (!file->IsWritable()) {
+      throw RException(R__FAIL("The file '" + std::string(file->GetName()) +
+                               "' given to RNTupleParallelWriter is not writable. Open it with 'UPDATE' or 'RECREATE' "
+                               "if you want to write into it."));
    }
    if (!options.GetUseBufferedWrite()) {
       throw RException(R__FAIL("parallel writing requires buffering"));

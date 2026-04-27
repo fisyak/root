@@ -134,11 +134,7 @@ void MAIN__() {}
 
 // As recommended in
 // https://gcc.gnu.org/onlinedocs/gfortran/Argument-passing-conventions.html
-#if __GNUC__ > 7
-typedef size_t fortran_charlen_t;
-#else
-typedef int fortran_charlen_t;
-#endif
+using fortran_charlen_t = size_t;
 
 #else
 # define hlimit  HLIMIT
@@ -215,10 +211,18 @@ extern "C" void  type_of_call hbnam(const int&,DEFCHAR,const int&,DEFCHAR,const 
 #endif
 
 extern "C" void  type_of_call hprntu(const int&);
-extern "C" void  type_of_call hgnpar(const int&,const char *,const int);
+#ifndef WIN32
+extern "C" void  type_of_call hgnpar(const int&,DEFCHAR,fortran_charlen_t);
+#else
+extern "C" void  type_of_call hgnpar(const int&,DEFCHAR);
+#endif
 extern "C" void  type_of_call hgnf(const int&,const int&,const float&,const int&);
 extern "C" void  type_of_call hgnt(const int&,const int&,const int&);
-extern "C" void  type_of_call rzink(const int&,const int&,const char *,const int);
+#ifndef WIN32
+extern "C" void  type_of_call rzink(const int&,const int&,DEFCHAR,fortran_charlen_t);
+#else
+extern "C" void  type_of_call rzink(const int&,const int&,DEFCHAR);
+#endif
 extern "C" void  type_of_call hdcofl();
 extern "C" void  type_of_call hmaxim(const int&,const float&);
 extern "C" void  type_of_call hminim(const int&,const float&);
@@ -321,11 +325,11 @@ int main(int argc, char **argv)
 
    int lun = 10;
 #ifndef WIN32
-   // "px" is a string being changed to "pxc" in the fortran side; since it's a temporary on C's side,
-   // we need a buffer of at least 3 chars on Cs side, too. Predefine it as a extra variable "px " since that way
-   // the space will be replaced by 'c' on the preallocated memory, instead of appending a new char (new memory) to "px".
-   auto opt = PASSCHAR("px ");
-   hropen(lun,PASSCHAR("example"),PASSCHAR(file_in),opt,record_size,ier,7,strlen(file_in),2);
+   // Reminder: Argument passing convention is that string lengths go as hidden arguments
+   // at the end of the argument list.
+   constexpr auto chdir = "example";
+   constexpr auto opt = "px";
+   hropen(lun, chdir, file_in, opt, record_size, ier, strlen(chdir), strlen(file_in), strlen(opt));
 #else
    hropen(lun,PASSCHAR("example"),PASSCHAR(file_in),PASSCHAR("px"),record_size,ier);
 #endif

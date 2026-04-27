@@ -73,6 +73,8 @@ ROOT::RResult<std::uint32_t> SerializeField(const ROOT::RFieldDescriptor &fieldD
       flags |= RNTupleSerializer::kFlagProjectedField;
    if (fieldDesc.GetTypeChecksum().has_value())
       flags |= RNTupleSerializer::kFlagHasTypeChecksum;
+   if (fieldDesc.IsSoACollection())
+      flags |= RNTupleSerializer::kFlagIsSoACollection;
    pos += RNTupleSerializer::SerializeUInt16(flags, *where);
 
    pos += RNTupleSerializer::SerializeString(fieldDesc.GetFieldName(), *where);
@@ -219,6 +221,10 @@ DeserializeField(const void *buffer, std::uint64_t bufSize, ROOT::Internal::RFie
       std::uint32_t typeChecksum;
       bytes += RNTupleSerializer::DeserializeUInt32(bytes, typeChecksum);
       fieldDesc.TypeChecksum(typeChecksum);
+   }
+
+   if (flags & RNTupleSerializer::kFlagIsSoACollection) {
+      fieldDesc.IsSoACollection(true);
    }
 
    return frameSize;
@@ -1086,8 +1092,10 @@ ROOT::Internal::RNTupleSerializer::SerializeLocator(const RNTupleLocator &locato
       break;
    default:
       if (locator.GetType() == ROOT::Internal::kTestLocatorType) {
-         // For the testing locator, use the same payload as Object64. We're not gonna really read it back anyway.
-         size += SerializeLocatorPayloadObject64(locator, payloadp);
+         // For the testing locator, use the same payload format as Object64. We won't read it back anyway.
+         RNTupleLocator dummy;
+         dummy.SetType(RNTupleLocator::kTypeDAOS);
+         size += SerializeLocatorPayloadObject64(dummy, payloadp);
          locatorType = 0x7e;
       } else {
          return R__FAIL("locator has unknown type");
@@ -1317,7 +1325,7 @@ void ROOT::Internal::RNTupleSerializer::RContext::MapSchema(const ROOT::RNTupleD
    if (!forHeaderExtension) {
       fieldTrees.emplace_back(fieldZeroId);
    } else if (auto xHeader = desc.GetHeaderExtension()) {
-      fieldTrees = xHeader->GetTopLevelFields(desc);
+      fieldTrees = xHeader->GetTopMostFields(desc);
    }
    depthFirstTraversal(fieldTrees, [&](ROOT::DescriptorId_t fieldId) { MapFieldId(fieldId); });
    depthFirstTraversal(fieldTrees, [&](ROOT::DescriptorId_t fieldId) {

@@ -19,10 +19,11 @@ if(MSVC AND NOT CMAKE_GENERATOR MATCHES Ninja)
                                      ${CMAKE_CURRENT_BINARY_DIR}/libCustomStruct.dll)
 endif()
 
+ROOT_ADD_GTEST(ntuple_attributes ntuple_attributes.cxx ntuple_test.cxx LIBRARIES ROOTNTuple xxHash::xxHash)
 ROOT_ADD_GTEST(ntuple_basics ntuple_basics.cxx LIBRARIES ROOTNTuple CustomStruct)
 ROOT_ADD_GTEST(ntuple_bulk ntuple_bulk.cxx LIBRARIES ROOTNTuple CustomStruct)
 ROOT_ADD_GTEST(ntuple_cast ntuple_cast.cxx LIBRARIES ROOTNTuple)
-ROOT_ADD_GTEST(ntuple_checksum ntuple_checksum.cxx ntuple_test.cxx LIBRARIES ROOTNTuple)
+ROOT_ADD_GTEST(ntuple_checksum ntuple_checksum.cxx ntuple_test.cxx LIBRARIES ROOTNTuple xxHash::xxHash)
 ROOT_ADD_GTEST(ntuple_cluster ntuple_cluster.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_compat ntuple_compat.cxx RXTuple.cxx LIBRARIES ROOTNTuple xxHash::xxHash)
 ROOT_GENERATE_DICTIONARY(RXTupleDict ${CMAKE_CURRENT_SOURCE_DIR}/RXTuple.hxx
@@ -43,11 +44,15 @@ if(NOT MSVC)
   ROOT_ADD_GTEST(ntuple_evolution_shape ntuple_evolution_shape.cxx LIBRARIES ROOTNTuple)
   ROOT_ADD_GTEST(ntuple_emulated ntuple_emulated.cxx LIBRARIES ROOTNTuple)
 endif()
+ROOT_ADD_GTEST(ntuple_field_name ntuple_field_name.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_join_table ntuple_join_table.cxx LIBRARIES ROOTNTuple)
-ROOT_ADD_GTEST(ntuple_merger ntuple_merger.cxx LIBRARIES ROOTNTuple CustomStruct ZLIB::ZLIB Tree INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/tree/tree/inc)
+ROOT_ADD_GTEST(ntuple_merger ntuple_merger.cxx ntuple_test.cxx
+  LIBRARIES ROOTNTuple CustomStruct ZLIB::ZLIB Tree xxHash::xxHash
+  INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/tree/tree/inc)
 ROOT_ADD_GTEST(ntuple_metrics ntuple_metrics.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_model ntuple_model.cxx LIBRARIES ROOTNTuple CustomStruct)
 ROOT_ADD_GTEST(ntuple_multi_column ntuple_multi_column.cxx LIBRARIES ROOTNTuple)
+ROOT_ADD_GTEST(ntuple_multi_stream ntuple_multi_stream.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_packing ntuple_packing.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_pages ntuple_pages.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_print ntuple_print.cxx LIBRARIES ROOTNTuple CustomStruct)
@@ -57,6 +62,10 @@ ROOT_ADD_GTEST(ntuple_processor_join ntuple_processor_join.cxx LIBRARIES ROOTNTu
 ROOT_ADD_GTEST(ntuple_project ntuple_project.cxx LIBRARIES ROOTNTuple)
 ROOT_ADD_GTEST(ntuple_modelext ntuple_modelext.cxx LIBRARIES ROOTNTuple MathCore CustomStruct)
 ROOT_ADD_GTEST(ntuple_serialize ntuple_serialize.cxx LIBRARIES ROOTNTuple)
+ROOT_ADD_GTEST(ntuple_soa ntuple_soa.cxx LIBRARIES ROOTNTuple)
+ROOT_GENERATE_DICTIONARY(SoAFieldDict ${CMAKE_CURRENT_SOURCE_DIR}/SoAField.hxx
+                         MODULE ntuple_soa LINKDEF SoAFieldLinkDef.h OPTIONS -inlineInputHeader
+                         DEPENDENCIES RIO ROOTVecOps)
 ROOT_ADD_GTEST(ntuple_type_name ntuple_type_name.cxx LIBRARIES ROOTNTuple CustomStruct)
 if(NOT MSVC OR llvm13_broken_tests)
   ROOT_ADD_GTEST(ntuple_types ntuple_types.cxx LIBRARIES ROOTNTuple)
@@ -132,13 +141,33 @@ if(MSVC AND NOT CMAKE_GENERATOR MATCHES Ninja)
                              ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/StreamerFieldXMLDict_rdict.pcm)
 endif()
 
+configure_file(SoAFieldXML.h . COPYONLY)
+configure_file(SoAFieldSelection.xml . COPYONLY)
+add_custom_command(OUTPUT SoAFieldXMLDict.cxx SoAFieldXMLDict_rdict.pcm
+                   COMMAND ${command} SoAFieldXML.h -o SoAFieldXMLDict.cxx -s SoAFieldSelection.xml
+                   DEPENDS rootcling SoAFieldXML.h SoAFieldSelection.xml)
+add_library(SoAFieldXMLDict OBJECT SoAFieldXMLDict.cxx)
+set_target_properties(SoAFieldXMLDict PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+target_sources(ntuple_soa PRIVATE $<TARGET_OBJECTS:SoAFieldXMLDict>)
+target_compile_options(SoAFieldXMLDict PRIVATE $<TARGET_PROPERTY:ntuple_soa,COMPILE_OPTIONS>)
+target_compile_definitions(SoAFieldXMLDict PRIVATE $<TARGET_PROPERTY:ntuple_soa,COMPILE_DEFINITIONS>)
+target_compile_features(SoAFieldXMLDict PRIVATE $<TARGET_PROPERTY:ntuple_soa,COMPILE_FEATURES>)
+target_include_directories(SoAFieldXMLDict PRIVATE $<TARGET_PROPERTY:ntuple_soa,INCLUDE_DIRECTORIES>)
+if(MSVC AND NOT CMAKE_GENERATOR MATCHES Ninja)
+  add_custom_command(TARGET ntuple_soa POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/libntuple_soa_rdict.pcm
+                             ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/libntuple_soa_rdict.pcm
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/SoAFieldXMLDict_rdict.pcm
+                             ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/SoAFieldXMLDict_rdict.pcm)
+endif()
+
 if(daos OR daos_mock)
   # Label of the DAOS pool used for testing, if not provided (may be any for libdaos_mock).
   if(NOT daos_test_pool)
     set(daos_test_pool ntuple-daos-test-pool)
   endif()
 
-  ROOT_ADD_GTEST(ntuple_storage_daos ntuple_storage_daos.cxx ntuple_test.cxx LIBRARIES ROOTNTuple MathCore CustomStruct)
+  ROOT_ADD_GTEST(ntuple_storage_daos ntuple_storage_daos.cxx ntuple_test.cxx LIBRARIES ROOTNTuple MathCore CustomStruct xxHash::xxHash)
   target_compile_definitions(ntuple_storage_daos PRIVATE R__DAOS_TEST_POOL="${daos_test_pool}")
 
   if(daos_mock)
