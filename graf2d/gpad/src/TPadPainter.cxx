@@ -134,11 +134,22 @@ Bool_t TPadPainter::IsSupportAlpha() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Clear the current gVirtualX window.
+/// Clear the current gVirtualX window - calling gVirtualX->ClearWindowW
 
 void TPadPainter::ClearDrawable()
 {
-   gVirtualX->ClearWindowW(fWinContext);
+   if (fWinContext)
+      gVirtualX->ClearWindowW(fWinContext);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Clear specified window - calling gVirtualX->ClearWindowW
+
+void TPadPainter::ClearWindow(Int_t device)
+{
+   auto ctxt = gVirtualX->GetWindowContext(device);
+   if (ctxt)
+      gVirtualX->ClearWindowW(ctxt);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -243,7 +254,16 @@ void TPadPainter::SetAttText(const TAttText &att)
 {
    TPadPainterBase::SetAttText(att);
 
-   gVirtualX->SetAttText(fWinContext, att);
+   // TODO: in ROOT7 move text size handling directly to correspondent PS engine
+   //       One not need to recalculate text size many time back and forth
+
+   if (!fPad)
+      Fatal("SetAttText", "Pad not specified");
+
+   TAttText attm(att);
+   attm.SetTextSize(att.GetTextSizePixels(*fPad));
+
+   gVirtualX->SetAttText(fWinContext, attm);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

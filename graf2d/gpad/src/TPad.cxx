@@ -14,6 +14,7 @@
 #include <iostream>
 #include <locale>
 #include <memory>
+#include <cmath>
 
 #include "TROOT.h"
 #include "TBuffer.h"
@@ -2816,7 +2817,7 @@ TVirtualPad *TPad::GetPadSave() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Get Wh.
+/// Get canvas height
 
 UInt_t TPad::GetWh() const
 {
@@ -2824,11 +2825,45 @@ UInt_t TPad::GetWh() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Get Ww.
+/// Get canvas width
 
 UInt_t TPad::GetWw() const
 {
    return  fCanvas ? fCanvas->GetWw() : 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get pad width
+
+UInt_t TPad::GetPadWidth() const
+{
+   // Very often pad width was calculated as XtoPixel(GetX2());
+   // But if coordinate system broken such trnasformation fail.
+   // Therefore use canvas width multiplied by absolute NDC width value
+   // Keep fallback solution only when canvas width cannot be defined
+
+   auto cw = GetWw();
+   if (!cw)
+      return XtoPixel(GetX2());
+
+   return static_cast<UInt_t>(std::lround(cw * GetAbsWNDC()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get pad height
+
+UInt_t TPad::GetPadHeight() const
+{
+   // Very often pad height was calculated as YtoPixel(GetY1())
+   // But if coordinate system broken such trnasformation fail.
+   // Therefore use canvas height multiplied by absolute NDC height value
+   // Keep fallback solution only when canvas height cannot be defined
+
+   auto ch = GetWh();
+   if (!ch)
+      return YtoPixel(GetY1());
+
+   return static_cast<UInt_t>(std::lround(GetWh() * GetAbsHNDC()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5086,7 +5121,7 @@ void TPad::Print(const char *filename, Option_t *option)
    if (!title && strstr(opt,"svg")) {
       gVirtualPS = (TVirtualPS*)gROOT->GetListOfSpecials()->FindObject(psname);
 
-      Bool_t noScreen = kFALSE;
+      Bool_t noScreen = kFALSE, wasModified = IsModified();
       if (!GetCanvas()->IsBatch() && GetCanvas()->GetCanvasID() == -1) {
          noScreen = kTRUE;
          GetCanvas()->SetBatch(kTRUE);
@@ -5114,6 +5149,8 @@ void TPad::Print(const char *filename, Option_t *option)
       Paint();
       if (noScreen)
          GetCanvas()->SetBatch(kFALSE);
+      if (wasModified && !IsBatch())
+         Modified(kTRUE);
 
       if (!gSystem->AccessPathName(psname))
          Info("Print", "SVG file %s has been created", psname.Data());
@@ -5128,7 +5165,7 @@ void TPad::Print(const char *filename, Option_t *option)
    if (!title && (strstr(opt,"tex") || strstr(opt,"Standalone"))) {
       gVirtualPS = (TVirtualPS*)gROOT->GetListOfSpecials()->FindObject(psname);
 
-      Bool_t noScreen = kFALSE;
+      Bool_t noScreen = kFALSE, wasModified = IsModified();
       if (!GetCanvas()->IsBatch() && GetCanvas()->GetCanvasID() == -1) {
          noScreen = kTRUE;
          GetCanvas()->SetBatch(kTRUE);
@@ -5157,7 +5194,10 @@ void TPad::Print(const char *filename, Option_t *option)
          gVirtualPS->NewPage();
       }
       Paint();
-      if (noScreen)  GetCanvas()->SetBatch(kFALSE);
+      if (noScreen)
+         GetCanvas()->SetBatch(kFALSE);
+      if (wasModified && !IsBatch())
+         Modified(kTRUE);
 
       if (!gSystem->AccessPathName(psname)) {
          if (standalone) {
@@ -5192,7 +5232,7 @@ void TPad::Print(const char *filename, Option_t *option)
    if (copen  || copenb)  mustClose = kFALSE;
    if (cclose || ccloseb) mustClose = kTRUE;
 
-   Bool_t noScreen = kFALSE;
+   Bool_t noScreen = kFALSE, wasModified = IsModified();
    if (!GetCanvas()->IsBatch() && GetCanvas()->GetCanvasID() == -1) {
       noScreen = kTRUE;
       GetCanvas()->SetBatch(kTRUE);
@@ -5282,6 +5322,9 @@ void TPad::Print(const char *filename, Option_t *option)
          gVirtualPS = nullptr;
       }
    }
+
+   if (wasModified && !IsBatch())
+      Modified(kTRUE);
 
    if (strstr(opt,"Preview"))
       gSystem->Exec(TString::Format("epstool --quiet -t6p %s %s", psname.Data(), psname.Data()).Data());
@@ -5681,6 +5724,7 @@ void TPad::ResizePad(Option_t *option)
          pp->SetAttLine(attl);
          auto attt = pp->GetAttText();
          attt.SetTextSize(-1);
+         pp->OnPad(this);
          pp->SetAttText(attt);
          // create or re-create off-screen pixmap
          if (fPixmapID) {
@@ -6173,6 +6217,7 @@ void TPad::SetAttTextPS(Int_t align, Float_t angle, Color_t color, Style_t font,
                tsize = dy/(GetY2()-GetY1());
             }
          }
+         pp->OnPad(this);
          pp->SetAttText({align, angle, color, font, tsize});
       }
 }

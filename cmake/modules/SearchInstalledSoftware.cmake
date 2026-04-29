@@ -108,7 +108,8 @@ foreach(suffix FOUND INCLUDE_DIR LIBRARY LIBRARY_DEBUG LIBRARY_RELEASE LIBRARIES
   unset(ZSTD_${suffix} CACHE)
 endforeach()
 
-# Request explicit user opt-in for required dependencies
+# Request explicit user opt-in for required "easy to self-install" dependencies
+# This purposely ignores the fail-on-missing=OFF behavior
 if(asimage)
   ROOT_FIND_REQUIRED_DEP(GIF builtin_gif)
   ROOT_FIND_REQUIRED_DEP(JPEG builtin_jpeg)
@@ -122,6 +123,7 @@ ROOT_FIND_REQUIRED_DEP(LZ4 builtin_lz4)
 ROOT_FIND_REQUIRED_DEP(LibLZMA builtin_lzma)
 ROOT_FIND_REQUIRED_DEP(ZLIB builtin_zlib)
 ROOT_FIND_REQUIRED_DEP(ZSTD builtin_zstd)
+ROOT_FIND_REQUIRED_DEP(xxHash builtin_xxhash)
 
 if(NOT "${MISSING_PACKAGES}" STREQUAL "")
   message(FATAL_ERROR "The following packages need to be installed or enabled to build ROOT: ${MISSING_PACKAGES}")
@@ -275,21 +277,16 @@ if(NOT builtin_pcre)
   endforeach()
   find_package(PCRE2)
   if(NOT PCRE2_FOUND)
-    if(fail-on-missing)
-      find_package(PCRE REQUIRED)
-    else()
-      find_package(PCRE)
-      if(NOT PCRE_FOUND)
-        message(STATUS "PCRE not found. Switching on builtin_pcre option")
-        set(builtin_pcre ON CACHE BOOL "Enabled because PCRE not found (${builtin_pcre_description})" FORCE)
-      endif()
+    find_package(PCRE)
+    if(NOT PCRE_FOUND)
+      message(SEND_ERROR "PCRE2 required but not found. Install it on the system (preferred), or explicitly request the builtin version.")
     endif()
   endif()
 endif()
 
 if(builtin_pcre)
-  list(APPEND ROOT_BUILTINS PCRE)
   add_subdirectory(builtins/pcre)
+  list(APPEND ROOT_BUILTINS BUILTIN_PCRE)
 endif()
 
 #---Check for LZMA-------------------------------------------------------------------
@@ -299,19 +296,6 @@ if(builtin_lzma)
 endif()
 
 #---Check for xxHash-----------------------------------------------------------------
-if(NOT builtin_xxhash)
-  message(STATUS "Looking for xxHash")
-  if(fail-on-missing)
-    find_package(xxHash 0.8 REQUIRED)
-  else()
-    find_package(xxHash 0.8)
-    if(NOT xxHash_FOUND)
-      message(STATUS "xxHash not found. Switching on builtin_xxhash option")
-      set(builtin_xxhash ON CACHE BOOL "Enabled because xxHash not found (${builtin_xxhash_description})" FORCE)
-    endif()
-  endif()
-endif()
-
 if(builtin_xxhash)
   list(APPEND ROOT_BUILTINS xxHash)
   add_subdirectory(builtins/xxhash)

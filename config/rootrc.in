@@ -422,7 +422,7 @@ RSA.KeyType:  1
 # UsrPwd: check of host equivalence via /etc/hosts.equiv or $HOME/.rhosts.
 #SrvAuth.CheckHostsEquivalence: 1
 
-# Force file opening via TNetFile (TNetXNGFile) if a hostname is specified
+# Force file opening via TNetXNGFile if a hostname is specified
 # in the Url.
 # By default, for local files TFile::Open() invokes directly TFile
 #TFile.ForceRemote:  yes
@@ -451,14 +451,6 @@ TFile.CrossProtocolRedirects:  yes
 # kNotDeleted; Older releases were not explicitly setting those bits to the
 # correct value but instead used verbatim the value stored in the file.
 # TFile.v630forwardCompatibility: no
-
-# List of S3 servers known to support multi-range HTTP GET requests.
-# This is the value sent back by the S3 server in the 'Server:' header
-# of the HTTP response.
-# Please note that Amazon S3 servers do not support this feature.
-# Add one line per server type with syntax:
-# +TS3WebFile.Root.MultiRangeServer: Mucura
-TS3WebFile.Root.MultiRangeServer:  Huawei OBS
 
 # Special cases for the TUrl parser, where the special cases are parsed
 # in a protocol + file part, like file:/path/file.root or /alien/path/file.root.
@@ -530,9 +522,6 @@ NetXNG.QueryReadVParams: $(ROOT_XRD_QUERY_READV_PARAMS)
 # classes give a comprehensive client side support for HTTP and WebDAV,
 # with all the goodies (session caching, flexible authentication, support
 # for different dialects like S3, and others)
-
-# Use the old TWebFile instead of the new libDavix based version
-Davix.UseOldClient: @useoldwebfile@
 
 # Verbosity level of the external Davix library
 # Davix.Debug: 0

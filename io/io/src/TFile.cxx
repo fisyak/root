@@ -15,14 +15,15 @@
 \ingroup IO
 \brief A file, usually with extension .root, that stores data and code in the form of serialized objects in a
 file-system-like logical structure, possibly including subdirectory hierarchies.
-\note ROOT files contain data, and executable code, for example through TExec, TMacro, and TFormula instances. As for all files, **do not open ROOT files from an unknown origin!**
+\note ROOT files contain data, and executable code, for example through TExec, TMacro, and TFormula instances. As for
+all files, **do not open ROOT files from an unknown origin!**
 \note See also \ref IO
 \note See also \ref rootio (or `io/doc/TFile` folder in your codebase)
 
-ROOT files a are an efficient mean to store C++ class instances, e.g. data, 
-both as individual objects, in a so called *row-wise fashion*, and in a 
+ROOT files a are an efficient mean to store C++ class instances, e.g. data,
+both as individual objects, in a so called *row-wise fashion*, and in a
 *so-called columnar fashion*. Also executable code can be stored in ROOT files,
-for example in the form of TMacro, TExec or TFormula instances, and the 
+for example in the form of TMacro, TExec or TFormula instances, and the
 related federation of classes.
 
 For example, a TCanvas or TPad instance may rely on TExec instances stored in
@@ -1868,7 +1869,6 @@ Bool_t TFile::ReadBuffer(char *buf, Int_t len)
 ///
 /// The value pos[i] is the seek position of block i of length len[i].
 /// Note that for nbuf=1, this call is equivalent to TFile::ReafBuffer.
-/// This function is overloaded by TNetFile, TWebFile, etc.
 /// Returns kTRUE in case of failure.
 
 Bool_t TFile::ReadBuffers(char *buf, Long64_t *pos, Int_t *len, Int_t nbuf)
@@ -3751,22 +3751,22 @@ TFile *TFile::OpenFromCache(const char *name, Option_t *, const char *ftitle,
 /// Create / open a file
 ///
 /// The type of the file can be either a
-/// TFile, TNetFile, TWebFile or any TFile derived class for which an
+/// TFile or any TFile derived class for which an
 /// plugin library handler has been registered with the plugin manager
 /// (for the plugin manager see the TPluginManager class). The returned
 /// type of TFile depends on the file name specified by 'url'.
 /// If 'url' is a '|'-separated list of file URLs, the 'URLs' are tried
 /// sequentially in the specified order until a successful open.
-/// If the file starts with "root:", "roots:" or "rootk:" a TNetFile object
-/// will be returned, with "http:" a TWebFile, with "file:" a local TFile,
+/// If the file starts with "root:", "roots:" or "rootk:" an XRootD-backed file
+/// will be returned, with "http:" a curl-based file, with "file:" a local TFile,
 /// etc. (see the list of TFile plugin handlers in $ROOTSYS/etc/system.rootrc
 /// for regular expressions that will be checked) and as last a local file will
 /// be tried.
-/// Before opening a file via TNetFile a check is made to see if the URL
+/// Before opening a file via a remote API, a check is made to see if the URL
 /// specifies a local file. If that is the case the file will be opened
 /// via a normal TFile. To force the opening of a local file via a
-/// TNetFile use either TNetFile directly or specify as host "localhost".
-/// The netopt argument is only used by TNetFile. For the meaning of the
+/// specify as host "localhost".
+/// The netopt argument is not used, any more. For the meaning of the
 /// options and other arguments see the constructors of the individual
 /// file classes. In case of error, it returns a nullptr.
 ///
@@ -3984,11 +3984,7 @@ TFile *TFile::Open(const char *url, Option_t *options, const char *ftitle,
             if ((h = gROOT->GetPluginManager()->FindHandler("TFile", name.Data()))) {
                if (h->LoadPlugin() == -1)
                   return nullptr;
-               TClass *cl = TClass::GetClass(h->GetClass());
-               if (cl && cl->InheritsFrom("ROOT::Deprecated::TNetFile"))
-                  f = (TFile*) h->ExecPlugin(5, name.Data(), option, ftitle, compress, netopt);
-               else
-                  f = (TFile*) h->ExecPlugin(4, name.Data(), option, ftitle, compress);
+               f = (TFile *)h->ExecPlugin(4, name.Data(), option, ftitle, compress);
             } else {
                // Just try to open it locally but via TFile::Open, so that we pick-up the correct
                // plug-in in the case file name contains information about a special backend (e.g.)

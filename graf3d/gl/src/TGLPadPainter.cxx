@@ -132,18 +132,6 @@ void TGLPadPainter::SetAttMarker(const TAttMarker &att)
       gVirtualX->SetAttMarker(fWinContext, att);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// Set text attributes
-
-void TGLPadPainter::SetAttText(const TAttText &att)
-{
-   TPadPainterBase::SetAttText(att);
-
-   // TODO: dismiss in the future, gVirtualX attributes not needed in GL
-   if (fWinContext && gVirtualX)
-      gVirtualX->SetAttText(fWinContext, att);
-}
-
 /*
 "Pixmap" part of TGLPadPainter.
 */
@@ -166,11 +154,20 @@ Int_t TGLPadPainter::ResizeDrawable(Int_t device, UInt_t w, UInt_t h)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Call gVirtualX->ClearWindow()
+/// Do nothing, sub-pads not cleared in GL
 
 void TGLPadPainter::ClearDrawable()
 {
-   gVirtualX->ClearWindow();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Clear specified window - calling gVirtualX->ClearWindowW
+
+void TGLPadPainter::ClearWindow(Int_t device)
+{
+   auto ctxt = gVirtualX->GetWindowContext(device);
+   if (ctxt)
+      gVirtualX->ClearWindowW(ctxt);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -781,6 +778,30 @@ void TGLPadPainter::DrawPolyMarker()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Select specified font/size
+
+void TGLPadPainter::SelectGLFont(Font_t font, Float_t tsize)
+{
+   //10 is the first valid font index.
+   //20 is FreeSerifBold, as in TTF.cxx and in TGLFontManager.cxx.
+   //shift - is the shift to access "extended" fonts.
+   const Int_t shift = TGLFontManager::GetExtendedFontStartIndex();
+
+   Int_t fontIndex = TMath::Max(Font_t(10), font);
+   if (fontIndex / 10 + shift > TGLFontManager::GetFontFileArray()->GetEntries())
+      fontIndex = 20 + shift * 10;
+   else
+      fontIndex += shift * 10;
+
+   Int_t textSize = TMath::Max(Int_t(tsize) - 1, 10);
+
+   const char *name = TGLFontManager::GetFontNameFromId(fontIndex);
+
+   fFM.RegisterFont(textSize, name, TGLFont::kTexture, fF);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Helper function to draw text
 
 template<class Char>
 void TGLPadPainter::DrawTextHelper(Double_t x, Double_t y, const Char *text, ETextMode /*mode*/)
@@ -797,22 +818,10 @@ void TGLPadPainter::DrawTextHelper(Double_t x, Double_t y, const Char *text, ETe
    Rgl::Pad::ExtractRGBA(GetAttText().GetTextColor(), rgba);
    glColor4fv(rgba);
 
-   //10 is the first valid font index.
-   //20 is FreeSerifBold, as in TTF.cxx and in TGLFontManager.cxx.
-   //shift - is the shift to access "extended" fonts.
-   const Int_t shift = TGLFontManager::GetExtendedFontStartIndex();
-
-   Int_t fontIndex = TMath::Max(Short_t(10), GetAttText().GetTextFont());
-   if (fontIndex / 10 + shift > TGLFontManager::GetFontFileArray()->GetEntries())
-      fontIndex = 20 + shift * 10;
-   else
-      fontIndex += shift * 10;
+   SelectGLFont(GetAttText().GetTextFont(), GetAttText().GetTextSizePixels(*gPad));
 
    fF.SetTextAlign(GetAttText().GetTextAlign());
 
-   fFM.RegisterFont(TMath::Max(Int_t(GetAttText().GetTextSize()) - 1, 10),//kTexture does not work if size < 10.
-                               TGLFontManager::GetFontNameFromId(fontIndex),
-                               TGLFont::kTexture, fF);
    fF.PreRender();
 
    const UInt_t padH = UInt_t(gPad->GetAbsHNDC() * gPad->GetWh());
@@ -825,6 +834,42 @@ void TGLPadPainter::DrawTextHelper(Double_t x, Double_t y, const Char *text, ETe
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Helper function to get text extent
+
+template<class Char_t>
+void TGLPadPainter::TextExtentHelper(Font_t font, Double_t size, UInt_t &w, UInt_t &h, const Char_t *text)
+{
+   SelectGLFont(font, size);
+
+   Float_t llx, lly, llz, urx, ury, urz;
+   fF.BBox(text, llx, lly, llz, urx, ury, urz);
+   urx -= llx;
+   ury -= lly;
+   w = (UInt_t) (urx > 0. ? urx : 0.);
+   h = (UInt_t) (ury > 0. ? ury : 0.);
+   (void) llz;
+   (void) urz;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Helper function to get text ascent / descent
+
+template<class Char_t>
+void TGLPadPainter::TextAscentDescentHelper(Font_t font, Double_t size, UInt_t &a, UInt_t &d, const Char_t *text)
+{
+   SelectGLFont(font, size);
+
+   Float_t llx, lly, llz, urx, ury, urz;
+   fF.BBox(text, llx, lly, llz, urx, ury, urz);
+   a = (UInt_t) (ury > 0. ? ury : 0.);
+   d = (UInt_t) (lly < 0. ? -lly : 0.);
+   (void) llx;
+   (void) llz;
+   (void) urx;
+   (void) urz;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 ///Draw text. This operation is especially
 ///dangerous if in locked state -
 ///ftgl will assert on zero texture size
@@ -834,10 +879,8 @@ void TGLPadPainter::DrawText(Double_t x, Double_t y, const char *text, ETextMode
 {
    if (fLocked) return;
 
-   if (!GetAttText().GetTextSize())
-      return;
-
-   DrawTextHelper(x, y, text, mode);
+   if (GetAttText().GetTextSize() > 0)
+      DrawTextHelper(x, y, text, mode);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -850,10 +893,8 @@ void TGLPadPainter::DrawText(Double_t x, Double_t y, const wchar_t *text, ETextM
 {
    if (fLocked) return;
 
-   if (!GetAttText().GetTextSize())
-      return;
-
-   DrawTextHelper(x, y, text, mode);
+   if (GetAttText().GetTextSize() > 0)
+      DrawTextHelper(x, y, text, mode);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -869,6 +910,50 @@ void TGLPadPainter::DrawTextNDC(Double_t u, Double_t v, const char *text, ETextM
    const Double_t xRange = gPad->GetX2() - gPad->GetX1();
    const Double_t yRange = gPad->GetY2() - gPad->GetY1();
    DrawText(gPad->GetX1() + u * xRange, gPad->GetY1() + v * yRange, text, mode);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get text extent
+
+void TGLPadPainter::GetTextExtent(Font_t font, Double_t size, UInt_t &w, UInt_t &h, const char *text)
+{
+   TextExtentHelper(font, size, w, h, text);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get text extent
+
+void TGLPadPainter::GetTextExtent(Font_t font, Double_t size, UInt_t &w, UInt_t &h, const wchar_t *text)
+{
+   TextExtentHelper(font, size, w, h, text);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get text extent
+
+void TGLPadPainter::GetTextAscentDescent(Font_t font, Double_t size, UInt_t &a, UInt_t &d, const char *text)
+{
+   TextAscentDescentHelper(font, size, a, d, text);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get text extent
+
+void TGLPadPainter::GetTextAscentDescent(Font_t font, Double_t size, UInt_t &a, UInt_t &d, const wchar_t *text)
+{
+   TextAscentDescentHelper(font, size, a, d, text);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get text advance
+
+UInt_t TGLPadPainter::GetTextAdvance(Font_t font, Double_t size, const char *text, Bool_t)
+{
+   SelectGLFont(font, size);
+
+   auto advance = fF.Advance(text);
+
+   return (UInt_t) (advance > 0. ? advance : 0.);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
