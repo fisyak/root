@@ -63,9 +63,10 @@ class RSoAField : public RFieldBase {
    };
 
    TClass *fSoAClass = nullptr;
-   std::vector<std::size_t> fSoAMemberOffsets;    ///< The offset of the RVec members in the SoA type
-   std::vector<std::size_t> fRecordMemberIndexes; ///< Maps the SoA members to the members of the underlying record
    std::vector<RFieldBase *> fRecordMemberFields; ///< Direct access to the member fields of the underlying record
+   /// The offset of the RVec members in the SoA type in the order of subfields of the underlying record type.
+   /// In particular, the order is not necessarily the same then the order of RVec members in the SoA class.
+   std::vector<std::size_t> fSoAMemberOffsets;
    std::size_t fMaxAlignment = 1;
    ROOT::Internal::RColumnIndex fNWritten;
 
@@ -98,12 +99,16 @@ public:
    std::vector<RValue> SplitValue(const RValue &value) const final;
    size_t GetValueSize() const final;
    size_t GetAlignment() const final { return fMaxAlignment; }
+   std::uint32_t GetTypeVersion() const final;
+   std::uint32_t GetTypeChecksum() const final;
    /// For polymorphic classes (that declare or inherit at least one virtual method), return the expected dynamic type
    /// of any user object. If the class is not polymorphic, return nullptr.
    /// TODO(jblomer): use information in unique pointer field
    const std::type_info *GetPolymorphicTypeInfo() const;
    // TODO(jblomer)
    // void AcceptVisitor(ROOT::Detail::RFieldVisitor &visitor) const final;
+
+   TClass *GetSoAClass() const { return fSoAClass; }
 };
 
 } // namespace Experimental

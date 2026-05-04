@@ -408,7 +408,7 @@ std::unique_ptr<ROOT::RFieldBase> ROOT::RRVecField::BeforeConnectPageSource(Inte
 
 void ROOT::RRVecField::ReconcileOnDiskField(const RNTupleDescriptor &desc)
 {
-   EnsureMatchingOnDiskField(desc, kDiffTypeName).ThrowOnError();
+   EnsureMatchingOnDiskCollection(desc).ThrowOnError();
 }
 
 void ROOT::RRVecField::ConstructValue(void *where) const
@@ -618,7 +618,7 @@ std::unique_ptr<ROOT::RFieldBase> ROOT::RVectorField::BeforeConnectPageSource(In
 
 void ROOT::RVectorField::ReconcileOnDiskField(const RNTupleDescriptor &desc)
 {
-   EnsureMatchingOnDiskField(desc, kDiffTypeName).ThrowOnError();
+   EnsureMatchingOnDiskCollection(desc).ThrowOnError();
 }
 
 void ROOT::RVectorField::RVectorDeleter::operator()(void *objPtr, bool dtorOnly)
@@ -761,7 +761,7 @@ void ROOT::RField<std::vector<bool>>::ReconcileOnDiskField(const RNTupleDescript
       }
       fOnDiskNRepetitions = fieldDesc.GetNRepetitions();
    } else {
-      EnsureMatchingOnDiskField(desc, kDiffTypeName).ThrowOnError();
+      EnsureMatchingOnDiskCollection(desc).ThrowOnError();
    }
 }
 
@@ -860,8 +860,7 @@ void ROOT::RArrayAsRVecField::ReadInClusterImpl(RNTupleLocalIndex localIndex, vo
 
 void ROOT::RArrayAsRVecField::ReconcileOnDiskField(const RNTupleDescriptor &desc)
 {
-   EnsureMatchingOnDiskField(desc, kDiffTypeName | kDiffTypeVersion | kDiffStructure | kDiffNRepetitions)
-      .ThrowOnError();
+   EnsureMatchingOnDiskField(desc, kDiffTypeName | kDiffStructure | kDiffNRepetitions).ThrowOnError();
    const auto &fieldDesc = desc.GetFieldDescriptor(GetOnDiskId());
    if (fieldDesc.GetTypeName().rfind("std::array<", 0) != 0) {
       throw RException(R__FAIL("RArrayAsRVecField " + GetQualifiedFieldName() + " expects an on-disk array field\n" +
@@ -961,7 +960,7 @@ void ROOT::RArrayAsVectorField::ReadInClusterImpl(ROOT::RNTupleLocalIndex localI
 
 void ROOT::RArrayAsVectorField::ReconcileOnDiskField(const RNTupleDescriptor &desc)
 {
-   EnsureMatchingOnDiskField(desc, kDiffTypeName | kDiffTypeVersion | kDiffStructure | kDiffNRepetitions);
+   EnsureMatchingOnDiskField(desc, kDiffTypeName | kDiffStructure | kDiffNRepetitions);
 
    const auto &fieldDesc = desc.GetFieldDescriptor(GetOnDiskId());
    if (fieldDesc.GetTypeName().rfind("std::array<", 0) != 0) {

@@ -11,6 +11,8 @@
 #include "SoAFieldXML.h"
 
 #include <TClass.h>
+#include <TFile.h>
+#include <TVirtualStreamerInfo.h>
 
 #include <memory>
 #include <utility>
@@ -54,9 +56,16 @@ TEST(RNTuple, SoACheck)
 
    try {
       auto f = std::make_unique<RSoAField>("f", "SoAUnknownRecord");
-      FAIL() << "creating SoA field with missing record typedef should fail";
+      FAIL() << "creating SoA field with unknown underlying record type should fail";
    } catch (const ROOT::RException &e) {
       EXPECT_THAT(e.what(), ::testing::HasSubstr("invalid record type of SoA field SoAUnknownRecord"));
+   }
+
+   try {
+      auto f = std::make_unique<RSoAField>("f", "SoAVersionMismatch");
+      FAIL() << "creating SoA field with a class version different from the underlying record type's should fail";
+   } catch (const ROOT::RException &e) {
+      EXPECT_THAT(e.what(), ::testing::HasSubstr("version mismatch between SoA type and underlying record type"));
    }
 
    try {
@@ -136,12 +145,36 @@ TEST(RNTuple, SoADescriptor)
 
    auto reader = ROOT::RNTupleReader::Open("ntpl", fileGuard.GetPath());
    const auto &desc = reader->GetDescriptor();
-   EXPECT_TRUE(desc.GetFieldDescriptor(desc.FindFieldId("f1")).IsSoACollection());
-   EXPECT_EQ(ROOT::ENTupleStructure::kCollection, desc.GetFieldDescriptor(desc.FindFieldId("f1")).GetStructure());
-   EXPECT_TRUE(desc.GetFieldDescriptor(desc.FindFieldId("f2")).IsSoACollection());
-   EXPECT_EQ(ROOT::ENTupleStructure::kCollection, desc.GetFieldDescriptor(desc.FindFieldId("f2")).GetStructure());
-   EXPECT_FALSE(desc.GetFieldDescriptor(desc.FindFieldId("f3")).IsSoACollection());
-   EXPECT_EQ(ROOT::ENTupleStructure::kCollection, desc.GetFieldDescriptor(desc.FindFieldId("f3")).GetStructure());
+   const auto &f1Desc = desc.GetFieldDescriptor(desc.FindFieldId("f1"));
+   EXPECT_TRUE(f1Desc.IsSoACollection());
+   EXPECT_EQ(ROOT::ENTupleStructure::kCollection, f1Desc.GetStructure());
+   EXPECT_EQ(TClass::GetClass("SoA")->GetClassVersion(), f1Desc.GetTypeVersion());
+   EXPECT_TRUE(f1Desc.GetTypeChecksum());
+   EXPECT_EQ(TClass::GetClass("SoA")->GetCheckSum(), *f1Desc.GetTypeChecksum());
+   const auto &f2Desc = desc.GetFieldDescriptor(desc.FindFieldId("f2"));
+   EXPECT_TRUE(f2Desc.IsSoACollection());
+   EXPECT_EQ(TClass::GetClass("SoA")->GetClassVersion(), f2Desc.GetTypeVersion());
+   EXPECT_EQ(ROOT::ENTupleStructure::kCollection, f2Desc.GetStructure());
+   EXPECT_TRUE(f2Desc.GetTypeChecksum());
+   EXPECT_EQ(TClass::GetClass("SoA")->GetCheckSum(), *f2Desc.GetTypeChecksum());
+   const auto &f3Desc = desc.GetFieldDescriptor(desc.FindFieldId("f3"));
+   EXPECT_FALSE(f3Desc.IsSoACollection());
+   EXPECT_EQ(0u, f3Desc.GetTypeVersion());
+   EXPECT_EQ(ROOT::ENTupleStructure::kCollection, f3Desc.GetStructure());
+   EXPECT_FALSE(f3Desc.GetTypeChecksum());
+}
+
+TEST(RNTuple, SoAStreamerInfo)
+{
+   ROOT::TestSupport::FileRaii fileGuard("test_ntuple_soa_streamer_info.root");
+
+   auto model = ROOT::RNTupleModel::Create();
+   model->AddField(std::make_unique<ROOT::Experimental::RSoAField>("f", "SoASimple"));
+   auto writer = ROOT::RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath());
+   writer.reset();
+
+   auto file = std::unique_ptr<TFile>(TFile::Open(fileGuard.GetPath().c_str()));
+   EXPECT_NE(nullptr, file->GetStreamerInfoList()->FindObject("SoASimple"));
 }
 
 TEST(RNTuple, SoAEmpty)
@@ -203,4 +236,31 @@ TEST(RNTuple, SoASimple)
    EXPECT_FLOAT_EQ(4.0, v(2).at(0).fY);
    EXPECT_FLOAT_EQ(5.0, v(2).at(1).fX);
    EXPECT_FLOAT_EQ(6.0, v(2).at(1).fY);
+
+   auto card = reader->GetView<ROOT::RNTupleCardinality<std::uint64_t>>("f");
+   EXPECT_EQ(1u, card(0));
+   EXPECT_EQ(0u, card(1));
+   EXPECT_EQ(2u, card(2));
+}
+
+TEST(RNTuple, SoASimpleSwapped)
+{
+   ROOT::TestSupport::FileRaii fileGuard("test_rntuple_soa_simple_swapped.root");
+
+   {
+      auto model = ROOT::RNTupleModel::Create();
+      model->AddField(std::make_unique<RSoAField>("f", "SoASimpleSwapped"));
+      auto writer = ROOT::RNTupleWriter::Recreate(std::move(model), "ntpl", fileGuard.GetPath());
+      auto soa = writer->GetModel().GetDefaultEntry().GetPtr<SoASimpleSwapped>("f");
+      soa->fX.push_back(1.0);
+      soa->fY.push_back(2.0);
+      writer->Fill();
+   }
+
+   auto reader = ROOT::RNTupleReader::Open("ntpl", fileGuard.GetPath());
+   EXPECT_EQ(1u, reader->GetNEntries());
+   auto v = reader->GetView<std::vector<RecordSimple>>("f");
+   EXPECT_EQ(1u, v(0).size());
+   EXPECT_FLOAT_EQ(1.0, v(0).at(0).fX);
+   EXPECT_FLOAT_EQ(2.0, v(0).at(0).fY);
 }

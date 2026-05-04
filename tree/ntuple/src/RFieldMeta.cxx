@@ -658,7 +658,6 @@ ROOT::Experimental::RSoAField::RSoAField(std::string_view fieldName, const RSoAF
    : ROOT::RFieldBase(fieldName, source.GetTypeName(), ROOT::ENTupleStructure::kCollection, false /* isSimple */),
      fSoAClass(source.fSoAClass),
      fSoAMemberOffsets(source.fSoAMemberOffsets),
-     fRecordMemberIndexes(source.fRecordMemberIndexes),
      fMaxAlignment(source.fMaxAlignment)
 {
    fTraits = source.GetTraits();
@@ -693,6 +692,12 @@ ROOT::Experimental::RSoAField::RSoAField(std::string_view fieldName, TClass *clS
    } catch (ROOT::RException &e) {
       throw RException(R__FAIL("invalid record type of SoA field " + GetTypeName() + " [" + e.what() + "]"));
    }
+   R__ASSERT(fSoAClass->GetClassVersion() >= 0);
+   if (static_cast<std::uint32_t>(fSoAClass->GetClassVersion()) != fSubfields[0]->GetTypeVersion()) {
+      throw RException(R__FAIL(std::string("version mismatch between SoA type and underlying record type: ") +
+                               std::to_string(fSoAClass->GetClassVersion()) + " vs. " +
+                               std::to_string(fSubfields[0]->GetTypeVersion())));
+   }
    fRecordMemberFields = fSubfields[0]->GetMutableSubfields();
 
    std::unordered_map<std::string, std::size_t> recordFieldNameToIdx;
@@ -716,6 +721,8 @@ ROOT::Experimental::RSoAField::RSoAField(std::string_view fieldName, TClass *clS
       throw RException(R__FAIL("SoA fields with inheritance are currently unsupported"));
    }
 
+   fSoAMemberOffsets.resize(fRecordMemberFields.size());
+   unsigned int nMembers = 0;
    for (auto dataMember : ROOT::Detail::TRangeStaticCast<TDataMember>(*fSoAClass->GetListOfDataMembers())) {
       if ((dataMember->Property() & kIsStatic) || !dataMember->IsPersistent())
          continue;
@@ -752,19 +759,19 @@ ROOT::Experimental::RSoAField::RSoAField(std::string_view fieldName, TClass *clS
 
       fMaxAlignment = std::max(fMaxAlignment, vecField->GetAlignment());
 
-      fSoAMemberOffsets.emplace_back(dataMember->GetOffset());
-      fRecordMemberIndexes.emplace_back(itr->second);
+      assert(itr->second < fSoAMemberOffsets.size());
+      fSoAMemberOffsets[itr->second] = dataMember->GetOffset();
+      nMembers++;
    }
-   if (recordFieldNameToIdx.size() != fSoAMemberOffsets.size()) {
+   if (recordFieldNameToIdx.size() != nMembers) {
       throw RException(R__FAIL("missing SoA members"));
    }
-   assert(fRecordMemberFields.size() == fSoAMemberOffsets.size());
 
    std::string renormalizedAlias;
    if (ROOT::Internal::NeedsMetaNameAsAlias(fSoAClass->GetName(), renormalizedAlias))
       fTypeAlias = renormalizedAlias;
 
-   fTraits |= kTraitSoACollection;
+   fTraits |= kTraitSoACollection | kTraitTypeChecksum;
 }
 
 std::unique_ptr<ROOT::RFieldBase> ROOT::Experimental::RSoAField::CloneImpl(std::string_view newName) const
@@ -859,6 +866,16 @@ std::vector<ROOT::RFieldBase::RValue> ROOT::Experimental::RSoAField::SplitValue(
 size_t ROOT::Experimental::RSoAField::GetValueSize() const
 {
    return fSoAClass->GetClassSize();
+}
+
+std::uint32_t ROOT::Experimental::RSoAField::GetTypeVersion() const
+{
+   return fSoAClass->GetClassVersion();
+}
+
+std::uint32_t ROOT::Experimental::RSoAField::GetTypeChecksum() const
+{
+   return fSoAClass->GetCheckSum();
 }
 
 const std::type_info *ROOT::Experimental::RSoAField::GetPolymorphicTypeInfo() const
@@ -1140,7 +1157,7 @@ void ROOT::RProxiedCollectionField::GenerateColumns(const ROOT::RNTupleDescripto
 
 void ROOT::RProxiedCollectionField::ReconcileOnDiskField(const RNTupleDescriptor &desc)
 {
-   EnsureMatchingOnDiskField(desc, kDiffTypeName).ThrowOnError();
+   EnsureMatchingOnDiskCollection(desc).ThrowOnError();
 }
 
 void ROOT::RProxiedCollectionField::ConstructValue(void *where) const
@@ -1211,7 +1228,7 @@ void ROOT::RMapField::ReconcileOnDiskField(const RNTupleDescriptor &desc)
 {
    static const std::vector<std::string> prefixesRegular = {"std::map<", "std::unordered_map<"};
 
-   EnsureMatchingOnDiskField(desc, kDiffTypeName).ThrowOnError();
+   EnsureMatchingOnDiskCollection(desc).ThrowOnError();
 
    switch (fMapType) {
    case EMapType::kMap:
@@ -1247,7 +1264,7 @@ void ROOT::RSetField::ReconcileOnDiskField(const RNTupleDescriptor &desc)
    static const std::vector<std::string> prefixesRegular = {"std::set<", "std::unordered_set<", "std::map<",
                                                             "std::unordered_map<"};
 
-   EnsureMatchingOnDiskField(desc, kDiffTypeName).ThrowOnError();
+   EnsureMatchingOnDiskCollection(desc).ThrowOnError();
 
    switch (fSetType) {
    case ESetType::kSet:

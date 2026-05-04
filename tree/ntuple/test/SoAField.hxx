@@ -19,6 +19,10 @@ struct SoAUnknownRecord {
    ClassDefNV(SoAUnknownRecord, 2);
 };
 
+struct SoAVersionMismatch {
+   ClassDefNV(SoAVersionMismatch, 4);
+};
+
 struct RecordBase {
    ClassDefNV(RecordBase, 2);
 };
@@ -49,6 +53,12 @@ struct SoASimple {
    ROOT::RVec<float> fX;
    ROOT::RVec<float> fY;
    ClassDefNV(SoASimple, 2);
+};
+
+struct SoASimpleSwapped {
+   ROOT::RVec<float> fY;
+   ROOT::RVec<float> fX;
+   ClassDefNV(SoASimpleSwapped, 2);
 };
 
 struct SoASimpleBadArray {

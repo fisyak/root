@@ -48,6 +48,7 @@
 #ifdef ROOFIT_LEGACY_EVAL_BACKEND
 #include "RooChi2Var.h"
 #include "RooNLLVar.h"
+#include "RooXYChi2Var.h"
 #endif
 
 using RooFit::Detail::RooNLLVarNew;
@@ -995,7 +996,9 @@ std::unique_ptr<RooAbsReal> createNLL(RooAbsPdf &pdf, RooAbsData &data, const Ro
    return nll;
 }
 
-std::unique_ptr<RooAbsReal> createChi2(RooAbsReal &real, RooDataHist &data, const RooLinkedList &cmdList)
+namespace {
+
+std::unique_ptr<RooAbsReal> createChi2FromDataHist(RooAbsReal &real, RooDataHist &data, const RooLinkedList &cmdList)
 {
    RooCmdConfig pc("createChi2(" + std::string(real.GetName()) + ")");
 
@@ -1157,6 +1160,65 @@ std::unique_ptr<RooAbsReal> createChi2(RooAbsReal &real, RooDataHist &data, cons
 #endif
 }
 
+} // namespace
+
+std::unique_ptr<RooAbsReal> createChi2(RooAbsReal &real, RooAbsData &data, const RooLinkedList &cmdList)
+{
+   if (auto dataHist = dynamic_cast<RooDataHist *>(&data))
+      return createChi2FromDataHist(real, *dataHist, cmdList);
+
+#ifdef ROOFIT_LEGACY_EVAL_BACKEND
+
+   RooCmdConfig pc("createChi2(" + std::string(real.GetName()) + ")");
+
+   pc.defineInt("numcpu", "NumCPU", 0, 1);
+   pc.defineInt("verbose", "Verbose", 0, 0);
+   pc.defineString("rangeName", "RangeWithName", 0, "", true);
+
+   RooAbsTestStatistic::Configuration cfg;
+
+   pc.defineInt("integrate", "Integrate", 0, 0);
+   pc.defineObject("yvar", "YVar", 0, nullptr);
+   pc.defineInt("interleave", "NumCPU", 1, 0);
+
+   // Process and check varargs
+   pc.process(cmdList);
+   if (!pc.ok(true)) {
+      return nullptr;
+   }
+
+   // Decode command line arguments
+   bool integrate = pc.getInt("integrate");
+   RooRealVar *yvar = static_cast<RooRealVar *>(pc.getObject("yvar"));
+   const char *rangeName = pc.getString("rangeName", nullptr, true);
+   Int_t numcpu = pc.getInt("numcpu");
+   Int_t numcpu_strategy = pc.getInt("interleave");
+   // strategy 3 works only for RooSimultaneous.
+   if (numcpu_strategy == 3 && !real.InheritsFrom("RooSimultaneous")) {
+      oocoutW(&real, Minimization) << "Cannot use a NumCpu Strategy = 3 when the pdf is not a RooSimultaneous, "
+                                      "falling back to default strategy = 0"
+                                   << std::endl;
+      numcpu_strategy = 0;
+   }
+   RooFit::MPSplit interl = (RooFit::MPSplit)numcpu_strategy;
+   bool verbose = pc.getInt("verbose");
+
+   cfg.rangeName = rangeName ? rangeName : "";
+   cfg.nCPU = numcpu;
+   cfg.interleave = interl;
+   cfg.verbose = verbose;
+   cfg.verbose = false;
+
+   std::string name = "chi2_" + std::string(real.GetName()) + "_" + data.GetName();
+
+   return std::make_unique<RooXYChi2Var>(name.c_str(), name.c_str(), real, static_cast<RooDataSet &>(data), yvar,
+                                         integrate, cfg);
+#else
+   throw std::runtime_error("createChi2() is not supported without the legacy evaluation backend");
+   return nullptr;
+#endif
+}
+
 std::unique_ptr<RooFitResult> fitTo(RooAbsReal &real, RooAbsData &data, const RooLinkedList &cmdList, bool chi2)
 {
    const bool isDataHist = dynamic_cast<RooDataHist const *>(&data);
@@ -1240,9 +1302,8 @@ std::unique_ptr<RooFitResult> fitTo(RooAbsReal &real, RooAbsData &data, const Ro
 
    std::unique_ptr<RooAbsReal> nll;
    if (chi2) {
-      if (isDataHist) {
-         nll = std::unique_ptr<RooAbsReal>{real.createChi2(static_cast<RooDataHist &>(data), nllCmdList)};
-      }
+      nll = std::unique_ptr<RooAbsReal>{isDataHist ? real.createChi2(static_cast<RooDataHist &>(data), nllCmdList)
+                                                   : real.createChi2(static_cast<RooDataSet &>(data), nllCmdList)};
    } else {
       nll = std::unique_ptr<RooAbsReal>{dynamic_cast<RooAbsPdf &>(real).createNLL(data, nllCmdList)};
    }

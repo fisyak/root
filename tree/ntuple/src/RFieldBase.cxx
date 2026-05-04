@@ -1070,6 +1070,14 @@ ROOT::RFieldBase::EnsureMatchingOnDiskField(const RNTupleDescriptor &desc, std::
    return R__FAIL(errMsg.str() + "\n" + Internal::GetTypeTraceReport(*this, desc));
 }
 
+ROOT::RResult<void> ROOT::RFieldBase::EnsureMatchingOnDiskCollection(const RNTupleDescriptor &desc) const
+{
+   std::uint32_t ignoreBits = kDiffTypeName;
+   if (desc.GetFieldDescriptor(GetOnDiskId()).IsSoACollection())
+      ignoreBits |= kDiffTypeVersion;
+   return EnsureMatchingOnDiskField(desc, ignoreBits);
+}
+
 ROOT::RResult<void> ROOT::RFieldBase::EnsureMatchingTypePrefix(const RNTupleDescriptor &desc,
                                                                const std::vector<std::string> &prefixes) const
 {

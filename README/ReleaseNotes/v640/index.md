@@ -222,7 +222,7 @@ This should be used for multi-stream reading where multiple threads share a sing
 
 ### HTTP I/O
 
-- There is a new HTTP I/O implementation in ROOT based on libcurl. It provides modern HTTP remote read capabilities (HTTP/2, compression, secure transport, etc.) on Linux, macOS, and Windows. The new HTTP I/O can also connect to protected resources on S3 enpoints using the `S3_ACCCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION` environment variables. By default, the new HTTP I/O is automaticlly built if libcurl is found on the system (manual cmake option: `-Dcurl=[on|off]`). If both, Davix based and libcurl based HTTP plugins are available, the Davix plugin has precedence unless `Curl.ReplaceDavix: yes` is set in the `root.rc`.
+- There is a new HTTP I/O implementation in ROOT based on libcurl. It provides modern HTTP remote read capabilities (HTTP/2, compression, secure transport, etc.) on Linux, macOS, and Windows. The new HTTP I/O can also connect to protected resources on S3 enpoints using the `S3_ACCCESS_KEY`, `S3_SECRET_KEY`, and `S3_REGION` environment variables. By default, the new HTTP I/O is automaticlly built if libcurl is found on the system (manual cmake option: `-Dcurl=[on|off]`). If both, Davix based and libcurl based HTTP plugins are available, the Davix plugin has precedence unless `Curl.ReplaceDavix: yes` is set in the `.rootrc`.
 
 ## Math
 
@@ -255,7 +255,7 @@ As part of this migration, the following build options are deprecated. From ROOT
 
 ### Added Modified Anderson-Bjork (ModAB) root-finding algorithm
 
-This is new and efficient bracketing root-finding algorithm. It combines bisection with Anderson-Bjork's method to achieve superlinear convergence (e.i. = 1.7-1.8), while preserving worst-case optimality. According to the benchmarks, it outperforms classical algorithms like ITP, Brent and Ridders. It is implemented as the `ROOT::Math::ModABRootFinder` class.
+This is new and efficient bracketing root-finding [(Ganchovski, et al. 2026)](https://www.mdpi.com/1999-4893/19/5/332). It combines bisection with Anderson-Bjork's method to achieve superlinear convergence (e.i. = 1.7-1.8), while preserving worst-case optimality. According to the benchmarks, it outperforms classical algorithms like ITP, Brent and Ridders. It is implemented as the `ROOT::Math::ModABRootFinder` class.
 
 ## RooFit
 
