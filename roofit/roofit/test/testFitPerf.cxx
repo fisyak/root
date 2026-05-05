@@ -563,12 +563,12 @@ int FitUsingRooFit(TTree *tree, TF1 *func)
 #ifdef DEBUG
       mean.Print();
       sigma.Print();
-      assert(result != nullptr);
+      assert(result != 0);
       std::cout << " Roofit status " << result->status() << std::endl;
       result->Print();
 #endif
       if (save)
-         iret |= int(result == nullptr);
+         iret |= (result == 0);
 
       if (iret != 0) {
          std::cout << "Fit failed " << std::endl;
@@ -648,12 +648,12 @@ int FitUsingRooFit2(TTree *tree)
          pdf[N - 1]->fitTo(data, RooFit::Minos(0), RooFit::Hesse(1), RooFit::PrintLevel(level), RooFit::Save(save))};
 
 #ifdef DEBUG
-      assert(result == nullptr);
-//std::cout << " Roofit status " << result->status() << std::endl;
-//result->Print();
+      assert(result != 0);
+      std::cout << " Roofit status " << result->status() << std::endl;
+      result->Print();
 #endif
 
-      iret |= int(result != nullptr);
+      iret |= (result != 0);
 
       if (iret != 0)
          return iret;

@@ -152,6 +152,14 @@ void RooErrorVar::removeMax(const char* name) {
   getBinning(name).setMax(RooNumber::infinity()) ;
 }
 
+
+/// Remove both upper and lower bounds from named binning, or
+/// default binning if name is null
+void RooErrorVar::removeRange(const char* name) {
+  getBinning(name).setRange(-RooNumber::infinity(),RooNumber::infinity()) ;
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Store given binning with this variable under the given name
 

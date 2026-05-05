@@ -558,11 +558,16 @@ int RooMinimizer::getPrintLevel()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// \deprecated Has no effect anymore. Functionality was removed in ROOT 6.42,
-/// and this function is kept as an empty shell that does nothing (for API
-/// compatibility between different ROOT versions).
+/// If flag is true, perform constant term optimization on
+/// function being minimized.
+///
+/// \deprecated Will be removed in ROOT 6.42, as this functionality only affects the legacy evalution backend.
+///             The default `cpu` backend already includes this optimization unconditionally.
 
-void RooMinimizer::optimizeConst(int /*flag*/) {}
+void RooMinimizer::optimizeConst(int flag)
+{
+   _fcn->setOptimizeConst(flag);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Save and return a RooFitResult snapshot of current minimizer status.

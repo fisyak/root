@@ -209,7 +209,7 @@ int FitUsingRooFit(TTree &tree, RooAbsPdf &pdf, RooArgSet &xvars)
       std::cout << " Roofit status " << result->status() << std::endl;
       result->Print();
 #endif
-      iret |= int(result == nullptr);
+      iret |= (result == nullptr);
    }
 
    w.Stop();
