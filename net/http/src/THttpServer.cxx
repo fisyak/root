@@ -56,11 +56,13 @@ public:
    }
 };
 
-
-/** \class THttpServer
+/**
+\class THttpServer
 \ingroup http
-
-Online http server for arbitrary ROOT application
+\brief Online http server for arbitrary ROOT application
+\note This class provides HTTP access to ROOT objects. The user is entirely responsible for the security of the server.
+It is strongly recommended to use the server only within an isolated network
+or to enable proper authentication to prevent unauthorized remote access.
 
 Idea of THttpServer - provide remote http access to running
 ROOT application and enable HTML/JavaScript user interface.
@@ -321,8 +323,8 @@ void THttpServer::AddLocation(const char *prefix, const char *path)
 ///
 /// One could specify address like:
 ///
-/// * https://root.cern/js/7.6.0/
-/// * https://jsroot.gsi.de/7.6.0/
+/// * https://root.cern/js/7.11.0/
+/// * https://jsroot.gsi.de/7.11.0/
 ///
 /// This allows to get new JSROOT features with old server,
 /// reduce load on THttpServer instance, also startup time can be improved
@@ -1300,8 +1302,10 @@ Bool_t THttpServer::ExecuteWS(std::shared_ptr<THttpCallArg> &arg, Bool_t externa
       return kTRUE;
    }
 
-   if (!handler)
+   if (!handler) {
+      arg->Set404();
       return kFALSE;
+   }
 
    Bool_t process = kFALSE;
 

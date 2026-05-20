@@ -27,6 +27,7 @@ The following people have contributed to this new version:
  Sergey Linev, GSI Darmstadt,\
  Lorenzo Moneta, CERN/EP-SFT,\
  Christian Ng, https://laserbear.org,\
+ Offset, https://offset.md,\
  Vincenzo Eduardo Padulano, CERN/EP-SFT,\
  Giacomo Parolini, CERN/EP-SFT,\
  Danilo Piparo, CERN/EP-SFT,\
@@ -59,9 +60,13 @@ The following people have contributed to this new version:
 * The `TFTP`, `TNetFile`, `TNetFileStager`, and `TNetSystem` classes are deprecated and will be removed in ROOT 6.42. These classes rely on **rootd**, which was removed in release 6.16.
 * The ROOT **auth** package together with `TVirtualAuth` and `TROOT::GetListOfSecContexts()`, and the **authenticated sockets** (`TSocket::CreateAuthSocket()`) feature are deprecated and will be remove in ROOT 6.42.
   The security assumtions in the current socket authentication implementation is not up to date anymore.
-  Secure communication should be provided by standard means, such as SSL sockets or SSH tunneling.
+  Secure communication should be provided by external means, such as SSH tunneling.
+* The `TSSLSocket` class is deprecated and should not be used in user code anymore. Secure communication should be provided by externals means, such as SSH tunneling.
 * The `builtin_davix` build option has been removed.
   The Davix I/O code in ROOT remains uneffected and is built as before provided that the Davix library is found on the system.
+* `RRealField::SetQuantized` now has a new overload and the existing signature has been deprecated. The new overload enforces proper ordering of the arguments.
+  The deprecated overload will be removed in ROOT 6.42.
+* The bindings to the R programming language that are enabled with the `r=ON` build option (`TRInterface` and friends) are deprecated and will be removed in ROOT 6.42. Their maintenance is no longer justified, given the broader adoption of the scientific Python ecosystem. Users who still rely on R from C++ are encouraged to call R directly via https://cran.r-project.org/package=RInside, which is what the ROOT bindings were using internally.
 
 ## Removals
 
@@ -332,9 +337,14 @@ Given the risk of silently incorrect physics results, and the absence of known w
 
 ## RDataFrame
 
+- The RDataFrame documentation now contains a section to help translate `TTree::Draw` expressions to RDataFrame, the ["Rosetta stone"](https://root.cern/doc/master/classROOT_1_1RDataFrame.html#rosetta-stone).
 - The change of default compression settings used by Snapshot for the TTree output data format introduced in 6.38 (was 101 before 6.38, became 505 in 6.38) is reverted. That choice was based on evidence available up to that point that indicated that ZSTD was outperforming ZLIB in all cases for the available datasets. New evidence demonstrated that this is not always the case, and in particular for the notable case of TTree branches made of collections where many (up to all) of them are empty. The investigation is described at https://github.com/vepadulano/ttree-lossless-compression-studies. The new default compression settings for Snapshot are respectively `kUndefined` for the compression algorithm and `0` for the compression level. When Snapshot detects `kUndefined` used in the options, it changes the compression settings to the new defaults of 101 (for TTree) and 505 (for RNTuple).
 - Signatures of the HistoND and HistoNSparseD operations have been changed. Previously, the list of input column names was allowed to contain an extra column for events weights. This was done to align the logic with the THnBase::Fill method. But this signature was inconsistent with all other Histo* operations, which have a separate function argument that represents the column to get the weights from. Thus, HistoND and HistoNSparseD both now have a separate function argument for the weights. The previous signature is still supported, but deprecated: a warning will be raised if the user passes the column name of the weights as an extra element of the list of input column names. In a future version of ROOT this functionality will be removed. From now on, creating a (sparse) N-dim histogram with weights should be done by calling `HistoN[Sparse]D(histoModel, inputColumns, weightColumn)`.
 - The string expressions passed to `Vary` calls can now be shortened. If the string begins with '{' and ends with '}' (excluding whitespace, tab and newline characters), RDataFrame will automatically inject the return type in the generated lambda expression before declaring it to the interpreter. This for example allows writing an expression such as `{{px * 0.9, px * 1.1}, {py * 0.9, py * 1.1}}` instead of `ROOT::RVec<ROOT::RVec<ROOT::RVec<float>>>{{px * 0.9, px * 1.1}, {py * 0.9, py * 1.1}}`
+- Support for the `Report` action was added to distributed RDataFrame.
+- The memory ownership model as well as the information sharing mechanism has been reworked for computation graphs with nodes storing code to be just-in-time compiled. In practice, this reduces the amount of code that will be interpreted before the start of a computation graph. This results in faster setup times as well as a reduction in memory used and a safer memory management overall. For a simple yet non-trivial example with 2 computation graphs each having 1000 nodes with code to be just-in-time-compiled sharing the same function signature, previous versions of RDataFrame would produce 4020 lines of code to be interpreted whereas currently it would produce 35 lines.
+- A new method called `GetDatasetTopLevelFieldNames` was added to retrieve the list of names of available columns that correspond to top-level fields on-disk. This makes sense only when the data source supports hierarchical dataset schemas, such as in the case of TTree or RNTuple. For example, if the schema contains a user class with a data member, only the name of the top-level field containing the user class object would be reported, but not the name of the data member sub-field.
+- Previously, RDataFrame would prevent the user from calling Snapshot if one or more of the selected columns would correspond to a type without an available I/O dictionary. If that type is known to the interpreter, it can be written to disk both by TTree and RNTuple (with different levels of support). If interpreter information is available, RDataFrame now removes that safeguard and delegates responsibility for writing an object of an interpreted class type to disk to either TTree or RNTuple.
 
 ## Histograms
 
@@ -798,4 +808,3 @@ More than 130 items were addressed for this release:
   * [[ROOT-7499](https://its.cern.ch/jira/browse/ROOT-7499)] - ExpectedData generated from RooSimultaneous does not have non-integer weights
   * [[ROOT-5306](https://its.cern.ch/jira/browse/ROOT-5306)] - Read a file with a versioned class layout fails if the current class layout is unversioned
   * [[ROOT-5174](https://its.cern.ch/jira/browse/ROOT-5174)] - rootcling without linkdef
-
